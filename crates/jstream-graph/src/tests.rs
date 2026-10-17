@@ -2,11 +2,11 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    AudioFollow, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId,
-    EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, KindCategory,
-    KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor, ParamType,
-    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId,
-    SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
+    AudioFollow, BlendMode, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile,
+    EncoderProfileId, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
+    KindCategory, KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor,
+    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
+    SceneId, SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -26,7 +26,9 @@ fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
 }
 
 /// The kinds the tests create: `color`, a video kind with a scalar, a reference of each
-/// sort, and an asset; and `tone`, an audio kind with no parameters.
+/// sort, and an asset; `tone`, an audio kind with no parameters; `scope`, a video kind
+/// that draws a bus (as `waveform` and `spectrum` do); and the filter kinds `tint`
+/// (video, with a scene reference) and `gain` (audio).
 fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -72,6 +74,54 @@ fn kinds() -> Vec<KindDescriptor> {
             video: false,
             audio: true,
             params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "scope".into(),
+            category: KindCategory::Source,
+            name: "Scope".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![param("audio", ParamType::Bus, Value::Null)],
+        },
+        KindDescriptor {
+            kind_id: "tint".into(),
+            category: KindCategory::VideoFilter,
+            name: "Tint".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![
+                param(
+                    "amount",
+                    ParamType::Float {
+                        min: Some(0.0),
+                        max: Some(1.0),
+                        step: None,
+                        unit: None,
+                    },
+                    json!(1.0),
+                ),
+                param("mask", ParamType::Scene, Value::Null),
+            ],
+        },
+        KindDescriptor {
+            kind_id: "gain".into(),
+            category: KindCategory::AudioFilter,
+            name: "Gain".into(),
+            version: 1,
+            video: false,
+            audio: true,
+            params: vec![param(
+                "gain_db",
+                ParamType::Float {
+                    min: Some(-60.0),
+                    max: Some(24.0),
+                    step: None,
+                    unit: Some("dB".into()),
+                },
+                json!(0.0),
+            )],
         },
     ]
 }
@@ -138,6 +188,8 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         source_id: SourceId::new(source),
         transform: None,
         geometry: None,
+        opacity: None,
+        blend: None,
     }
 }
 
@@ -627,6 +679,56 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
     }
 }
 
+/// A YouTube-bound output (ADR-0058) is an RTMP target naming a broadcast: it is
+/// created, retargeted to and from a generic URL, and its broadcast ID is checked.
+#[test]
+fn a_youtube_target_is_stored_retargeted_and_checked() {
+    let youtube = |id: &str| RtmpTarget::YouTube {
+        broadcast_id: id.into(),
+    };
+    let mut graph = Graph::new();
+    apply_ok(
+        &mut graph,
+        vec![Edit::OutputCreate {
+            output_id: OutputId::new("live"),
+            kind: OutputKind::Rtmp {
+                target: youtube("dQw4w9WgXcQ"),
+            },
+        }],
+    );
+    let retarget = apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: target("rtmp://host/live"),
+        }],
+    );
+    assert_eq!(
+        retarget.inverse.edits,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: youtube("dQw4w9WgXcQ"),
+        }]
+    );
+    for id in ["", "a b", "id?x=1", "id/../x", &"x".repeat(129)] {
+        let (field, reason) = invalid_reason(apply_err(
+            &mut graph,
+            vec![Edit::OutputSetTarget {
+                output_id: OutputId::new("live"),
+                target: youtube(id),
+            }],
+        ));
+        assert_eq!(field, "edits.0.target.broadcast_id", "{id:?}: {reason}");
+    }
+    apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: youtube(&"A-z_9".repeat(25)),
+        }],
+    );
+}
+
 #[test]
 fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
     let mut graph = Graph::new();
@@ -989,10 +1091,10 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        AudioFollow, BusId, Crop, DeleteTarget, Easing, Edit, EncoderProfile, EncoderProfileId,
-        Finite32, FitMode, Glide, ItemEasing, ItemGeometry, ItemId, ItemTransform, ItemTransition,
-        OutputId, RateControl, Rev, SceneId, SceneRole, Settings, Size, SourceId, SourceKind,
-        TransitionEffect, TransitionPresetId, Vec2,
+        Action, AudioFollow, BusId, Chord, Crop, DeleteTarget, Easing, Edit, EncoderProfile,
+        EncoderProfileId, Finite32, FitMode, Glide, ItemEasing, ItemGeometry, ItemId,
+        ItemTransform, ItemTransition, OutputId, RateControl, Rev, SceneId, SceneRole, Settings,
+        Size, SourceId, SourceKind, TransitionEffect, TransitionPresetId, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1030,6 +1132,14 @@ mod property {
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
+        let filters: Vec<(String, String)> = state
+            .sources()
+            .flat_map(|s| {
+                s.filters()
+                    .all()
+                    .map(|(_, f)| (s.id().to_string(), f.id().to_string()))
+            })
+            .collect();
         let presets: Vec<String> = state.presets().map(|p| p.id().to_string()).collect();
         let buses: Vec<String> = state.buses().map(|b| b.id().to_string()).collect();
         let urls = [
@@ -1116,7 +1226,26 @@ mod property {
                 ..ItemGeometry::covering_canvas(1, 1).expect("positive")
             }
         };
-        match rng.below(45) {
+        // Mostly in range; one in five above 1.
+        let opacity = |rng: &mut Rng| {
+            Finite32::new([0.0, 0.25, 0.5, 1.0, 1.5][rng.below(5)]).expect("finite")
+        };
+        // Mostly `normal`; one in three a mode that isn't drawn yet.
+        let blend = |rng: &mut Rng| {
+            [
+                jstream_protocol::BlendMode::Normal,
+                jstream_protocol::BlendMode::Normal,
+                jstream_protocol::BlendMode::Multiply,
+            ][rng.below(3)]
+        };
+        let mask = |rng: &mut Rng| match rng.below(3) {
+            0 => Value::Null,
+            _ => scene_ref(&scene(rng)),
+        };
+        let owner = |source: String| jstream_protocol::FilterOwner::Source {
+            source_id: SourceId::new(source),
+        };
+        match rng.below(50) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1240,6 +1369,8 @@ mod property {
                 source_id: SourceId::new(source(rng)),
                 transform: None,
                 geometry: Some(geometry(rng)),
+                opacity: (rng.below(2) == 0).then(|| opacity(rng)),
+                blend: (rng.below(4) == 0).then(|| blend(rng)),
             },
             24 => {
                 let profile_id = EncoderProfileId::new(pool(rng, "enc"));
@@ -1324,7 +1455,72 @@ mod property {
                 source_id: SourceId::new(source(rng)),
                 bus_id: bus(rng),
             },
-            38 => Edit::TransitionCreate {
+            38 => {
+                let item = item(rng);
+                Edit::ItemSetOpacity {
+                    scene_id: address(rng, &item),
+                    item_id: ItemId::new(item),
+                    opacity: opacity(rng),
+                }
+            }
+            39 => Edit::ItemSetBlend {
+                item_id: ItemId::new(item(rng)),
+                blend: blend(rng),
+            },
+            40 => Edit::FilterAdd {
+                owner: owner(source(rng)),
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new(pool(rng, "f")),
+                kind: "tint".into(),
+                settings: super::settings(&[("mask", mask(rng))]),
+                enabled: (rng.below(3) == 0).then_some(false),
+                index: (rng.below(2) == 0).then(|| index(rng)),
+            },
+            41 => {
+                let (source, filter) = rng
+                    .pick(&filters)
+                    .unwrap_or_else(|| (source(rng), pool(rng, "f")));
+                let filter_id = jstream_protocol::FilterId::new(filter);
+                let owner = owner(source);
+                match rng.below(4) {
+                    0 => Edit::FilterRemove { owner, filter_id },
+                    1 => Edit::FilterSetEnabled {
+                        owner,
+                        filter_id,
+                        enabled: rng.below(2) == 0,
+                    },
+                    2 => Edit::FilterSetSettings {
+                        owner,
+                        filter_id,
+                        patch: super::settings(&[("mask", mask(rng))]),
+                    },
+                    _ => Edit::FilterReorder {
+                        owner,
+                        filter_id,
+                        index: index(rng),
+                    },
+                }
+            }
+            42 => {
+                let chord = Chord::new(["F1", "Ctrl+KeyA", "Shift+Ctrl+KeyA"][rng.below(3)]);
+                if rng.below(3) == 0 {
+                    Edit::HotkeyClear { chord }
+                } else {
+                    let action = if rng.below(2) == 0 {
+                        Action::SceneSwitch {
+                            scene_id: SceneId::new(scene(rng)),
+                            preset_id: (rng.below(2) == 0)
+                                .then(|| TransitionPresetId::new(preset(rng))),
+                        }
+                    } else {
+                        Action::OutputStart {
+                            output_id: OutputId::new(output(rng)),
+                        }
+                    };
+                    Edit::HotkeySet { chord, action }
+                }
+            }
+            43 => Edit::TransitionCreate {
                 preset_id: TransitionPresetId::new(pool(rng, "tr")),
                 name: pool(rng, "name "),
                 kind: kind(rng),
@@ -1332,7 +1528,7 @@ mod property {
                 easing: easing(rng),
                 settings: preset_settings(rng),
             },
-            39 => Edit::TransitionUpdate {
+            44 => Edit::TransitionUpdate {
                 preset_id: TransitionPresetId::new(preset(rng)),
                 name: (rng.below(2) == 0).then(|| pool(rng, "name ")),
                 kind: (rng.below(2) == 0).then(|| kind(rng)),
@@ -1340,18 +1536,18 @@ mod property {
                 easing: (rng.below(2) == 0).then(|| easing(rng)),
                 patch: preset_settings(rng),
             },
-            40 => Edit::TransitionDelete {
+            45 => Edit::TransitionDelete {
                 preset_id: TransitionPresetId::new(preset(rng)),
             },
-            41 => Edit::TransitionSetDefault {
+            46 => Edit::TransitionSetDefault {
                 preset_id: TransitionPresetId::new(preset(rng)),
             },
-            42 => Edit::SceneSetTransitions {
+            47 => Edit::SceneSetTransitions {
                 scene_id: SceneId::new(scene(rng)),
                 transition_in: (rng.below(2) == 0).then(|| TransitionPresetId::new(preset(rng))),
                 transition_out: (rng.below(2) == 0).then(|| TransitionPresetId::new(preset(rng))),
             },
-            43 => Edit::ItemSetTransition {
+            48 => Edit::ItemSetTransition {
                 item_id: ItemId::new(item(rng)),
                 transition: ItemTransition {
                     delay_ms: [0, 120, 70_000][rng.below(3)],
@@ -1440,6 +1636,8 @@ mod property {
             "item.set_visible",
             "item.set_crop",
             "item.set_source",
+            "item.set_opacity",
+            "item.set_blend",
             "source.create",
             "source.duplicate",
             "source.delete",
@@ -1452,6 +1650,11 @@ mod property {
             "encoder.create",
             "encoder.update",
             "encoder.delete",
+            "filter.add",
+            "filter.remove",
+            "filter.set_enabled",
+            "filter.set_settings",
+            "filter.reorder",
             "canvas.set_size",
             "transition.create",
             "transition.update",
@@ -1466,6 +1669,8 @@ mod property {
             "bus.delete",
             "send.set",
             "send.remove",
+            "hotkey.set",
+            "hotkey.clear",
         ]
         .into();
         assert_eq!(applied_names, all);
@@ -1843,7 +2048,7 @@ fn referenced_objects_cannot_be_deleted() {
 
 fn plan(graph: &Graph, target: DeleteTarget) -> Vec<Edit> {
     match graph.query(&Query::DeletePlan { target }) {
-        Some(Ok(QueryResult::DeletePlan { rev, edits })) => {
+        Some(Ok(QueryResult::DeletePlan { rev, edits, .. })) => {
             assert_eq!(rev, graph.rev());
             edits
         }
@@ -1945,6 +2150,172 @@ fn delete_plan_removes_a_sources_placements_and_clears_references() {
     );
     apply_ok(&mut graph, edits);
     assert!(graph.state().source(&SourceId::new("mic")).is_none());
+}
+
+fn bus_ref(id: &str) -> Value {
+    json!({"type": "bus", "bus_id": id})
+}
+
+/// A `scope` source drawing `bus` (`None`: the program mix).
+fn scope(id: &str, bus: Option<&str>) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: "Scope".into(),
+        kind: SourceKind::Builtin {
+            kind: "scope".into(),
+        },
+        settings: settings(&[("audio", bus.map_or(Value::Null, bus_ref))]),
+        duplicated_from: None,
+    }
+}
+
+fn bus_create(id: &str) -> Edit {
+    Edit::BusCreate {
+        bus_id: BusId::new(id),
+        name: id.into(),
+    }
+}
+
+/// #362: a bus reference names a bus that exists, the master included, as a scene or
+/// source reference does; any other tag is refused.
+#[test]
+fn a_bus_reference_must_name_a_bus() {
+    let mut graph = fixture();
+    assert_eq!(
+        apply_err(&mut graph, vec![scope("wave", Some("ghost"))]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "ghost".into(),
+        }
+    );
+    assert_eq!(
+        invalid_reason(apply_err(
+            &mut graph,
+            vec![Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "Scope".into(),
+                kind: SourceKind::Builtin {
+                    kind: "scope".into(),
+                },
+                settings: settings(&[("audio", source_ref("mic"))]),
+                duplicated_from: None,
+            }],
+        )),
+        (
+            "edits.0.settings.audio".into(),
+            "must be a bus reference or null".into()
+        )
+    );
+    apply_ok(
+        &mut graph,
+        vec![
+            bus_create("vod"),
+            scope("wave", Some("vod")),
+            scope("program", None),
+            scope("master", Some("master")),
+        ],
+    );
+    assert_eq!(
+        graph
+            .state()
+            .source(&SourceId::new("wave"))
+            .and_then(|s| s.settings.get("audio")),
+        Some(&bus_ref("vod"))
+    );
+    assert_eq!(
+        apply_err(
+            &mut graph,
+            vec![set_settings("program", &[("audio", bus_ref("gone"))])]
+        ),
+        ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "gone".into(),
+        }
+    );
+}
+
+/// #362: a bus a source draws can't be deleted, as a referenced scene or source can't
+/// (ADR-0025): the error lists the settings that hold it, and `delete.plan` clears them
+/// (the source then draws the program mix) before it deletes the bus with its sends.
+#[test]
+fn a_drawn_bus_is_deleted_only_with_its_references_cleared() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            bus_create("vod"),
+            scope("wave", Some("vod")),
+            scope("bars", Some("vod")),
+        ],
+    );
+    let delete = Edit::BusDelete {
+        bus_id: BusId::new("vod"),
+    };
+    let error = apply_err(&mut graph, vec![delete.clone()]);
+    let (field, reason) = invalid_reason(error.clone());
+    assert_eq!(field, "edits.0.bus_id");
+    assert!(
+        reason.contains("bus `vod` is still referred to"),
+        "{reason}"
+    );
+    assert_eq!(
+        blockers(error),
+        vec![
+            blocker(EntityKind::Source, "bars", "settings.audio"),
+            blocker(EntityKind::Source, "wave", "settings.audio"),
+        ]
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Bus {
+            bus_id: BusId::new("vod"),
+        },
+    );
+    assert_eq!(
+        edits,
+        vec![
+            set_settings("bars", &[("audio", Value::Null)]),
+            set_settings("wave", &[("audio", Value::Null)]),
+            delete,
+        ]
+    );
+    let before = graph.clone();
+    let applied = apply_ok(&mut graph, edits);
+    assert!(graph.state().bus(&BusId::new("vod")).is_none());
+    assert_eq!(
+        graph
+            .state()
+            .source(&SourceId::new("wave"))
+            .and_then(|s| s.settings.get("audio")),
+        Some(&Value::Null)
+    );
+    graph
+        .apply(&applied.inverse.edits, Some(applied.rev))
+        .expect("undo applies");
+    assert_eq!(graph.state(), before.state());
+    // The master can't be planned away, and a missing bus is not found.
+    assert_eq!(
+        graph.query(&Query::DeletePlan {
+            target: DeleteTarget::Bus {
+                bus_id: BusId::master(),
+            },
+        }),
+        Some(Err(ProtocolError::invalid_argument(
+            "target.bus_id",
+            "the master bus can't be deleted"
+        )))
+    );
+    assert_eq!(
+        graph.query(&Query::DeletePlan {
+            target: DeleteTarget::Bus {
+                bus_id: BusId::new("nope"),
+            },
+        }),
+        Some(Err(ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "nope".into(),
+        }))
+    );
 }
 
 #[test]
@@ -2567,6 +2938,8 @@ fn removing_a_geometry_item_re_adds_it_with_its_geometry() {
             source_id: SourceId::new("cam"),
             transform: None,
             geometry: Some(boxed()),
+            opacity: None,
+            blend: None,
         }],
     );
     let applied = apply_ok(
@@ -2583,6 +2956,8 @@ fn removing_a_geometry_item_re_adds_it_with_its_geometry() {
             source_id: SourceId::new("cam"),
             transform: None,
             geometry: Some(boxed()),
+            opacity: None,
+            blend: None,
         }]
     );
 }
@@ -2600,6 +2975,8 @@ fn a_geometry_item_reads_its_geometry_and_a_transform_view() {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: Some(boxed()),
+                opacity: None,
+                blend: None,
             },
         ],
     );
@@ -2696,6 +3073,8 @@ fn invalid_geometries_name_the_field() {
         source_id: SourceId::new("cam"),
         transform: Some(ItemTransform::IDENTITY),
         geometry: Some(boxed()),
+        opacity: None,
+        blend: None,
     };
     let (field, _) = invalid_reason(apply_err(&mut graph, vec![both]));
     assert_eq!(field, "edits.0.geometry");
@@ -3008,6 +3387,132 @@ fn reference_and_clone_convert_in_one_batch_each() {
     );
 }
 
+fn set_opacity(item: &str, opacity: f32) -> Edit {
+    Edit::ItemSetOpacity {
+        item_id: ItemId::new(item),
+        scene_id: None,
+        opacity: Finite32::new(opacity).expect("finite"),
+    }
+}
+
+fn set_blend(item: &str, blend: BlendMode) -> Edit {
+    Edit::ItemSetBlend {
+        item_id: ItemId::new(item),
+        blend,
+    }
+}
+
+fn item_info(graph: &Graph, item: &str) -> jstream_protocol::ItemInfo {
+    graph
+        .state()
+        .item(&ItemId::new(item))
+        .expect("invariant: the item exists")
+        .1
+        .to_info()
+}
+
+/// Opacity is checked to [0, 1], reported, and undone to the previous value; every blend
+/// mode but `normal` is refused, since the compositor doesn't draw it (ADR-0023 §1).
+#[test]
+fn opacity_and_blend_are_checked_reported_and_undone() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i", "cam")]);
+    let info = item_info(&g, "i");
+    assert_eq!(
+        (info.opacity, info.blend),
+        (Finite32::ONE, BlendMode::Normal)
+    );
+    assert!(
+        g.state()
+            .item(&ItemId::new("i"))
+            .expect("exists")
+            .1
+            .effects()
+            .is_empty()
+    );
+
+    let applied = apply_ok(&mut g, vec![set_opacity("i", 0.25)]);
+    assert_eq!(applied.inverse.edits, vec![set_opacity("i", 1.0)]);
+    assert_eq!(item_info(&g, "i").opacity.get(), 0.25);
+    for edge in [0.0, 1.0] {
+        apply_ok(&mut g, vec![set_opacity("i", edge)]);
+    }
+    for bad in [-0.01, 1.01, 2.0] {
+        let (field, reason) = invalid_reason(apply_err(&mut g, vec![set_opacity("i", bad)]));
+        assert_eq!(field, "edits.0.opacity", "{bad}");
+        assert!(reason.contains("0 to 1"), "{reason}");
+    }
+    // The same addressing as every placement edit (ADR-0024 §2).
+    let elsewhere = Edit::ItemSetOpacity {
+        item_id: ItemId::new("i"),
+        scene_id: Some(SceneId::new("b")),
+        opacity: Finite32::ONE,
+    };
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![elsewhere]));
+    assert_eq!(field, "edits.0.scene_id");
+
+    let applied = apply_ok(&mut g, vec![set_blend("i", BlendMode::Normal)]);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![set_blend("i", BlendMode::Normal)]
+    );
+    for mode in [
+        BlendMode::Additive,
+        BlendMode::Multiply,
+        BlendMode::Exclusion,
+    ] {
+        let (field, reason) = invalid_reason(apply_err(&mut g, vec![set_blend("i", mode)]));
+        assert_eq!(field, "edits.0.blend");
+        assert!(reason.contains(mode.as_str()), "{reason}");
+    }
+    assert!(matches!(
+        apply_err(&mut g, vec![set_blend("ghost", BlendMode::Normal)]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Item,
+            ..
+        }
+    ));
+}
+
+/// `item.add` takes an opacity and a blend mode, checked like the set edits, and
+/// `item.remove`'s inverse puts back an opacity other than 1.
+#[test]
+fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
+    let mut g = fixture();
+    let with = |opacity: f32, blend: BlendMode| Edit::ItemAdd {
+        scene_id: SceneId::new("a"),
+        item_id: ItemId::new("i"),
+        source_id: SourceId::new("cam"),
+        transform: None,
+        geometry: None,
+        opacity: Some(Finite32::new(opacity).expect("finite")),
+        blend: Some(blend),
+    };
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![with(1.5, BlendMode::Normal)]));
+    assert_eq!(field, "edits.0.opacity");
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![with(0.5, BlendMode::Screen)]));
+    assert_eq!(field, "edits.0.blend");
+    apply_ok(&mut g, vec![with(0.5, BlendMode::Normal)]);
+    assert_eq!(item_info(&g, "i").opacity.get(), 0.5);
+
+    let before = g.state().clone();
+    let removed = apply_ok(
+        &mut g,
+        vec![Edit::ItemRemove {
+            item_id: ItemId::new("i"),
+        }],
+    );
+    let Edit::ItemAdd { opacity, blend, .. } = &removed.inverse.edits[0] else {
+        panic!("not an item.add: {:?}", removed.inverse.edits);
+    };
+    assert_eq!(*opacity, Finite32::new(0.5));
+    assert_eq!(*blend, None, "`normal` is the default, so it is left out");
+    apply_ok(&mut g, removed.inverse.edits);
+    assert_eq!(g.state(), &before);
+}
+
+mod filters;
+
 fn tone_create(id: &str) -> Edit {
     Edit::SourceCreate {
         source_id: SourceId::new(id),
@@ -3164,4 +3669,384 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
             "the master bus can't be deleted".to_owned()
         )
     );
+}
+
+mod hotkeys {
+    //! Hotkey bindings (ADR-0024 §5) and the delete rule of ADR-0040 §3: deleting what a
+    //! binding names removes the binding in the same edit, and undo restores both.
+
+    use super::{apply_err, apply_ok, fixture, output_create, plan};
+    use crate::Graph;
+    use jstream_protocol::{
+        Action, Chord, DeleteTarget, Easing, Edit, EntityKind, HotkeyBinding, OutputId,
+        ProtocolError, SceneId, Settings, SourceId, TransitionPresetId,
+    };
+
+    fn switch(scene: &str) -> Action {
+        Action::SceneSwitch {
+            scene_id: SceneId::new(scene),
+            preset_id: None,
+        }
+    }
+
+    fn start(output: &str) -> Action {
+        Action::OutputStart {
+            output_id: OutputId::new(output),
+        }
+    }
+
+    fn set(chord: &str, action: Action) -> Edit {
+        Edit::HotkeySet {
+            chord: Chord::new(chord),
+            action,
+        }
+    }
+
+    /// Deletes scene `id` with the `scene` source `s<id>` that shows it.
+    fn delete_scene(id: &str) -> Vec<Edit> {
+        vec![
+            Edit::SourceDelete {
+                source_id: SourceId::new(format!("s{id}")),
+            },
+            Edit::SceneDelete {
+                scene_id: SceneId::new(id),
+            },
+        ]
+    }
+
+    fn chords(graph: &Graph) -> Vec<&str> {
+        graph.state().hotkeys().map(|(c, _)| c.as_str()).collect()
+    }
+
+    /// Scenes a, b, c (fixture), output `yt`; `F1` and `F2` switch to `a`, `F3` to `b`,
+    /// `Ctrl+Digit1` starts `yt`.
+    fn bound() -> Graph {
+        let mut graph = fixture();
+        apply_ok(
+            &mut graph,
+            vec![
+                output_create("yt", "rtmp://a.example/live"),
+                set("F1", switch("a")),
+                set("F2", switch("a")),
+                set("F3", switch("b")),
+                set("Ctrl+Digit1", start("yt")),
+            ],
+        );
+        graph
+    }
+
+    #[test]
+    fn set_and_clear_are_exact_inverses() {
+        let mut graph = fixture();
+        let applied = apply_ok(&mut graph, vec![set("F1", switch("a"))]);
+        assert_eq!(
+            applied.inverse.edits,
+            vec![Edit::HotkeyClear {
+                chord: Chord::new("F1"),
+            }]
+        );
+        assert_eq!(graph.state().hotkey(&Chord::new("F1")), Some(&switch("a")));
+        let applied = apply_ok(
+            &mut graph,
+            vec![Edit::HotkeyClear {
+                chord: Chord::new("F1"),
+            }],
+        );
+        assert_eq!(applied.inverse.edits, vec![set("F1", switch("a"))]);
+        assert!(chords(&graph).is_empty());
+    }
+
+    /// Rebinding is a clear then a set, in one batch.
+    #[test]
+    fn a_bound_chord_is_rebound_by_a_clear_and_a_set() {
+        let mut graph = bound();
+        assert_eq!(
+            apply_err(&mut graph, vec![set("F1", switch("b"))]),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Hotkey,
+                id: "F1".into(),
+            }
+        );
+        apply_ok(
+            &mut graph,
+            vec![
+                Edit::HotkeyClear {
+                    chord: Chord::new("F1"),
+                },
+                set("F1", switch("b")),
+            ],
+        );
+        assert_eq!(graph.state().hotkey(&Chord::new("F1")), Some(&switch("b")));
+    }
+
+    #[test]
+    fn deleting_a_scene_removes_its_bindings_and_undo_restores_them() {
+        let mut graph = bound();
+        let applied = apply_ok(&mut graph, delete_scene("a"));
+        assert_eq!(chords(&graph), ["Ctrl+Digit1", "F3"]);
+        assert_eq!(
+            applied.removed_hotkeys,
+            vec![
+                HotkeyBinding::new(Chord::new("F1"), &switch("a")),
+                HotkeyBinding::new(Chord::new("F2"), &switch("a")),
+            ]
+        );
+        // The bindings come back after the scene they name.
+        let names: Vec<_> = applied.inverse.edits.iter().map(Edit::name).collect();
+        assert_eq!(
+            names,
+            [
+                "scene.create",
+                "scene.reorder",
+                "hotkey.set",
+                "hotkey.set",
+                "source.create"
+            ]
+        );
+    }
+
+    #[test]
+    fn deleting_an_output_removes_its_bindings_and_undo_restores_them() {
+        let mut graph = bound();
+        let applied = apply_ok(
+            &mut graph,
+            vec![Edit::OutputDelete {
+                output_id: OutputId::new("yt"),
+            }],
+        );
+        assert_eq!(chords(&graph), ["F1", "F2", "F3"]);
+        assert_eq!(
+            applied.removed_hotkeys,
+            vec![HotkeyBinding::new(Chord::new("Ctrl+Digit1"), &start("yt"))]
+        );
+    }
+
+    /// No action names a source yet, so a source's delete keeps every binding.
+    #[test]
+    fn deleting_a_source_keeps_bindings_that_dont_name_it() {
+        let mut graph = bound();
+        let applied = apply_ok(
+            &mut graph,
+            vec![Edit::SourceDelete {
+                source_id: SourceId::new("cam"),
+            }],
+        );
+        assert_eq!(chords(&graph), ["Ctrl+Digit1", "F1", "F2", "F3"]);
+        assert!(applied.removed_hotkeys.is_empty());
+    }
+
+    /// A binding is not a blocker: the plan lists it beside the edits, and needs no edit
+    /// for it.
+    #[test]
+    fn delete_plan_lists_the_bindings_its_delete_removes() {
+        let graph = bound();
+        let result = graph.query(&jstream_protocol::Query::DeletePlan {
+            target: DeleteTarget::Scene {
+                scene_id: SceneId::new("b"),
+            },
+        });
+        let Some(Ok(jstream_protocol::QueryResult::DeletePlan { hotkeys, .. })) = result else {
+            panic!("expected a delete plan, got {result:?}");
+        };
+        assert_eq!(
+            hotkeys,
+            vec![HotkeyBinding::new(Chord::new("F3"), &switch("b"))]
+        );
+        let edits = plan(
+            &graph,
+            DeleteTarget::Scene {
+                scene_id: SceneId::new("b"),
+            },
+        );
+        assert!(edits.iter().all(|e| e.name() != "hotkey.clear"));
+        let mut applied = graph.clone();
+        assert!(applied.apply(&edits, Some(graph.rev())).is_ok());
+        assert_eq!(chords(&applied), ["Ctrl+Digit1", "F1", "F2"]);
+    }
+
+    /// ADR-0040 §3: if another client bound a restored chord since, the inverse fails
+    /// rather than overwriting that binding.
+    #[test]
+    fn undoing_a_delete_fails_when_its_chord_was_bound_again() {
+        let mut graph = bound();
+        let applied = graph.apply(&delete_scene("b"), None).expect("applies");
+        apply_ok(&mut graph, vec![set("F3", switch("c"))]);
+        assert_eq!(
+            graph.apply(&applied.inverse.edits, None),
+            Err(ProtocolError::AlreadyExists {
+                entity: EntityKind::Hotkey,
+                id: "F3".into(),
+            })
+        );
+        // And the two batches touch the same binding, so undo history sees the conflict
+        // before applying anything.
+        let rebind = crate::Touched::of(&[set("F3", switch("c"))], &[]);
+        assert!(applied.touched.conflicts_with(&rebind));
+    }
+
+    #[test]
+    fn an_action_that_names_nothing_can_be_bound_and_a_scene_delete_keeps_it() {
+        let mut graph = bound();
+        apply_ok(&mut graph, vec![set("F9", Action::AudioResetLoudness {})]);
+        let applied = apply_ok(&mut graph, delete_scene("a"));
+        assert!(
+            applied
+                .removed_hotkeys
+                .iter()
+                .all(|b| b.chord.as_str() != "F9")
+        );
+        assert_eq!(
+            graph.state().hotkey(&Chord::new("F9")),
+            Some(&Action::AudioResetLoudness {})
+        );
+    }
+
+    #[test]
+    fn a_binding_must_name_objects_that_exist_and_keep_no_secret() {
+        let mut graph = fixture();
+        assert_eq!(
+            apply_err(&mut graph, vec![set("F1", start("ghost"))]),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            }
+        );
+        let error = apply_err(
+            &mut graph,
+            vec![set(
+                "F1",
+                Action::OutputSetKey {
+                    output_id: OutputId::new("ghost"),
+                    key: jstream_protocol::SecretString::new("live_abc"),
+                },
+            )],
+        );
+        let ProtocolError::InvalidArgument { field, reason, .. } = &error else {
+            panic!("expected invalid_argument, got {error:?}");
+        };
+        assert_eq!(field, "edits.0.action.type");
+        assert!(!reason.contains("live_abc"), "{reason}");
+        // Session-only, server-answered and YouTube actions can't be bound either.
+        for action in [
+            Action::PreviewUnsubscribe { channel: 1 },
+            Action::LiveCancel {
+                gesture_id: jstream_protocol::GestureId::new("drag"),
+            },
+            Action::PairingStart,
+            Action::YoutubeSignOut,
+        ] {
+            let error = apply_err(&mut graph, vec![set("F1", action)]);
+            let ProtocolError::InvalidArgument { field, .. } = &error else {
+                panic!("expected invalid_argument, got {error:?}");
+            };
+            assert_eq!(field, "edits.0.action.type");
+        }
+        assert_eq!(
+            apply_err(&mut graph, vec![set("ctrl+a", switch("a"))]),
+            ProtocolError::invalid_argument(
+                "edits.0.chord",
+                "`a` is not a key code this engine knows, such as `KeyA` or `F1`",
+            )
+        );
+        // A scene created earlier in the same batch can be bound.
+        apply_ok(
+            &mut graph,
+            vec![super::scene_create("new"), set("F9", switch("new"))],
+        );
+    }
+
+    /// A binding to something the batch deletes later goes with it; one the batch binds
+    /// after the delete is refused.
+    #[test]
+    fn bindings_follow_deletes_within_a_batch() {
+        let mut graph = fixture();
+        let mut edits = vec![set("F1", switch("a"))];
+        edits.extend(delete_scene("a"));
+        let applied = apply_ok(&mut graph, edits);
+        assert!(chords(&graph).is_empty());
+        assert_eq!(applied.removed_hotkeys.len(), 1);
+        let mut edits = delete_scene("b");
+        edits.push(set("F1", switch("b")));
+        assert_eq!(
+            apply_err(&mut graph, edits),
+            ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "b".into(),
+            }
+        );
+    }
+
+    /// A switch that names a preset binds to it too: the preset must exist, and
+    /// deleting it removes the binding, which undo restores.
+    #[test]
+    fn a_switch_naming_a_preset_follows_the_preset() {
+        let mut graph = fixture();
+        let with_preset = Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: Some(TransitionPresetId::new("wipe")),
+        };
+        assert_eq!(
+            apply_err(&mut graph, vec![set("F5", with_preset.clone())]),
+            ProtocolError::NotFound {
+                entity: EntityKind::Transition,
+                id: "wipe".into(),
+            }
+        );
+        apply_ok(
+            &mut graph,
+            vec![
+                Edit::TransitionCreate {
+                    preset_id: TransitionPresetId::new("wipe"),
+                    name: "Wipe".into(),
+                    kind: "fade".into(),
+                    duration_ms: 500,
+                    easing: Easing::Linear,
+                    settings: Settings::new(),
+                },
+                set("F5", with_preset.clone()),
+                set("F6", switch("a")),
+            ],
+        );
+        let applied = apply_ok(
+            &mut graph,
+            vec![Edit::TransitionDelete {
+                preset_id: TransitionPresetId::new("wipe"),
+            }],
+        );
+        assert_eq!(chords(&graph), ["F6"]);
+        assert_eq!(
+            applied.removed_hotkeys,
+            vec![HotkeyBinding::new(Chord::new("F5"), &with_preset)]
+        );
+        apply_ok(&mut graph, applied.inverse.edits);
+        assert_eq!(chords(&graph), ["F5", "F6"]);
+        assert_eq!(graph.state().hotkey(&Chord::new("F5")), Some(&with_preset));
+    }
+}
+
+#[test]
+fn a_filter_kind_cannot_be_created_as_a_source() {
+    let mut graph = graph().with_kinds([KindDescriptor {
+        kind_id: "clap/org.example.gain".into(),
+        category: KindCategory::AudioFilter,
+        name: "Gain".into(),
+        version: 1,
+        video: false,
+        audio: true,
+        params: vec![],
+    }]);
+    let (field, reason) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::SourceCreate {
+            source_id: SourceId::new("x"),
+            name: "x".into(),
+            kind: SourceKind::Builtin {
+                kind: "clap/org.example.gain".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: None,
+        }],
+    ));
+    assert_eq!(field, "edits.0.kind.kind");
+    assert!(reason.contains("filter kind"), "{reason}");
 }

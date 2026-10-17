@@ -11,15 +11,20 @@
 
 use crate::audio::AudioFollow;
 use crate::encoder::EncoderProfile;
+use crate::error::EntityKind;
+use crate::filter::{FilterChain, FilterOwner};
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
+use crate::hotkey::Chord;
 use crate::id::{
-    BusId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
-    TransitionPresetId,
+    BusId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId, OutputId, Rev,
+    SceneId, SourceId, TransitionPresetId,
 };
 use crate::output::{OutputKind, RtmpTarget, SecretString};
+use crate::preview::PreviewCodec;
 use crate::settings::Settings;
 use crate::transition::{Easing, ItemTransition};
+use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -69,10 +74,12 @@ pub enum Edit {
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
     /// `invalid_argument` while a `scene` source shows it or any source's settings refer
     /// to it: delete those sources, or clear those references, first (in the same batch
-    /// if needed). Inverse: `scene.create` with its role (omitted for `scene`), then
-    /// `scene.reorder` to its old display position (unless it was last),
-    /// `scene.set_transitions` if it had an override, then each deleted item's
-    /// `item.remove` inverse, from bottom to top.
+    /// if needed). Hotkey bindings whose action names the scene are not blockers: they
+    /// are removed with it (ADR-0040 §3). Inverse: `scene.create` with its role (omitted
+    /// for `scene`), then `scene.reorder` to its old display position (unless it was
+    /// last), `scene.set_transitions` if it had an override, then each deleted item's
+    /// `item.remove` inverse, from bottom to top, then `hotkey.set` for each removed
+    /// binding.
     #[serde(rename = "scene.delete")]
     SceneDelete {
         /// The scene to delete.
@@ -85,7 +92,11 @@ pub enum Edit {
     ///
     /// The item's placement is `geometry` when that is sent, else a legacy placement:
     /// `transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).
-    /// Sending both is `invalid_argument`.
+    /// Sending both is `invalid_argument`. That identity draws the source at its own
+    /// pixel size from the canvas's top-left, so a `display`, `window` or `webcam` larger
+    /// than the canvas shows only its corner: for those, send a `geometry` covering the
+    /// canvas (`center` at half the canvas size, `size` the canvas size, `fit_mode`
+    /// `fit`), as `jstream-cli` does.
     #[serde(rename = "item.add")]
     ItemAdd {
         /// The scene to add to.
@@ -102,13 +113,20 @@ pub enum Edit {
         /// `item.set_geometry`'s.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         geometry: Option<ItemGeometry>,
+        /// The initial opacity, checked like `item.set_opacity`'s. Omitted means 1.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        opacity: Option<Finite32>,
+        /// The initial blend mode, checked like `item.set_blend`'s. Omitted means
+        /// `normal`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blend: Option<BlendMode>,
     },
     /// Removes an item from its scene. The source itself stays. Inverse: `item.add` with
-    /// the removed item's scene, ID and source, and its placement in the field matching
-    /// its form (`transform` or `geometry`), then `item.reorder` to its old stacking
-    /// position (unless it was on top), `item.set_crop` if it was cropped,
-    /// `item.set_visible` if it was hidden, and `item.set_transition` if its transition
-    /// settings were not the default.
+    /// the removed item's scene, ID and source, its placement in the field matching its
+    /// form (`transform` or `geometry`), and its opacity and blend where they differ from
+    /// the defaults, then `item.reorder` to its old stacking position (unless it was on
+    /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and
+    /// `item.set_transition` if its transition settings were not the default.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -175,6 +193,30 @@ pub enum Edit {
         scene_id: Option<SceneId>,
         /// Whether the item is drawn. Items are visible when added.
         visible: bool,
+    },
+    /// Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by
+    /// `opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items
+    /// are added at 1. Inverse: `item.set_opacity` with the previous value.
+    #[serde(rename = "item.set_opacity")]
+    ItemSetOpacity {
+        /// The item to change.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The alpha multiplier, from 0 (invisible) to 1 (as the source draws it).
+        opacity: Finite32,
+    },
+    /// Changes how an item composites onto what is below it (ADR-0023 §1). A mode the
+    /// compositor doesn't draw yet is `invalid_argument`, so stored state never claims
+    /// something that isn't drawn; today that is every mode but `normal`. Inverse:
+    /// `item.set_blend` with the previous mode.
+    #[serde(rename = "item.set_blend")]
+    ItemSetBlend {
+        /// The item to change.
+        item_id: ItemId,
+        /// The new blend mode. Items are added with `normal`.
+        blend: BlendMode,
     },
     /// Moves an item to another stacking position in its scene. Inverse: `item.reorder`
     /// back to its previous index.
@@ -261,8 +303,8 @@ pub enum Edit {
         /// Parameter ID to new value, or `null` for the default.
         patch: Settings,
     },
-    /// Copies a source under a new ID: a separate instance with the same kind,
-    /// settings, audio settings and sends, which changes independently from then on. The copy's `duplicated_from`
+    /// Copies a source under a new ID: a separate instance with the same kind, settings,
+    /// filters (with the same filter IDs), audio settings and sends, which changes independently from then on. The copy's `duplicated_from`
     /// names the source it was copied from. Placing the *same* source again is `item.add`
     /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]
@@ -275,17 +317,95 @@ pub enum Edit {
         name: String,
     },
     /// Deletes a source. Rejected with `invalid_argument` while any item still places it,
-    /// or any source's settings refer to it: remove those items, or clear those
-    /// references, first (in the same batch if needed). Deleting a source that others were
-    /// copied from is allowed: their `duplicated_from` then reads as absent. Its sends go
-    /// with it. Inverse: `source.create` with its name, kind, settings and
+    /// or any source's or filter's settings refer to it: remove those items, or clear
+    /// those references, first (in the same batch if needed). Deleting a source that
+    /// others were copied from is allowed: their `duplicated_from` then reads as absent.
+    /// Its sends go with it, and so do the hotkey bindings whose action names it
+    /// (ADR-0040 §3). Inverse: `source.create` with its name, kind, settings and
     /// `duplicated_from`, then `send.remove` of its master send if it had none,
-    /// `send.set` for each send that `source.create` doesn't restore as it was, and
-    /// `source.set_audio` if its audio settings were not the defaults.
+    /// `send.set` for each send that `source.create` doesn't restore as it was,
+    /// `source.set_audio` if its audio settings were not the defaults, and `filter.add`
+    /// for each of its filters, video chain first, in chain order, then `hotkey.set` for
+    /// each removed binding.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
         source_id: SourceId,
+    },
+    /// Adds a filter to one of a source's chains (ADR-0026). Rejected with `not_found` if
+    /// the owner doesn't exist, `already_exists` if it has a filter with this ID, and
+    /// `invalid_argument` if the source has no such chain, the chain is full
+    /// ([`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS)), `kind` is not a filter kind of
+    /// that chain (`video_filter` or `audio_filter`), a setting fails its descriptor as in
+    /// `source.create`, a reference in the settings would close a cycle, or `index` is
+    /// past the end. Inverse: `filter.remove`.
+    #[serde(rename = "filter.add")]
+    FilterAdd {
+        /// What owns the chain.
+        owner: FilterOwner,
+        /// Which chain.
+        chain: FilterChain,
+        /// The new filter's ID, chosen by the client, unique within its owner.
+        filter_id: FilterId,
+        /// The filter's kind, as `kind.list` reports it.
+        kind: String,
+        /// Initial settings, checked against the kind's descriptor and completed with its
+        /// defaults, as `source.create`'s are. Omitted means all defaults.
+        #[serde(default, skip_serializing_if = "Settings::is_empty")]
+        settings: Settings,
+        /// Whether it runs. Omitted means enabled.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        /// Its position in the chain, counted from the first filter (0). Must be at most
+        /// the number of filters already in the chain. Omitted means last.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
+    },
+    /// Removes a filter from its chain. Inverse: `filter.add` with its chain, kind,
+    /// settings, `enabled: false` if it was disabled, and its index.
+    #[serde(rename = "filter.remove")]
+    FilterRemove {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to remove.
+        filter_id: FilterId,
+    },
+    /// Turns a filter on or off. A disabled filter stays in its chain and keeps its
+    /// settings, and is bypassed. Inverse: `filter.set_enabled` with the previous value.
+    #[serde(rename = "filter.set_enabled")]
+    FilterSetEnabled {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to change.
+        filter_id: FilterId,
+        /// Whether it runs.
+        enabled: bool,
+    },
+    /// Changes some of a filter's settings, with `source.set_settings`'s rules: each entry
+    /// is checked against the kind's descriptor, `null` resets a parameter to its default
+    /// (a reference to none), and a reference that would make a cycle is
+    /// `invalid_argument` naming it. Inverse: `filter.set_settings` with the patched
+    /// parameters' previous values.
+    #[serde(rename = "filter.set_settings")]
+    FilterSetSettings {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to change.
+        filter_id: FilterId,
+        /// Parameter ID to new value, or `null` for the default.
+        patch: Settings,
+    },
+    /// Moves a filter to another position in its own chain. Inverse: `filter.reorder`
+    /// back to its previous index.
+    #[serde(rename = "filter.reorder")]
+    FilterReorder {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to move.
+        filter_id: FilterId,
+        /// The new position, counted from the first filter (0). Must be less than the
+        /// number of filters in its chain, else `invalid_argument`.
+        index: u32,
     },
     /// Moves a scene to another display position. Inverse: `scene.reorder` back to its
     /// previous index.
@@ -309,8 +429,11 @@ pub enum Edit {
         kind: OutputKind,
     },
     /// Changes where an RTMP output publishes. A running output keeps its connection;
-    /// the new target applies from its next `output.start`. Its stream key is kept.
-    /// Inverse: `output.set_target` with the previous target.
+    /// the new target applies from its next `output.start`. Its stream key is kept only
+    /// while the server stays the same (scheme, host and port; the path may change): a
+    /// new server removes the key from the credential store, so the old key never goes
+    /// to it, and needs a new `output.set_key`. Inverse: `output.set_target` with the
+    /// previous target, which can't restore a removed key.
     #[serde(rename = "output.set_target")]
     OutputSetTarget {
         /// The output to change.
@@ -330,9 +453,11 @@ pub enum Edit {
         height: u32,
     },
     /// Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.
-    /// Its stream key stays in the credential store, so undoing the delete restores a
-    /// working output; `output.clear_key` removes it. Inverse: `output.create` with its
-    /// kind.
+    /// Its stream key is removed from the credential store, so an output created later
+    /// with the same ID doesn't inherit it. Hotkey bindings whose action names the output
+    /// are removed with it (ADR-0040 §3). Inverse: `output.create` with its kind,
+    /// `output.set_encoder` if it had a profile, then `hotkey.set` for each removed
+    /// binding; it can't restore the key: set it again with `output.set_key`.
     #[serde(rename = "output.delete")]
     OutputDelete {
         /// The output to delete.
@@ -381,6 +506,30 @@ pub enum Edit {
         /// The profile to delete.
         profile_id: EncoderProfileId,
     },
+    /// Binds a key chord to an action (ADR-0024 §5). A client that listens for keys
+    /// sends the action when the chord is pressed; the engine only stores the binding.
+    /// Only actions can be bound, so pressing a hotkey never adds to an undo history.
+    /// Rejected with `invalid_argument` for a chord that isn't valid (see [`Chord`]) or
+    /// an action that can't be bound (`output.set_key`, whose stream key is never stored
+    /// in the collection), with `already_exists` (entity `hotkey`) for a chord that is
+    /// already bound (rebinding is a batch of `hotkey.clear` then `hotkey.set`), and with
+    /// `not_found` for a scene or output the action names that doesn't exist. Deleting
+    /// that object later removes the binding with it (ADR-0040 §3). Inverse:
+    /// `hotkey.clear`.
+    #[serde(rename = "hotkey.set")]
+    HotkeySet {
+        /// The chord, such as `Ctrl+Digit1` or `F1`.
+        chord: Chord,
+        /// The action request it runs, checked as an `action` call is.
+        action: Action,
+    },
+    /// Removes a hotkey binding. Rejected with `not_found` (entity `hotkey`) for a chord
+    /// that isn't bound. Inverse: `hotkey.set` with its action.
+    #[serde(rename = "hotkey.clear")]
+    HotkeyClear {
+        /// The chord to unbind.
+        chord: Chord,
+    },
     /// Adds a transition preset (ADR-0029, ADR-0037). Inverse: `transition.delete`.
     #[serde(rename = "transition.create")]
     TransitionCreate {
@@ -426,10 +575,12 @@ pub enum Edit {
         patch: Settings,
     },
     /// Deletes a transition preset, and clears every scene's `transition_in` and
-    /// `transition_out` that names it. The default preset can't be deleted
+    /// `transition_out` that names it. Hotkey bindings whose `scene.switch` names it
+    /// are removed with it (ADR-0040 §3). The default preset can't be deleted
     /// (`invalid_argument`): make another one the default first. Inverse:
     /// `transition.create` with its name, kind, timing and settings, then
-    /// `scene.set_transitions` for each scene it cleared.
+    /// `scene.set_transitions` for each scene it cleared, then `hotkey.set` for each
+    /// removed binding.
     #[serde(rename = "transition.delete")]
     TransitionDelete {
         /// The preset to delete.
@@ -493,8 +644,8 @@ pub enum Edit {
         muted: Option<bool>,
     },
     /// Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most
-    /// 16 buses, the master included; one more is `invalid_argument`. Inverse:
-    /// `bus.delete`.
+    /// 16 buses (`MAX_BUSES`), the master included; one more is `invalid_argument`.
+    /// Inverse: `bus.delete`.
     #[serde(rename = "bus.create")]
     BusCreate {
         /// The new bus's ID, chosen by the client. Rejected if it exists, so `master` is
@@ -527,7 +678,8 @@ pub enum Edit {
         muted: Option<bool>,
     },
     /// Deletes a bus and every send into it. The master bus can't be deleted
-    /// (`invalid_argument`). Inverse: `bus.create` with its name, `bus.set_fader` if
+    /// (`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that
+    /// `invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if
     /// its fader or mute were not the defaults, then `send.set` for each send it had.
     #[serde(rename = "bus.delete")]
     BusDelete {
@@ -577,12 +729,19 @@ impl Edit {
             Edit::ItemReorder { .. } => "item.reorder",
             Edit::SceneReorder { .. } => "scene.reorder",
             Edit::ItemSetCrop { .. } => "item.set_crop",
+            Edit::ItemSetOpacity { .. } => "item.set_opacity",
+            Edit::ItemSetBlend { .. } => "item.set_blend",
             Edit::ItemSetSource { .. } => "item.set_source",
             Edit::SourceCreate { .. } => "source.create",
             Edit::SourceRename { .. } => "source.rename",
             Edit::SourceSetSettings { .. } => "source.set_settings",
             Edit::SourceDuplicate { .. } => "source.duplicate",
             Edit::SourceDelete { .. } => "source.delete",
+            Edit::FilterAdd { .. } => "filter.add",
+            Edit::FilterRemove { .. } => "filter.remove",
+            Edit::FilterSetEnabled { .. } => "filter.set_enabled",
+            Edit::FilterSetSettings { .. } => "filter.set_settings",
+            Edit::FilterReorder { .. } => "filter.reorder",
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
             Edit::OutputDelete { .. } => "output.delete",
@@ -598,6 +757,8 @@ impl Edit {
             Edit::SendSet { .. } => "send.set",
             Edit::SendRemove { .. } => "send.remove",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
+            Edit::HotkeySet { .. } => "hotkey.set",
+            Edit::HotkeyClear { .. } => "hotkey.clear",
             Edit::TransitionCreate { .. } => "transition.create",
             Edit::TransitionUpdate { .. } => "transition.update",
             Edit::TransitionDelete { .. } => "transition.delete",
@@ -611,10 +772,11 @@ impl Edit {
 /// A command with side effects outside the collection state: never undoable and never
 /// batchable.
 ///
-/// Serialized with an internal `type` tag holding the command name. The response only
-/// says the action was accepted; how it goes is reported by events
-/// (`output.state_changed`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// Serialized with an internal `type` tag holding the command name. The response says
+/// the action was accepted, with an [`ActionResult`](crate::ActionResult) for the
+/// actions that return something (a YouTube sign-in's consent URL, a broadcast); how
+/// it goes is reported by events (`output.state_changed`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum Action {
@@ -636,8 +798,10 @@ pub enum Action {
     /// edit: the key is not collection state, so it is never undone. A running output
     /// uses the new key from its next `output.start`. Fails with `not_found` for an
     /// output not in the collection, `invalid_argument` (field `key`) for an empty key,
-    /// one over 1024 bytes or one with whitespace or control characters, and
-    /// `action_failed` when the engine has no credential store or the store refuses.
+    /// one over 1024 bytes or one with whitespace, control or non-ASCII characters, and
+    /// `action_failed` when the engine has no credential store, the store refuses, or
+    /// the output's `output.start` is still opening its target (#343): send it again
+    /// once the start has settled.
     #[serde(rename = "output.set_key")]
     OutputSetKey {
         /// The output whose key to set.
@@ -654,11 +818,144 @@ pub enum Action {
         /// The output whose key to remove.
         output_id: OutputId,
     },
+    /// Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):
+    /// each overrides one parameter of the collection on output, from the next render
+    /// tick, without changing `rev`. A value replaces the gesture's previous value for
+    /// the same parameter, and takes the parameter over from any other gesture that held
+    /// it. Values are validated as a batch's edits are (`not_found`, `invalid_argument`
+    /// with the field `values.<n>.<field>`); a value that is not a live-adjustable
+    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or
+    /// over-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a
+    /// rejected message is applied. The gesture ends with a batch carrying
+    /// `ends_gesture`, with `live.cancel`, or when its client's session ends.
+    #[serde(rename = "live.set")]
+    LiveSet {
+        /// The gesture, chosen by the client and unique among its open gestures.
+        gesture_id: GestureId,
+        /// The values, as setter edits: the same edits the committing batch carries.
+        #[schemars(length(min = 1, max = 256))]
+        values: Vec<Edit>,
+    },
+    /// Ends one of the client's gestures without a commit: its parameters show their
+    /// collection values again, and no edit is made. Succeeds when the client has no
+    /// such gesture open, so a retry is safe.
+    #[serde(rename = "live.cancel")]
+    LiveCancel {
+        /// The gesture to cancel.
+        gesture_id: GestureId,
+    },
+    /// Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4, kept by ADR-0058) and
+    /// returns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens
+    /// it in a browser; Google then redirects to a listener the engine opened on
+    /// `127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the
+    /// OS credential store and emits `youtube.status_changed` (`signed_in`, or
+    /// `signed_out` when the user declines or the sign-in times out after 5 minutes).
+    /// Sent again while a sign-in waits, it returns the same URL. Sent while signed in,
+    /// it starts a new sign-in, which replaces the account once it finishes. Fails with
+    /// `action_failed` when no YouTube OAuth client is configured.
+    #[serde(rename = "youtube.sign_in")]
+    YoutubeSignIn,
+    /// Signs out of YouTube: removes the account's token from the credential store,
+    /// abandons a sign-in that is waiting, then revokes the token at Google (best
+    /// effort).
+    /// Emits `youtube.status_changed` `signed_out`. Succeeds when already signed out.
+    /// A running `youtube` output keeps its connection. Fails with `action_failed` when
+    /// no YouTube OAuth client is configured or the credential store refuses.
+    #[serde(rename = "youtube.sign_out")]
+    YoutubeSignOut,
+    /// Creates a YouTube broadcast (`liveBroadcasts.insert`) and returns it. JStream
+    /// moves it through its states itself (`youtube.transition_broadcast`), so automatic
+    /// start and stop are off, and its monitor stream is on so `testing` works. Fails
+    /// with `invalid_argument` for an empty title or start time or an `other` privacy,
+    /// and with `action_failed` when not signed in or YouTube refuses, including when
+    /// the day's API quota is used up.
+    #[serde(rename = "youtube.create_broadcast")]
+    YoutubeCreateBroadcast {
+        /// Its title.
+        title: String,
+        /// Its description. Omitted means empty.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        description: String,
+        /// When it is scheduled to start, RFC 3339 (`2026-10-16T19:00:00Z`).
+        scheduled_start_time: String,
+        /// Who can watch it. Omitted means `private`.
+        #[serde(default)]
+        privacy: BroadcastPrivacy,
+        /// Whether it is made for kids. Omitted means `false`.
+        #[serde(default)]
+        made_for_kids: bool,
+    },
+    /// Binds a stream to a broadcast (`liveBroadcasts.bind`) and returns the broadcast.
+    /// A `youtube` output sends to its broadcast's bound stream. With no `stream_id`,
+    /// the engine first creates a reusable stream named after the broadcast. Fails
+    /// with `action_failed` when not signed in or YouTube refuses.
+    #[serde(rename = "youtube.bind_broadcast")]
+    YoutubeBindBroadcast {
+        /// The broadcast.
+        broadcast_id: String,
+        /// The stream to bind, as `youtube.list_streams` reports it. Omitted creates one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stream_id: Option<String>,
+    },
+    /// Moves a broadcast to `testing`, `live` or `complete`
+    /// (`liveBroadcasts.transition`) and returns it. `testing` and `live` need its
+    /// bound stream to be receiving: start its `youtube` output first. Fails with
+    /// `action_failed` when not signed in or YouTube refuses (a transition the
+    /// broadcast can't make, or a stream that isn't sending).
+    #[serde(rename = "youtube.transition_broadcast")]
+    YoutubeTransitionBroadcast {
+        /// The broadcast.
+        broadcast_id: String,
+        /// Where to move it.
+        to: BroadcastTransition,
+    },
     /// Restarts the master bus's integrated loudness measurement (ADR-0028). Meters are
     /// runtime state, so this is an action, never an edit. Succeeds, doing nothing, while
     /// the mixer isn't running.
     #[serde(rename = "audio.reset_loudness")]
     AudioResetLoudness {},
+    /// Opens a preview stream of the program mix for this session: low-resolution
+    /// pictures sent as binary frames on `channel`, only to this session (ADR-0045).
+    /// The picture is the canvas scaled down to fit `max_width` × `max_height`, with
+    /// even sides; it follows the canvas when that changes. A picture is sent when what
+    /// the program mix draws changes, at most `fps` times a second, and at least once
+    /// every 2 s (a keyframe), so a client that lost frames recovers. The engine picks
+    /// the first of `codecs` it can encode, and every frame names its codec. The stream
+    /// shows the mix before any master stage. It lasts until `preview.unsubscribe`, the
+    /// session's end, or an end frame (the engine could not go on; the frame says why).
+    ///
+    /// Fails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,
+    /// default 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a
+    /// codec named twice, a `channel` this session already has open (`channel`), or a
+    /// fifth open stream; and with `action_failed` when the session cannot receive
+    /// binary frames (an MCP session) or none of `codecs` can be encoded here.
+    #[serde(rename = "preview.subscribe")]
+    PreviewSubscribe {
+        /// The number this stream's binary frames carry, chosen by the client. Not an
+        /// ID: it only tells this session's streams apart, and can be reused once the
+        /// stream has ended.
+        channel: u32,
+        /// The widest the picture may be, in pixels. Default 640.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_width: Option<u32>,
+        /// The tallest the picture may be, in pixels. Default 360.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_height: Option<u32>,
+        /// Pictures per second, at most. Default 15.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fps: Option<u32>,
+        /// The codecs the client can decode, most preferred first. Empty or omitted
+        /// means `["h264", "jpeg"]`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        codecs: Vec<PreviewCodec>,
+    },
+    /// Closes one of this session's preview streams. No end frame follows; frames
+    /// already sent may still arrive. Succeeds for a channel that is not open.
+    #[serde(rename = "preview.unsubscribe")]
+    PreviewUnsubscribe {
+        /// The channel the stream was opened on.
+        channel: u32,
+    },
     /// Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`
     /// names, else the scene's `transition_in`, else the current program scene's
     /// `transition_out`, else the default preset. A `cut`, a zero duration, or a preset
@@ -687,6 +984,27 @@ pub enum Action {
         /// The scene to put on preview.
         scene_id: SceneId,
     },
+    /// Opens pairing for one more device (ADR-0044): the server draws a one-time
+    /// pairing code and answers with it, to this client only (a `result` of type
+    /// `pairing.start`). A device that posts the code with a name to `POST
+    /// /api/v1/pair` within 2 minutes gets its own device token. One code is open at a
+    /// time: a new `pairing.start` replaces the one open. A code is single-use and void
+    /// after 5 wrong attempts. The code never appears in a log, an event or any other
+    /// answer (R-SEC-001). Answered by the server that admits clients, not the engine:
+    /// a `Control` with no server in front fails with `unsupported`. Fails with
+    /// `action_failed` when the server listens beyond loopback, since a device token
+    /// travels only over loopback or TLS and the server has no TLS yet.
+    #[serde(rename = "pairing.start")]
+    PairingStart,
+    /// Revokes a paired device: its token stops working at once, and its open
+    /// connections are closed. Fails with `not_found` for a device that isn't paired
+    /// (or whose token lapsed after 30 days unused). Answered by the server, like
+    /// `pairing.start`.
+    #[serde(rename = "device.revoke")]
+    DeviceRevoke {
+        /// The device to revoke, as `device.list` reports it.
+        device_id: DeviceId,
+    },
 }
 
 impl Action {
@@ -697,9 +1015,104 @@ impl Action {
             Action::OutputStop { .. } => "output.stop",
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
+            Action::LiveSet { .. } => "live.set",
+            Action::LiveCancel { .. } => "live.cancel",
+            Action::YoutubeSignIn => "youtube.sign_in",
+            Action::YoutubeSignOut => "youtube.sign_out",
+            Action::YoutubeCreateBroadcast { .. } => "youtube.create_broadcast",
+            Action::YoutubeBindBroadcast { .. } => "youtube.bind_broadcast",
+            Action::YoutubeTransitionBroadcast { .. } => "youtube.transition_broadcast",
             Action::AudioResetLoudness {} => "audio.reset_loudness",
+            Action::PreviewSubscribe { .. } => "preview.subscribe",
+            Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
             Action::SceneSwitch { .. } => "scene.switch",
+            Action::PairingStart => "pairing.start",
+            Action::DeviceRevoke { .. } => "device.revoke",
             Action::StudioSetPreview { .. } => "studio.set_preview",
+        }
+    }
+
+    /// The collection objects this action names, by kind and ID: what a hotkey binding
+    /// bound to it refers to (ADR-0040 §3). Deleting one of them removes the binding.
+    pub fn named_objects(&self) -> Vec<(EntityKind, &str)> {
+        match self {
+            Action::OutputStart { output_id }
+            | Action::OutputStop { output_id }
+            | Action::OutputSetKey { output_id, .. }
+            | Action::OutputClearKey { output_id } => {
+                vec![(EntityKind::Output, output_id.as_str())]
+            }
+            Action::SceneSwitch {
+                scene_id,
+                preset_id,
+            } => {
+                let mut named = vec![(EntityKind::Scene, scene_id.as_str())];
+                if let Some(preset_id) = preset_id {
+                    named.push((EntityKind::Transition, preset_id.as_str()));
+                }
+                named
+            }
+            Action::StudioSetPreview { scene_id } => {
+                vec![(EntityKind::Scene, scene_id.as_str())]
+            }
+            // Broadcasts, preview channels and devices are not collection objects, and a
+            // live action can't be bound (`bind_problem`).
+            Action::AudioResetLoudness {}
+            | Action::LiveSet { .. }
+            | Action::LiveCancel { .. }
+            | Action::YoutubeSignIn
+            | Action::YoutubeSignOut
+            | Action::YoutubeCreateBroadcast { .. }
+            | Action::YoutubeBindBroadcast { .. }
+            | Action::YoutubeTransitionBroadcast { .. }
+            | Action::PreviewSubscribe { .. }
+            | Action::PreviewUnsubscribe { .. }
+            | Action::PairingStart
+            | Action::DeviceRevoke { .. } => vec![],
+        }
+    }
+
+    /// Why this action can't be bound to a hotkey, as the field within the action and the
+    /// reason, or `None` if it can. The engine rejects `hotkey.set` with it, so every
+    /// implementation gives the same one. Every action is listed, so a new one has to be
+    /// classified here: one that carries a secret can't be bound, and neither can one
+    /// that answers or serves only the session that sends it, or that runs an account,
+    /// device or YouTube flow a person drives through the UI.
+    pub fn bind_problem(&self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Action::OutputSetKey { .. } => Some((
+                "type",
+                "`output.set_key` can't be bound: a stream key is never stored in the \
+                 collection (R-SEC-001)",
+            )),
+            Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. } => Some((
+                "type",
+                "a preview action can't be bound: it serves only the session that sends it",
+            )),
+            Action::LiveSet { .. } | Action::LiveCancel { .. } => Some((
+                "type",
+                "a live action can't be bound: its gesture belongs to the session that sends \
+                 it (ADR-0032)",
+            )),
+            Action::PairingStart | Action::DeviceRevoke { .. } => Some((
+                "type",
+                "a pairing or device action can't be bound: the server answers it for the \
+                 client that asks",
+            )),
+            Action::YoutubeSignIn
+            | Action::YoutubeSignOut
+            | Action::YoutubeCreateBroadcast { .. }
+            | Action::YoutubeBindBroadcast { .. }
+            | Action::YoutubeTransitionBroadcast { .. } => Some((
+                "type",
+                "a YouTube action can't be bound: YouTube is driven through the UI (ADR-0058)",
+            )),
+            Action::OutputStart { .. }
+            | Action::OutputStop { .. }
+            | Action::OutputClearKey { .. }
+            | Action::AudioResetLoudness {}
+            | Action::SceneSwitch { .. }
+            | Action::StudioSetPreview { .. } => None,
         }
     }
 }
@@ -723,16 +1136,31 @@ pub struct Batch {
     /// client is not applied again, and gets the original result.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<IdempotencyKey>,
+    /// Commits one of the client's open gestures (ADR-0032): when the batch applies, the
+    /// gesture ends in the same step, and its live values give way to the committed
+    /// state. A gesture the client has not open is `invalid_argument` (field
+    /// `ends_gesture`), and nothing is applied. A batch that fails leaves the gesture
+    /// open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ends_gesture: Option<GestureId>,
 }
 
 impl Batch {
-    /// A batch of one edit, with no `expected_rev` and no idempotency key.
+    /// A batch of one edit, with no `expected_rev`, no idempotency key and no gesture.
     pub fn single(edit: Edit) -> Self {
         Batch {
             edits: vec![edit],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         }
+    }
+
+    /// Sets the gesture the batch commits.
+    #[must_use]
+    pub fn ending_gesture(mut self, gesture_id: GestureId) -> Self {
+        self.ends_gesture = Some(gesture_id);
+        self
     }
 
     /// Sets `expected_rev`.
@@ -907,6 +1335,78 @@ impl Crop {
     };
 }
 
+/// How an item composites onto what is below it (ADR-0023 §1, register D13).
+///
+/// The list is the modes the UI offers. The compositor blends in linear light and draws
+/// `normal` only so far; the engine rejects every other mode with `invalid_argument`
+/// until it draws it, so a client can read the list without the engine claiming it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum BlendMode {
+    /// Source-over: the item covers what is below it, by its alpha.
+    #[default]
+    Normal,
+    /// Adds the item's colour to what is below it.
+    Additive,
+    /// Multiplies the colours, which darkens.
+    Multiply,
+    /// The inverse of multiplying the inverses, which lightens.
+    Screen,
+    /// Multiply or screen, depending on the colour below.
+    Overlay,
+    /// The darker of the two colours, per channel.
+    Darken,
+    /// The lighter of the two colours, per channel.
+    Lighten,
+    /// The absolute difference of the colours.
+    Difference,
+    /// Like difference, with lower contrast.
+    Exclusion,
+}
+
+impl BlendMode {
+    /// Every mode, in the order the UI lists them.
+    pub const ALL: [BlendMode; 9] = [
+        BlendMode::Normal,
+        BlendMode::Additive,
+        BlendMode::Multiply,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+        BlendMode::Lighten,
+        BlendMode::Difference,
+        BlendMode::Exclusion,
+    ];
+
+    /// The mode with this wire name.
+    pub fn from_name(name: &str) -> Option<BlendMode> {
+        BlendMode::ALL
+            .into_iter()
+            .find(|mode| mode.as_str() == name)
+    }
+
+    /// Whether this is the default mode, `normal`.
+    pub fn is_normal(&self) -> bool {
+        *self == BlendMode::Normal
+    }
+
+    /// The mode's wire name (`normal`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BlendMode::Normal => "normal",
+            BlendMode::Additive => "additive",
+            BlendMode::Multiply => "multiply",
+            BlendMode::Screen => "screen",
+            BlendMode::Overlay => "overlay",
+            BlendMode::Darken => "darken",
+            BlendMode::Lighten => "lighten",
+            BlendMode::Difference => "difference",
+            BlendMode::Exclusion => "exclusion",
+        }
+    }
+}
+
 /// What a source shows.
 ///
 /// Serialized with an internal `type` tag. A source is one shared instance: every item
@@ -956,7 +1456,7 @@ impl SceneRole {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, Batch, Command, CommandClass, Edit, SceneRole};
+    use super::{Action, Batch, BlendMode, Command, CommandClass, Edit, SceneRole};
     use crate::id::{IdempotencyKey, OutputId, Rev, SceneId};
     use serde_json::json;
 
@@ -1047,6 +1547,16 @@ mod tests {
             assert!(serde_json::from_str::<Edit>(&text).is_err(), "{x} accepted");
         }
         assert_eq!(super::Vec2::new(f32::INFINITY, 0.0), None);
+    }
+
+    /// `as_str` is the wire name serde writes, for every mode, and `from_name` reads it.
+    #[test]
+    fn blend_mode_names_match_the_wire() {
+        for mode in BlendMode::ALL {
+            assert_eq!(serde_json::to_value(mode).ok(), Some(json!(mode.as_str())));
+            assert_eq!(BlendMode::from_name(mode.as_str()), Some(mode));
+        }
+        assert_eq!(BlendMode::from_name("dissolve"), None);
     }
 
     #[test]

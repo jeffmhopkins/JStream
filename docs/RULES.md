@@ -27,7 +27,9 @@ enforced_by = ["review"]
 applies_to = ["crates/**"]
 -->
 Every capability is first a command, query, event or stream in `jstream-protocol`.
-UI, MCP and CLI are built on the protocol, never beside it. There are no UI-only features.
+UI, MCP and CLI are built on the protocol, never beside it. There are no UI-only features,
+except YouTube's account features (the `youtube.*` commands, queries and events), which
+[ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) keeps from agents.
 
 <a id="R-ARCH-002"></a>
 ### R-ARCH-002: Crate layering
@@ -203,15 +205,19 @@ applies_to = ["crates/**"]
 -->
 Only crates whose metadata declares `unsafe_allowed = true` may contain `unsafe`:
 `jstream-platform-windows`, `jstream-platform-macos`, `jstream-platform-linux`,
-`jstream-vcam-windows` and `*-sys`. All other crates have `#![forbid(unsafe_code)]`,
-and lint-deps checks that it's present.
+`jstream-vcam-windows`, `jstream-plugin-clap`, `jstream-browser` (ADR-0046),
+`jstream-browser-helper` (ADR-0048, for its `RunWinMain` export) and `*-sys`. All other
+crates have `#![forbid(unsafe_code)]`, and lint-deps checks that it's present. Only
+`jstream-plugin-host` may depend on `jstream-plugin-clap`, directly or through other
+crates, so no other process loads a CLAP plugin
+([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); lint-deps checks that too.
 
 <a id="R-UNSAFE-002"></a>
 ### R-UNSAFE-002: Every unsafe block is justified
 <!-- @rule
 status = "active"
 enforced_by = ["lint:clippy::undocumented_unsafe_blocks"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 
@@ -220,7 +226,7 @@ Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 FFI wrappers expose safe APIs. Raw handles don't leak past a crate's public API.
 COM / Objective-C / C resources are wrapped in RAII types.
@@ -230,7 +236,7 @@ COM / Objective-C / C resources are wrapped in RAII types.
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Prefer maintained bindings (`windows`, `objc2-*`, `pipewire`) over hand-written `extern` blocks.
 
@@ -239,7 +245,7 @@ Prefer maintained bindings (`windows`, `objc2-*`, `pipewire`) over hand-written 
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Every function called from foreign code (COM methods, WGC/WASAPI/MF callbacks, Core Audio
 procs) wraps its body in `catch_unwind`. A caught panic becomes an error the engine
@@ -249,15 +255,14 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e23ff09bf4f04289", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 -->
 
 <a id="R-RT-001"></a>
 ### R-RT-001: Audio thread does not allocate, lock, block or log
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "review"]
-applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**"]
+enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "test:jstream_plugin_host::rt::a_pass_does_not_allocate", "review"]
+applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**", "apps/jstream-plugin-host/src/rt.rs"]
 -->
 In steady state, the audio callback and mixer do not allocate, take locks, block, make
 syscalls other than the device API, or log. Debug builds and tests install
@@ -320,7 +325,6 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:d555bf7414bec253", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -400,7 +404,7 @@ applies_to = [".github/workflows/**"]
 -->
 Every third-party action is referenced as `owner/action@<full commit SHA> # vX.Y.Z`. Mutable
 tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
-([ADR-0018](adr/0018-ci-supply-chain-policy.md)).
+([ADR-0056](adr/0056-ci-supply-chain-policy-v2.md)).
 
 <a id="testing"></a>
 ## Testing
@@ -471,7 +475,6 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:ae9d966ab2868d92", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio #240, #331): re-read main's audio text beside T1's transition/preview text and merged the sentences both sides edited (contents lists, state.get, file, rebuild order, touched sets, tool nouns, version line); T1 now documents protocol 0.20 since D5 took 0.19; CLI usage also notes the transition edits aren't in the CLI; holds" }
 -->
 
 <a id="R-API-001"></a>
@@ -495,7 +498,8 @@ Protocol commands are named `noun.verb` in snake_case (`scene.create`). MCP tool
 match `^[a-zA-Z0-9_-]{1,128}$` ([Anthropic tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use)),
 which rules out the protocol's `.`. So the tools are generated from the protocol and grouped
 by noun ([ARCH › MCP](ARCHITECTURE.md#mcp)): each command or query `noun.verb` is an `op` of
-the tool named after its noun (`scene`), and reaches exactly one tool. Tool names are
+the tool named after its noun (`scene`), and reaches exactly one tool. The one exception is
+the `youtube` noun, whose ops reach no tool ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). Tool names are
 unique. IDs are opaque strings.
 
 <a id="R-API-003"></a>
@@ -546,7 +550,8 @@ token (even on localhost), except `POST /api/v1/pair` while a pairing code is op
 ([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
 device token, never the control token, as the `__Host-jstream_device` cookie. Every
 listener validates the `Host` header, and
-the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
+the `Origin` header when one is present. A device token is accepted only over loopback
+or TLS. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>
@@ -605,6 +610,13 @@ applies_to = [".github/workflows/**"]
 -->
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
+On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
+`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist` and `macos` are in
+`after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
+([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
+the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
+A PR into a `wave/*` branch skips only `test`, `doc`, `deny`, `wasm` and the after-review jobs;
+every other check runs. The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|
@@ -619,9 +631,12 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
+| `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0020](adr/0020-portable-windows-distribution.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
+| `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
+| `fuzz` | nightly scheduled run of every fuzz target for a few minutes; a crashing input opens or updates an issue for its target ([Fuzz targets › In CI](../fuzz/README.md#ci)) | n/a | now |
 
 <a id="R-GIT-004"></a>
 ### R-GIT-004: One logical change per PR
@@ -646,7 +661,6 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:fdb0c87dff90c573", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against DOCS#gate after the rebase: R-DOC-009 names the adr-status exception citing ADR-0038 (renumbered from 0036); R-DOC-006 already covers generated blocks; DOCS#gate's ADR-0039 row-key wording leaves R-DOC-012 as is" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -676,8 +690,8 @@ status = "active"
 enforced_by = ["ci:docs"]
 applies_to = ["**"]
 -->
-A section's stored `verified.hash` must match the computed hash
-([DOCS › Hash-bound verification](DOCS.md#verification)).
+A section's stamp in `docs/verified.toml` must match the computed hash of each of its
+inputs ([DOCS › Hash-bound verification](DOCS.md#verification)).
 
 <a id="R-DOC-004"></a>
 ### R-DOC-004: Fix docs in the same PR; verify only what you re-read
@@ -787,7 +801,6 @@ rules.
 ## Governance
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:689f8a82ade70b26", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read R-GOV-001..005: R-GOV-005 now follows ADR-0043's narrowed maintainer tier; labels, overrides, gate and proxy decisions unchanged" }
 -->
 
 <a id="R-GOV-001"></a>

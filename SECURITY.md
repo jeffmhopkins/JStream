@@ -42,7 +42,6 @@ advisory unless they ask not to be.
 ## What JStream promises
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002", "docs/RULES.md#R-SEC-003", "docs/RULES.md#R-SEC-004"]
-verified = { hash = "b3:ff1eafc65561b462", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: control API bullet now names the TLS-only pairing page and the device-only cookie, per R-SEC-002's amended text; other bullets unchanged" }
 -->
 
 A report is in scope when it breaks one of these. The rules they cite are the authority.
@@ -52,7 +51,7 @@ A report is in scope when it breaks one of these. The rules they cite are the au
 - **The control API:** every connection needs the control token or a paired device's
   token (the pairing exchange aside, which needs an open one-time code, and the fixed
   pairing page on a TLS listener; a browser may hold a device token as a cookie, never the
-  control token), and the listener
+  control token), a device token is accepted only over loopback or TLS, and the listener
   binds to localhost by default and checks `Host`, and `Origin` when one is present
   ([R-SEC-002](docs/RULES.md#R-SEC-002)).
 - **WASM plugins** get no filesystem or network access unless the manifest declares it

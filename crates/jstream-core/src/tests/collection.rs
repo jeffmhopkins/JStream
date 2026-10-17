@@ -9,7 +9,7 @@ use crate::{CollectionFileError, Engine};
 use jstream_control::Control;
 use jstream_protocol::{
     Batch, Call, Edit, HistoryCall, HistoryOp, OutputId, OutputState, Query, QueryResult, Rev,
-    SceneId,
+    SceneId, Settings, SourceId, SourceKind,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -116,6 +116,101 @@ fn changes_are_saved_and_load_in_a_new_engine() {
         Some(Rev(3))
     );
     assert_eq!(files(&dir), ["scenes.json"]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// #459: a waveform drawing another source saves and loads with the builtin kinds,
+/// the drawn source made first; and a waveform saved before `audio_source` existed
+/// loads with it `null`, drawing what it drew (an added parameter needs no kind
+/// version bump).
+#[test]
+fn a_source_drawing_a_source_round_trips() {
+    let dir = temp_dir("audio-source");
+    let path = dir.join("scenes.json");
+    let drawn = serde_json::json!({"type": "source", "source_id": "desk"});
+    let wave_settings = |engine: &Engine| {
+        let control = connected(engine);
+        match query(&control, Query::SourceList) {
+            Ok(QueryResult::SourceList { sources, .. }) => {
+                sources
+                    .into_iter()
+                    .find(|s| s.source_id.as_str() == "wave")
+                    .expect("the waveform")
+                    .settings
+            }
+            other => panic!("expected a source list, got {other:?}"),
+        }
+    };
+    {
+        let control = connected(&open(&path));
+        batch(
+            &control,
+            edits(vec![
+                // Created in this order, the waveform's ID sorts before the source it
+                // draws, so loading must make the drawn source first.
+                Edit::SourceCreate {
+                    source_id: SourceId::new("desk"),
+                    name: "Desktop".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "desktop_audio".into(),
+                    },
+                    settings: Settings::new(),
+                    duplicated_from: None,
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("a_wave"),
+                    name: "Waveform".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "waveform".into(),
+                    },
+                    settings: [("audio_source", drawn.clone())].into_iter().collect(),
+                    duplicated_from: None,
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("wave"),
+                    name: "Waveform".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "waveform".into(),
+                    },
+                    settings: Settings::new(),
+                    duplicated_from: None,
+                },
+            ]),
+        )
+        .expect("created");
+    }
+    let engine = open(&path);
+    let control = connected(&engine);
+    let Ok(QueryResult::SourceList { sources, .. }) = query(&control, Query::SourceList) else {
+        panic!("a source list");
+    };
+    let a_wave = sources
+        .iter()
+        .find(|s| s.source_id.as_str() == "a_wave")
+        .expect("loaded");
+    assert_eq!(a_wave.settings.get("audio_source"), Some(&drawn));
+    assert_eq!(
+        wave_settings(&engine).get("audio_source"),
+        Some(&serde_json::Value::Null)
+    );
+    drop((control, engine));
+
+    // As a file from before #459: no `audio_source` at all.
+    let mut file = saved(&path);
+    for source in file["sources"].as_array_mut().expect("sources") {
+        if let Some(settings) = source
+            .get_mut("settings")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            settings.remove("audio_source");
+        }
+    }
+    fs::write(&path, file.to_string()).expect("write");
+    let engine = open(&path);
+    assert_eq!(
+        wave_settings(&engine).get("audio_source"),
+        Some(&serde_json::Value::Null)
+    );
     let _ = fs::remove_dir_all(dir);
 }
 

@@ -7,7 +7,7 @@ use jstream_mux::aac::AudioSpecificConfig;
 use jstream_mux::fmp4::{AudioTrack, Fmp4Config, Fmp4Muxer, Fmp4Writer, Segment, VideoTrack};
 use jstream_mux::h264::AvcDecoderConfig;
 
-use super::{Durable, Sink, temp_path_for};
+use super::{Durable, Sink, move_no_replace, reserve_then_rename, temp_path_for};
 use crate::record::{RecordError, RecordStats, Recorder};
 
 /// A Baseline-compatible High-profile SPS (1280×720) and its PPS, as `jstream-mux`'s
@@ -223,6 +223,80 @@ fn finish_refuses_a_destination_that_appeared_meanwhile() {
         fs::read(dir.join("show.mp4.part")).unwrap(),
         expected(config(true), &packets)
     );
+}
+
+// #355: a file created after any check and right before the final move is never
+// replaced, by the hard-link move and by its fallback for file systems without links.
+#[test]
+fn the_final_move_never_replaces_a_destination_created_just_before_it() {
+    type Move = fn(&Path, &Path) -> Result<(), RecordError>;
+    let moves: [(&str, Move); 2] = [("link", move_no_replace), ("reserve", reserve_then_rename)];
+    for (name, move_file) in moves {
+        let dir = TempDir::new(&format!("no-replace-{name}"));
+        let temp = dir.join("show.mp4.part");
+        let path = dir.join("show.mp4");
+        fs::write(&temp, b"recording").unwrap();
+        fs::write(&path, b"keep").unwrap();
+        let err = move_file(&temp, &path).unwrap_err();
+        assert!(
+            matches!(&err, RecordError::Exists { path: p } if *p == path),
+            "{name}: {err}"
+        );
+        assert_eq!(fs::read(&path).unwrap(), b"keep", "{name}");
+        assert_eq!(fs::read(&temp).unwrap(), b"recording", "{name}");
+
+        fs::remove_file(&path).unwrap();
+        move_file(&temp, &path).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"recording", "{name}");
+        assert!(!temp.exists(), "{name}");
+    }
+}
+
+// #355, deterministically: a dangling symlink at the destination is invisible to an
+// existence check (`try_exists` follows it and finds nothing), just like a file that
+// appears right after the check, but it is still an entry a rename would replace.
+// `finish` must refuse it, and so must the placeholder fallback.
+#[cfg(unix)]
+#[test]
+fn finish_never_replaces_a_destination_an_existence_check_misses() {
+    use std::os::unix::fs::symlink;
+
+    let dir = TempDir::new("dangling");
+    let path = dir.join("show.mp4");
+    let temp = dir.join("show.mp4.part");
+    let packets = packets();
+    let mut recorder = Recorder::create(&path, config(true)).unwrap();
+    for p in &packets {
+        recorder.write_packet(p).unwrap();
+    }
+    symlink(dir.join("nowhere"), &path).unwrap();
+    assert!(!path.try_exists().unwrap());
+
+    let err = recorder.finish().unwrap_err();
+    assert!(
+        matches!(&err, RecordError::Exists { path: p } if *p == path),
+        "{err}"
+    );
+    assert!(
+        fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read(&temp).unwrap(), expected(config(true), &packets));
+
+    let err = reserve_then_rename(&temp, &path).unwrap_err();
+    assert!(
+        matches!(&err, RecordError::Exists { path: p } if *p == path),
+        "{err}"
+    );
+    assert!(
+        fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read(&temp).unwrap(), expected(config(true), &packets));
 }
 
 #[test]

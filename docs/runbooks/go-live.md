@@ -17,7 +17,6 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +35,6 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:d9c4b67198b82fa4", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio): stale through dependencies only; re-read, the runbook names no studio, scene switch or transition; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -100,7 +98,6 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:230ab7f1e5d08ee6", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio): stale through dependencies only; re-read, the runbook names no studio, scene switch or transition; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
@@ -159,11 +156,39 @@ snapshot and the graceful stop. That is what CI or a Linux machine can run.
 <!-- @section
 -->
 
-Pending. Going live to YouTube with a plain stream key works as above, with YouTube's
-RTMPS server URL from YouTube Studio. The `youtube.*` flows (sign-in with OAuth, then
-creating the broadcast and binding the output through the API) are added here once the
-daemon's YouTube wiring (roadmap item A6) and the YouTube setup flow (Y3, issue #223)
-have landed.
+Going live to YouTube needs no sign-in and no Google OAuth client
+([ADR-0058](../adr/0058-youtube-sign-in-with-a-jstream-client.md)): use a plain stream
+key as above, with YouTube's RTMPS server URL from YouTube Studio, and turn on
+auto-start (and auto-stop) for the stream in YouTube Studio, so the broadcast goes live
+when data arrives and ends when it stops.
+
+Signing in, to manage broadcasts through the API, is optional and Windows only. It
+uses JStream's own OAuth client (ADR-0058 above), which this build doesn't have yet, so a
+run for now uses a developer's Google Cloud OAuth client of type "Desktop app", with the
+YouTube Data API v3 enabled. The `youtube.*` calls below are a person's: they go over
+the WebSocket API, since MCP has no `youtube` tool and `jstream-cli` has no
+YouTube commands yet. Then:
+
+1. Start the daemon with `--youtube-client <the client's JSON>`, or with
+   `JSTREAM_YOUTUBE_CLIENT_ID` (and `JSTREAM_YOUTUBE_CLIENT_SECRET`) set
+   ([daemon › Usage](../../apps/jstream-daemon/README.md#usage)). Without either,
+   `youtube.status` answers `unavailable` until the built-in client is filled in.
+2. `youtube.status` answers `signed_out`. Call `youtube.sign_in`, open the consent URL
+   it returns, and approve.
+3. `youtube.status` answers `signed_in`. The refresh token is in Credential Manager, so
+   a restart stays signed in.
+4. Create a broadcast (`youtube.create_broadcast`) or pick one
+   (`youtube.list_broadcasts`), and bind a stream to it (`youtube.bind_broadcast`).
+   Create an output with the `youtube { broadcast_id }` target and start it.
+   `youtube.health_changed` reports the stream's health.
+5. Starting the output doesn't take the broadcast live: broadcasts are created without
+   auto-start. Once the health is good, call `youtube.transition_broadcast` with `to:
+   testing`, then `to: live`.
+6. To end, call `youtube.transition_broadcast` with `to: complete`, then stop the
+   output.
+7. `youtube.sign_out` removes the token.
+
+This path has not yet been run on hardware: issue #337 holds its run, step by step.
 
 <a id="results"></a>
 ## Reporting results

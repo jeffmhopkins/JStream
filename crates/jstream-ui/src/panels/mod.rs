@@ -1,31 +1,22 @@
-//! The shell's panels: the scenes and sources tree, the inspector (properties, outputs
-//! and go-live) and the audio mixer. Placeholders until each panel is built; they read
-//! the open session from [`SessionContext`](crate::app::SessionContext) context.
+//! The shell's panels: the scene list and the sources list on the left, the inspector's
+//! pages (properties, then outputs) on the right, and the audio mixer (`mixer.rs`) along
+//! the bottom. They read the shared state from [`Studio`](crate::store::Studio) context
+//! and call the engine through the open session from
+//! [`SessionContext`](crate::app::SessionContext); the mixer reads its own state.
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
-use leptos::prelude::*;
-
+mod confirm;
+pub mod mixer;
 pub mod outputs;
+mod properties;
+mod scenes;
+mod sources;
 pub mod studio;
 
+pub use mixer::Mixer;
 pub use outputs::Outputs;
+pub use properties::Properties;
+pub use scenes::Scenes;
+pub use sources::Sources;
 pub use studio::StudioMode;
-
-/// The scenes and sources tree.
-#[component]
-pub fn SceneTree() -> impl IntoView {
-    view! { <h2>"Scenes"</h2><p class="placeholder">"Not built yet."</p> }
-}
-
-/// The inspector: the selected item's or source's properties, and the outputs.
-#[component]
-pub fn Inspector() -> impl IntoView {
-    view! { <h2>"Properties"</h2><p class="placeholder">"Not built yet."</p> }
-}
-
-/// The audio mixer, with meters.
-#[component]
-pub fn Mixer() -> impl IntoView {
-    view! { <h2>"Mixer"</h2><p class="placeholder">"Not built yet."</p> }
-}

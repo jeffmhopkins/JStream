@@ -27,7 +27,8 @@ use jstream_core::{
 };
 use jstream_encode::{SessionOptions, VideoSession};
 use jstream_platform::fake::{
-    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+    FakeVideoDevices,
 };
 use jstream_platform::media::{
     AudioFormat, ChannelLayout, Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, SampleFormat,
@@ -222,7 +223,7 @@ fn overload_drops_and_counts() {
         role: None,
     }))))
     .expect("batch");
-    assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(applied.result, CallResult::batch(Rev(1)));
     assert!(matches!(
         drain(&mut user_events).as_slice(),
         [
@@ -357,6 +358,7 @@ fn rt_panic_is_reported() {
         audio: Arc::new(audio.clone()),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -426,5 +428,5 @@ fn rt_panic_is_reported() {
         role: None,
     }))))
     .expect("batch");
-    assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(applied.result, CallResult::batch(Rev(1)));
 }

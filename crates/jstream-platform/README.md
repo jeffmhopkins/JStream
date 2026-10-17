@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:1b07c4408c0168dc", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -21,7 +20,9 @@ Layer-1 backend traits: the seam between the engine and the OS. Platform crates
 holds the backends as injected trait objects, so no engine crate names a platform API.
 This crate is the **single owner** of the encoder and decoder traits
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). It depends only on
-[`jstream-media`](../jstream-media/README.md#purpose), `thiserror` and `wgpu` (for the
+[`jstream-media`](../jstream-media/README.md#purpose),
+[`jstream-plugin-proto`](../jstream-plugin-proto/README.md#purpose) (the plugin-host
+contract, itself dependency-free), `thiserror` and `wgpu` (for the
 GPU-frame types, pinned exactly per
 [ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md) and re-exported as
 `jstream_platform::wgpu`), and has no `unsafe`.
@@ -42,8 +43,9 @@ Contents:
   engine's `GpuContext` (adapter, device, queue, `AdapterId`, and the platform's own
   state, which drops first) and allocates NV12 `encode_target`s. A `GpuFrame` holds a
   `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
-  stages its fence wait and signal around the engine's next submit. Frames compare by
-  texture, hold and info.
+  stages its fence wait and signal around the engine's next submit, and
+  `FrameSync::platform` lets the platform that made a hold recognise it (`None` by
+  default). Frames compare by texture, hold and info.
 - **Capture:** `Capture` (`Send + Sync`) lists displays and windows and starts a
   `CaptureStream` (`Send`). The backend's capture thread fills a single-slot
   "latest frame" mailbox, as in
@@ -52,6 +54,9 @@ Contents:
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
   `CaptureStats` counts captured and skipped frames, and the compressed frames a
   `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
+  `Capture::on_context` returns the backend on a `GpuContext`'s device, whose captures
+  deliver `Gpu` frames, or `None` (the default) when it has no GPU path; the engine
+  then keeps CPU frames.
 - **Video capture devices** (webcams and capture cards,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
@@ -85,6 +90,29 @@ Contents:
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
   as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) says.
+  `Codecs::on_context` returns the backend on a `GpuContext`, whose video encoders take
+  that context's encode targets ([GPU frames](#gpu-frames)); `Ok(None)`, the default,
+  when the backend has no GPU path.
+- **Media files** (`media_file.rs`,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `MediaDecoders`
+  (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
+  video pixel format, a `HardwarePreference`, and whether to decode audio too) as a
+  `MediaDecoder` (`Send`), which owns the whole file: the platform demuxes and decodes
+  it with its own APIs, unlike the packet-level `VideoDecoder`. `info()` gives a
+  `MediaInfo`: the first video stream (`MediaVideoInfo`: frame size and nominal frame
+  period) or `None`, the first audio stream as it decodes (`MediaAudioInfo`: its
+  format, the stream's own rate in a layout `jstream-media` has, interleaved `f32`,
+  never resampled) or `None` when there is none, it wasn't asked for or the platform
+  can't decode it, and the duration when the container says. `next_video()` and
+  `next_audio()` (an `AudioBuffer`) block while they decode the next frame or block of
+  their stream, in presentation order, and are `Ok(None)` at its end. Audio is the
+  stream's content only: a backend drops the encoder's priming and padding where it can
+  tell them. The caller reads
+  the two in step by time, since a backend holds what one stream demuxed while the
+  other is read. `seek(to)` moves both: video restarts at the key frame at or before
+  `to`, so the frames up to it may come out first, and audio at or before `to`. Times
+  are on the file's own timeline from its start, not the media clock; the `media`
+  source maps them onto the clock.
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
@@ -102,9 +130,30 @@ Contents:
   a separate trait from `StreamKeyStore`, so a token and a stream key never share a name.
   Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
   contain a token. `jstream-youtube` keeps its Google refresh token here.
+- **CLAP plugin hosts** (`plugin_host.rs`,
+  [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): `PluginHosts`
+  (`Send + Sync`) lists the CLAP search directories that exist, `scan`s a plugin file
+  in a short-lived host process (so a plugin that crashes while scanned costs only that
+  process), and `start`s a host for a `HostRequest` (file, plugin id, the block's
+  `Config` and a saved state): it creates the block initialised with that
+  configuration, starts the process on it and sends `Start`. A `PluginHost` (`Send`)
+  gives the block as a `HostBlock` (an `Arc` of anything that is `AsRef<Shared>`) for
+  the mixer's CLAP filter, says whether the process has `exited`, receives control
+  messages without waiting (`try_recv`), `send`s them (false once the host is gone),
+  and is ended by `kill` or by dropping it. Deciding when to restart or give up is the
+  engine's job, not this trait's. The engine holds it apart from `Backends`.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
-  capture device, audio, codec and GPU-interop backends and its optional virtual-camera
-  sink.
+  capture device, audio, codec, GPU-interop and media-file backends and its optional
+  virtual-camera sink.
+- **Data folder** (`paths.rs`, [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)):
+  `paths::data_dir`, the one folder every host keeps its state in. It is a folder named
+  `data` beside the exe when a file named `portable` sits there (so the app can run from
+  a USB stick), and otherwise the platform's per-user data folder: `%APPDATA%\JStream`
+  on Windows, `~/Library/Application Support/JStream` on macOS, and
+  `$XDG_DATA_HOME/jstream` (else `~/.local/share/jstream`) elsewhere. Only absolute
+  variables count, so nothing is written beside the exe without the marker. It reads the
+  environment itself: three cases don't pay for `dirs`. A plain function, not a trait:
+  no host needs to swap it.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
@@ -120,33 +169,49 @@ Contents:
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
   MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
+  `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA
+  frames whose colour tells them apart, seeking to the key frame before as a real
+  decoder does, and with a `FakeAudio` blocks of one level each, which tells them
+  apart; any other path is `Unsupported`, and nothing is read from disk; its `stats`
+  count opens, seeks, frames and audio blocks),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
-  `fake::backends`. The crate's tests drive every trait through trait objects only,
+  `fake::backends`. `plugin_host::fake::FakePluginHosts` (scans find the files a test
+  adds; `refuse_starts` fails starts, `start_hung` starts hosts already hung, and
+  `start_loading` starts hosts that don't get ready until `finish_loading`) runs each
+  host as a thread acting like a unity-gain plugin with `FAKE_LATENCY` and one
+  parameter (`fake_param`): once started it publishes ready and, like the real host,
+  only then beats the heartbeat, copies each input block to the output under the same
+  number, answers `SaveState` and ends on `Stop` or the `stop` word. A test makes it
+  `crash` (it exits) or `hang` (the heartbeat stops but it hasn't exited) through its
+  `FakeHostControl`, which also records what the host received. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
-**Not yet:** a platform that consumes GPU frames (Windows capture delivers them through
-`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet),
-an engine that opens `Backends::video_devices` (the field is filled, with
-`MfVideoDevices` on Windows and `MfMjpegDecoder` as its `CaptureDecoder`, but no source
-uses it, so `stats.tick` doesn't report `frames_undecodable`), an MJPEG `Codec` variant,
-and encoder selection by GPU adapter.
+**Not yet:** a virtual camera that takes GPU frames (Windows capture delivers them
+through `WgcCapture::on_gpu`, the engine composites them, and Windows' H.264 encoder
+takes encode targets), an engine that opens `Backends::video_devices` (the field is
+filled, with `MfVideoDevices` on Windows and `MfMjpegDecoder` as its `CaptureDecoder`,
+but no source uses it, so `stats.tick` doesn't report `frames_undecodable`), an MJPEG
+`Codec` variant, and encoder selection by vendor ID for an encoder that reports no
+adapter LUID.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c6483a76063d043e", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
 → NV12 → encoder with no CPU copy). The types below are built in this crate, and the
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
-**Frame lifetime** below describes. `jstream-render` composites one scene on
-that device when the engine has one, and opens its own (software adapter first) when it
-does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
+**Frame lifetime** below describes. `jstream-render` composites the program mix (a
+scene, or a transition between two) on that device when the engine has one, sampling
+capture frames there, and opens its own (hardware adapter first, the software one as the
+fallback) when it does not; it does not write the NV12 encode target.
+Windows' H.264 encoder takes encode targets on the context it reached through
+`Codecs::on_context`; the engine does not write or push them yet.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -172,8 +237,8 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
     - The media adapter is the one that drives the captured display, with
       `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
       engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, software adapter first. On a hybrid-GPU machine where sharing an
-      adapter isn't possible, the platform says so (ARCH step 6).
+      opens its own, hardware adapter first with the software one as the fallback. On a
+      hybrid-GPU machine where sharing an adapter isn't possible, the platform says so (ARCH step 6).
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.
@@ -196,8 +261,14 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   `wgpu::TextureUses::PRESENT`, the D3D12 `COMMON` state the platform's other APIs
   expect, as S1 did.
 - **Encoders and the virtual camera** accept `VideoSurface::Gpu` from the same platform.
-  They wait on the D3D11 side for the release value before reading (ARCH step 5). A
-  `GpuFrame` from another platform, or from another `GpuContext`, is `Unsupported`.
+  The encoders reach the context through `Codecs::on_context`, a default method like
+  `Capture::on_context`. They wait on the D3D11 side for the value the last write
+  signalled before reading, then signal a release value that the next write's stage
+  waits for (ARCH step 5), and drop the frame once the read is queued: a producer
+  writes a target again only when it holds the frame's only clone. They recognise their
+  own holds through `FrameSync::platform`, whose default is `None`. A `GpuFrame` from
+  another platform, or from another `GpuContext`, is `Unsupported`. The virtual camera
+  doesn't take them yet.
 - **Equality and `Debug`:** two `GpuFrame`s are equal when they have the same texture
   (wgpu's resource identity), the same `FrameSync` hold (the same allocation, compared by
   data pointer with `ptr::addr_eq`, so two vtables for one hold don't matter) and equal
@@ -223,10 +294,12 @@ the same reason.
 `FakeGpuInterop::open_device` returns `Unsupported`, because CI has no GPU (R-TEST-004).
 
 **Open within the design.**
-- **Encoder adapter matching.** AMD's encoder MFTs don't report `MFT_ENUM_ADAPTER_LUID`
-  (S1). The Windows implementation will match by the adapter's vendor ID when the LUID
-  is missing, and take the first hardware MFT when only one adapter has an encoder.
-  `AdapterId` carries both the LUID and the vendor ID for that.
+- **Encoder adapter matching.** The Windows encoders on a context are enumerated for
+  the context's LUID (`MFTEnum2` with `MFT_ENUM_ADAPTER_LUID`). AMD's encoder MFTs
+  don't report it (S1), so such a machine may find none and fall back to CPU frames.
+  Matching by the adapter's vendor ID when the LUID is missing, and taking the first
+  hardware MFT when only one adapter has an encoder, is not built. `AdapterId` carries
+  both the LUID and the vendor ID for it.
 - **Frame lifetime.** Capture uses a small ring of shared textures. A slot comes free
   in one of two ways:
   - **Staged:** once the fence has passed the value that render's signal released it
@@ -245,10 +318,10 @@ the same reason.
 -->
 
 - **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above. Windows capture
-  delivers them; nothing consumes them yet. Capture reaches the context through a Windows
-  constructor, `WgcCapture::on_gpu(&GpuContext)`, so the trait shapes are unchanged. How
-  the encoders reach it is still open in
-  [jstream-platform-windows](../jstream-platform-windows/README.md#open-questions).
+  delivers them, the engine composites them, and Windows' H.264 encoder takes encode
+  targets. Capture and the encoders reach the context through default methods,
+  `Capture::on_context` and `Codecs::on_context`, so other backends are unchanged. The
+  engine does not yet write encode targets or push them to an encoder.
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
   **Proposed default:** backends downmix any other layout to stereo, and new layouts
   (e.g. 7.1) are added only when a real device needs them. The Windows backend already

@@ -27,3 +27,21 @@ test('the switch is off while preview is the program scene', async ({ page, daem
   await expect(studio.getByRole('button', { name: 'Transition' })).toBeDisabled();
   await expect(studio.getByRole('button', { name: 'Cut' })).toBeDisabled();
 });
+
+test('a value the preset form refused keeps it from being added', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const studio = page.locator('section.studio');
+  await studio.getByText('Transition presets').click();
+  const form = studio.locator('form.preset-form');
+  const presets = studio.locator('.preset-list .preset');
+  const before = await presets.count();
+  await form.getByLabel('Name').fill('Slow fade');
+  // An empty number field passes the browser's own validation, so the form's refusal
+  // is what has to stop the submit.
+  await form.getByLabel('Stagger (ms)').fill('');
+  await form.getByLabel('Stagger (ms)').press('Tab');
+  await expect(form.getByRole('alert')).toHaveText('Stagger is a whole number.');
+  await form.getByRole('button', { name: 'Add' }).click();
+  await expect(form.getByRole('alert')).toHaveText('Fix the values the form refused first.');
+  await expect(presets).toHaveCount(before);
+});

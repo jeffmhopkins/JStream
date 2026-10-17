@@ -1,7 +1,9 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
-use crate::SourceError;
-use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
+use crate::{AudioScopes, MediaAudio, SourceError};
+use jstream_browser::BrowserBackend;
+use jstream_media::{AudioFormat, MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame, MediaDecoders};
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
 use std::fs::File;
 use std::io::Read;
@@ -12,23 +14,44 @@ use std::sync::Arc;
 ///
 /// Sources are created by their [`SourceKind`] from a complete, already validated
 /// settings map. Creating one may block (an image is read and decoded then), so it never
-/// happens on a real-time thread. Asking for a frame doesn't block or allocate for the
-/// built-in kinds: frames are made when the source is created or updated and handed out
-/// as shared [`Arc`]s, so the render thread can hold one past the next update.
+/// happens on a real-time thread. Asking for a frame doesn't block on I/O or allocate
+/// for the built-in kinds, and frames are handed out as shared [`Arc`]s, so the render
+/// thread can hold one past the next update. Most make their frames when created or
+/// updated; a `media` file decodes them ahead on a thread of its own and hands each
+/// over under a short lock; a source whose frames follow something live (the
+/// `waveform`, `spectrum` and `chat_message` kinds) draws them in its [`Painter`]
+/// instead, and `frame` hands out the one painted last.
 pub trait Source: Send {
     /// The frame to show at `at`, the time since the source started on the media clock
     /// (ADR-0014, docs/adr/0014-media-clock.md). A time before the start shows the
     /// first frame.
     ///
     /// # Errors
-    /// Whatever stops the source from producing a frame. The built-in kinds never fail
-    /// here; their errors surface when they are created.
+    /// Whatever stops the source from producing a frame. The built-in kinds' errors
+    /// surface when they are created, apart from a `media` file that fails to decode
+    /// partway, which fails here from then on.
     fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError>;
 
     /// When the frame shown at `at` is next replaced, on the same clock as
     /// [`frame`](Self::frame). `None` means it never changes again (a still image, a
     /// colour, or an animation that has finished its loops).
     fn next_change(&self, at: MediaTime) -> Option<MediaTime>;
+
+    /// The program mix shows the source again at `at`, on the same clock as
+    /// [`frame`](Self::frame): it reaches the source after plans that didn't. A kind that
+    /// restarts when it is shown (a media file's `restart_on_show`) restarts here; the
+    /// default does nothing.
+    fn show(&mut self, at: MediaTime) {
+        let _ = at;
+    }
+
+    /// The source's sound, for the engine to mix while the program shows the source: a
+    /// `media` file's audio, decoded on the media clock. `None`, the default, for a kind
+    /// without such sound. A kind whose audio plays whether or not it is shown (a
+    /// `browser` page) gives it through [`audio`](Self::audio) instead.
+    fn sound(&self) -> Option<MediaAudio> {
+        None
+    }
 
     /// Applies a new settings map. Only parameters marked `live` in the kind's
     /// descriptor may differ from the ones the source runs with; check
@@ -38,6 +61,55 @@ pub trait Source: Send {
     /// [`SourceError::NotLive`] when a non-live parameter changed, and
     /// [`SourceError::Setting`] when a value doesn't have its descriptor's type.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
+
+    /// What draws this source's frames ahead of [`frame`](Self::frame), for a source
+    /// whose frames follow something live; `None` (the default) for one whose frames are
+    /// made on create and update.
+    fn painter(&self) -> Option<Arc<dyn Painter>> {
+        None
+    }
+
+    /// The source's frame as a texture on the engine's GPU device, for kinds whose
+    /// frames never reach the CPU (`browser`, ADR-0021): when it is `Some`, it is what
+    /// the source shows, and [`frame`](Self::frame) is only a transparent stand-in of
+    /// the same size. `None` (the default, and a GPU source before its first frame)
+    /// means [`frame`](Self::frame) is the source's picture.
+    fn gpu_frame(&mut self) -> Option<GpuFrame> {
+        None
+    }
+
+    /// The source's own audio, for kinds that produce sound as well as frames
+    /// (`browser`), which the engine records into a mixer input as it records a device.
+    /// `None` (the default) means the source has none. The same source returns the same
+    /// audio for as long as it runs.
+    fn audio(&self) -> Option<Arc<dyn SourceAudio>> {
+        None
+    }
+}
+
+/// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.
+///
+/// Drawing a frame can take milliseconds (a whole frame's pixels, an FFT), so a host
+/// that asks for frames under a lock calls `paint` before it takes that lock, when
+/// [`Source::next_change`] said the frame is due, and `frame` then hands the painted
+/// frame out at once. The `waveform` and `spectrum` painters allocate only while their
+/// pool of frames grows, or when every frame in it is still held; `chat_message`'s
+/// allocates when it redraws for a newly featured message.
+pub trait Painter: Send + Sync {
+    /// Draws the frame to show at `at`, on the same clock as [`Source::frame`].
+    fn paint(&self, at: MediaTime);
+}
+
+/// A source's own audio ([`Source::audio`]): a stream the engine records into a mixer
+/// input the way it records an audio device (`AudioIo::open_input` in
+/// `jstream-platform`).
+pub trait SourceAudio: Send + Sync {
+    /// The format packets arrive in: interleaved `f32`, at a fixed rate and layout.
+    fn format(&self) -> AudioFormat;
+
+    /// Starts handing packets to `handler`, on the source's own audio thread, until the
+    /// returned stream is dropped. Opening again replaces the earlier handler.
+    fn open(&self, handler: Box<dyn AudioInputHandler>) -> Box<dyn AudioStream>;
 }
 
 /// A source kind: its descriptor (`kind.describe`) and how to create its sources.
@@ -58,14 +130,41 @@ pub trait SourceKind: Send + Sync {
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError>;
 }
 
-/// What sources are created with: where asset references point, and how much a
-/// decoded asset may take.
-#[derive(Clone, Debug, Default)]
+/// What sources are created with: where asset references point, how much a decoded
+/// asset may take, the platform backends the kinds that need one play through, and the
+/// featured chat message.
+#[derive(Clone, Default)]
 pub struct Context {
     /// The folders behind asset roots.
     pub assets: AssetRoots,
     /// Size limits for decoded assets.
     pub limits: Limits,
+    /// The audio the `waveform` and `spectrum` sources draw: the program mix's scope
+    /// and each bus's, looked up by their `audio` setting. `None` draws silence.
+    pub audio: Option<Arc<AudioScopes>>,
+    /// The platform's media files (ADR-0031): what the `media` kind demuxes and decodes
+    /// with. `None` until the host injects the platform's backends; `media` sources
+    /// then fail with [`SourceError::NoBackend`].
+    pub media: Option<Arc<dyn MediaDecoders>>,
+    /// The browser engine `browser` sources open their pages in (ADR-0021). `None`
+    /// until the host injects one; `browser` sources then fail with
+    /// [`SourceError::NoBackend`].
+    pub browser: Option<Arc<dyn BrowserBackend>>,
+    /// The featured chat message `chat_message` sources draw. Clones share it.
+    pub chat: crate::ChatFeature,
+}
+
+impl std::fmt::Debug for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Context")
+            .field("assets", &self.assets)
+            .field("limits", &self.limits)
+            .field("audio", &self.audio)
+            .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
+            .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
+            .field("chat", &self.chat)
+            .finish()
+    }
 }
 
 /// The folders behind the `collection` and `app` asset roots. `absolute` paths need
@@ -121,10 +220,14 @@ impl AssetRoots {
     ) -> Result<Vec<u8>, SourceError> {
         let read_err = read_err(path);
         let file = match self.base(root, path)? {
-            Some(base) => open_inside(&base, path).map_err(|e| match e {
-                Opened::Escapes => escapes(root, path),
-                Opened::Io(e) => read_err(e),
-            })?,
+            Some(base) => {
+                open_inside(&base, path)
+                    .map_err(|e| match e {
+                        Opened::Escapes => escapes(root, path),
+                        Opened::Io(e) => read_err(e),
+                    })?
+                    .0
+            }
             None => File::open(path).map_err(&read_err)?,
         };
         let mut bytes = Vec::new();
@@ -140,6 +243,33 @@ impl AssetRoots {
             });
         }
         Ok(bytes)
+    }
+
+    /// Opens the file an asset reference names, for a reader that opens it again by its
+    /// path (a platform decoder streaming a large file), and returns it with that host
+    /// path, resolved through symlinks. Under `collection` and `app` the file is checked
+    /// as [`read`](Self::read) checks it.
+    ///
+    /// The returned file is the caller's hold on the path. On Windows it is opened without
+    /// `FILE_SHARE_DELETE`, and Windows refuses to rename or delete a file open that way,
+    /// or a folder that holds one, so a reader that opens the path while the hold is kept
+    /// opens this file. Unix has no such hold: there the path is only checked.
+    ///
+    /// # Errors
+    /// Those of [`read`](Self::read), apart from [`SourceError::TooLarge`].
+    pub fn open(&self, root: AssetRoot, path: &str) -> Result<(File, PathBuf), SourceError> {
+        let read_err = read_err(path);
+        match self.base(root, path)? {
+            Some(base) => open_inside(&base, path).map_err(|e| match e {
+                Opened::Escapes => escapes(root, path),
+                Opened::Io(e) => read_err(e),
+            }),
+            None => {
+                let file = open_held(Path::new(path)).map_err(&read_err)?;
+                let host = Path::new(path).canonicalize().map_err(read_err)?;
+                Ok((file, host))
+            }
+        }
     }
 
     /// The canonical folder behind `root`; `None` for `absolute`, which has none. A
@@ -195,17 +325,17 @@ impl From<std::io::Error> for Opened {
 /// its path resolves to afterwards: a file swapped in from outside the root is a
 /// different file.
 #[cfg(unix)]
-fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
+fn open_inside(base: &Path, rel: &str) -> Result<(File, PathBuf), Opened> {
     let joined = base.join(rel);
     let file = File::open(&joined)?;
-    check_opened(&file, base, &joined)?;
-    Ok(file)
+    let canonical = check_opened(&file, base, &joined)?;
+    Ok((file, canonical))
 }
 
 /// Whether `file`, opened through `joined`, is the file `joined` now resolves to inside
-/// `base`.
+/// `base`. Returns that resolved path.
 #[cfg(unix)]
-fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<(), Opened> {
+fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<PathBuf, Opened> {
     use std::os::unix::fs::MetadataExt;
     let canonical = joined.canonicalize()?;
     if !canonical.starts_with(base) {
@@ -213,9 +343,29 @@ fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<(), Opened> {
     }
     let (opened, named) = (file.metadata()?, std::fs::metadata(&canonical)?);
     if (opened.dev(), opened.ino()) == (named.dev(), named.ino()) {
-        Ok(())
+        Ok(canonical)
     } else {
         Err(Opened::Escapes)
+    }
+}
+
+/// Opens `path` for reading as a hold on it ([`AssetRoots::open`]): on Windows without
+/// `FILE_SHARE_DELETE`, which std's `File::open` grants.
+fn open_held(path: &Path) -> std::io::Result<File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Win32 values (winnt.h).
+        const FILE_SHARE_READ: u32 = 0x1;
+        const FILE_SHARE_WRITE: u32 = 0x2;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(path)
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(path)
     }
 }
 
@@ -226,10 +376,11 @@ fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<(), Opened> {
 /// resolved form is walked from `base` one component at a time (see [`walk_below`]).
 /// A path that resolves outside `base` is refused before the walk.
 #[cfg(windows)]
-fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
+fn open_inside(base: &Path, rel: &str) -> Result<(File, PathBuf), Opened> {
     let canonical = base.join(rel).canonicalize()?;
     let below = canonical.strip_prefix(base).map_err(|_| Opened::Escapes)?;
-    walk_below(base, below)
+    let file = walk_below(base, below)?;
+    Ok((file, canonical))
 }
 
 /// Opens `below`, a path relative to the canonical folder `base` that was resolved

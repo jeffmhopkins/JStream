@@ -22,7 +22,7 @@ futures-util.workspace = true
 jstream-control = { workspace = true, features = ["ws"] }
 jstream-protocol.workspace = true
 leptos.workspace = true
-# Settings values in the transition preset form.
+# Settings values in the properties form and the transition preset form.
 serde_json.workspace = true
 
 [dev-dependencies]

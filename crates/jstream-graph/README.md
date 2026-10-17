@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:925720aa5ed2aedb", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio #240, #331): re-read main's audio text beside T1's transition/preview text and merged the sentences both sides edited (contents lists, state.get, file, rebuild order, touched sets, tool nouns, version line); T1 now documents protocol 0.20 since D5 took 0.19; CLI usage also notes the transition edits aren't in the CLI; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -30,8 +29,11 @@ codes, so the engine passes them to clients unchanged.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `buses`, keyed by ID and always holding the master, the `sends`,
-  keyed by bus and source, and the `transitions`: the presets, keyed by ID, and the
-  default. A new state holds one preset, `cut`, as its default.
+  keyed by bus and source, the `hotkeys`: each `Chord` bound to the protocol
+  `Action` it fires
+  ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
+  §3), and the `transitions`: the presets, keyed by ID, and the default. A binding
+  always names objects that exist. A new state holds one preset, `cut`, as its default.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -39,13 +41,19 @@ codes, so the engine passes them to clients unchanged.
   capture. `source.duplicate` makes a separate copy under a new ID and records the
   original in the copy's `duplicated_from`, a plain link that is no dependency edge:
   the original may be deleted, and reads then omit the link. Removing an item never
-  deletes its source. An audio source (its kind has audio, or a `scene` source) also
-  has its `SourceAudio` ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)).
+  deletes its source. A source also has its filter `Chains`, a video and an audio
+  chain of `Filter`s (an ID unique within the source, a kind, `enabled` and complete
+  settings), at most `MAX_CHAIN_FILTERS` (8) each
+  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)). An audio source (its kind
+  has audio, or a `scene` source) also has its `SourceAudio`
+  ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here), its `transition_in` and `transition_out` overrides, and its items in stacking
   order, bottom first.
-- `Item`: the source it places, a `Placement`, a `crop`, `visible` and its
-  `ItemTransition` ([ADR-0029](../../docs/adr/0029-transitions.md)). `Placement` is
+- `Item`: the source it places, a `Placement`, a `crop`, `visible`, an `opacity` from
+  0 to 1 and a `BlendMode`, its `ItemTransition`
+  ([ADR-0029](../../docs/adr/0029-transitions.md)), and the reserved per-placement
+  `effects`, an uninhabited `Effect` list that is always empty. `Placement` is
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
   written. Only an edit changes the form.
@@ -56,14 +64,15 @@ codes, so the engine passes them to clients unchanged.
   [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): an
   ID, a name, a transition kind, `duration_ms`, `easing` and its complete settings.
 - `Bus`: an ID, a name and a fader (`gain_db`, `muted`). The master bus (`master`,
-  `MASTER_NAME`) is in every state; at most `MAX_BUSES` (16) buses in all. A send is a
+  `MASTER_NAME`) is in every state; at most `MAX_BUSES` (16, the protocol's
+  `MAX_BUSES`) buses in all. A send is a
   gain in dB from a source into a bus.
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
-- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, a recording
-  to an MP4 file, or the virtual camera, which has nothing to check) and the encoder
-  profile it uses, if not the default (a virtual camera encodes nothing, so it ignores
-  its profile). Whether it
+- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL or to a YouTube
+  broadcast by its ID, a recording to an MP4 file, or the virtual camera, which has
+  nothing to check) and the encoder profile it uses, if not the default (a virtual
+  camera encodes nothing, so it ignores its profile). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -78,8 +87,8 @@ the batch **touched**.
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
-  `item.set_crop` and `item.set_visible` only where the item differed from what
-  `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
+  `item.set_crop`, `item.set_visible` and `item.set_transition` only where the item
+  differed from what `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
   group), `scene.reorder`, `scene.set_transitions` when it had an override, and each
   item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
@@ -88,33 +97,39 @@ the batch **touched**.
   delete also names what it removed), the objects created or deleted, the objects used
   (an item's scene and source, both sources of an `item.set_source`, a `scene`
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
-  an `output.set_encoder` names, a send's source and bus), the properties set (names,
-  a scene's role, an item's placement, crop, visibility, index and source, each
-  settings parameter, an output's target and encoder choice, a profile's encoding, each
-  audio field a `source.set_audio` or `bus.set_fader` sets, a send's gain, a preset's
-  fields, a scene's transition overrides, an item's transition settings), and whether
-  the scenes' order, the canvas size or the default preset was set. A send is an
-  object of its own, so two sources' sends into one bus don't conflict, and deleting a
-  bus conflicts with every change to its sends. An edit it doesn't know marks the set as conflicting with
+  an `output.set_encoder` names, a send's source and bus, the preset a scene override
+  or `transition.set_default` names), the properties set (names, a scene's role, an
+  item's placement, crop, visibility, opacity, blend, index and source, each settings
+  parameter, a filter's switch, settings parameters and index, an output's target and
+  encoder choice, a profile's encoding, each audio field a `source.set_audio` or
+  `bus.set_fader` sets, a send's gain, a preset's fields, a scene's transition
+  overrides, an item's transition settings), and whether the scenes' order, the canvas
+  size or the default preset was set. A send is an object of its own, so two sources'
+  sends into one bus don't conflict, and deleting a bus conflicts with every change to
+  its sends. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
   clients' later batches: one set creates or deletes an object the other touches, both
   set the same property, both set the scenes' order, both set the canvas size, or both
   set the default preset.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
-  `source.create` of a `builtin` source needs a kind the graph describes, checks each
+  `source.create` of a `builtin` source needs a source kind the graph describes (a
+  filter or transition kind, such as a scanned CLAP plugin's, is `invalid_argument` on
+  `kind.kind`, naming its category), checks each
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
   with defaults filled in. `source.set_settings` checks and applies a patch (`null`
   resets a parameter to its default) and its inverse is the patch of the old values.
   `source.rename` renames. `source.create` rejects a `duplicated_from` naming the new
   source itself, and accepts one naming a missing source, as `source.delete`'s inverse
-  may need after the original went first. A reference to a missing scene or source is `not_found`, and
+  may need after the original went first. A reference to a missing scene, source or
+  bus is `not_found`, and
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
-  places the source or a setting refers to it, and `scene.delete` while a `scene`
-  source shows the scene or a setting refers to it. The `invalid_argument` lists every
+  places the source or a setting refers to it, `scene.delete` while a `scene`
+  source shows the scene or a setting refers to it, and `bus.delete` while a setting
+  refers to the bus (a `waveform` or `spectrum` drawing it, #362). The `invalid_argument` lists every
   blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
-  item (`source_id`), the `scene` source (`kind.scene_id`) or the setting
-  (`settings.<param>`). The client removes them first, in the same batch if it likes,
+  item (`source_id`), the `scene` source (`kind.scene_id`), the setting
+  (`settings.<param>`) or a filter's setting (`filters.<filter_id>.<param>`). The client removes them first, in the same batch if it likes,
   or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
   edit's effect, and its inverse, limited to the object it names.
 - **Canvas and geometry** ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)):
@@ -126,14 +141,36 @@ the batch **touched**.
   `item.set_transform`. A geometry is checked before it is stored: a positive size and
   perspective, finite corners, and neutral tilt, turn, depth and perspective until the
   compositor draws 3D; each failure names its field (`edits.N.geometry.tilt_deg`).
+  `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
+  `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
+  accept only `normal` until the compositor draws the other modes. Each is undone by
+  the previous value, and removing an item restores both.
+- **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
+  `filter.add` checks, in order, the owner source, the filter ID (non-empty, unused in
+  the source), that the source has the chain (video if its kind produces video, audio
+  if it produces audio and it is not a `scene` source), that the chain has room, that
+  the kind is a filter kind of that chain (`kind`), the settings exactly as a source's,
+  and the index; it is undone by `filter.remove`. `filter.remove` is undone by the
+  `filter.add` that puts the filter back where it was, with its switch and settings;
+  `filter.set_enabled`, `filter.set_settings` (a patch, `null` resets) and
+  `filter.reorder` by the previous values. `source.duplicate` copies both chains with
+  their IDs, `source.delete`'s inverse re-adds every filter after `source.create`, and
+  `source.create` refuses a filter kind.
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
   name, and one that could carry a credential (`user:password@`, a query or a
-  fragment). A recording's `path` is rejected (field `kind.path`) when it is empty,
+  fragment). A `youtube` target's `broadcast_id` is rejected (field
+  `kind.target.broadcast_id`, or `target.broadcast_id` in `output.set_target`) when it is empty, over 128 bytes, or has anything but ASCII
+  letters, digits, `-` and `_`. A recording's `path` is rejected (field `kind.path`) when it is empty,
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
-  `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
-  doesn't end in a file name; whether it is absolute on the engine's own machine, and
+  `\…`, `C:\…` or `C:/…`, the same on every platform), starts with two separators (a
+  Windows UNC or device path), has `:` other than a drive letter's, `?` or `*` (`\??\…`
+  is an NT object path), or doesn't end in a file name, or ends in a DOS device name
+  (`NUL`, `CON`, `PRN`, `AUX`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`,
+  `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`, in any case and with or without an extension,
+  so `nul.mp4` too, by the rule of an asset path's last component), which Windows opens
+  in place of a file; whether it is absolute on the engine's own machine, and
   whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
@@ -167,31 +204,44 @@ the batch **touched**.
   `send.remove` of the default master send for whatever differs from the defaults.
   `source.set_audio` needs an audio source and at least one field, and refuses a
   `scene` source's `gain_db` or `muted`. `bus.create` checks the ID, the name and the
-  bus limit; `bus.delete` refuses the master and removes the bus's sends, and its
-  inverse is `bus.create`, `bus.set_fader` if the fader differed, and the sends.
+  bus limit; `bus.delete` refuses the master and a bus a setting refers to (above),
+  and removes the bus's sends, and its inverse is `bus.create`, `bus.set_fader` if the fader differed, and the sends.
   `send.set` and `send.remove` check the source, then the bus (`not_found`), then that
   the source has a channel (a `scene` source sends nothing of its own). Every gain is
   checked with the protocol's `gain_db_problem` (−100 to +24 dB). A send always runs
   from a source to a bus, so buses can't form a cycle (buses never feed buses); a
-  routing check comes with filters.
+  routing check comes with keyed (sidechain) filters.
 - **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
   `scene.set_role` changes a scene's role and is undone by the previous role.
   `scene.create` sets the `role` it names, or `scene` when it names none.
   `item.move` moves an item to an index in another scene (up to one past its top) or
   within its own (a reorder), keeping the whole item, and is undone by `item.move`
   back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
-  `item.set_visible`)
+  `item.set_visible`, `item.set_opacity`)
   take an optional `scene_id`: absent or the item's own scene changes the item, another
   scene is `invalid_argument` until keyframe scenes exist, and the inverse keeps the
   addressing. No keyframe overrides exist yet, so no edit drops any
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §1 applies once they do).
+- **Hotkeys** (`hotkey.rs`): `hotkey.set` binds a chord to an action and
+  `hotkey.clear` unbinds it, checked in this order: the chord's spelling
+  (`invalid_argument` on `chord`), whether it is already bound (`already_exists`) or
+  bound at all (`not_found`, entity `hotkey`), an action that can't be bound
+  (`Action::bind_problem`: `output.set_key`, whose key is never stored, and the
+  session-only (preview and live), server-answered and YouTube actions), and the objects the action names
+  (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
+  `hotkey.set` in one batch. Deleting a scene, source, output, encoder profile or
+  transition preset (a `scene.switch` may name one) removes the bindings that name it, so none dangles: the result's `removed_hotkeys` lists them,
+  and the delete's inverse ends with a `hotkey.set` for each, after the object is back.
+  The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
-  scenes and sources its settings refer to. Asset references are not edges. Every edit
-  that adds an edge runs the cycle check: `item.add`, `item.move`, `item.set_source`
-  (from the item's scene to its new source), `source.create` and
-  `source.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
+  scenes, sources and buses its settings, or its filters' settings, refer to. A bus
+  depends on nothing, so an edge into one never closes a cycle; it only holds the bus
+  against `bus.delete`. Asset references are not edges. Every edit that adds an edge
+  runs the cycle check: `item.add`, `item.move`, `item.set_source` (from the item's
+  scene to its new source), `source.create`, `source.set_settings`, `filter.add` and
+  `filter.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
   depends on, so it can't close one. A cycle is `invalid_argument` naming it
   (for example scene `a` -> source `sa` -> scene `a`).
 
@@ -206,34 +256,42 @@ unknown kind), and `delete.plan` (`plan.rs`,
 target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
-to `null` (one `source.set_settings` per source), and the target's own delete comes
-last. Sources come ordered by ID, scenes in
+to `null` (one `source.set_settings` per source, and one `filter.set_settings` per
+filter), and the target's own delete comes last. The plan also lists the hotkey bindings those deletes remove. A bus's plan only clears references
+(its `bus.delete` takes its sends); the master's is `invalid_argument`. Sources come
+ordered by ID, scenes in
 display order, items bottom first, outputs, encoder profiles and buses ordered by
 ID, and sends by bus and then source. `state.get` carries the canvas, the buses, the
-sends and the transition presets (ordered by ID) with the default, and an audio
-source's info its `audio`; `kind.list` lists the transition kinds beside the source
-kinds. A geometry item reads its `geometry`, and the deprecated `transform` view the
+sends, the hotkey bindings ordered by chord, and the transition presets (ordered by ID)
+with the default, and an audio source's info its `audio`; `kind.list` lists the
+transition kinds beside the source and filter kinds. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
-`Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
+`Scene::to_info`, `Item::to_info`, `Filter::to_info` and `Output::to_info` convert single
+objects; a source reports its chains in `filters`, omitted while both are empty, and an
+item its `opacity` and `blend`. Reads change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
 (`SCHEMA_VERSION`, now 1), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024) with their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
-and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
-`builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
-when it names a deleted source), outputs ordered by ID (each with its
+and `visible`, and its `opacity` and `blend` only when they differ from 1 and
+`normal`), sources ordered by ID (with `kind_version`, the descriptor version a
+`builtin` source's settings follow, ADR-0025, `duplicated_from` as stored, even
+when it names a deleted source, and `filters`, omitted while both chains are empty: each
+filter with its `kind_version` and settings, and `enabled` only when false), outputs ordered by ID (each with its
 `encoder_profile`, omitted for the default), encoder profiles (`encoders`) ordered by
 ID, omitted when there are none, `buses` (omitted while the master is the only one and
 at its defaults), `sends`, written whenever there is a send or a source with a
 channel of its own (so an empty list means every master send was removed) and omitted
-otherwise, and `transitions` (each preset with its `kind_version`, and the default),
-omitted while it is the initial `cut` alone. A scene writes `transition_in` and
-`transition_out` when set, and an item its `transition` when not the default. A
-source's `audio` is saved only where it differs from its kind's defaults. Kinds, undo history and runtime state are not in it, and
+otherwise, the `hotkeys` ordered by chord, omitted when there are none, and
+`transitions` (each preset with its `kind_version`, and the default), omitted while it
+is the initial `cut` alone (so no `schema_version` bump: an older file has neither). A
+scene writes `transition_in` and `transition_out` when set, and an item its
+`transition` when not the default. A source's `audio` is saved
+only where it differs from its kind's defaults. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -241,23 +299,25 @@ the engine's; this crate does no I/O.
   `schema_version` it has no path from (missing, 0, or newer), runs the forward
   migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`;
   there are none while the schema is at 1), and refuses unknown fields in the file's
-  own objects, so a newer field is never silently dropped by the next save.
+  own objects, so a newer field is never silently dropped by the next save. An item's
+  reserved `effects` is accepted only empty.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
-  graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
-  sources its settings refer to), then items in their placement form with their crop,
-  visibility and transition settings, then encoder profiles, then the presets and the
+  graph with the caller's kinds: the canvas size, scenes with their roles, then the
+  buses (the master renamed or faded as saved), which a source's settings may refer to,
+  then sources (each after the sources its settings refer to), then every source's
+  filters, then items in their placement form with their crop and visibility, opacity,
+  blend and transition settings, then encoder profiles, then the presets and the
   default (the initial `cut` is updated in place when the file has it, and deleted when
-  it doesn't), then each scene's overrides, then outputs with their profiles, then the
-  buses (the master renamed or faded as saved), each source's audio and the sends
-  (with a `send.remove` of a default master send the file doesn't list; a file
-  without `sends`, such as one saved before sends existed, keeps every default master
-  send). A
+  it doesn't), then each scene's overrides, then outputs with their profiles, then each
+  source's audio and the sends (with a `send.remove` of a default master send the file
+  doesn't list; a file without `sends`, such as one saved before sends existed, keeps
+  every default master send), then hotkeys (`` hotkey `F1` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
   `LoadError` stay small); nothing is partly loaded. Then `rev` is set
-  to the file's, so revisions keep increasing across restarts. A source or preset whose
+  to the file's, so revisions keep increasing across restarts. A source, filter or preset whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
 - **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s
@@ -273,15 +333,25 @@ case per edge-adding edit), settings checks and defaults,
 placement conversions and their inverses, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
-output, encoder edits and their inverses (a profile freed and deleted in one batch), audio
-defaults by kind, a duplicate's audio and a delete's restore, a bus deleted with its
-sends and undone exactly, exact inverses,
+output, encoder edits and their inverses (a profile freed and deleted in one batch),
+opacity and blend checks and inverses, the filter edits (`tests/filters.rs`: each
+check's field, exact inverses, duplicate and delete, references in filter settings as
+cycles, blockers and plans, and the collection file), audio defaults by kind, a
+duplicate's audio and a delete's restore, a bus deleted with its sends and undone
+exactly, bus references (#362: `a_bus_reference_must_name_a_bus`,
+`a_drawn_bus_is_deleted_only_with_its_references_cleared`, and in `persist/tests.rs`
+`a_source_drawing_a_bus_round_trips`), hotkey checks, rebinds and the bindings
+deletes remove (and restore on undo), a `scene.switch` binding that names a preset
+(`a_switch_naming_a_preset_follows_the_preset`), the transition edits (in
+`transition.rs`: the initial `cut`, kind and settings checks, a source refusing a
+transition kind, patches and kind changes, the default's delete refused and a delete
+clearing overrides, item settings), exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes, source switches, addressed
-placement edits and the audio edits. After each successful one, the state must hold no cycle, applying its
+placement edits, filter edits, the audio edits and the transition edits. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged. And
 after every batch, for each scene and source: a plain delete is refused exactly when
@@ -297,8 +367,9 @@ works out itself. The
 seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
-scene `b` made a group, a clone, a `duplicated_from` naming a missing source, and the
-fixture's buses, sends and source audio, less the virtual camera the parity collection
+scene `b` made a group, a clone, a `duplicated_from` naming a missing source,
+opacities, a desktop audio source with two gain filters, one disabled, and the
+fixture's buses, sends and source audio, less the virtual camera and the hotkeys the parity collection
 gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
@@ -307,7 +378,9 @@ moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none; a file
 without `sends`, `buses` or source `audio` (as saved before audio existed) keeping
 its audio sources' master sends at 0 dB; a removed master send's round trip; a profile's
-round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
+round trip; a virtual camera's round trip; transitions' round trip (with the initial
+`cut` deleted, or kept but changed) and a preset of another kind version refused;
+hotkeys' round trip, and a file whose binding names a missing scene refused; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that
@@ -320,12 +393,14 @@ no error quotes a credential-like value placed where a number, key or tag belong
 
 Planned, and kept possible by the private fields of the model types:
 
-- **Filters and effects:** `filters[]` on sources (applied wherever the source is
-  placed) and `effects[]` on items (per placement), with their edits.
+- **Effects and more chains:** `effects[]` on items (per placement), which a collection
+  reserves and must leave empty for now, with their edits; filter chains on buses,
+  scenes, the master and outputs
+  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)).
 - **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
   records each source's kind version but refuses a mismatch: settings migrations per
   kind, and keeping the data of a source whose kind is missing, come later.
-- Blend modes and opacity on placements (B7). Legacy placements go in 1.0, whose
+- Blend modes other than `normal` on placements. Legacy placements go in 1.0, whose
   collection migration converts them
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5).
 - Keyframe scenes (`variant_of`, per-item `overrides`, `item.clear_override`) and the

@@ -198,6 +198,11 @@ impl InputControl {
     /// parameters travel through the block's parameter ring, not
     /// [`FilterControl::set`].
     ///
+    /// One filter per block, and a freshly initialised one: the filter numbers blocks
+    /// from 0 and fixes its latency from the host's ready latency when it is built. A
+    /// host restarted on a re-initialised block (or reporting a new latency) needs the
+    /// filter removed and added again.
+    ///
     /// # Errors
     /// As [`Self::add_filter`], and [`AudioError::InvalidConfig`] for a block that isn't
     /// initialised for this mixer or whose host isn't ready.
@@ -240,6 +245,21 @@ impl InputControl {
     /// Whether the input is muted.
     pub fn muted(&self) -> bool {
         self.shared.gain.muted()
+    }
+
+    /// Sets the input's activity gain, linear, clamped to 0..=1; NaN is ignored. It is
+    /// applied after the fader and the input's meter, and scales every send: the
+    /// engine's audio that follows the program (ADR-0028's `when_shown`). The mixer
+    /// ramps to it over one block. A new input starts at 1.
+    pub fn set_activity_gain(&self, gain: f32) {
+        if !gain.is_nan() {
+            self.shared.activity.store(gain.clamp(0.0, 1.0));
+        }
+    }
+
+    /// The input's activity gain.
+    pub fn activity_gain(&self) -> f32 {
+        self.shared.activity.load()
     }
 
     /// Sends the input into `bus` (post-fader) at `gain`, linear, or changes that
@@ -313,7 +333,8 @@ pub struct InputStats {
     /// Device frames lost in gaps the clock agreed with, replaced by silence.
     pub gap_frames: u64,
     /// Restarts of the position mapping: backwards or overlong position jumps, gaps the
-    /// clock disagreed with, and runs of timestamp outliers.
+    /// clock disagreed with, runs of timestamp outliers, and a discontinuity whose stamp
+    /// is more than 20 ms off the fitted clock line.
     pub resets: u64,
     /// Times the input was re-placed on the engine time line after its first anchor
     /// (after resets, discontinuities and timing errors beyond 20 ms).

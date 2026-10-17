@@ -81,7 +81,7 @@ impl Source for ColorSource {
 }
 
 /// The `width` and `height` settings, within the descriptor's range and `limits`.
-fn frame_size(settings: &Settings, limits: &Limits) -> Result<FrameSize, SourceError> {
+pub(crate) fn frame_size(settings: &Settings, limits: &Limits) -> Result<FrameSize, SourceError> {
     let side = |id: &str| {
         let value = setting(settings, id)?;
         value

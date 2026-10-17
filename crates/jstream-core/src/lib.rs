@@ -20,6 +20,7 @@
 
 #![forbid(unsafe_code)]
 
+mod activity;
 mod audio;
 mod audio_sources;
 mod audit;
@@ -27,10 +28,14 @@ mod collection;
 mod drops;
 mod engine;
 mod events;
+mod filters;
+mod gesture;
 mod history;
 mod kinds;
 mod live;
 mod outputs;
+mod plugins;
+mod preview;
 mod runtime;
 mod session;
 mod snapshot;
@@ -38,6 +43,7 @@ mod studio;
 #[cfg(test)]
 mod tests;
 mod transition;
+mod youtube;
 
 pub use audit::{
     AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditMemory, AuditSink,
@@ -50,12 +56,17 @@ pub use drops::{
     capture_drops, output_packet_drops, render_tick_drops, video_encode_drops,
 };
 pub use engine::Engine;
+pub use plugins::kinds::{CLAP_KIND_PREFIX, ClapKind, ClapScan};
+pub use plugins::supervisor::{
+    HostEvent, HostStatus, HostSupervisor, STOP_GRACE, SupervisorPolicy,
+};
 pub use runtime::{
     LinkState, LivePublish, OpenPublish, OutputStats, PublishError, RecordingPublish, RtmpPublish,
     connect_rtmp,
 };
 pub use session::InProcessControl;
 pub use snapshot::SourceFrameError;
+pub use youtube::{HEALTH_INTERVAL, SIGN_IN_TIMEOUT, TOKEN_ACCOUNT, YoutubeSetup};
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 

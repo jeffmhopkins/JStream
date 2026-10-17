@@ -11,9 +11,8 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["apps/jstream-desktop/src/**"]
+covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f0925d97c67e7dbc", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -30,28 +29,35 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Startup** (`app.rs`, `main.rs`): the command line, the log file, then the engine,
   its server and the UI bundle. Anything that fails becomes the page the window shows.
 - **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
-  is) and its server on a free port, with a token made fresh at each start.
+  is, plus the virtual camera) and its server on a free port, with a token made fresh
+  at each start; `vcam_status`, whether the camera is registered.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
-- **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token.
+- **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
+  and the virtual camera's status.
+- **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
+  backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
-- **Data folder and log file** (`data.rs`, `logs.rs`).
+- **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
-  script's escaping, the data folder and the capped log file).
+  script's escaping, the command line, the virtual camera's status values and the
+  capped log file), and one integration test, `tests/delay_load.rs` (Windows MSVC
+  only), which reads the built `jstream.exe`'s PE headers to check that each Media
+  Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
 
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's registration mode (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, crash
-reports, MCP and the token for outside clients, and the release build of the portable
-folder.
+reports, MCP and the token for outside clients, and browser sources in a default build
+(the `cef` feature is off). `cargo xtask dist` builds the portable folder
+([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
 <a id="usage"></a>
 ## Usage
 <!-- @section
-covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:1806a584c2b4f0f0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
+covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
 -->
 
 On Windows, with the UI built first:
@@ -70,10 +76,24 @@ Closing the window stops the engine.
 | Option | Meaning |
 |---|---|
 | `--ui-dir <folder>` | The UI bundle (`trunk build`'s `dist`). Default: the `ui` folder beside the exe. |
+| `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. |
+
+**Browser sources** need the `cef` feature (`cargo run -p jstream-desktop --features
+cef`) and the sandboxed browser helper beside `jstream.exe`: CEF's bootstrap exe renamed
+`jstream-browser-helper.exe`, `jstream-browser-helper.dll` and CEF's runtime files
+([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md),
+[the helper's README](../jstream-browser-helper/README.md#purpose)). The app itself
+doesn't build or link CEF, so it starts without them; a `browser` source fails to open
+until they are there. It is off by default until the CEF runtime and the helper are
+packaged ([the browser crate's open items](../../crates/jstream-browser/README.md#open-items)).
+Without it, a `browser` source draws nothing. CEF's cache is the data folder's `cef`
+folder, and its log `logs\cef.log`.
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
   sits beside the exe, a `data` folder beside the exe instead, so the app can run from
-  a USB stick ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)).
+  a USB stick ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). Both
+  hosts find it through `jstream-platform`'s `paths` module
+  ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **The collection** is `collection.json` in the data folder, created empty the first
   time and saved on every change, so the next start opens where the last one stopped.
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start and
@@ -85,21 +105,29 @@ Closing the window stops the engine.
   details. An unknown command-line argument is shown the same way.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager) and start it.
+- **The virtual camera.** Add a "Virtual camera" output in the outputs panel and start
+  it: other apps then see the program as the webcam *JStream Virtual Camera*. The
+  camera must be registered once, with `jstream-daemon --register-vcam` from the same
+  folder (one administrator prompt); the panel says whether it is, as the app read it
+  at start, so restart the app after registering. `--no-vcam` turns the camera off.
 - **Elsewhere** the binary prints that the app runs on Windows only for now and exits 1.
 
 <a id="design"></a>
 ## Design
 <!-- @section
-covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
+covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/media_foundation.rs", "apps/jstream-desktop/tests/delay_load.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:f6d32a6fab0050f4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 now excepts GET /pair on a TLS listener and allows a device-token cookie; desktop serves loopback without TLS, pairs nothing and uses its in-memory token, so nothing here changes; holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
   picks, behind a 32-byte random token made at each start and kept only in memory: no
   token file, and no other client can connect. MCP is off. The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
-  token. On Windows the engine is live with the same wiring as the daemon (OS backends,
+  token. The engine serves only the webview, so the server pairs no device
+  (`ServerConfig::pairing` off): `pairing.start`, `device.list` and `device.revoke`
+  answer `unsupported`, `jstream-ui`'s pairing panel stays hidden, and there is no
+  pairing page or device cookie
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
@@ -117,7 +145,21 @@ verified = { hash = "b3:f6d32a6fab0050f4", by = "agent:claude@session_01WbL3WRbc
   reassigned, and only when the page's origin is the app's. `jstream-ui` checks for it
   at start (its `host.rs`) and connects at once; the browser client offers the token as
   its subprotocol, as in a browser ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
-  The strings are written as escaped JavaScript literals.
+  The strings are written as escaped JavaScript literals. The global also carries
+  `vcam`, the virtual camera's status as the app read it at start: `registered`,
+  `not_registered`, `moved`, `off` (`--no-vcam`) or `unavailable` (not Windows). The UI
+  uses it only to say whether the camera can start (its outputs panel); the engine
+  still decides.
+- **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
+  the app was started with `--no-vcam`; creating it opens nothing, and its `start`
+  refuses an unregistered camera. `vcam_status` reads the registration with no
+  elevation (`vcam_registration`, for the `jstream_vcam_windows.dll` beside the exe)
+  and logs a registration that names another folder. Registering stays the daemon's
+  `--register-vcam` for now, and so does the hardware check. The build script also
+  delay-loads `mfsensorgroup.dll`, which `WindowsVcam` imports `MFCreateVirtualCamera`
+  from, as the daemon's does, so a Windows without it still starts the app; on a
+  Windows without that export (Windows 10), `WindowsVcam::start` probes for it first,
+  so `output.start` fails with a reason rather than a delay-load exception.
 - **The window stays on the app.** Navigation to anything but the app's scheme is
   refused, and so are new windows, so no other page loads in a webview that runs the
   bootstrap script. The page gets no Tauri IPC: the app defines no commands and grants
@@ -127,13 +169,30 @@ verified = { hash = "b3:f6d32a6fab0050f4", by = "agent:claude@session_01WbL3WRbc
   with the reason (HTML-escaped, with a policy that allows nothing) and no bootstrap
   script. A missing bundle is found after the engine started, so the engine is stopped
   first. As in the daemon, the build script delay-loads the Media Foundation DLLs with
-  MSVC, so the app starts on a Windows without them and can say so.
+  MSVC, so the app starts on a Windows without them and can say so. The list
+  (`mfplat.dll`, `mf.dll`, `mfreadwrite.dll`, `mfsensorgroup.dll`) is in
+  `media_foundation.rs`, which `build.rs` and `tests/delay_load.rs` both include. That
+  test reads the built `jstream.exe`'s import tables, as the daemon's does: each listed
+  DLL must be in the delay-import table and none in the import table. So CI's Windows
+  test job fails when `/DELAYLOAD` stops applying, or when a listed DLL is no longer
+  imported (the linker only warns, LNK4199, which doesn't fail CI). A new Media
+  Foundation import listed nowhere still gets past it.
 - **Windows only, for now.** Tauri is a Windows-only dependency, so Linux CI builds
-  and tests everything but the window (`shell.rs`) without GTK or WebKitGTK. Tauri's
-  other platforms still appear in `cargo metadata`, so `deny.toml` and the lint-deps
-  allowlist list their duplicates and native crates, each marked as never built for
-  Windows where that holds. `tauri.conf.json` names the app and its icon; the bundler
-  is off (the portable folder is ADR-0020's), and so are Tauri's CSP injection and
-  global API. `tauri-build` writes ACL schemas to `gen/`, which is not committed.
+  and tests everything but the window (`shell.rs`) and `tests/delay_load.rs` without
+  GTK or WebKitGTK. Tauri's other platforms still appear in `cargo metadata`, so
+  `deny.toml` and the lint-deps allowlist list their duplicates and native crates,
+  each marked as never built for Windows where that holds. `tauri.conf.json` names the
+  app and its icon; the bundler is off (the portable folder is ADR-0020's), and so are
+  Tauri's CSP injection and global API. `tauri-build` writes ACL schemas to `gen/`,
+  which is not committed.
+- **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
+  (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
+  clock the mixer runs on. Its pages paint onto a device of the media adapter the app
+  opens for them (`WindowsGpu::open_device`), since the engine doesn't hand out its own
+  device yet. The backend is added after the OS backends, so sources open on the media
+  clock. CEF runs only in the sandboxed browser helper, which the backend starts on the
+  first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
+  doesn't link CEF, so a missing helper or missing CEF files fail that source, not the
+  app. With no device, pages play audio but show no frames.
 - **Logs and the token.** The token reaches only the bootstrap script. It is never
   logged, written to disk, or put in a URL (R-SEC-001).

@@ -19,7 +19,6 @@ input on the canvas.
 ## Harness
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests/e2e/*.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:2d38e2f1f7c1e463", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304 merge of T1: re-read; the mock daemon seed (Intro, Main on program via scene.switch with preset_id None) is what studio.spec.js relies on; holds" }
 -->
 
 - **The mock daemon** (`mock-daemon/`, the test-only crate `jstream-ui-e2e`) puts
@@ -34,7 +33,8 @@ verified = { hash = "b3:2d38e2f1f7c1e463", by = "agent:claude@session_016SaCkMFy
 - **One daemon per test** (`fixtures.js`): each test starts its own, with a random
   token, so tests share no state and run in parallel. The browser signs in with HTTP
   Basic, the token as the password, as a person's browser does when the daemon serves
-  the UI; the connect form's token field can then stay empty.
+  the UI; the connect form's token field can then stay empty. `connect` opens the page
+  and connects; `inspectorPage` opens one of the inspector's tabs.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -49,16 +49,22 @@ verified = { hash = "b3:2d38e2f1f7c1e463", by = "agent:claude@session_016SaCkMFy
 ## What the tests cover
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
-verified = { hash = "b3:dbdf1d7c7ed897c6", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304: added the Studio mode bullet for studio.spec.js; 15 tests (one test.fail for #305) pass locally against Chromium; holds" }
 -->
 
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
   connects with the browser's credentials; the status bar shows the URL, protocol and
   revision; disconnecting returns to the form with the token field empty; a refused
   upgrade shows its reason; the token never appears in the page, its storage or its
-  cookies. A URL the page's policy refuses leaves the form on "Connecting…" (#305): that
-  test is marked `test.fail` until the browser client is fixed.
-- **Outputs** (`outputs.spec.js`): adding a stream and a recording; a stream can't start
+  cookies. A URL the page's policy refuses shows a reason and re-enables Connect,
+  although Chromium sends that socket an `error` event and no `close` (#305).
+- **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
+  program scene marked and selected, and its item listed; putting a scene on program,
+  which a second client follows; adding a scene, which is selected, and renaming it in
+  place; hiding and showing an item, placing an existing source again and removing that
+  item; selecting an item opens its properties. The mock engine lists no kinds and makes
+  no delete plans, so new-kind sources, the properties form's fields and deletes are
+  tested natively.
+- **Outputs** (`outputs.spec.js`, on the inspector's Outputs page): adding a stream and a recording; a stream can't start
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
@@ -68,13 +74,14 @@ verified = { hash = "b3:dbdf1d7c7ed897c6", by = "agent:claude@session_016SaCkMFy
   keys nudge (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
 - **Studio mode** (`studio.spec.js`): a scene picked for preview goes to program with
   Transition, the old program scene comes back on preview, and the canvas follows
-  program; Transition and Cut are off while preview is the program scene.
+  program; Transition and Cut are off while preview is the program scene; a value the
+  preset form refused keeps the preset from being added. The mock engine refuses
+  preset edits, so the edits the preset form sends are tested natively.
 
 <a id="running"></a>
 ## Running them
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/playwright.config.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:dbac1e8d9fa742df", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 -->
 
 ```sh

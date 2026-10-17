@@ -1,11 +1,13 @@
 //! The root component: the connect form until a session is open, then the shell with its
-//! regions, and the event loop that follows the engine's revision.
+//! regions, the event loop that keeps the shared [`Studio`] state current, and the
+//! routing: which panel goes in which region, and the inspector's pages.
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
 use crate::canvas::Canvas;
-use crate::panels::{Inspector, Mixer, SceneTree};
+use crate::panels::{Mixer, Outputs, Properties, Scenes, Sources};
 use crate::session::{Session, engine_url_for_page};
+use crate::store::Studio;
 use futures_util::StreamExt;
 use jstream_control::ControlError;
 use jstream_control::protocol::Event;
@@ -73,6 +75,8 @@ pub fn App() -> impl IntoView {
     let info = RwSignal::new(SessionInfo::default());
     let session = SessionContext(StoredValue::new_local(None));
     provide_context(session);
+    let studio = Studio::new();
+    provide_context(studio);
     // Bumped each time a session ends, so a stale event loop can tell it is stale.
     let generation = StoredValue::new(0_u64);
 
@@ -95,14 +99,21 @@ pub fn App() -> impl IntoView {
                         rev: opened.welcome.rev.to_string(),
                     });
                     let mut events = opened.control.events();
+                    studio.reset();
+                    studio.load(&opened);
+                    // The context holds the only lasting handle: dropping it on Disconnect
+                    // drops the connection, which closes the socket and ends `events`.
                     session.0.set_value(Some(opened));
                     status.set(Status::Connected);
                     while let Some(event) = events.next().await {
                         if generation.get_value() != mine {
                             return;
                         }
-                        if let Event::StateChanged { rev, .. } = event {
+                        if let Event::StateChanged { rev, .. } = &event {
                             info.update(|info| info.rev = rev.to_string());
+                        }
+                        if let Some(current) = session.get() {
+                            studio.on_event(&current, &event);
                         }
                     }
                     if generation.get_value() == mine {
@@ -188,11 +199,75 @@ fn ConnectForm(
     }
 }
 
-/// The workspace: a status bar over the scene tree, the preview canvas and the
-/// inspector, with the mixer along the bottom. Each region is its own component, so the
-/// panels and the canvas are built separately.
+/// One page of the inspector: a tab and the panel it shows.
+struct Page {
+    /// The tab's ID, kept while the page list changes.
+    id: &'static str,
+    /// The tab's label.
+    label: &'static str,
+    /// The panel.
+    view: fn() -> AnyView,
+}
+
+/// The inspector's pages, in tab order. A panel that lives in the inspector adds its
+/// line here.
+fn inspector_pages() -> Vec<Page> {
+    vec![
+        Page {
+            id: "properties",
+            label: "Properties",
+            view: || view! { <Properties /> }.into_any(),
+        },
+        Page {
+            id: "outputs",
+            label: "Outputs",
+            view: || view! { <Outputs /> }.into_any(),
+        },
+    ]
+}
+
+/// The inspector: a tab per page, showing one page at a time. With one page there are no
+/// tabs.
+#[component]
+fn Inspector() -> impl IntoView {
+    let pages = inspector_pages();
+    let open = RwSignal::new(pages.first().map_or("", |p| p.id));
+    let tabs = (pages.len() > 1).then(|| {
+        pages
+            .iter()
+            .map(|page| {
+                let id = page.id;
+                view! {
+                    <button
+                        role="tab"
+                        aria-selected=move || if open.get() == id { "true" } else { "false" }
+                        on:click=move |_| open.set(id)
+                    >
+                        {page.label}
+                    </button>
+                }
+            })
+            .collect_view()
+    });
+    let bodies = pages
+        .into_iter()
+        .map(|page| {
+            let id = page.id;
+            view! { <div role="tabpanel" hidden=move || open.get() != id>{(page.view)()}</div> }
+        })
+        .collect_view();
+    view! {
+        {tabs.map(|tabs| view! { <div class="tabs" role="tablist">{tabs}</div> })}
+        {bodies}
+    }
+}
+
+/// The workspace: a status bar over the scene and sources lists, the preview canvas and
+/// the inspector, with the mixer along the bottom. Each region is its own component, so
+/// the panels and the canvas are built separately.
 #[component]
 fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl IntoView {
+    let studio = expect_context::<Studio>();
     view! {
         <div class="shell">
             <header class="status-bar">
@@ -203,9 +278,18 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
                 <span>"rev " {move || info.with(|i| i.rev.clone())}</span>
                 <button on:click=move |_| disconnect()>"Disconnect"</button>
             </header>
-            <aside class="region scenes"><SceneTree /></aside>
+            {move || studio.problem.get().map(|problem| view! {
+                <div class="problem-bar" role="alert">
+                    <span>{problem}</span>
+                    <button on:click=move |_| studio.problem.set(None)>"Dismiss"</button>
+                </div>
+            })}
+            <aside class="region scenes"><Scenes /><Sources /></aside>
             <section class="region canvas"><Canvas /><crate::panels::StudioMode /></section>
-            <aside class="region inspector"><Inspector /><crate::panels::Outputs /></aside>
+            <aside class="region inspector">
+                <Inspector />
+                <crate::pairing::Pairing />
+            </aside>
             <footer class="region mixer"><Mixer /></footer>
         </div>
     }

@@ -15,6 +15,13 @@ unsafe_allowed = false
 [lints]
 workspace = true
 
+[features]
+# Platform tests against real hardware (docs/RULES.md#testing): the GPU capture path on
+# WGC and the DX12 device. Additive, off by default, and the tests are also `#[ignore]`d.
+# Run them on a Windows machine with a display and a DX12 GPU:
+# `cargo test -p jstream-core --features hw-tests --lib windows_gpu -- --ignored --nocapture`.
+hw-tests = []
+
 [dependencies]
 # The render snapshot the control side publishes and the render thread loads lock-free.
 arc-swap.workspace = true
@@ -27,13 +34,21 @@ jstream-media.workspace = true
 jstream-mux.workspace = true
 jstream-outputs.workspace = true
 jstream-platform.workspace = true
+# The plugin-host control messages and block the CLAP supervisor reads (ADR-0035).
+jstream-plugin-proto.workspace = true
 jstream-protocol.workspace = true
 jstream-render.workspace = true
 # The built-in source kinds and their descriptors (ADR-0031, ADR-0025).
 jstream-sources.workspace = true
 # PNG for `video.snapshot` (ADR-0031). Encoding only; deflate stays pure Rust.
 png.workspace = true
+# Settings values: the audio filter kinds' defaults and the mixer kernels read from them
+# (ADR-0025, ADR-0026), the CLAP kinds' parameter defaults, and saved collection files in
+# the engine tests.
+serde_json.workspace = true
 thiserror.workspace = true
+# Sign-in and the Live API for YouTube outputs and the YouTube commands (ADR-0058).
+jstream-youtube.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
 
@@ -42,10 +57,20 @@ tracing.workspace = true
 jstream-control = { workspace = true, features = ["mock"] }
 # `tests/scenarios.rs` and the output pipeline test: overload drops and fakes.
 jstream-platform = { workspace = true, features = ["fake"] }
+# `src/tests/audio.rs`: `browser` sources open pages in the fake browser.
+jstream-browser = { workspace = true, features = ["fake"] }
 # `tests/mcp.rs`: an MCP agent driving the real engine through `InProcessControl`.
 jstream-mcp.workspace = true
-# Settings values and saved collection files in the engine tests (`src/tests.rs`,
-# `src/tests/`, `tests/mcp.rs`).
-serde_json.workspace = true
+# `FakeTransport` and its JSON fixtures, for the YouTube tests (R-TEST-004).
+jstream-youtube = { workspace = true, features = ["fake"] }
 # The shared parity fixture that `jstream-graph` and the mock are held to.
 jstream-protocol = { workspace = true, features = ["fixtures"] }
+# Decodes the preview stream's JPEGs in its tests; already in the tree for the image
+# source (`jstream-sources`).
+zune-jpeg.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+# The ignored hardware test of the GPU capture path (`src/tests/windows_gpu.rs`): the
+# engine on WGC capture and the platform's DX12 device. Tests only; the engine itself
+# never names a platform crate.
+jstream-platform-windows.workspace = true

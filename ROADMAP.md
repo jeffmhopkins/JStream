@@ -16,7 +16,6 @@ that runs from a clean checkout.
 ## M0: Foundation and risk spikes
 <!-- @section
 depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:a5b81f06b2d1f93a", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review N5: Demo line now says S1-S4 each have a written result (S4's is ARCH#browser-source); Track B bullets unchanged" }
 -->
 
 Two tracks run in parallel.
@@ -32,7 +31,7 @@ Two tracks run in parallel.
   changes in covered workflow files, so Dependabot bumps don't stale REVIEW#output. It
   replaces every `bootstrap` hash with a real one.
 - `xtask lint-deps` (layers, `unsafe` declarations, `links=` allowlist, workspace deps),
-  `xtask governance` (must encode ADR-0018's pre-approval for Dependabot pin-only PRs).
+  `xtask governance` (must encode ADR-0056's pre-approval for Dependabot pin-only PRs).
 - `jstream-types`, `jstream-media`, first cut of `jstream-protocol` (edit/action
   classification, schema snapshot tests), `jstream-control`.
 
@@ -58,7 +57,6 @@ but needed one before the browser source is built).
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:7a438748cfb1a5f1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; M1b's source-kinds bullet is ADR-0031's list (display, window, video capture device, image formats, color, text, audio inputs, browser) and still matches it" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -103,7 +101,6 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:86e4c1f1ce342936", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: M2's first bullet now says Leptos is confirmed by ADR-0045 (which supersedes ADR-0002 and keeps its web-UI decision); depends_on moved to ADR-0045; rest of M2 unchanged" }
 -->
 
 - Leptos confirmed ([ADR-0045](docs/adr/0045-leptos-web-ui.md)).
@@ -138,9 +135,11 @@ verified = { hash = "b3:86e4c1f1ce342936", by = "agent:claude@session_01SHnfsdCu
 -->
 
 - Full 3D transforms; WGSL effect packs with hot reload.
-- `jstream-youtube`: OAuth, broadcasts, metadata, health, chat, sending chat as the
-  channel, a featured chat message shown on stream by a chat message source, and audience
-  stats, all exposed over MCP ([ADR-0041](docs/adr/0041-youtube-interaction-scope-v3.md)).
+- YouTube with no required OAuth client: a stream key with Studio's auto-start, and chat
+  through a browser-source preset. Signed in through JStream's own OAuth client, `jstream-youtube`
+  adds broadcasts, metadata, health, chat, sending chat as the channel, a featured chat
+  message shown on stream by a chat message source, and audience stats, for people in the
+  UI only, not agents ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)).
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
 - CLAP audio effect filters, hosted out of process
@@ -156,6 +155,42 @@ verified = { hash = "b3:86e4c1f1ce342936", by = "agent:claude@session_01SHnfsdCu
   A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
 - Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
   which needs root, so it gets its own ADR too).
+
+<a id="endgame"></a>
+## Endgame: what done means
+<!-- @section
+depends_on = ["docs/adr/0055-wave-branches.md#decision"]
+-->
+
+The Rust implementation is **done** when every item of M0 to M3 in
+[`docs/progress.toml`](docs/progress.toml) is `done`: merged on `main`, with its Windows
+run passed where it needs one. Then each milestone's demo above runs from a clean checkout.
+An item leaves M3 only when the maintainer moves it to [Later](#later). The README's
+[What's left](README.md#progress) table lists every unfinished item with the steps it still
+needs, from that file.
+
+The remaining work lands in this order. A step doesn't wait for the one before it to
+finish: builds, runs and decisions go on side by side, and the order is what lands first.
+
+1. **Land the open waves** in milestone order, M1, then M2, then M3
+   ([RUNBOOK-WAVES › Landing](docs/runbooks/waves.md#landing)). Items marked *build*
+   finish through review into their wave. Items marked *its wave lands* are already in
+   one.
+2. **Windows runs.** Every item marked *Windows run* passes its run on Windows hardware,
+   which only the maintainer can do. Items that a later build changes run again.
+3. **Maintainer decisions and actions**, for items marked *maintainer*:
+   - the Google Cloud project and OAuth client for YouTube sign-in
+     ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). Until then
+     the daemon's sign-in and the signed-in YouTube features stay hidden;
+   - which platforms besides Windows are supported (maintainer tier): Linux first, and
+     whether macOS stays in M3 or moves to Later.
+4. **Platform crates**: Linux, after its codec-path ADR, and macOS, if it stays, after
+   its own ADR ([M3](#m3)).
+5. **Release check.** With every item `done`, run the M1, M2 and M3 demos from a clean
+   checkout. Whether that becomes a first release, 1.0, is the maintainer's call: 1.0
+   removes the deprecated protocol forms
+   ([ADR-0022](docs/adr/0022-item-transform-and-canvas.md)), a public compatibility
+   promise.
 
 <a id="later"></a>
 ## Later

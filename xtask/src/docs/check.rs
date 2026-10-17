@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
 use super::hash::{self, Files};
+use super::ledger::{self, Ledger};
 use super::parse::{Diag, Doc};
 
 const DOC_KEYS: &[&str] = &[
@@ -48,6 +49,8 @@ pub(crate) struct Repo<'a> {
     pub(crate) rules_md: String,
     /// Every tracked file, for `covers` globs and hashing.
     pub(crate) files: Files<'a>,
+    /// The ledger (ADR-0053), as [`check_ledger`] returns it.
+    pub(crate) ledger: Ledger,
 }
 
 /// Runs every check; returns the diagnostics found.
@@ -69,6 +72,7 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
     let mut ids: BTreeMap<&str, &str> = BTreeMap::new();
     for doc in repo.docs {
         check_doc_meta(doc, &mut out);
+        check_conflict_markers(doc, &mut out);
         if let Some(id) = doc.meta_str("id")
             && let Some(other) = ids.insert(id, &doc.path)
         {
@@ -137,6 +141,39 @@ fn diag(path: &str, line: usize, msg: String) -> Diag {
     }
 }
 
+/// Refuses git conflict markers left in a doc, as a merge whose conflicts were committed
+/// unresolved leaves them: `<<<<<<<`, `|||||||` and `>>>>>>>` at the start of a line, alone
+/// or before a space, and `=======` alone on a line inside an open `<<<<<<<` hunk. Outside
+/// one, a lone `=======` is a setext heading underline.
+fn check_conflict_markers(doc: &Doc, out: &mut Vec<Diag>) {
+    let mut open = false;
+    for (i, line) in doc.text.lines().enumerate() {
+        let line = line.trim_end_matches('\r');
+        let marker = |m: &str| {
+            line.strip_prefix(m)
+                .is_some_and(|r| r.is_empty() || r.starts_with(' '))
+        };
+        let found = if marker("<<<<<<<") {
+            open = true;
+            "<<<<<<<"
+        } else if marker(">>>>>>>") {
+            open = false;
+            ">>>>>>>"
+        } else if marker("|||||||") {
+            "|||||||"
+        } else if open && line == "=======" {
+            "======="
+        } else {
+            continue;
+        };
+        out.push(diag(
+            &doc.path,
+            i + 1,
+            format!("git conflict marker `{found}`: resolve the merge conflict before committing"),
+        ));
+    }
+}
+
 fn check_doc_meta(doc: &Doc, out: &mut Vec<Diag>) {
     let Some(meta) = &doc.meta else { return };
     for k in meta.keys() {
@@ -202,6 +239,55 @@ fn check_doc_meta(doc: &Doc, out: &mut Vec<Diag>) {
     }
 }
 
+/// Reads the ledger (ADR-0053) and checks it: it must parse and be in canonical form, and
+/// stamps of sections that no longer need one are reported. A missing or broken ledger is
+/// returned empty, so every stamped section is then stale.
+pub(crate) fn check_ledger(root: &Path, docs: &[Doc], out: &mut Vec<Diag>) -> Ledger {
+    let text = match std::fs::read_to_string(root.join(ledger::PATH)) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ledger::default(),
+        Err(e) => {
+            out.push(diag(ledger::PATH, 1, format!("not readable: {e}")));
+            return Ledger::default();
+        }
+    };
+    let ledger = match Ledger::parse(&text) {
+        Ok(l) => l,
+        Err(e) => {
+            out.push(diag(ledger::PATH, 1, format!("does not parse: {e}")));
+            return Ledger::default();
+        }
+    };
+    if ledger.render() != text {
+        out.push(diag(
+            ledger::PATH,
+            1,
+            "not in canonical form (it is written only by `cargo xtask docs verify`): \
+             `cargo xtask docs migrate` rewrites it"
+                .into(),
+        ));
+    }
+    let keep = super::stamped_sections(docs);
+    for key in ledger
+        .sections
+        .keys()
+        .filter(|k| !keep.contains(k.as_str()))
+    {
+        out.push(Diag {
+            warning: true,
+            ..diag(
+                ledger::PATH,
+                1,
+                format!(
+                    "stamp `{key}` names no section with `covers` or `depends_on`; \
+                     `cargo xtask docs migrate` drops it"
+                ),
+            )
+        });
+    }
+    ledger
+}
+
 fn check_section_meta(
     repo: &Repo<'_>,
     doc: &Doc,
@@ -239,41 +325,41 @@ fn check_section_meta(
             Err(e) => out.push(diag(&doc.path, line, format!("section `{anchor}`: {e:#}"))),
         }
     }
+    let key = super::section_key(doc, anchor);
+    if meta.contains_key("verified") {
+        out.push(diag(
+            &doc.path,
+            line,
+            format!(
+                "section `{anchor}` has an inline `verified` stamp; stamps live in {} \
+                 (ADR-0053): run `cargo xtask docs migrate`",
+                ledger::PATH
+            ),
+        ));
+    }
     if !covers.is_empty() || !deps.is_empty() {
-        match meta.get("verified").and_then(|v| v.as_table()) {
-            None => out.push(diag(
-                &doc.path,
-                line,
-                format!("section `{anchor}` has covers/depends_on but no `verified`"),
-            )),
-            Some(v) => {
-                for k in ["hash", "by", "note"] {
-                    if v.get(k).and_then(|x| x.as_str()).is_none_or(str::is_empty) {
-                        out.push(diag(
-                            &doc.path,
-                            line,
-                            format!(
-                                "section `{anchor}`: `verified.{k}` must be a non-empty string"
-                            ),
-                        ));
-                    }
-                }
-                let stored = v.get("hash").and_then(|x| x.as_str()).unwrap_or_default();
-                match hash::section_hash(doc, anchor, &covers, &deps, &repo.files, by_path) {
-                    Ok(computed) if computed == stored => {}
-                    Ok(computed) => out.push(diag(
+        let stamp = repo.ledger.sections.get(&key);
+        match hash::inputs(doc, anchor, &covers, &deps, &repo.files, by_path) {
+            Ok(inputs) => {
+                let changed = ledger::diff(stamp, &inputs);
+                if !changed.is_empty() {
+                    let why = if stamp.is_none() {
+                        format!("no stamp in {}", ledger::PATH)
+                    } else {
+                        format!("changed since its stamp: {}", changed.join(", "))
+                    };
+                    out.push(diag(
                         &doc.path,
                         line,
                         format!(
-                            "section `{anchor}` is stale (stored {stored}, now {computed}): re-read it \
-                             against your change; if it still holds run `cargo xtask docs verify \
-                             {}#{anchor} --by <who> --note \"<what you checked>\"`, otherwise edit it",
-                            doc.meta_str("id").unwrap_or(&doc.path)
+                            "section `{anchor}` is stale ({why}): re-read it against your \
+                             change; if it still holds run `cargo xtask docs verify {key} \
+                             --by <who> --note \"<what you checked>\"`, otherwise edit it"
                         ),
-                    )),
-                    Err(e) => out.push(diag(&doc.path, line, format!("section `{anchor}`: {e:#}"))),
+                    ));
                 }
             }
+            Err(e) => out.push(diag(&doc.path, line, format!("section `{anchor}`: {e:#}"))),
         }
     }
     for dep in deps {
@@ -633,6 +719,22 @@ pub(crate) fn ci_check_names(rules_md: &str) -> BTreeSet<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conflict_markers_are_refused() {
+        let markers = |text: &str| {
+            let doc = super::super::parse::parse("T.md", text, &mut Vec::new());
+            let mut out = Vec::new();
+            check_conflict_markers(&doc, &mut out);
+            out.iter().map(|d| d.line).collect::<Vec<_>>()
+        };
+        let text = "# T\n\n<<<<<<< HEAD\nours\n||||||| base\nbase\n=======\ntheirs\n>>>>>>> origin/wave/m1-2\n";
+        assert_eq!(markers(text), vec![3, 5, 7, 9]);
+        assert_eq!(markers("<<<<<<<\n=======\n>>>>>>>\n"), vec![1, 2, 3]);
+        // A setext underline, and look-alikes that aren't markers, pass.
+        assert!(markers("Title\n=======\n\ntext\n").is_empty());
+        assert!(markers("a <<<<<<< b\n<<<<<<<< x\n>>>>>>>y\n `=======`\n").is_empty());
+    }
 
     #[test]
     fn ci_names_come_from_the_rgit003_table() {

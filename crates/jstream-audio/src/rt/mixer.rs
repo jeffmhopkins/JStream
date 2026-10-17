@@ -3,8 +3,10 @@
 //! meters inputs and buses.
 //!
 //! **Signal order** (docs/adr/0028-audio-model-v2.md): per input, ring → filter chain
-//! → fader and mute → each send's gain → bus sum. Per bus, sum → filter chain → fader
+//! → fader and mute → (meter) → activity gain → each send's gain → bus sum. Per bus, sum → filter chain → fader
 //! and mute → output (the monitor tap, [`Mixer::bus_block`]). Sends are post-fader.
+//! Each input's signal after its activity gain, before the send gains, is kept as its
+//! own monitor block ([`Mixer::input_block`]).
 //! Then (docs/adr/0027-program-master-and-output-chains.md), on each bus that feeds an
 //! output: → master chain (each bus its own copy) → the master bus's block, and each
 //! output tap on the bus → the tap's chain → [`Mixer::output_block`].
@@ -32,8 +34,8 @@
 //! block and counts the frames it skipped, rather than mixing stale or overwritten data.
 //!
 //! **Gain** changes ramp linearly across one block, so fader moves don't click. So do
-//! send gains, and a send that starts or stops (or whose bus is added) ramps from or to
-//! silence.
+//! send gains and the activity gain, which scales every send, and a send that starts or
+//! stops (or whose bus is added) ramps from or to silence.
 //!
 //! **Meters** are post-fader (each input before its sends) and each bus's output:
 //! per channel, the peak held until the control plane takes it, and the latest block's
@@ -143,6 +145,11 @@ struct Slot {
     /// bus, the send starts again from silence.
     send_bus: [u64; MAX_BUSES],
     chain: Box<Chain>,
+    /// The last block after the fader, mute and activity gain, before the sends:
+    /// `block_frames` frames ([`Mixer::input_block`]).
+    block: Box<[[f32; 2]]>,
+    /// The activity gain applied to `block` at the end of the previous block.
+    activity_now: f32,
 }
 
 #[derive(Debug)]
@@ -287,9 +294,9 @@ impl Mixer {
     /// another thread, use [`MixerControl::add_bus`].
     ///
     /// # Errors
-    /// [`AudioError::TooManyBuses`] past 16 buses (the master included), and
-    /// [`AudioError::CommandQueueFull`] when the mixer has not yet applied a full queue
-    /// of changes.
+    /// [`AudioError::TooManyBuses`] past [`MAX_BUSES`](crate::MAX_BUSES) buses (the
+    /// master included), and [`AudioError::CommandQueueFull`] when the mixer has not yet
+    /// applied a full queue of changes.
     pub fn add_bus(&mut self) -> Result<BusControl, AudioError> {
         let bus = self.control().add_bus()?;
         self.apply_commands();
@@ -353,6 +360,18 @@ impl Mixer {
         self.acc
             .get(bus.slot * n..(bus.slot + 1) * n)
             .map(<[[f32; 2]]>::as_flattened)
+    }
+
+    /// Input `input`'s signal in the last block mixed (interleaved stereo): after its
+    /// filter chain, fader, mute and activity gain, before its sends, so what it
+    /// contributes to the mix before each send's gain. Silence before the first block.
+    /// `None` when the mixer does not hold that input: it was removed, or the mixer has
+    /// not applied its addition yet. `input` must be one of this mixer's.
+    pub fn input_block(&self, input: InputId) -> Option<&[f32]> {
+        self.inputs
+            .iter()
+            .find(|slot| slot.id == input.0)
+            .map(|slot| slot.block.as_flattened())
     }
 
     /// The filter chains' latency, frames: the longest input chain's plus the longest
@@ -457,13 +476,19 @@ impl Mixer {
             slot.gain_now = target;
             let (peak, rms) = levels(scratch);
             slot.shared.meter.publish(peak, rms);
+            // The activity gain scales every send, so it ramps with them.
+            let activity = slot.shared.activity.load();
+            // The input's own block: what the sends below receive, before their gains.
+            slot.block.copy_from_slice(scratch);
+            apply_gain(&mut slot.block, slot.activity_now, activity);
+            slot.activity_now = activity;
             for (k, (bus, sum)) in buses.iter().zip(acc.chunks_exact_mut(n)).enumerate() {
                 let Some(bus) = bus else { continue };
                 if slot.send_bus[k] != bus.id {
                     slot.send_bus[k] = bus.id;
                     slot.send_now[k] = 0.0;
                 }
-                let target = slot.shared.sends.target(k, bus.id);
+                let target = slot.shared.sends.target(k, bus.id) * activity;
                 add_with_gain(sum, scratch, slot.send_now[k], target);
                 slot.send_now[k] = target;
             }
@@ -551,11 +576,13 @@ impl Mixer {
                     ring,
                     shared,
                     chain,
+                    block,
                 } => {
                     if self.inputs.len() >= cmd::MAX_INPUTS {
                         self.plane.retirer().ring(ring);
                         self.plane.retirer().shared(shared);
                         self.plane.retirer().chain(chain);
+                        self.plane.retirer().block(block);
                         continue;
                     }
                     if let Some(pos) = self.position {
@@ -565,7 +592,9 @@ impl Mixer {
                     let send_bus: [u64; MAX_BUSES] = std::array::from_fn(|k| {
                         self.buses[k].as_ref().map_or(NO_BUS, |bus| bus.id)
                     });
-                    let send_now = std::array::from_fn(|k| shared.sends.target(k, send_bus[k]));
+                    let activity = shared.activity.load();
+                    let send_now =
+                        std::array::from_fn(|k| shared.sends.target(k, send_bus[k]) * activity);
                     self.inputs.push(Slot {
                         id,
                         ring,
@@ -574,6 +603,8 @@ impl Mixer {
                         send_now,
                         send_bus,
                         chain,
+                        block,
+                        activity_now: activity,
                     });
                 }
                 Command::Remove(id) => self.retire_id(id),
@@ -751,6 +782,7 @@ impl Mixer {
         self.plane.retirer().ring(slot.ring);
         self.plane.retirer().shared(slot.shared);
         self.plane.retirer().chain(slot.chain);
+        self.plane.retirer().block(slot.block);
     }
 
     fn check_out(&self, out: &[f32]) -> Result<(), AudioError> {
@@ -776,11 +808,13 @@ impl Drop for Mixer {
                     ring,
                     shared,
                     chain,
+                    block,
                     ..
                 }) => {
                     self.plane.retirer().ring(ring);
                     self.plane.retirer().shared(shared);
                     self.plane.retirer().chain(chain);
+                    self.plane.retirer().block(block);
                 }
                 Ok(Command::Remove(id)) => self.retire_id(id),
                 Ok(Command::AddBus {
@@ -817,6 +851,7 @@ impl Drop for Mixer {
             self.plane.retirer().ring(slot.ring);
             self.plane.retirer().shared(slot.shared);
             self.plane.retirer().chain(slot.chain);
+            self.plane.retirer().block(slot.block);
         }
         for bus in self.buses.iter_mut().filter_map(Option::take) {
             self.plane.retirer().bus(bus.shared);
@@ -1125,6 +1160,49 @@ mod tests {
         }
     }
 
+    /// Each input keeps its own block after its fader, mute and activity gain, before
+    /// its sends (#459): one input of a mix reads on its own, a send's gain doesn't
+    /// touch it, and a removed input has none.
+    #[test]
+    fn each_input_keeps_its_block_after_its_fader_and_activity() {
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        let (mut b, cb) = m.add_input(stereo48()).unwrap();
+        assert_frames(
+            m.input_block(ca.id()).unwrap(),
+            [0.0, 0.0],
+            "before a block",
+        );
+        feed(&mut a, 0.5, -0.5, 1.0);
+        feed(&mut b, 0.25, 0.25, 1.0);
+        ca.set_gain(0.5);
+        ca.set_send(BusId::MASTER, 0.1);
+        cb.set_activity_gain(0.5);
+        let mut out = vec![0.0; 960];
+        // The first block ramps to the new gains.
+        m.mix(40_000, &mut out).unwrap();
+        m.mix(40_480, &mut out).unwrap();
+        assert_frames(
+            m.input_block(ca.id()).unwrap(),
+            [0.25, -0.25],
+            "a after its fader",
+        );
+        assert_frames(
+            m.input_block(cb.id()).unwrap(),
+            [0.125, 0.125],
+            "b after activity",
+        );
+        assert_frames(&out, [0.025 + 0.125, -0.025 + 0.125], "the mix");
+        ca.set_muted(true);
+        m.mix(40_960, &mut out).unwrap(); // ramp
+        m.mix(41_440, &mut out).unwrap();
+        assert_frames(m.input_block(ca.id()).unwrap(), [0.0, 0.0], "a muted");
+        assert!(ca.remove());
+        m.mix(41_920, &mut out).unwrap();
+        assert_eq!(m.input_block(ca.id()), None, "a removed");
+        drop((a, b));
+    }
+
     /// Sends are post-fader and each bus sums only what is sent to it, with its own
     /// fader and mute, and meters its own output.
     #[test]
@@ -1211,6 +1289,47 @@ mod tests {
         assert_eq!(ramp, [0.75, 0.5, 0.25, 0.0]);
         // The master was untouched throughout.
         assert_frames(&out, [1.0, 1.0], "master");
+    }
+
+    /// The activity gain scales every send and ramps over one block, but leaves the
+    /// input's post-fader meter alone (ADR-0028's audio that follows the program).
+    #[test]
+    fn activity_gain_ramps_the_sends_and_not_the_meter() {
+        let mut m = Mixer::new(config(4)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        let aux = m.add_bus().unwrap();
+        ca.set_send(aux.id(), 0.5);
+        feed(&mut a, 1.0, 1.0, 1.0);
+        let mut out = vec![0.0; 8];
+        m.mix(40_000, &mut out).unwrap(); // the aux send ramps in
+        m.mix(40_004, &mut out).unwrap();
+        assert_frames(&out, [1.0, 1.0], "master at full activity");
+        ca.set_activity_gain(f32::NAN);
+        ca.set_activity_gain(-1.0);
+        assert_eq!(ca.activity_gain(), 0.0, "clamped, NaN ignored");
+        let _ = ca.take_meter();
+        m.mix(40_008, &mut out).unwrap();
+        let ramp: Vec<f32> = out.iter().step_by(2).copied().collect();
+        assert_eq!(ramp, [0.75, 0.5, 0.25, 0.0]);
+        let ramp: Vec<f32> = m
+            .bus_block(aux.id())
+            .unwrap()
+            .iter()
+            .step_by(2)
+            .copied()
+            .collect();
+        assert_eq!(ramp, [0.375, 0.25, 0.125, 0.0]);
+        m.mix(40_012, &mut out).unwrap();
+        assert_frames(&out, [0.0, 0.0], "silent while inactive");
+        let meter = ca.take_meter();
+        assert!((meter.peak[0] - 1.0).abs() < 1e-6, "{meter:?}");
+        // The send itself is untouched, so full activity brings it back.
+        assert_eq!(ca.send(aux.id()), Some(0.5));
+        ca.set_activity_gain(2.0);
+        assert_eq!(ca.activity_gain(), 1.0);
+        m.mix(40_016, &mut out).unwrap();
+        let ramp: Vec<f32> = out.iter().step_by(2).copied().collect();
+        assert_eq!(ramp, [0.25, 0.5, 0.75, 1.0]);
     }
 
     /// Removing a bus drops it from the mix; its slot can go to a new bus, which the

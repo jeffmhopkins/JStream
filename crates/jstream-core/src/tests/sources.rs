@@ -4,9 +4,9 @@
 
 use super::{add, batch, connected, create, edits};
 use crate::Engine;
-use jstream_media::Timebase;
-use jstream_platform::fake::FakeClock;
-use jstream_protocol::{AssetRoot, Batch, Edit, Reference, Settings, SourceId, SourceKind};
+use jstream_media::{FrameSize, Timebase};
+use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
+use jstream_protocol::{AssetRoot, Batch, Edit, ItemId, Reference, Settings, SourceId, SourceKind};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::PathBuf;
@@ -303,6 +303,20 @@ fn a_missing_file_shows_nothing() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// Waits until the sources thread, on its own, makes the program mix show `want`. The
+/// thread re-reads a clock that is not wall time at least once a second, so the deadline
+/// leaves room for a loaded machine.
+fn shows_by_itself(engine: &Engine, want: (usize, u8)) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while colour(engine) != want {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    true
+}
+
 #[test]
 fn the_sources_thread_advances_an_animation_by_itself() {
     let dir = temp_dir("by-itself");
@@ -310,6 +324,10 @@ fn the_sources_thread_advances_an_animation_by_itself() {
     let engine = Engine::new()
         .with_collection_file(dir.join("scenes.json"))
         .expect("collection file");
+    // Time moves only when the test moves it, so each frame stays shown until the test
+    // has seen it, however slow the machine (#293).
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
     let control = connected(&engine);
     let file = Reference::Asset {
         root: AssetRoot::Collection,
@@ -324,28 +342,257 @@ fn the_sources_thread_advances_an_animation_by_itself() {
         ]),
     )
     .expect("created");
-    // On the engine's own clock the thread re-plans when each frame is due; no call
-    // touches the engine meanwhile.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    let mut seen = Vec::new();
-    while std::time::Instant::now() < deadline {
-        let now = colour(&engine);
-        if seen.last() != Some(&now) {
-            seen.push(now);
-        }
-        if now == (2, 128) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5));
+    assert_eq!(colour(&engine), (0, 0xff), "red first");
+    // The thread re-plans when each frame is due; no call touches the engine meanwhile.
+    clock.advance(100);
+    assert!(shows_by_itself(&engine, (1, 0xff)), "green at 100 ms");
+    // Past both plays (2 x 600 ms), the last frame stays.
+    clock.advance(2_000);
+    assert!(shows_by_itself(&engine, (2, 128)), "blue at alpha 128");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_waveform_source_is_painted_by_the_sources_thread() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    // One column, three rows: silence lights the middle row, full scale the top one.
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "wave",
+                "waveform",
+                settings(&[
+                    ("width", json!(1)),
+                    ("height", json!(3)),
+                    ("color", json!("#ff0000")),
+                    ("background", json!("#0000ff")),
+                ]),
+            ),
+            add("a", "i1", "wave"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(shown(&engine, "wave"), Some([0, 0, 0xff, 0xff]), "silence");
+    // The program mix's audio arrives: the thread paints it on its own, off the lock.
+    let scope = engine.audio_scope();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && shown(&engine, "wave") != Some([0xff, 0, 0, 0xff]) {
+        scope.push(48_000, &[1.0; 960]);
+        std::thread::sleep(Duration::from_millis(5));
     }
     assert_eq!(
-        seen.last(),
-        Some(&(2, 128)),
-        "reached the last frame: {seen:?}"
+        shown(&engine, "wave"),
+        Some([0xff, 0, 0, 0xff]),
+        "full scale"
     );
+}
+
+/// Shows or hides item `i1`.
+fn visible(control: &crate::InProcessControl, visible: bool) {
+    batch(
+        control,
+        Batch::single(Edit::ItemSetVisible {
+            item_id: ItemId::new("i1"),
+            scene_id: None,
+            visible,
+        }),
+    )
+    .expect("shown or hidden");
+}
+
+/// The fake clip frame `video` shows, re-planning until the decode thread has caught up
+/// with the clock and the program mix shows `want`.
+fn plays(engine: &Engine, want: u32) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        engine.replan();
+        if shown(engine, "video") == Some(FakeClip::pixel(want)) {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    false
+}
+
+#[test]
+fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
+    let dir = temp_dir("media");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(true)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("video", "media", video),
+            add("a", "i1", "video"),
+        ]),
+    )
+    .expect("created");
+    assert!(plays(&engine, 0), "the first frame");
+    clock.advance(250);
+    assert!(plays(&engine, 2), "frame 2 at 250 ms");
+
+    visible(&control, false);
+    assert_eq!(shown(&engine, "video"), None, "hidden");
+    clock.advance(300);
+    visible(&control, true);
+    assert!(plays(&engine, 0), "shown again, it plays from the start");
+    clock.advance(100);
+    assert!(plays(&engine, 1));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// B2 of #245's review: a source built while no plan reaches it (here, behind an item
+/// created hidden) starts from the beginning when the program first shows it, rather
+/// than where its clock has run to.
+#[test]
+fn a_media_file_first_shown_long_after_it_was_built_plays_from_the_start() {
+    let dir = temp_dir("media-hidden");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media.clone()));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(false)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("video", "media", video),
+            add("a", "i1", "video"),
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+                visible: false,
+            },
+        ]),
+    )
+    .expect("created hidden");
+    assert_eq!(shown(&engine, "video"), None, "built, but hidden");
+    assert_eq!(media.stats().opened, 1, "the file was opened");
+    engine.replan();
+    // Past the end of the one-second clip: without the restart it would show its last
+    // frame.
+    clock.advance(5000);
+    engine.replan();
+    visible(&control, true);
+    assert!(plays(&engine, 0), "first shown, it plays from the start");
+    clock.advance(100);
+    assert!(plays(&engine, 1));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// #422: a `media` source loaded from a collection file, before the host injects the
+/// platform's media files, fails for want of them; injecting them builds it again, so
+/// it plays without waiting for an edit.
+#[test]
+fn a_media_file_loaded_before_the_media_backend_plays_once_it_is_injected() {
+    let dir = temp_dir("media-loaded");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(true)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(false)),
+    ]);
+    {
+        // The run that creates the source and saves it to the collection file.
+        let engine = Engine::new()
+            .with_collection_file(dir.join("scenes.json"))
+            .expect("collection file");
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![
+                create("a"),
+                source("video", "media", video),
+                add("a", "i1", "video"),
+            ]),
+        )
+        .expect("created");
+    }
+
+    // The next run loads it before the media files are injected, as a host does.
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    assert_eq!(shown(&engine, "video"), None, "no media files yet");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
     assert!(
-        seen.contains(&(1, 0xff)),
-        "showed green on the way: {seen:?}"
+        plays(&engine, 0),
+        "it plays once the media files are injected"
     );
+    clock.advance(150);
+    assert!(plays(&engine, 1), "and advances on the clock");
     let _ = fs::remove_dir_all(dir);
 }

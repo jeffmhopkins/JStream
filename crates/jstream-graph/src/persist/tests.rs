@@ -3,9 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    BusId, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId,
-    OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId,
-    SourceKind, parity,
+    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor,
+    OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole,
+    SourceId, SourceKind, parity,
 };
 use serde_json::{Value, json};
 
@@ -50,6 +50,25 @@ fn kinds() -> Vec<KindDescriptor> {
             },
         ],
     });
+    kinds.push(KindDescriptor {
+        kind_id: "scope".into(),
+        category: KindCategory::Source,
+        name: "Scope".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        params: vec![ParamDescriptor {
+            id: "audio".into(),
+            ty: ParamType::Bus,
+            default: Value::Null,
+            label: "Audio".into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live: false,
+        }],
+    });
     kinds
 }
 
@@ -68,8 +87,9 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
 /// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
-/// deletes the virtual camera `vcam`, which the parity collection gained after the
-/// fixture was written; `a_virtual_camera_round_trips` covers it.
+/// deletes the virtual camera `vcam` and clears the hotkeys, which the parity collection
+/// gained after the fixture was written; `a_virtual_camera_round_trips` and
+/// `hotkeys_round_trip` cover them.
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -84,6 +104,12 @@ fn fixture_graph() -> Graph {
             },
             Edit::OutputDelete {
                 output_id: OutputId::new("vcam"),
+            },
+            Edit::HotkeyClear {
+                chord: Chord::new("F1"),
+            },
+            Edit::HotkeyClear {
+                chord: Chord::new("Ctrl+Digit1"),
             },
         ],
         None,
@@ -190,6 +216,63 @@ fn clone_links_round_trip() {
     assert_eq!(link("plain"), Some(None));
 }
 
+/// Hotkey bindings save ordered by chord, with their actions as `hotkey.set` takes them,
+/// and load back the same. A file without them (every v1 file written before they
+/// existed, such as the fixture) loads with none.
+#[test]
+fn hotkeys_round_trip() {
+    let mut graph = fixture_graph();
+    assert_eq!(graph.state().hotkeys().len(), 0);
+    let applied = graph.apply(
+        &[
+            Edit::HotkeySet {
+                chord: Chord::new("Shift+F2"),
+                action: Action::OutputStop {
+                    output_id: OutputId::new("yt"),
+                },
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F1"),
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("a"),
+                    preset_id: None,
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        saved["hotkeys"],
+        json!([
+            {"chord": "F1", "action": {"type": "scene.switch", "scene_id": "a"}},
+            {"chord": "Shift+F2", "action": {"type": "output.stop", "output_id": "yt"}}
+        ])
+    );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A binding is checked on load as `hotkey.set` checks it: here its scene is missing.
+#[test]
+fn a_hotkey_naming_a_missing_scene_is_refused() {
+    let file = edit_file(|v| {
+        v["hotkeys"] =
+            json!([{"chord": "F1", "action": {"type": "scene.switch", "scene_id": "gone"}}]);
+    });
+    assert_eq!(
+        load(&file),
+        Err(LoadError::Invalid {
+            object: "hotkey `F1`".into(),
+            error: Box::new(ProtocolError::NotFound {
+                entity: jstream_protocol::EntityKind::Scene,
+                id: "gone".into(),
+            }),
+        })
+    );
+}
+
 #[test]
 fn encoder_profiles_and_an_outputs_profile_round_trip() {
     let mut graph = fixture_graph();
@@ -267,6 +350,7 @@ fn a_file_from_before_audio_keeps_the_master_sends() {
     assert_eq!(
         sends,
         [
+            ("desk".to_owned(), BusId::master(), 0.0),
             ("mic".to_owned(), BusId::master(), 0.0),
             ("mic_copy".to_owned(), BusId::master(), 0.0),
         ]
@@ -300,6 +384,36 @@ fn a_removed_master_send_round_trips() {
     assert_eq!(value["sends"], json!([]));
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// #362: a source whose settings draw a bus loads: the buses are made before the
+/// sources, so the reference finds its bus.
+#[test]
+fn a_source_drawing_a_bus_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::BusCreate {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "wave".into(),
+                kind: SourceKind::Builtin {
+                    kind: "scope".into(),
+                },
+                settings: [("audio", json!({"type": "bus", "bus_id": "vod"}))]
+                    .into_iter()
+                    .collect(),
+                duplicated_from: None,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let loaded = load(&graph.to_collection_json());
     assert_eq!(loaded.as_ref(), Ok(&graph));
 }
 
@@ -503,6 +617,29 @@ fn placements_and_the_canvas_are_checked() {
         "{:?}",
         load(&canvas)
     );
+}
+
+/// An item's opacity and blend load through `item.add`'s checks, and its reserved
+/// `effects` loads only empty (ADR-0023 §1).
+#[test]
+fn opacity_blend_and_reserved_effects_are_checked() {
+    let empty = edit_file(|v| v["scenes"][0]["items"][0]["effects"] = json!([]));
+    assert_eq!(load(&empty).map(|g| g.rev()), Ok(Rev(2)));
+    let effect = edit_file(|v| v["scenes"][0]["items"][0]["effects"] = json!([{"kind": "blur"}]));
+    assert_eq!(
+        load(&effect),
+        Err(LoadError::Parse(
+            "item `i4`: `effects` is reserved and must be empty".into()
+        ))
+    );
+    for (field, value) in [("opacity", json!(1.5)), ("blend", json!("multiply"))] {
+        let file = edit_file(|v| v["scenes"][0]["items"][0][field] = value.clone());
+        assert!(
+            matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "item `i4`"),
+            "{field}: {:?}",
+            load(&file)
+        );
+    }
 }
 
 /// R-SEC-001: a malformed file's error never quotes a value from it, so it is safe to

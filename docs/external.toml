@@ -7,7 +7,7 @@
 [[external]]
 id = "yt-live-api"
 url = "https://developers.google.com/youtube/v3/live/getting-started"
-relied_on = "YouTube Live Streaming API: liveBroadcasts (insert/bind/transition), liveStreams (health), liveChatMessages (list, and insert to send chat as the channel), video statistics reads (concurrent viewers, likes), and the OAuth scopes each method accepts: JStream signs in once with youtube, which broadcast control and liveChatMessages.insert need (youtube.force-ssl also works) and which the reads accept too (ADR-0041)"
+relied_on = "YouTube Live Streaming API: liveBroadcasts (insert/bind/transition), liveStreams (health), liveChatMessages (list, and insert to send chat as the channel), video statistics reads (concurrent viewers, likes), and the OAuth scopes each method accepts: signed in through JStream's own OAuth client, JStream signs in once with youtube, which broadcast control and liveChatMessages.insert need (youtube.force-ssl also works) and which the reads accept too (ADR-0041, kept by ADR-0058)"
 review_every = "90d"
 status = "ok"
 checked_note = "Page loads; content not yet re-read against relied_on"
@@ -229,9 +229,57 @@ status = "unverified"
 checked_note = "Not fetched from the PR's environment (proxy refused the host); the commands were run against cargo-fuzz 0.13.2"
 
 [[external]]
+id = "w3c-uievents-code"
+url = "https://www.w3.org/TR/uievents-code/"
+relied_on = "KeyboardEvent.code values name physical keys independently of layout: KeyA–KeyZ, Digit0–Digit9, the punctuation keys (Minus, Equal, BracketLeft, BracketRight, Backslash, Semicolon, Quote, Backquote, Comma, Period, Slash), Space, Enter, Tab, Backspace, Escape, F1–F24, Insert, Delete, Home, End, PageUp, PageDown, the Arrow keys, PrintScreen, ScrollLock, Pause, Numpad0–Numpad9 and NumpadAdd/Subtract/Multiply/Divide/Decimal/Enter, and MediaPlayPause, MediaStop, MediaTrackNext, MediaTrackPrevious, AudioVolumeMute, AudioVolumeDown, AudioVolumeUp (Chord::KEYS, ADR-0024 §5)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not fetched: the build container's proxy refused the host; the names follow the spec as widely implemented by browsers"
+
+[[external]]
 id = "playwright"
 url = "https://playwright.dev/"
 relied_on = "@playwright/test drives Chromium headless from a test runner with fixtures, HTTP Basic credentials per browser context (httpCredentials), a launch executablePath and expected failures (test.fail); the web UI's end-to-end tests (crates/jstream-ui/tests/e2e/README.md)"
 review_every = "180d"
 status = "unverified"
-checked_note = "@playwright/test 1.56.1 ran the e2e suite with Chromium 141 headless shell and full build; the page itself was not re-read from the session"
+checked_note = "@playwright/test 1.64.0 ran the e2e suite in CI's ui-e2e job (the runner's Google Chrome) on PR #329; 1.56.1 had run it with Chromium 141 headless shell and full build; the page itself was not re-read from the session"
+
+[[external]]
+id = "google-oauth-device-flow"
+url = "https://developers.google.com/identity/protocols/oauth2/limited-input-device"
+relied_on = "OAuth 2.0 for TVs and limited-input devices: supported only for listed scopes, which include youtube and youtube.readonly (not youtube.force-ssl); needs a client of type 'TVs and Limited Input devices' and its client_secret; apps with a browser should use the installed-app (loopback) flow instead (ADR-0058)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the allowed-scopes list (YouTube API section), the client type and the note sending command-line and desktop apps to the installed-app flow"
+
+[[external]]
+id = "google-oauth-app-audience"
+url = "https://support.google.com/cloud/answer/15549945"
+relied_on = "Testing status: up to 100 listed test users, and their authorizations and refresh tokens expire seven days after consent (exception only for openid/email/profile); unverified production apps: 100 new users in total after the unverified-app screen, over the project's lifetime, never reset (ADR-0058)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the Testing user limit, the seven-day expiry and its exception, and the unverified-app user cap"
+
+[[external]]
+id = "google-oauth-brand-verification"
+url = "https://developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification"
+relied_on = "Verification of an external app: homepage (not only a login page) and privacy policy on a domain the project owns, verified in Search Console as the top private domain; sensitive and restricted scopes also need a demo video and a scope justification; the security assessment is for restricted scopes only (ADR-0058)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the homepage, privacy policy, domain ownership, demo video, justification and restricted-only security assessment requirements"
+
+[[external]]
+id = "yt-quota-audits"
+url = "https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits"
+relied_on = "Default allocation of 10,000 units per day per project; more quota needs an audit for compliance with the YouTube API Services terms, requested with the Audit and Quota Extension form (ADR-0058)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the default allocation and the audit requirement for more quota"
+
+[[external]]
+id = "yt-quota-costs"
+url = "https://developers.google.com/youtube/v3/determine_quota_cost"
+relied_on = "Quota costs: liveBroadcasts.insert 1, liveBroadcasts.transition 1, liveStreams.list 1, liveChatMessages.list 5, liveChatMessages.streamList 5; daily quotas reset at midnight Pacific time (ADR-0058)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the Live Streaming rows of the cost table and the reset time"

@@ -11,7 +11,7 @@ use super::parse::{Diag, Doc};
 /// The name of the status banner block in every ADR.
 pub(crate) const STATUS_BLOCK: &str = "adr-status";
 /// The name of the table block in the ADR index.
-const INDEX_BLOCK: &str = "adr-index";
+pub(crate) const INDEX_BLOCK: &str = "adr-index";
 /// The generated ADR index.
 pub(crate) const INDEX_PATH: &str = "docs/adr/README.md";
 /// Where ADRs live; only these are listed in the index.
@@ -142,6 +142,25 @@ pub(crate) fn join(lines: &[&str], like: &str) -> String {
         out.push('\n');
     }
     out
+}
+
+/// `doc`'s text with the inside of its `name` block replaced by `body`, and the 1-based
+/// line of the begin marker. Used by the generators that own one block in a hand-written
+/// doc (the README's progress table, the UI features summary).
+pub(crate) fn with_block(doc: &Doc, name: &str, body: &str) -> Result<(String, usize), String> {
+    let lines: Vec<&str> = doc.text.lines().collect();
+    let open = outside_fences(&lines);
+    let (b, e) = (begin(name), end(name));
+    let start = (0..lines.len())
+        .find(|&k| open[k] && lines[k].trim_end() == b)
+        .ok_or_else(|| format!("no `{b}` line to generate the `{name}` block into"))?;
+    let stop = (start + 1..lines.len())
+        .find(|&k| lines[k].trim_end() == e)
+        .ok_or_else(|| format!("the `{name}` block is not closed by `{e}`"))?;
+    let mut out: Vec<&str> = lines[..=start].to_vec();
+    out.extend(body.lines());
+    out.extend(&lines[stop..]);
+    Ok((join(&out, &doc.text), start + 1))
 }
 
 /// `text` without its well-formed `adr-status` blocks: what R-DOC-009 compares in an

@@ -12,12 +12,15 @@
 use std::env;
 
 /// The Media Foundation DLLs the daemon imports from: `mfplat.dll` (`MfCodecs`,
-/// `MfVideoDevices`), `mf.dll` and `mfreadwrite.dll` (`MfVideoDevices`), and
-/// `mfsensorgroup.dll` (`WindowsVcam`), which N editions also lack and Windows 10 has
-/// without `MFCreateVirtualCamera` (`WindowsVcam::start` checks for it before calling
-/// it). Only DLLs the binary imports from belong here: delay-loading one it doesn't is
-/// linker warning LNK4199, which CI's `-D warnings` turns into an error
-/// (`linker_messages`). `tests/delay_load.rs` checks the built binary.
+/// `MfVideoDevices`, `MfMediaDecoders`), `mf.dll` (`MfVideoDevices`), `mfreadwrite.dll`
+/// (`MfVideoDevices`, `MfMediaDecoders`), and `mfsensorgroup.dll` (`WindowsVcam`),
+/// which N editions also lack and Windows 10 has without `MFCreateVirtualCamera`
+/// (`WindowsVcam::start` checks for it before calling it). Only DLLs the binary imports
+/// from belong here. The linker ignores one it doesn't with warning LNK4199, and that
+/// warning doesn't fail CI: rustc reports it through the `linker_messages` lint, which
+/// ignores `-D warnings`. What catches a stale entry is `tests/delay_load.rs`, which
+/// requires each DLL in its own copy of this list to be in the built binary's
+/// delay-import table and none in its import table.
 const MEDIA_FOUNDATION: [&str; 4] = [
     "mfplat.dll",
     "mf.dll",
@@ -31,8 +34,9 @@ fn main() {
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let toolchain = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     if os == "windows" && toolchain == "msvc" {
-        // Only the daemon binary: its test binaries run on machines that have Media
-        // Foundation, and `rustc-link-arg` would reach them too.
+        // Only the daemon binary and its unit-test harness (`-bins` reaches both), not
+        // the integration tests, which run on machines that have Media Foundation and
+        // which `rustc-link-arg` would reach too.
         for dll in MEDIA_FOUNDATION {
             println!("cargo:rustc-link-arg-bins=/DELAYLOAD:{dll}");
         }
