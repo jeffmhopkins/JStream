@@ -1,15 +1,20 @@
-//! The shared block of one CLAP filter instance (`jstream-plugin-proto`, ADR-0035), as a
-//! named Windows file mapping: the engine creates it, and the plugin host it starts opens
-//! it by name. Plus the host's real-time thread registration with MMCSS.
+//! The shared block of one CLAP filter instance (`jstream-plugin-proto`, ADR-0035), as an
+//! unnamed Windows file mapping: the engine creates it and duplicates its handle into the
+//! plugin host it starts, which maps it from that handle. With no name, no other process
+//! can open it, and the handle isn't inheritable, so no other child of the engine gets it
+//! either (#351). Plus the host's real-time thread registration with MMCSS.
 
 use jstream_platform::PlatformError;
 use jstream_plugin_proto::Shared;
-use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, INVALID_HANDLE_VALUE};
+use windows::Win32::Foundation::{
+    DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE,
+};
 use windows::Win32::System::Memory::{
     CreateFileMappingW, FILE_MAP_ALL_ACCESS, MEMORY_BASIC_INFORMATION, MEMORY_MAPPED_VIEW_ADDRESS,
-    MapViewOfFile, OpenFileMappingW, PAGE_READWRITE, UnmapViewOfFile, VirtualQuery,
+    MapViewOfFile, PAGE_READWRITE, UnmapViewOfFile, VirtualQuery,
 };
-use windows::core::HSTRING;
+use windows::Win32::System::Threading::GetCurrentProcess;
+use windows::core::PCWSTR;
 
 use crate::com::{Mmcss, OsResult};
 use crate::vcam::shared::{Handle, SecurityAttributes, user_sid};
@@ -21,7 +26,7 @@ const SIZE: usize = size_of::<Shared>();
 /// the mapping itself lives while either process has it open.
 pub struct PluginBlock {
     view: MEMORY_MAPPED_VIEW_ADDRESS,
-    _handle: Handle,
+    handle: Handle,
 }
 
 // SAFETY: the view is plain shared memory that is only ever read and written through
@@ -37,18 +42,19 @@ impl std::fmt::Debug for PluginBlock {
 }
 
 impl PluginBlock {
-    /// Creates a new, zeroed block named `name` (`Local\JStreamPlugin-…`) that only this
-    /// user can open. The engine's side; the name must be new.
+    /// Creates a new, zeroed, unnamed block, with a DACL that grants only this user. The
+    /// engine's side: the host gets it through [`PluginBlock::share_with`].
     ///
     /// # Errors
-    /// The OS refuses, or a mapping of that name already exists.
-    pub fn create(name: &str) -> Result<Self, PlatformError> {
+    /// The OS refuses.
+    pub fn create() -> Result<Self, PlatformError> {
         let sid = user_sid()?;
         let sa = SecurityAttributes::from_sddl(&format!("D:P(A;;GA;;;{sid})"))?;
         let size = u32::try_from(SIZE).map_err(|_| PlatformError::Unsupported {
             what: "a plugin block larger than 4 GiB".into(),
         })?;
-        // SAFETY: `sa` outlives the call; the name is a valid wide string.
+        // SAFETY: `sa` outlives the call; a null name makes an unnamed section, and
+        // `sa` says the handle isn't inheritable.
         let handle = unsafe {
             CreateFileMappingW(
                 INVALID_HANDLE_VALUE,
@@ -56,31 +62,55 @@ impl PluginBlock {
                 PAGE_READWRITE,
                 0,
                 size,
-                &HSTRING::from(name),
+                PCWSTR::null(),
             )
         }
         .os("CreateFileMappingW")?;
-        // SAFETY: plain call, right after the call whose status it reads.
-        let existed = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
-        let handle = Handle(handle);
-        if existed {
-            return Err(PlatformError::Unsupported {
-                what: format!("a second plugin block named {name}"),
-            });
-        }
-        Self::map(handle)
+        Self::map(Handle(handle))
     }
 
-    /// Opens the block named `name` that the engine created. The host's side.
+    /// Duplicates the block's section handle into `process` (a host the engine just
+    /// started, opened with `PROCESS_DUP_HANDLE`), returning the handle's value there for
+    /// the host's `ToHost::Block`. The copy isn't inheritable and closes with that
+    /// process.
     ///
     /// # Errors
-    /// No such mapping, or one too small to be a block.
-    pub fn open(name: &str) -> Result<Self, PlatformError> {
-        // SAFETY: the name is a valid wide string.
-        let handle =
-            unsafe { OpenFileMappingW(FILE_MAP_ALL_ACCESS.0, false, &HSTRING::from(name)) }
-                .os("OpenFileMappingW")?;
-        Self::map(Handle(handle))
+    /// The OS refuses, as when the process has already exited.
+    pub fn share_with(&self, process: HANDLE) -> Result<u64, PlatformError> {
+        let mut target = HANDLE::default();
+        // SAFETY: both process handles and the section handle are live for the call
+        // (the current process's is a pseudo-handle), and `target` is a valid
+        // out-pointer.
+        unsafe {
+            DuplicateHandle(
+                GetCurrentProcess(),
+                self.handle.0,
+                process,
+                &mut target,
+                0,
+                false,
+                DUPLICATE_SAME_ACCESS,
+            )
+        }
+        .os("DuplicateHandle")?;
+        Ok(target.0 as usize as u64)
+    }
+
+    /// Maps the block whose section handle the engine duplicated into this process,
+    /// `value` from its `ToHost::Block`, taking ownership of that handle. The host's
+    /// side.
+    ///
+    /// # Errors
+    /// `value` can't be a handle, or isn't a section at least a block's size.
+    pub fn from_handle(value: u64) -> Result<Self, PlatformError> {
+        // Handle values are non-zero multiples of 4 that fit a pointer.
+        let raw = usize::try_from(value)
+            .ok()
+            .filter(|&v| v != 0 && v % 4 == 0)
+            .ok_or_else(|| PlatformError::Unsupported {
+                what: format!("a plugin block handle of {value:#x}"),
+            })?;
+        Self::map(Handle(HANDLE(raw as *mut std::ffi::c_void)))
     }
 
     /// Maps the whole of `handle`'s section and checks it holds a `Shared`.
@@ -94,10 +124,7 @@ impl PluginBlock {
                 message: windows::core::Error::from_thread().message(),
             });
         }
-        let block = Self {
-            view,
-            _handle: handle,
-        };
+        let block = Self { view, handle };
         let mut info = MEMORY_BASIC_INFORMATION::default();
         // SAFETY: `view` is a live mapping in this process; `info` is writable for its
         // size.
