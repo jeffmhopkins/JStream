@@ -3074,6 +3074,8 @@ mod tests {
                 sends,
                 hotkeys,
                 transitions,
+                folders,
+                labels,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -3088,8 +3090,8 @@ mod tests {
                 sends,
                 hotkeys,
                 transitions,
-                folders: Vec::new(),
-                labels: Vec::new(),
+                folders,
+                labels,
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -4618,5 +4620,196 @@ mod tests {
         drop(control);
         drop(engine);
         assert_eq!(poll_event(&mut events, &waker), Poll::Ready(None));
+    }
+
+    /// The folder, label and metadata edits (ADR-0024 §3 and §4) with `jstream-graph`'s
+    /// checks: missing parents and labels, a folder inside itself, colours and icons,
+    /// a label listed twice, and the in-use refusals with their blockers. Reads report
+    /// what they set, `source.duplicate` copies the metadata, and undo restores it
+    /// through a scene's and a source's delete.
+    #[test]
+    fn folders_labels_and_metadata_follow_the_graph() {
+        use jstream_protocol::{Blocker, FolderId, LabelId, SceneMeta, SourceMeta};
+        fn field(error: ControlError) -> String {
+            match error.protocol() {
+                Some(ProtocolError::InvalidArgument { field, .. }) => field.clone(),
+                other => panic!("not invalid_argument: {other:?}"),
+            }
+        }
+        fn folder(id: &str, parent: Option<&str>) -> Edit {
+            Edit::FolderCreate {
+                folder_id: FolderId::new(id),
+                name: id.to_uppercase(),
+                parent: parent.map(FolderId::new),
+            }
+        }
+        fn label(id: &str, color: &str) -> Edit {
+            Edit::LabelCreate {
+                label_id: LabelId::new(id),
+                name: id.to_uppercase(),
+                color: color.into(),
+                icon: None,
+            }
+        }
+        fn many(edits: Vec<Edit>) -> Batch {
+            Batch {
+                edits,
+                ..Batch::single(create("unused"))
+            }
+        }
+        fn labelled(labels: &[&str]) -> Edit {
+            Edit::SourceSetMeta {
+                source_id: SourceId::new("webcam"),
+                meta: SourceMeta {
+                    labels: labels.iter().map(|l| LabelId::new(*l)).collect(),
+                    favourite: true,
+                },
+            }
+        }
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = many(vec![
+            create("a"),
+            webcam(),
+            add("a", "i1", "webcam"),
+            folder("outer", None),
+            folder("inner", Some("outer")),
+            label("sponsor", "#ff8800"),
+            label("camera", "#00FF00"),
+        ]);
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let before = state(&*control);
+
+        let refused = |edit: Edit| batch(&*control, Batch::single(edit)).expect_err("refused");
+        assert_eq!(
+            code(&refused(folder("x", Some("ghost")))),
+            Some("not_found")
+        );
+        assert_eq!(
+            code(&refused(folder("outer", None))),
+            Some("already_exists")
+        );
+        let cycle = Edit::FolderSetParent {
+            folder_id: FolderId::new("outer"),
+            parent: Some(FolderId::new("inner")),
+        };
+        assert_eq!(field(refused(cycle)), "edits.0.parent");
+        assert_eq!(field(refused(label("x", "orange"))), "edits.0.color");
+        let icon = Edit::LabelUpdate {
+            label_id: LabelId::new("sponsor"),
+            name: "Sponsor".into(),
+            color: "#ff8800".into(),
+            icon: Some(String::new()),
+        };
+        assert_eq!(field(refused(icon)), "edits.0.icon");
+        assert_eq!(code(&refused(labelled(&["ghost"]))), Some("not_found"));
+        assert_eq!(
+            field(refused(labelled(&["sponsor", "sponsor"]))),
+            "edits.0.labels"
+        );
+        let bad_meta = Edit::SceneSetMeta {
+            scene_id: SceneId::new("a"),
+            meta: SceneMeta {
+                color: Some("#123".into()),
+                ..SceneMeta::default()
+            },
+        };
+        assert_eq!(field(refused(bad_meta)), "edits.0.color");
+
+        let organise = many(vec![
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("a"),
+                folder_id: Some(FolderId::new("inner")),
+            },
+            Edit::SceneSetMeta {
+                scene_id: SceneId::new("a"),
+                meta: SceneMeta {
+                    favourite: true,
+                    ..SceneMeta::default()
+                },
+            },
+            labelled(&["sponsor", "camera"]),
+            Edit::FolderReorder {
+                folder_id: FolderId::new("inner"),
+                index: 0,
+            },
+        ]);
+        assert_eq!(batch(&*control, organise), Ok(Rev(2)));
+        let Ok(QueryResult::SourceList { sources, .. }) = query(&*control, Query::SourceList)
+        else {
+            panic!("a source list");
+        };
+        assert_eq!(
+            sources[0].meta.labels,
+            [LabelId::new("camera"), LabelId::new("sponsor")]
+        );
+        let Ok(QueryResult::SceneList { scenes, .. }) = query(&*control, Query::SceneList) else {
+            panic!("a scene list");
+        };
+        assert_eq!(scenes[0].folder, Some(FolderId::new("inner")));
+        assert!(scenes[0].meta.favourite);
+        let Ok(QueryResult::StateGet { folders, .. }) = query(&*control, Query::StateGet) else {
+            panic!("a state");
+        };
+        assert_eq!(folders[0].folder_id, FolderId::new("inner"));
+
+        let in_use = refused(Edit::FolderDelete {
+            folder_id: FolderId::new("inner"),
+        });
+        let Some(ProtocolError::InvalidArgument {
+            field: in_use_field,
+            blockers,
+            ..
+        }) = in_use.protocol()
+        else {
+            panic!("not invalid_argument: {in_use:?}");
+        };
+        assert_eq!(in_use_field, "edits.0.folder_id");
+        assert_eq!(
+            blockers,
+            &[Blocker {
+                entity: EntityKind::Scene,
+                id: "a".into(),
+                field: "folder".into(),
+            }]
+        );
+        let label_in_use = refused(Edit::LabelDelete {
+            label_id: LabelId::new("sponsor"),
+        });
+        assert_eq!(field(label_in_use), "edits.0.label_id");
+        let outer = refused(Edit::FolderDelete {
+            folder_id: FolderId::new("outer"),
+        });
+        assert_eq!(field(outer), "edits.0.folder_id");
+
+        // The copy carries the labels and favourite flag.
+        let copy = Edit::SourceDuplicate {
+            source_id: SourceId::new("webcam"),
+            new_source_id: SourceId::new("webcam_2"),
+            name: "Copy".into(),
+        };
+        assert_eq!(batch(&*control, Batch::single(copy)), Ok(Rev(3)));
+        let Ok(QueryResult::SourceList { sources, .. }) = query(&*control, Query::SourceList)
+        else {
+            panic!("a source list");
+        };
+        assert_eq!(sources[0].meta, sources[1].meta);
+        assert!(undo(&*control).is_ok());
+
+        // Deleting the scene and the source, then undoing, restores their metadata.
+        let organised = state(&*control);
+        let delete = many(vec![
+            Edit::SceneDelete {
+                scene_id: SceneId::new("a"),
+            },
+            Edit::SourceDelete {
+                source_id: SourceId::new("webcam"),
+            },
+        ]);
+        assert!(batch(&*control, delete).is_ok());
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), organised);
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), before);
     }
 }
