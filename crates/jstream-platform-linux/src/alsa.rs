@@ -922,9 +922,10 @@ mod backend {
                 // and the handle is live.
                 let written = unsafe { (pcm.api.writei)(pcm.handle, rest.as_ptr().cast(), frames) };
                 if written == EAGAIN {
-                    if let Err(code) = pcm.wait()
-                        && !pcm.recover(code)
-                    {
+                    if let Err(code) = pcm.wait() {
+                        if pcm.recover(code) {
+                            break;
+                        }
                         handler.on_error(&pcm.lost(code));
                         return;
                     }

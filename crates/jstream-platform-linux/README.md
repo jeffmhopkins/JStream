@@ -99,10 +99,10 @@ It has:
   time is the media clock at the read less the frames still queued and its own; a render
   buffer's is the clock plus the frames queued ahead. An overrun or underrun is
   recovered (a capture stream is then started again, since recovery only prepares it;
-  playback restarts with its next write) and flags the next packet as a discontinuity,
-  and a short write is finished before the next period is rendered (ALSA doesn't say how many
-  frames were lost, so the device position doesn't jump); a device that can't be
-  recovered ends the stream with `DeviceLost`. An unknown PCM is `NotFound`. Desktop and
+  playback restarts with its next write, dropping the rest of that period) and flags the
+  next packet as a discontinuity (ALSA doesn't say how many frames were lost, so the
+  device position doesn't jump); a device that can't be recovered ends the stream with
+  `DeviceLost`. A short write is finished before the next period is rendered. An unknown PCM is `NotFound`. Desktop and
   application audio (`*Loopback`, `processes`) are `Unsupported`: ALSA has no loopback,
   and ADR-0060 §4 leaves them to PipeWire. alsa-lib prints its own error lines to stderr
   (such as for an unknown PCM); silencing them needs a variadic C callback, which stable
@@ -195,8 +195,7 @@ stopping on drop, a capture stream running again after an overrun, loopback refu
 unknown PCM and the listing) pass with or without those libraries installed and need no
 GPU, session or daemon. ALSA's sample conversion, channel layouts, listed names and frame
 times are platform-independent. The OpenH264 tests use a fake download and a fake
-encoder behind the
-library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
+encoder behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
