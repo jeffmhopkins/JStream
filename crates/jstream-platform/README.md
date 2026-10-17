@@ -141,7 +141,7 @@ Contents:
   variables count, so nothing is written beside the exe without the marker. It reads the
   environment itself: three cases don't pay for `dirs`. A plain function, not a trait:
   no host needs to swap it.
-- **Shared backend helpers** (`mailbox.rs`, `nv12.rs`): safe, platform-independent code
+- **Shared backend helpers** (`mailbox.rs`, `nv12.rs`, `yuv.rs`): safe, platform-independent code
   the platform crates share, so it is written and tested once. `mailbox::Mailbox` is the
   capture callbacks' single-slot latest-frame mailbox: `put` swaps a boxed frame in and
   returns the one it replaced (a skipped frame), `take` swaps it out, and neither waits
@@ -149,8 +149,13 @@ Contents:
   around an optional box, one atomic swap. `nv12` converts packed 8-bit BGRA or RGBA to
   NV12 in BT.709 limited range with left-sited chroma (`rgb_to_nv12` into a
   `VideoFrame`, `rgb_to_nv12_image` into an `Nv12Image`, NV12 laid out in one mapped
-  buffer), and `even_size` crops an odd source. Windows' capture and H.264 CPU path and
-  Linux's PipeWire capture and VA-API upload use them.
+  buffer), and `even_size` crops an odd source. `yuv` turns a video capture device's
+  raw frame bytes, rows `stride` bytes apart with the chroma planes after the luma, into
+  engine frames: `copy_planar` copies NV12 and I420, and `yuy2_to_nv12` converts packed
+  4:2:2, each chroma sample averaging the two rows of its block. A short buffer is an
+  `Os` error naming the caller's OS call. Windows' capture and H.264 CPU path, its Media
+  Foundation webcams, and Linux's PipeWire capture, VA-API upload and V4L2 webcams use
+  them.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such

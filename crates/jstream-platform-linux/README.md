@@ -17,11 +17,11 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
-ADR is **accepted**; this crate has its first three parts (the platform basics, screen
-capture, then VA-API H.264 encoding), and the rest follows in later PRs. Layer 2, and one
-of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
-system call is wrapped here behind safe APIs, with RAII types for what the system hands
-back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
+ADR is **accepted**; this crate has the platform basics, screen capture, VA-API H.264
+encoding, the software H.264 and AAC encoders, and V4L2 webcams, and the rest follows in
+later PRs. Layer 2, and one of the crates allowed `unsafe`
+([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every system call is wrapped here
+behind safe APIs, with RAII types for what the system hands back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
 
 **System libraries are loaded at run time** (ADR-0060 §8). libpipewire and libva are
 opened with `dlopen` through `libloading` when a backend first needs them, and only the
@@ -82,6 +82,30 @@ It has:
 - **`PipeWire`** loads `libpipewire-0.3.so.0` and checks it is at least ADR-0060's floor
   (1.0). **`PipeWireAudio`** (`AudioIo`) is built on it; listing devices and opening
   streams report `Unsupported` for now.
+- **`V4l2Devices`** (`VideoDevices`): webcams and capture cards through V4L2, the
+  "plain V4L2 backend" ADR-0060 §9 keeps in scope. There is no library: the nodes are
+  driven with `ioctl`s declared by hand from `<linux/videodev2.h>` (`v4l2/abi.rs`, the
+  64-bit layouts, checked against the kernel headers; the backend isn't built for 32-bit
+  targets). `devices` lists each `/dev/videoN` that captures single-planar video with
+  streaming I/O (a UVC webcam's metadata node doesn't), named by its card name, with
+  udev's `/dev/v4l/by-id/` link as the ID where there is one (it survives replugging and
+  renumbering), else the node's path. Only such paths are ever opened, since an ID can
+  come from a saved collection. Nodes the user can't open are left out, and no
+  microphone is paired yet. `formats` lists every enumerated size and frame interval of
+  the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12), NV12 and I420 as
+  they are, and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. A stepwise size range
+  offers its largest size and the common sizes its steps reach, a stepwise interval its
+  shortest, and a driver that enumerates no sizes or no intervals its current ones. `open` sets the
+  format (refused as `Unsupported` if the driver settles on another) and frame interval,
+  maps four driver buffers, and starts a capture thread that waits on the node and an
+  `eventfd`, converts each filled buffer with `jstream_platform::yuv` or hands it to the
+  decoder, queues it back, and fills the single-slot mailbox. A frame's time is its
+  `CLOCK_MONOTONIC` buffer timestamp when it is recent, else the clock's `now`. Buffers
+  the driver marks as corrupt and short raw frames are dropped, rejected JPEGs counted.
+  Raw colour is what the driver reports, else the colour space's default, else BT.601
+  below 720 lines and BT.709 from there, in limited range. An unplug is `DeviceLost`, a
+  device another application streams from `Busy`. Dropping the stream wakes and joins
+  the thread, which turns the stream off, unmaps the buffers and closes the node.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
@@ -155,21 +179,25 @@ Not here yet, in roughly the order they follow:
   the source when it starts a capture;
 - PipeWire audio streams, and the ALSA fallback through libasound (ADR-0060 §4, §8);
 - DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
-- V4L2 webcams;
+- multi-planar V4L2 capture (some capture cards and SoC cameras), and pairing a webcam
+  with its microphone;
 - the stream-key store.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
-pods, the frame copy, and the H.264 parameters, parameter sets, GOP and upload are
+pods, the frame copy, the H.264 parameters, parameter sets, GOP and upload, and V4L2's
+ABI layouts, formats list, colour, buffer times and device IDs are
 platform-independent. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
-libva probes) pass with or without those libraries installed and need no GPU, session
+libva probes, V4L2's refusal of IDs that aren't video nodes and of a node that isn't
+V4L2, and its handling of filled buffers) pass with or without those libraries installed and need no GPU, session
 or daemon. The OpenH264 tests use a fake download and a fake encoder behind the
 library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
-GNOME or KDE session with PipeWire, and VA-API H.264 encodes on a GPU with an encode
-driver.
+GNOME or KDE session with PipeWire, VA-API H.264 encodes on a GPU with an encode
+driver, and V4L2 capture from a webcam or capture card (the `vivid` test driver will
+do).
