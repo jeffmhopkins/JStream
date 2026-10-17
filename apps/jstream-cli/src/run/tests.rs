@@ -908,6 +908,37 @@ fn capture_targets_prints_each_target() {
 }
 
 #[test]
+fn privacy_golden() {
+    let engine = MockEngine::new();
+    assert_eq!(
+        run_on(&engine, &["--mock", "privacy", "get"]),
+        ok("privacy: off\n")
+    );
+    let control = session(&engine);
+    let events = control.events();
+    assert_eq!(
+        run_on(&engine, &["--mock", "privacy", "on"]),
+        ok("privacy.set on accepted (req_1)\n")
+    );
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "privacy", "get"]),
+        ok(concat!(
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"privacy.get","#,
+            r#""on":true}}}"#,
+            "\n"
+        ))
+    );
+    assert_eq!(engine.rev(), Rev(0), "privacy is not an edit");
+    let mut out = Vec::new();
+    stream_events(events, Some(1), false, &mut out).expect("one event");
+    let line = String::from_utf8_lossy(&out);
+    assert!(
+        line.starts_with("privacy.changed on by ") && line.ends_with(" (req_1)\n"),
+        "{line}"
+    );
+}
+
+#[test]
 fn events_golden_unknown_skipped_and_an_ended_stream_is_disconnected() {
     let engine = populated();
     let control = session(&engine);

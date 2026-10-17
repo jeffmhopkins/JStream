@@ -328,14 +328,19 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   output with a video chain, even one holding only disabled filters, gets its own render
   pass and session, keyed by its output ID. An output's own audio chain gives it its own
   audio encode and never affects video sharing. Hardware session caps differ by GPU
-  vendor, so the engine reports, per output, whether it shares and with which outputs,
-  plus the sessions in use. It does not guess the caps.
+  vendor, so the engine reports, per output, whether it shares and with which outputs
+  and whether its session is its own, plus the sessions in use. It does not guess the
+  caps. Outputs carry no video chain until filters land, so for now every output shares
+  by `(video_mix, encoder_profile)`; the engine already keys and draws an output with a
+  chain on its own.
 - **Privacy screen** ([ADR-0027](adr/0027-program-master-and-output-chains.md)): whether
   it is on is runtime state, set by an action and never stored in the collection; it
   starts off. The collection's `privacy` setting only says how it looks (a blur or a
   slate) and which sources it mutes, by default every audio input-device source,
   independently of each source's own mute. While on, it covers every output and every
-  preview stream of a post-master stage.
+  preview stream of a post-master stage. Built so far: on and off, covering every
+  output's video with the default blur. The look setting, the slate and the muted
+  sources are not built yet.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -571,11 +576,14 @@ and reads are `SeqCst`, with a `SeqCst` fence between each side's store and its 
 fence doesn't allocate, lock or wait, so [R-RT-001](RULES.md#R-RT-001) and
 [R-RT-002](RULES.md#R-RT-002) still hold.
 
-The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
-reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
-so it takes effect on the next tick and block. The blur or slate pass exists whenever an
-output does, so turning privacy on allocates nothing on a real-time thread. Not built
-yet.
+The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) reaches the
+render thread as a lock-free atomic flag, not a snapshot rebuild, so it takes effect on
+the next tick: the engine stores it with release ordering under its lock, and the thread
+loads it with acquire ordering at the start of each tick. The blur pass's layers are
+kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
+thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
+never the last frame. The mixer thread will read it the same way once privacy mutes
+sources; not built yet.
 
 <a id="protocol"></a>
 ## Control protocol
@@ -668,19 +676,22 @@ The wire format, versioning, error codes and compatibility policy are designed i
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
   rather than overwrite another client's later change (protocol 0.10).
-- **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
-  undoable or batchable and with no `rev` change; every change emits
-  `privacy.changed { on }` to every client and goes to the audit log
-  ([ADR-0027](adr/0027-program-master-and-output-chains.md)). A batch holds only edits,
-  so one naming `privacy.set` is refused whole with the stable code `malformed`, and
-  nothing in it is applied. A client that connects while privacy is on gets
-  `privacy.changed { on: true }` right after its handshake, so no client shows it as
-  off. Preview streams show the pre-master stage (the editing view) by
+- **Privacy screen** (protocol 0.31): the action `privacy.set { on }` on the master
+  stage, never undoable or batchable and with no `rev` change; every change emits
+  `privacy.changed { on }`, naming the client and request, to every client, and every
+  `privacy.set` goes to the audit log with the state it asked for
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)). `privacy.get` reads it. A
+  batch holds only edits, so one naming `privacy.set` is refused whole with the stable
+  code `malformed`, and nothing in it is applied. A client that connects while privacy is
+  on gets `privacy.changed { on: true }` as the first event of its subscription, so no
+  client shows it as off. Preview streams show the pre-master stage (the editing view) by
   default; a client asks for the post-master stage to see what viewers see, and only
-  that stage is covered by the privacy screen.
+  that stage is covered by the privacy screen. `preview.subscribe` has no post-master
+  stage yet, so every preview stream is uncovered.
 - **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
-  its encoder session's profile and the other outputs sharing it, plus the sessions and
-  hardware sessions in use. A profile's settings and the output's video mix at start
+  its encoder session's profile, the other outputs sharing it and whether the session is
+  dedicated to it because of its own video chain (0.31), plus the sessions and hardware
+  sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
   outputs on different mixes never share one. Planned: when the encoder refuses a
   session, `output.start` fails with a stable session-limit error code naming the
@@ -784,7 +795,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `privacy`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -801,7 +812,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 593 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 600 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -951,7 +962,10 @@ output: mix → master video chain → the output's own video chain → privacy 
 conversion (step 4) → encoder. The render plan has a master node per consumed mix, a
 node per output with a video chain, and a privacy node per output. The privacy stage
 comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
-the output gets a black frame. None of this is built yet.
+the output gets a black frame. Built so far: the privacy stage, as a blur after the
+mix's draw (a chain of half-size downsamples to a small layer, stretched back up), and
+the sharing key's output part. The master and output video chains are not built yet
+(their audio chains are, protocol 0.29).
 
 <a id="browser-source"></a>
 ## Browser source

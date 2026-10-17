@@ -320,6 +320,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         Arc::new(RenderHub::default()),
         Arc::new(Wanted::default()),
         (1280, 720),
+        Arc::default(),
     );
     let opened = open_capture(&parts).expect("a capture path");
     let mut stream = start_capture(&opened.backends, &CaptureSpec::Display(None))

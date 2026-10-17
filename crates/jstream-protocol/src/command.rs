@@ -1058,6 +1058,18 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
+    /// Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's
+    /// video is covered from the next frame: a heavy blur of the outgoing picture, or
+    /// black when the blur can't be drawn, never the picture itself. It is runtime
+    /// state, not collection state: it changes no `rev`, is never undone, goes to the
+    /// audit log, and the engine starts with it off. A change emits `privacy.changed`,
+    /// which `privacy.get` reads back; setting the state it already has succeeds and
+    /// emits nothing.
+    #[serde(rename = "privacy.set")]
+    PrivacySet {
+        /// Whether the privacy screen covers the outputs.
+        on: bool,
+    },
 }
 
 impl Action {
@@ -1082,6 +1094,7 @@ impl Action {
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
             Action::StudioSetPreview { .. } => "studio.set_preview",
+            Action::PrivacySet { .. } => "privacy.set",
         }
     }
 
@@ -1121,7 +1134,8 @@ impl Action {
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
             | Action::PairingStart
-            | Action::DeviceRevoke { .. } => vec![],
+            | Action::DeviceRevoke { .. }
+            | Action::PrivacySet { .. } => vec![],
         }
     }
 
@@ -1165,7 +1179,8 @@ impl Action {
             | Action::OutputClearKey { .. }
             | Action::AudioResetLoudness {}
             | Action::SceneSwitch { .. }
-            | Action::StudioSetPreview { .. } => None,
+            | Action::StudioSetPreview { .. }
+            | Action::PrivacySet { .. } => None,
         }
     }
 }

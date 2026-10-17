@@ -451,6 +451,24 @@ source: crates/jstream-mcp/src/tests.rs
                   "device_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
+                "properties": {
+                  "on": {
+                    "description": "Whether the privacy screen covers the outputs.",
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "privacy.set",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "on"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -3825,7 +3843,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Returns the engine's events after the cursor `after`, oldest first, without waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` say whose batch did it), `studio.changed` (another scene went on program) and `output.state_changed`, from every client, yours included, and `events.dropped` (the server dropped `count` events because this session fell behind; re-read the state). The once-a-second `stats.tick` is not in `events`: each read returns the newest one as `stats` (running drop totals). Nor is `meters.tick`, about ten a second while the mixer runs: each read returns the newest one as `meters` (each source's and bus's audio levels, and the master's loudness). Each comes with a `seq`, a sequence number of this MCP server, starting at 1 when your first call opened the session. Pass the returned `next` as `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At most 100 events come back at once; `more` says others are waiting. The server keeps the last 1000: `dropped` counts events after your cursor that were discarded before you read them, so re-read the state if it is not 0. `ended` means the session is gone and no more events will come.",
+      "description": "Returns the engine's events after the cursor `after`, oldest first, without waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` say whose batch did it), `studio.changed` (another scene went on program), `privacy.changed` (the privacy screen went on or off; first in a session that opens while it is on) and `output.state_changed`, from every client, yours included, and `events.dropped` (the server dropped `count` events because this session fell behind; re-read the state). The once-a-second `stats.tick` is not in `events`: each read returns the newest one as `stats` (running drop totals). Nor is `meters.tick`, about ten a second while the mixer runs: each read returns the newest one as `meters` (each source's and bus's audio levels, and the master's loudness). Each comes with a `seq`, a sequence number of this MCP server, starting at 1 when your first call opened the session. Pass the returned `next` as `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At most 100 events come back at once; `more` says others are waiting. The server keeps the last 1000: `dropped` counts events after your cursor that were discarded before you read them, so re-read the state if it is not 0. `ended` means the session is gone and no more events will come.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -4638,6 +4656,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "device_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
+                "properties": {
+                  "on": {
+                    "description": "Whether the privacy screen covers the outputs.",
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "privacy.set",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "on"
                 ],
                 "type": "object"
               }
@@ -8509,6 +8545,24 @@ source: crates/jstream-mcp/src/tests.rs
                   "device_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
+                "properties": {
+                  "on": {
+                    "description": "Whether the privacy screen covers the outputs.",
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "privacy.set",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "on"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -11662,6 +11716,61 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "preview"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `privacy` operation: set `op.type` to one of `privacy.set` (action), `privacy.get` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `privacy` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
+                "properties": {
+                  "on": {
+                    "description": "Whether the privacy screen covers the outputs.",
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "privacy.set",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "on"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reads whether the privacy screen is on (ADR-0027 §4). Runtime state, so the\nresult carries no `rev`.",
+                "properties": {
+                  "type": {
+                    "const": "privacy.get",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "privacy"
     },
     {
       "annotations": {

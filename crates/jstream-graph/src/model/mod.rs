@@ -730,6 +730,13 @@ impl Output {
     pub fn video_mix(&self) -> Option<&VideoMixId> {
         self.video_mix.as_ref()
     }
+
+    /// Whether its own video filter chain has any filters. Such an output gets its own
+    /// render pass and encoder session (ADR-0027 §3). Outputs carry no video chain
+    /// until filters land, so this is `false` for every output.
+    pub fn has_video_chain(&self) -> bool {
+        false
+    }
 }
 
 /// One encoder profile: a named encoding outputs can share.

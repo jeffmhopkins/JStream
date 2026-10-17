@@ -266,6 +266,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`;
+- the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
+  `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
+  stream opened while it is on gets first;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.
