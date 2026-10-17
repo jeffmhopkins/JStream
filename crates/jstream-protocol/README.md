@@ -891,6 +891,9 @@ function in this crate so the compositor and the UI share one implementation.
   point, texture coordinate and `w = (p − z) / p` (1 without perspective), so the GPU
   can interpolate texture coordinates perspective-correctly. It returns nothing when the
   content misses the box, the whole item is past the near plane, or it is seen edge-on.
+  Edge-on is decided by the plane's facing (the z of its unit normal under a millionth:
+  through the viewer with perspective, side-on without), whatever the item's size, and
+  `unplace` makes the same test, so the two agree.
   With neutral 3D it is the 2D quad, its texture coordinates clipped to the box.
   `unplace` maps a canvas point back to the local point it shows: a 2×2 solve, in
   `f64`, with nothing returned edge-on or past the near plane. It doesn't check the box,

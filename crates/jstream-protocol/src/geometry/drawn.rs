@@ -16,12 +16,14 @@ use super::{CanvasPoint, ContentRect, GeometryError, ItemGeometry, rotate_x, rot
 /// not drawn.
 pub const NEAR_W: f32 = 1.0 / 256.0;
 
-/// A polygon with less area than this, in square canvas pixels, is seen edge-on and
-/// draws nothing.
+/// A polygon with less area than this, in square canvas pixels, draws nothing:
+/// too small to see.
 const MIN_AREA: f32 = 0.01;
 
-/// How small the plane's area scale on the canvas may get before [`ItemGeometry::unplace`]
-/// treats the item as seen edge-on.
+/// How small the plane's area scale on the canvas may get before the item is seen
+/// edge-on: the facing ([`Plane::facing`]) for the whole item, and the same scale at one
+/// canvas point for [`ItemGeometry::unplace`]. A quarter turn leaves a few times 1e-8 in
+/// f32, not 0, whatever the item's size.
 const EDGE_ON: f64 = 1e-6;
 
 /// The most vertices a drawn polygon has: a rectangle cut by one line.
@@ -96,6 +98,15 @@ impl Plane {
         }
     }
 
+    /// The z of the plane's unit normal, `ax × ay`: 1 facing the viewer, 0 edge-on. With
+    /// perspective, 0 means the plane passes through the viewer, so every point of it is
+    /// seen edge-on; without, it is seen side-on. It does not depend on the item's size,
+    /// so it decides edge-on where an area would not.
+    fn facing(&self) -> f64 {
+        f64::from(self.ax[0]) * f64::from(self.ay[1])
+            - f64::from(self.ax[1]) * f64::from(self.ay[0])
+    }
+
     /// The viewing-axis coordinate of a local point, positive toward the viewer.
     fn z(&self, x: f32, y: f32) -> f32 {
         self.ax[2] * x + self.ay[2] * y + self.depth
@@ -125,7 +136,7 @@ impl ItemGeometry {
     /// rectangle clipped to the box (what [`FitMode::Fill`](super::FitMode::Fill) needs),
     /// then to `w ≥` [`NEAR_W`], each vertex placed by ADR-0022's formula. `Ok(None)`
     /// when nothing is left: the content misses the box, the whole item is behind the
-    /// near plane, or it is seen edge-on (no area).
+    /// near plane, it is seen edge-on (whatever its size), or it covers under 0.01 px².
     ///
     /// With neutral 3D every `w` is 1 and the polygon is the 2D compositor's quad, its
     /// texture coordinates clipped to the box.
@@ -139,6 +150,9 @@ impl ItemGeometry {
     ) -> Result<Option<DrawnPolygon>, GeometryError> {
         self.validate()?;
         let plane = Plane::of(self);
+        if plane.facing().abs() < EDGE_ON {
+            return Ok(None);
+        }
         let half_w = self.size.width.get() * 0.5;
         let half_h = self.size.height.get() * 0.5;
         let left = content.left.max(-half_w);
@@ -212,6 +226,9 @@ impl ItemGeometry {
             return Err(GeometryError::NotFinite);
         }
         let plane = Plane::of(self);
+        if plane.facing().abs() < EDGE_ON {
+            return Ok(None);
+        }
         // With (X, Y) the point from the centre, X · (p − z) = p · x3 and the same for
         // Y: linear in the local x and y, so a 2×2 solve, in f64 for the near-edge-on
         // cases.

@@ -366,7 +366,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:18b9ccac4b74c4a6", by = "agent:claude-x1", note = "Re-read for this change: it adds pure placement functions (drawn_polygon, unplace) to jstream-protocol's geometry module with no wire form; the section's wire format, versioning, commands and compatibility text are unaffected." }
+stamp = { hash = "b3:9c1b44d8d76b7ba7", by = "agent:claude-x1", note = "The section describes the wire surface; the edge-on fix in drawn.rs and its test are pure functions with no wire form, so no command, event, schema or PROTOCOL_VERSION change, and the section holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:0a8b1e5c526a5500", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: wave/m2's #460 bus references (delete.plan with a bus target, bus.delete blockers) stay at 0.24, matching version.rs, now beside main's 0.20 preview, 0.21 pairing, 0.22 opacity/blend/filter chains and 0.23 YouTube bullets; the merged protocol, control mock and server sources and both snapshots match; holds" }
@@ -405,10 +405,10 @@ stamp = { hash = "b3:3801dd7697fcd15f", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:254b8c8f72984121", by = "agent:claude-x1", note = "Re-read for this change: it adds pure placement functions (drawn_polygon, unplace) to jstream-protocol's geometry module with no wire form; the section's wire format, versioning, commands and compatibility text are unaffected." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry/drawn.rs"]
-stamp = { hash = "b3:54445052e2cf2b25", by = "agent:claude-x1", note = "Re-read for this change: it adds pure placement functions (drawn_polygon, unplace) to jstream-protocol's geometry module with no wire form; the section's wire format, versioning, commands and compatibility text are unaffected." }
+stamp = { hash = "b3:252cdb32fbf50e7d", by = "agent:claude-x1", note = "The section describes the wire surface; the edge-on fix in drawn.rs and its test are pure functions with no wire form, so no command, event, schema or PROTOCOL_VERSION change, and the section holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry/drawn/tests.rs"]
-stamp = { hash = "b3:dd785bd7c7b4100b", by = "agent:claude-x1", note = "Re-read for this change: it adds pure placement functions (drawn_polygon, unplace) to jstream-protocol's geometry module with no wire form; the section's wire format, versioning, commands and compatibility text are unaffected." }
+stamp = { hash = "b3:85ab941614c33669", by = "agent:claude-x1", note = "The section describes the wire surface; the edge-on fix in drawn.rs and its test are pure functions with no wire form, so no command, event, schema or PROTOCOL_VERSION change, and the section holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/history.rs"]
 stamp = { hash = "b3:abc973f4355bada5" }
@@ -1104,7 +1104,7 @@ stamp = { hash = "b3:66b28773c491abf0", by = "agent:claude@session_011FozW2QGjNv
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:aa03a318e592b12f", by = "agent:claude-x1", note = "Re-read for protocol Item geometry's new drawn_polygon/unplace bullet: core's Design draws each item in its stored placement form through jstream-render's 2D path and keeps the engine's neutral-3D rejection; nothing calls the new functions yet, so it holds." }
+stamp = { hash = "b3:ad0db484444aa36d", by = "agent:claude-x1", note = "Core's Design does not describe 3D placement; the neutral-3D rejection is jstream-graph's (apply.rs), not core's (correcting the earlier note, #611 N2). The protocol Design change (edge-on decided by facing) touches nothing core describes, so it holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1704,7 +1704,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:17ce369331505f2d", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the merged text carries main's filter chains (filter.rs, filter edits, blockers in filter settings, plans clearing them), opacity/blend, reserved effects and the youtube broadcast_id check beside wave/m2's bus references (a bus reference is not_found when missing, an edge that never closes a cycle, blocks bus.delete; a bus delete.plan; buses rebuilt before sources on load; MAX_BUSES from the protocol); checked against apply.rs, deps.rs, plan.rs, model/mod.rs, persist/ and tests; ARCH data-model and protocol design deps re-read and edited; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:aa03a318e592b12f", by = "agent:claude-x1", note = "Re-read for protocol Item geometry's new drawn_polygon/unplace bullet: graph still checks a geometry (positive size and perspective, finite corners, neutral 3D until the compositor draws it) and stores it unchanged; the new functions have no caller here yet, so Purpose holds." }
+stamp = { hash = "b3:ad0db484444aa36d", by = "agent:claude-x1", note = "The protocol Design change is the edge-on test of drawn_polygon/unplace; graph still rejects non-neutral 3D in apply.rs as its README line 126 says, so this holds." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2502,7 +2502,7 @@ stamp = { hash = "b3:1959409ddae735b7", by = "agent:find-idle-work", note = "Lim
 stamp = { hash = "b3:4f98ed9e4b04bbad", by = "agent:find-idle-work", note = "Limits bullet now says host calls are charged to the fuel budget (1,000 + 1 per byte copied or parsed), matching charge() in plugin.rs and the new host_calls_are_charged_by_size test; other claims unchanged; holds" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:aa03a318e592b12f", by = "agent:claude-x1", note = "Item geometry gains the drawn_polygon/unplace bullet: box clip then near clip at NEAR_W = 1/256 in the local frame, 3 to 5 vertices with canvas, local, uv and w = (p - z)/p, None when it misses the box, is past the near plane or edge-on, neutral 3D giving the 2D quad, unplace a 2x2 f64 solve with an edge-on threshold, no allocation, no wire form, no caller yet. Checked against geometry/drawn.rs and its tests; the Validation bullet's neutral-3D rejection is unchanged." }
+stamp = { hash = "b3:ad0db484444aa36d", by = "agent:claude-x1", note = "Item geometry bullet: drawn_polygon and unplace now both decide edge-on from the plane's facing (unit normal z under 1e-6), whatever the item's size, so they agree; the new sentence says so. MIN_AREA stays only for polygons too small to see. Checked against a_large_item_edge_on_draws_nothing_and_unplaces_nothing (#611 B1)." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2556,10 +2556,10 @@ stamp = { hash = "b3:3801dd7697fcd15f", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:254b8c8f72984121", by = "agent:claude-x1", note = "Item geometry gains the drawn_polygon/unplace bullet: box clip then near clip at NEAR_W = 1/256 in the local frame, 3 to 5 vertices with canvas, local, uv and w = (p - z)/p, None when it misses the box, is past the near plane or edge-on, neutral 3D giving the 2D quad, unplace a 2x2 f64 solve with an edge-on threshold, no allocation, no wire form, no caller yet. Checked against geometry/drawn.rs and its tests; the Validation bullet's neutral-3D rejection is unchanged." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry/drawn.rs"]
-stamp = { hash = "b3:54445052e2cf2b25", by = "agent:claude-x1", note = "Item geometry gains the drawn_polygon/unplace bullet: box clip then near clip at NEAR_W = 1/256 in the local frame, 3 to 5 vertices with canvas, local, uv and w = (p - z)/p, None when it misses the box, is past the near plane or edge-on, neutral 3D giving the 2D quad, unplace a 2x2 f64 solve with an edge-on threshold, no allocation, no wire form, no caller yet. Checked against geometry/drawn.rs and its tests; the Validation bullet's neutral-3D rejection is unchanged." }
+stamp = { hash = "b3:252cdb32fbf50e7d", by = "agent:claude-x1", note = "Item geometry bullet: drawn_polygon and unplace now both decide edge-on from the plane's facing (unit normal z under 1e-6), whatever the item's size, so they agree; the new sentence says so. MIN_AREA stays only for polygons too small to see. Checked against a_large_item_edge_on_draws_nothing_and_unplaces_nothing (#611 B1)." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry/drawn/tests.rs"]
-stamp = { hash = "b3:dd785bd7c7b4100b", by = "agent:claude-x1", note = "Item geometry gains the drawn_polygon/unplace bullet: box clip then near clip at NEAR_W = 1/256 in the local frame, 3 to 5 vertices with canvas, local, uv and w = (p - z)/p, None when it misses the box, is past the near plane or edge-on, neutral 3D giving the 2D quad, unplace a 2x2 f64 solve with an edge-on threshold, no allocation, no wire form, no caller yet. Checked against geometry/drawn.rs and its tests; the Validation bullet's neutral-3D rejection is unchanged." }
+stamp = { hash = "b3:85ab941614c33669", by = "agent:claude-x1", note = "Item geometry bullet: drawn_polygon and unplace now both decide edge-on from the plane's facing (unit normal z under 1e-6), whatever the item's size, so they agree; the new sentence says so. MIN_AREA stays only for polygons too small to see. Checked against a_large_item_edge_on_draws_nothing_and_unplaces_nothing (#611 B1)." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/history.rs"]
 stamp = { hash = "b3:abc973f4355bada5" }
@@ -2634,10 +2634,10 @@ stamp = { hash = "b3:3801dd7697fcd15f", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:254b8c8f72984121", by = "agent:claude-x1", note = "The Geometry bullet now names drawn_polygon and unplace (ADR-0050's 3D polygon and inverse map, geometry/drawn.rs), pointing to Item geometry; lib.rs re-exports DrawnPolygon, DrawnVertex, LocalPoint and NEAR_W. No wire type, command or PROTOCOL_VERSION changes, so the rest of Purpose holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry/drawn.rs"]
-stamp = { hash = "b3:54445052e2cf2b25", by = "agent:claude-x1", note = "The Geometry bullet now names drawn_polygon and unplace (ADR-0050's 3D polygon and inverse map, geometry/drawn.rs), pointing to Item geometry; lib.rs re-exports DrawnPolygon, DrawnVertex, LocalPoint and NEAR_W. No wire type, command or PROTOCOL_VERSION changes, so the rest of Purpose holds." }
+stamp = { hash = "b3:252cdb32fbf50e7d", by = "agent:claude-x1", note = "Geometry bullet still names drawn_polygon and unplace; the facing-based edge-on test (#611 B1) changes no public item, and the exports are unchanged." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry/drawn/tests.rs"]
-stamp = { hash = "b3:dd785bd7c7b4100b", by = "agent:claude-x1", note = "The Geometry bullet now names drawn_polygon and unplace (ADR-0050's 3D polygon and inverse map, geometry/drawn.rs), pointing to Item geometry; lib.rs re-exports DrawnPolygon, DrawnVertex, LocalPoint and NEAR_W. No wire type, command or PROTOCOL_VERSION changes, so the rest of Purpose holds." }
+stamp = { hash = "b3:85ab941614c33669", by = "agent:claude-x1", note = "Geometry bullet still names drawn_polygon and unplace; the facing-based edge-on test (#611 B1) changes no public item, and the exports are unchanged." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/history.rs"]
 stamp = { hash = "b3:abc973f4355bada5" }
