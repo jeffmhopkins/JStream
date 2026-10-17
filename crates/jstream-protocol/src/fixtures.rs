@@ -9,11 +9,11 @@ use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
     CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
     EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32, FitMode,
-    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
-    OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
-    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
-    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
-    Vec2, Welcome, json_schema,
+    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo, OutputId,
+    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
+    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -23,6 +23,7 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
+use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
     Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
@@ -34,6 +35,7 @@ use crate::{
 };
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
+use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -346,6 +348,27 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..ItemTransition::default()
             },
         },
+        Edit::VideoMixCreate {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Camera".into(),
+            mix: camera_mix(),
+        },
+        Edit::VideoMixUpdate {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Program 720p".into(),
+            mix: program_mix(),
+        },
+        Edit::OutputSetVideoMix {
+            output_id: OutputId::new("out_rec"),
+            mix_id: Some(VideoMixId::new("mix_cam")),
+        },
+        Edit::OutputSetVideoMix {
+            output_id: OutputId::new("out_yt"),
+            mix_id: None,
+        },
+        Edit::VideoMixDelete {
+            mix_id: VideoMixId::new("mix_old"),
+        },
         Edit::SourceSetAudio {
             source_id: SourceId::new("src_mic"),
             enabled: Some(true),
@@ -405,7 +428,8 @@ pub(crate) fn edits() -> Vec<Edit> {
     edits
 }
 
-/// The filter edits (ADR-0026), on both chains.
+/// The filter edits (ADR-0026), on both chains of a source, and on the master stage's
+/// and an output's audio chains (ADR-0027).
 fn filter_edits() -> Vec<Edit> {
     let mic = || FilterOwner::Source {
         source_id: SourceId::new("src_mic"),
@@ -451,6 +475,86 @@ fn filter_edits() -> Vec<Edit> {
         Edit::FilterRemove {
             owner: mic(),
             filter_id: FilterId::new("flt_gain"),
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Master,
+            chain: FilterChain::Audio,
+            filter_id: FilterId::new("flt_limit"),
+            kind: "limiter".into(),
+            settings: Settings::new(),
+            enabled: None,
+            index: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Output {
+                output_id: OutputId::new("out_rec"),
+            },
+            chain: FilterChain::Audio,
+            filter_id: FilterId::new("flt_quiet"),
+            kind: "gain".into(),
+            settings: quieter(),
+            enabled: None,
+            index: None,
+        },
+    ]
+}
+
+/// A limiter's settings, complete as the engine reports them.
+fn limiter() -> Settings {
+    let mut settings = Settings::new();
+    settings.insert("ceiling_db", serde_json::json!(-1.0));
+    settings.insert("lookahead_ms", serde_json::json!(5.0));
+    settings.insert("release_ms", serde_json::json!(60.0));
+    settings
+}
+
+/// A gain filter's settings, 6 dB down.
+fn quieter() -> Settings {
+    let mut gain = Settings::new();
+    gain.insert("gain_db", serde_json::json!(-6.0));
+    gain
+}
+
+/// One scene at 1280×720 and half the base rate.
+fn camera_mix() -> VideoMix {
+    VideoMix {
+        input: MixInput::Scene {
+            scene_id: SceneId::new("scn_cam"),
+        },
+        resolution: MixResolution {
+            width: 1280,
+            height: 720,
+        },
+        fps_divisor: 2,
+    }
+}
+
+/// The program at 1280×720 and the base rate.
+fn program_mix() -> VideoMix {
+    VideoMix {
+        input: MixInput::Program,
+        resolution: MixResolution {
+            width: 1280,
+            height: 720,
+        },
+        fps_divisor: 1,
+    }
+}
+
+fn mix_infos() -> Vec<VideoMixInfo> {
+    vec![
+        VideoMixInfo {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Camera".into(),
+            mix: camera_mix(),
+        },
+        VideoMixInfo {
+            mix_id: VideoMixId::new("mix_preview"),
+            name: "Preview".into(),
+            mix: VideoMix {
+                input: MixInput::Preview,
+                ..program_mix()
+            },
         },
     ]
 }
@@ -568,11 +672,23 @@ fn output_infos() -> Vec<OutputInfo> {
                 container: RecordContainer::Mp4,
             },
             encoder_profile: Some(EncoderProfileId::new("enc_rec")),
+            filters: FilterChains {
+                video: vec![],
+                audio: vec![FilterInfo {
+                    filter_id: FilterId::new("flt_quiet"),
+                    kind: "gain".into(),
+                    enabled: true,
+                    settings: quieter(),
+                }],
+            },
+            video_mix: Some(VideoMixId::new("mix_cam")),
         },
         OutputInfo {
             output_id: OutputId::new("out_yt"),
             kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
             encoder_profile: None,
+            filters: FilterChains::default(),
+            video_mix: None,
         },
     ]
 }
@@ -695,6 +811,8 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::VideoMixList,
+        Query::CaptureTargets,
         Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
@@ -1104,8 +1222,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             outputs: output_infos(),
             encoders: encoder_infos(),
             transitions: transitions_info(),
+            video_mixes: mix_infos(),
             buses: bus_infos(),
             sends: send_infos(),
+            master: MasterInfo {
+                filters: FilterChains {
+                    video: vec![],
+                    audio: vec![FilterInfo {
+                        filter_id: FilterId::new("flt_limit"),
+                        kind: "limiter".into(),
+                        enabled: true,
+                        settings: limiter(),
+                    }],
+                },
+            },
             hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
@@ -1158,6 +1288,31 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
+        },
+        QueryResult::VideoMixList {
+            rev: Rev(12),
+            video_mixes: mix_infos(),
+        },
+        QueryResult::CaptureTargets {
+            targets: vec![
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::Display,
+                    target: r"monitor:\\.\DISPLAY1".into(),
+                    name: "DISPLAY1".into(),
+                    size: Some(PixelSize {
+                        width: 2560,
+                        height: 1440,
+                    }),
+                    primary: true,
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::Window,
+                    target: "hwnd:0x1a2b".into(),
+                    name: "Untitled - Notepad".into(),
+                    size: None,
+                    primary: false,
+                },
+            ],
         },
         QueryResult::LiveList {
             gestures: vec![GestureInfo {
@@ -1415,6 +1570,11 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
                     id: "src_cam".into(),
                     field: "settings.mask".into(),
                 },
+                Blocker {
+                    entity: EntityKind::VideoMix,
+                    id: "mix_mask".into(),
+                    field: "mix.input.scene_id".into(),
+                },
             ],
         },
         ProtocolError::UndoConflict {
@@ -1444,6 +1604,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Source,
         EntityKind::Output,
         EntityKind::Encoder,
+        EntityKind::VideoMix,
         EntityKind::Filter,
         EntityKind::Bus,
         EntityKind::Device,

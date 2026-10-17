@@ -4,8 +4,8 @@
 //! history logs it and checks a step's touched set against other clients' later ones.
 
 use jstream_protocol::{
-    BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, ItemId, OutputId, SceneId,
-    SourceId, SourceKind, TransitionPresetId,
+    BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, FilterOwner, ItemId, OutputId,
+    SceneId, SourceId, SourceKind, TransitionPresetId, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -17,10 +17,12 @@ enum Object {
     Source(SourceId),
     Output(OutputId),
     Encoder(EncoderProfileId),
-    /// A filter, by its owner's source and its ID there (ADR-0026).
-    Filter(SourceId, FilterId),
+    VideoMix(VideoMixId),
+    /// A filter, by its owner and its ID there (ADR-0026).
+    Filter(FilterOwner, FilterId),
     /// A transition preset.
     Transition(TransitionPresetId),
+    /// An audio bus.
     Bus(BusId),
     /// One source's send into one bus.
     Send(SourceId, BusId),
@@ -55,6 +57,10 @@ enum Prop {
     EncoderChoice,
     /// An encoder profile's encoding.
     Encoding,
+    /// The video mix an output shows.
+    MixChoice,
+    /// A video mix's input, resolution and rate.
+    Mix,
     /// Whether a filter runs.
     Enabled,
     /// A transition preset's kind, timing and settings: what a switch with it runs.
@@ -210,22 +216,53 @@ impl Touched {
                 self.prop(encoder.clone(), Prop::Name);
                 self.prop(encoder, Prop::Encoding);
             }
+            Edit::VideoMixCreate { mix_id, mix, .. } => {
+                self.exists.insert(Object::VideoMix(mix_id.clone()));
+                if let Some(scene_id) = mix.scene() {
+                    self.uses.insert(Object::Scene(scene_id.clone()));
+                }
+            }
+            Edit::VideoMixDelete { mix_id } => {
+                self.exists.insert(Object::VideoMix(mix_id.clone()));
+            }
+            Edit::VideoMixUpdate { mix_id, mix, .. } => {
+                let video_mix = Object::VideoMix(mix_id.clone());
+                self.prop(video_mix.clone(), Prop::Name);
+                self.prop(video_mix, Prop::Mix);
+                if let Some(scene_id) = mix.scene() {
+                    self.uses.insert(Object::Scene(scene_id.clone()));
+                }
+            }
+            Edit::OutputSetVideoMix { output_id, mix_id } => {
+                self.prop(Object::Output(output_id.clone()), Prop::MixChoice);
+                if let Some(mix_id) = mix_id {
+                    self.uses.insert(Object::VideoMix(mix_id.clone()));
+                }
+            }
             Edit::FilterAdd {
                 owner, filter_id, ..
             } => {
-                let source_id = owner.source_id();
                 self.exists
-                    .insert(Object::Filter(source_id.clone(), filter_id.clone()));
-                self.uses.insert(Object::Source(source_id.clone()));
+                    .insert(Object::Filter(owner.clone(), filter_id.clone()));
+                match owner {
+                    FilterOwner::Source { source_id } => {
+                        self.uses.insert(Object::Source(source_id.clone()));
+                    }
+                    FilterOwner::Output { output_id } => {
+                        self.uses.insert(Object::Output(output_id.clone()));
+                    }
+                    // The master stage always exists.
+                    _ => {}
+                }
             }
             Edit::FilterRemove { owner, filter_id } => {
                 self.exists
-                    .insert(Object::Filter(owner.source_id().clone(), filter_id.clone()));
+                    .insert(Object::Filter(owner.clone(), filter_id.clone()));
             }
             Edit::FilterSetEnabled {
                 owner, filter_id, ..
             } => {
-                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                let filter = Object::Filter(owner.clone(), filter_id.clone());
                 self.prop(filter, Prop::Enabled);
             }
             Edit::FilterSetSettings {
@@ -234,7 +271,7 @@ impl Touched {
                 patch,
             } => {
                 for param in patch.0.keys() {
-                    let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                    let filter = Object::Filter(owner.clone(), filter_id.clone());
                     self.prop(filter, Prop::Setting(param.clone()));
                 }
             }
@@ -242,7 +279,7 @@ impl Touched {
             Edit::FilterReorder {
                 owner, filter_id, ..
             } => {
-                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                let filter = Object::Filter(owner.clone(), filter_id.clone());
                 self.prop(filter, Prop::Index);
             }
             Edit::TransitionCreate { preset_id, .. } | Edit::TransitionDelete { preset_id } => {

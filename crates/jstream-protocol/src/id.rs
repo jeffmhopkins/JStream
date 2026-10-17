@@ -77,6 +77,10 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// A video mix in the collection: what an output's video shows.
+    VideoMixId
+);
+opaque_id!(
     /// A paired device: one browser or other client admitted with its own device token
     /// (ADR-0044). Assigned by the server when the device pairs.
     DeviceId
