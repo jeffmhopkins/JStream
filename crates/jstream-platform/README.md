@@ -186,9 +186,11 @@ Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
 that device when the engine has one, sampling capture frames there, and opens its own
-(software adapter first) when it does not; it does not write the NV12 encode target.
+(software adapter first) when it does not. It has the NV12 pass that can render into an
+encode target's plane views (`Nv12Converter`).
 Windows' H.264 encoder takes encode targets on the context it reached through
-`Codecs::on_context`; the engine does not write or push them yet.
+`Codecs::on_context`, and the engine's render thread converts each composite into the
+next of a ring of them and pushes it to such a session.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -298,7 +300,8 @@ the same reason.
   delivers them, the engine composites them, and Windows' H.264 encoder takes encode
   targets. Capture and the encoders reach the context through default methods,
   `Capture::on_context` and `Codecs::on_context`, so other backends are unchanged. The
-  engine does not yet write encode targets or push them to an encoder.
+  engine's render thread writes encode targets and pushes them to the encoders that
+  take them. Open: the virtual camera taking them.
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
   **Proposed default:** backends downmix any other layout to stereo, and new layouts
   (e.g. 7.1) are added only when a real device needs them. The Windows backend already

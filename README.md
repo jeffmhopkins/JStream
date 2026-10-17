@@ -50,9 +50,9 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `██████░░░░` 61% | 14 | 5 | 4 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 33% | 3 | 2 | 4 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 4 | 3 |
 
-94 of 112 items are merged; 5 of those still wait on a run on Windows hardware.
+94 of 113 items are merged; 5 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -206,17 +206,18 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 3 of 9 merged</summary>
+<summary><b>M3</b> Depth and reach: 3 of 10 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ✅ merged | #325 |
+| E3d | Composite to NV12 on the GPU | 🔍 in review | #280 |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
-| WA1 | WASM automation plugins | ⏳ planned |  |
+| WA1 | WASM automation plugins | 🔍 in review | #486 |
 | MAC1 | macOS platform crate | ⏳ planned |  |
 | LNX1 | Linux codec path and platform crate | 🔍 in review: ADR-0060 accepted (#481); crate part 1 (#490) | #481, #490 |
 
