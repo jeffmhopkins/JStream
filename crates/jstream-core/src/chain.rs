@@ -10,6 +10,8 @@
 //! Each compositor that draws shots keeps a [`Chains`]: one [`VideoFilter`] per filter,
 //! made when the filter first draws and kept while the shot keeps it, so a stateful kind
 //! (a video delay) sees every frame in order, and a settings change updates it in place.
+//! A kind that reads an asset is made again, with the new image, when a new load of
+//! that asset arrives.
 //! Each filter draws into a layer of the compositor's [`ResourceCache`], under
 //! [`GpuKey::Chain`], with the last one under [`GpuKey::Filtered`], so a steady chain
 //! allocates no output texture. A filter that no shot keeps is retired into the cache
@@ -17,8 +19,12 @@
 //! once the GPU is done with it, so the render thread drops it on its collector
 //! (R-RT-003).
 //!
-//! A chain whose filter fails to draw (a layer past the adapter's limit, a shader the
-//! driver refuses) draws nothing for that frame; the failure is logged once per filter.
+//! A chain whose filter fails (its layer can't be made, past the adapter's limit, or a
+//! shader the driver refuses fails to draw) draws nothing for that frame. The failure
+//! is logged once per filter until a frame it draws, so a filter that keeps failing
+//! doesn't log every tick. Unlike an audio filter, which ADR-0026 bypasses when it
+//! fails, a failed video chain doesn't show its unfiltered input: a key or a mask that
+//! fails would otherwise reveal what it hides.
 //!
 //! Docs: crates/jstream-core/README.md#design, docs/adr/0026-source-filter-chains.md
 
@@ -106,8 +112,12 @@ struct Running {
     filter: VideoFilter,
     /// The version of the asset whose image `filter` reads, if any.
     reference: Option<u64>,
-    /// Whether a failure to draw has been logged, so a filter that keeps failing logs
-    /// once.
+    /// The layer it draws into ([`output_key`]), made when the chain's shape changes so
+    /// a steady frame builds no key.
+    key: GpuKey,
+    /// Whether a failure to make its layer or draw has been logged, so a filter that
+    /// keeps failing logs once; a frame it draws clears it, so a later failure logs
+    /// again.
     warned: bool,
 }
 
@@ -162,7 +172,7 @@ impl Chains {
                 self.running.insert(source.clone(), Vec::new());
             }
             if let Some(running) = self.running.get_mut(source) {
-                sync(running, &chain.filters, &mut self.retired);
+                sync(source, running, &chain.filters, &mut self.retired);
                 for (r, f) in running.iter_mut().zip(&chain.filters) {
                     refer(compositor, source, r, f, &mut self.retired);
                 }
@@ -174,7 +184,7 @@ impl Chains {
         // Every output layer first, so the draws below read and write the cache
         // without borrowing it mutably.
         for (source, chain) in chains {
-            let Some(running) = self.running.get(source) else {
+            let Some(running) = self.running.get_mut(source) else {
                 continue;
             };
             let Some(input) = cache.get(&chain.input) else {
@@ -182,17 +192,19 @@ impl Chains {
                 continue;
             };
             let mut size = (input.width(), input.height());
-            let last = running.len().saturating_sub(1);
-            for (at, filter) in running.iter().enumerate() {
+            for filter in running.iter_mut() {
                 size = filter.filter.output_size(size.0, size.1);
-                let key = output_key(source, at, last);
-                if let Err(error) = cache.layer(compositor, &key, size.0, size.1) {
-                    tracing::warn!(
-                        source = %source,
-                        filter = %filter.id,
-                        %error,
-                        "video filter output can't be made; the source draws nothing"
-                    );
+                if let Err(error) = cache.layer(compositor, &filter.key, size.0, size.1) {
+                    if !filter.warned {
+                        filter.warned = true;
+                        tracing::warn!(
+                            source = %source,
+                            filter = %filter.id,
+                            kind = %filter.kind,
+                            %error,
+                            "video filter output can't be made; the source draws nothing"
+                        );
+                    }
                     self.failed.insert(source.clone());
                     break;
                 }
@@ -209,26 +221,30 @@ impl Chains {
             let Some(running) = self.running.get_mut(source) else {
                 continue;
             };
-            let last = running.len().saturating_sub(1);
-            let mut input = chain.input.clone();
-            for (at, filter) in running.iter_mut().enumerate() {
-                let key = output_key(source, at, last);
-                let drawn = match (cache.get(&input), cache.get(&key)) {
-                    (Some(from), Some(to)) => {
-                        compositor.apply_filter_into(&mut filter.filter, from, to, clock)
-                    }
+            let mut input = &chain.input;
+            for running in running.iter_mut() {
+                let Running {
+                    id,
+                    kind,
+                    filter,
+                    key,
+                    warned,
+                    ..
+                } = running;
+                let drawn = match (cache.get(input), cache.get(key)) {
+                    (Some(from), Some(to)) => compositor.apply_filter_into(filter, from, to, clock),
                     _ => Err(RenderError::Invalid {
                         what: "cache",
                         detail: format!("no image for {input:?} or {key:?}"),
                     }),
                 };
                 if let Err(error) = drawn {
-                    if !filter.warned {
-                        filter.warned = true;
+                    if !*warned {
+                        *warned = true;
                         tracing::warn!(
                             source = %source,
-                            filter = %filter.id,
-                            kind = %filter.kind,
+                            filter = %id,
+                            kind = %kind,
                             %error,
                             "video filter failed to draw; the source draws nothing"
                         );
@@ -236,6 +252,7 @@ impl Chains {
                     self.failed.insert(source.clone());
                     break;
                 }
+                *warned = false;
                 input = key;
             }
         }
@@ -248,18 +265,14 @@ impl Chains {
         if self.ran == Some(cache.frame()) {
             return;
         }
-        for (source, running) in &self.running {
-            let last = running.len().saturating_sub(1);
-            for at in 0..running.len() {
-                let key = output_key(source, at, last);
-                let Some(size) = cache.get(&key).map(|image| (image.width(), image.height()))
-                else {
-                    continue;
-                };
-                // It is the same size, so this reuses it and can't fail; if it ever
-                // does, the next run makes it again.
-                let _ = cache.layer(compositor, &key, size.0, size.1);
-            }
+        for running in self.running.values().flatten() {
+            let key = &running.key;
+            let Some(size) = cache.get(key).map(|image| (image.width(), image.height())) else {
+                continue;
+            };
+            // It is the same size, so this reuses it and can't fail; if it ever does, the
+            // next run makes it again.
+            let _ = cache.layer(compositor, key, size.0, size.1);
         }
     }
 
@@ -287,9 +300,14 @@ fn output_key(source: &SourceId, at: usize, last: usize) -> GpuKey {
 
 /// Makes `running` run `filters`: a filter with the same ID and kind as the one at its
 /// place keeps its state and takes new settings in place; any other change rebuilds the
-/// list, keeping each filter whose ID and kind it finds. Allocates nothing when nothing
-/// changed.
-fn sync(running: &mut Vec<Running>, filters: &[ChainFilter], retired: &mut Vec<VideoFilter>) {
+/// list, keeping each filter whose ID and kind it finds, and gives each its layer's key
+/// for `source`'s chain. Allocates nothing when nothing changed.
+fn sync(
+    source: &SourceId,
+    running: &mut Vec<Running>,
+    filters: &[ChainFilter],
+    retired: &mut Vec<VideoFilter>,
+) {
     let same_shape = running.len() == filters.len()
         && running
             .iter()
@@ -325,6 +343,7 @@ fn sync(running: &mut Vec<Running>, filters: &[ChainFilter], retired: &mut Vec<V
                     settings: f.settings.clone(),
                     filter,
                     reference: None,
+                    key: GpuKey::Filtered(source.clone()),
                     warned: false,
                 },
                 // The plan only keeps kinds this engine draws.
@@ -332,6 +351,10 @@ fn sync(running: &mut Vec<Running>, filters: &[ChainFilter], retired: &mut Vec<V
             },
         };
         running.push(entry);
+    }
+    let last = running.len().saturating_sub(1);
+    for (at, r) in running.iter_mut().enumerate() {
+        r.key = output_key(source, at, last);
     }
     retired.extend(old.into_iter().map(|r| r.filter));
 }
@@ -640,5 +663,59 @@ mod tests {
         );
         let pixel = draw(&mut compositor, (&mut cache, &mut chains), &masked, 1);
         assert_eq!(pixel, [0, 0, 0, 255], "cut out: the black under it");
+    }
+
+    /// `graph(&[])` with one `aspect_ratio` filter on `cam`, padding to a custom
+    /// `width:height`.
+    fn padded(width: i64, height: i64) -> Graph {
+        let mut graph = graph(&[]);
+        let settings = [
+            ("ratio", serde_json::json!("custom")),
+            ("custom_width", serde_json::json!(width)),
+            ("custom_height", serde_json::json!(height)),
+            ("mode", serde_json::json!("pad")),
+        ];
+        graph
+            .apply(
+                &[Edit::FilterAdd {
+                    owner: FilterOwner::Source {
+                        source_id: SourceId::new("cam"),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("pad"),
+                    kind: "aspect_ratio".into(),
+                    settings: settings.into_iter().collect(),
+                    enabled: Some(true),
+                    index: None,
+                }],
+                None,
+            )
+            .expect("edit");
+        graph
+    }
+
+    /// A filter whose output layer can't be made (1:10000 padding of a 16x9 frame is
+    /// past any adapter's limit) fails its source every frame but is logged once, and
+    /// a frame it draws clears that, so a later failure logs again.
+    #[test]
+    fn a_filter_whose_layer_cant_be_made_fails_and_logs_once() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let cam = SourceId::new("cam");
+        let warned = |chains: &Chains| chains.running[&cam][0].warned;
+        let failing = shot(&padded(1, 10_000));
+        for _ in 0..2 {
+            let pixel = draw(&mut compositor, (&mut cache, &mut chains), &failing, 1);
+            assert_eq!(pixel, WHITE, "cam draws nothing; logo shows beneath it");
+            assert!(chains.failed(&GpuKey::Filtered(cam.clone())));
+            assert!(warned(&chains), "logged, and not again");
+        }
+        let drawing = shot(&padded(16, 9));
+        draw(&mut compositor, (&mut cache, &mut chains), &drawing, 1);
+        assert!(!chains.failed(&GpuKey::Filtered(cam.clone())));
+        assert!(!warned(&chains), "a frame it draws clears the flag");
+        assert_eq!(chains.len(), 1, "the settings changed in place");
     }
 }

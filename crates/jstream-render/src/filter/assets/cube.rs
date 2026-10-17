@@ -87,6 +87,7 @@ impl Lut {
     }
 
     /// The identity table with `size` points per side.
+    #[cfg(test)]
     pub(crate) fn identity(size: usize) -> Self {
         Self::from_fn(size, |rgb| rgb)
     }

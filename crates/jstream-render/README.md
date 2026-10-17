@@ -531,7 +531,7 @@ imported frame as both and counts one stage.
   that is not such a layout passes the input through. `Lut` (with `parse_cube`,
   `from_tiled_rgba8` and `size`), `LutError` and `lut_image` are public, for the chain
   runtime to load a table and make its image.
-- `image_mask` (`image`: asset, png/jpg/jpeg/webp/gif/bmp; `mode` alpha or luma;
+- `image_mask` (`image`: asset, png/jpg/jpeg/webp/gif, what `jstream-sources` decodes; `mode` alpha or luma;
   `invert`) and `scene_mask` (`scene`: scene reference, its composited layer; `mode`
   alpha, luma or clip; `invert`). The mask is stretched over the frame and scales the
   premultiplied input: by its alpha, by BT.709 luma of its sRGB-encoded colour times its
