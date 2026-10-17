@@ -1,9 +1,10 @@
 //! PipeWire, loaded at run time (ADR-0060 §4, §8).
 //!
-//! For now, [`PipeWire`] loads libpipewire and checks its version against ADR-0060's floor,
-//! and [`PipeWireAudio`] is the `AudioIo` backend built on it. Its streams (input,
-//! output, a sink's monitor for desktop audio and an application's stream for
-//! application audio) report `Unsupported` until the stream code lands.
+//! [`PipeWire`] loads libpipewire and checks its version against ADR-0060's floor. The
+//! video stream the ScreenCast portal hands over is [`stream`]. [`PipeWireAudio`] is the
+//! `AudioIo` backend built on it; its streams (input, output, a sink's monitor for
+//! desktop audio and an application's stream for application audio) report
+//! `Unsupported` until the audio stream code lands.
 
 /// The oldest PipeWire ADR-0060 supports: 1.0.
 pub const PIPEWIRE_FLOOR: (u32, u32, u32) = (1, 0, 0);
@@ -28,6 +29,9 @@ pub fn pipewire_version_supported(version: &str) -> bool {
 pub use backend::{PipeWire, PipeWireAudio};
 
 #[cfg(target_os = "linux")]
+pub(crate) mod stream;
+
+#[cfg(target_os = "linux")]
 mod backend {
     use std::ffi::{CStr, c_char};
 
@@ -47,7 +51,7 @@ mod backend {
     pub struct PipeWire {
         version: String,
         // Keeps the library loaded while the stream code holds its functions.
-        _lib: SystemLibrary,
+        lib: SystemLibrary,
     }
 
     impl PipeWire {
@@ -86,12 +90,17 @@ mod backend {
                     ),
                 });
             }
-            Ok(Self { version, _lib: lib })
+            Ok(Self { version, lib })
         }
 
         /// The library's version, as it reports it.
         pub fn version(&self) -> &str {
             &self.version
+        }
+
+        /// The loaded library, for the stream code's function table.
+        pub(crate) fn library(&self) -> &SystemLibrary {
+            &self.lib
         }
     }
 
