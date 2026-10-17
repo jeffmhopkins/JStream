@@ -41,13 +41,15 @@
 //!   fader and send gain is within the protocol's −100 to +24 dB.
 //! - Every send's source is an audio source that is not a `scene` source, and its bus
 //!   exists. Sends only run from sources into buses, so the audio graph has no cycle.
+//! - Every hotkey binding's chord is valid, its action can be bound, and every object
+//!   its action names exists (ADR-0024 §5, ADR-0040 §3).
 //!
 //! The structs have private fields so that later additions (the full 3D transform,
 //! chains on buses and outputs) don't break callers.
 
 use jstream_protocol::{
-    BlendMode, BusId, Canvas, Crop, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
-    Finite32, ItemGeometry, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind,
+    Action, BlendMode, BusId, Canvas, Chord, Crop, EncoderProfile, EncoderProfileId, FilterChain,
+    FilterId, Finite32, ItemGeometry, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind,
     PlacementForm, Rev, SceneId, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
@@ -124,6 +126,7 @@ pub struct State {
     /// Each send's gain in dB, keyed by bus, then by source: the order `bus.list`
     /// reports them in.
     pub(crate) sends: BTreeMap<(BusId, SourceId), Finite32>,
+    pub(crate) hotkeys: BTreeMap<Chord, Action>,
 }
 
 impl Default for State {
@@ -138,6 +141,7 @@ impl Default for State {
             encoders: BTreeMap::new(),
             buses: BTreeMap::from([(master.id.clone(), master)]),
             sends: BTreeMap::new(),
+            hotkeys: BTreeMap::new(),
         }
     }
 }
@@ -236,6 +240,16 @@ impl State {
     /// The gain in dB of `source`'s send into `bus`, if it has one.
     pub fn send(&self, source: &SourceId, bus: &BusId) -> Option<Finite32> {
         self.sends.get(&(bus.clone(), source.clone())).copied()
+    }
+
+    /// Every hotkey binding, ordered by chord: the chord and the action it runs.
+    pub fn hotkeys(&self) -> impl ExactSizeIterator<Item = (&Chord, &Action)> {
+        self.hotkeys.iter()
+    }
+
+    /// The action bound to this chord.
+    pub fn hotkey(&self, chord: &Chord) -> Option<&Action> {
+        self.hotkeys.get(chord)
     }
 
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {

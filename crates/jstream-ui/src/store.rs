@@ -458,7 +458,7 @@ pub async fn apply(
         batch = batch.expecting(rev);
     }
     match session.control.call(Call::Batch(batch)).await?.result {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         _ => Err(unexpected("a batch")),
     }
 }
@@ -477,7 +477,7 @@ pub async fn plan_delete(
     target: DeleteTarget,
 ) -> Result<(Rev, Vec<Edit>), ControlError> {
     match query(session, Query::DeletePlan { target }).await? {
-        QueryResult::DeletePlan { rev, edits } => Ok((rev, edits)),
+        QueryResult::DeletePlan { rev, edits, .. } => Ok((rev, edits)),
         other => Err(unexpected(other.name())),
     }
 }

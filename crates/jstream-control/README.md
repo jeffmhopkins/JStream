@@ -153,7 +153,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
     deleting the master or a bus a source's settings refer to (a `bus` reference, as
     a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
-    source with no audio, removing a missing send, and gains outside −100 to +24 dB.
+    source with no audio, removing a missing send, and gains outside −100 to +24 dB;
+  - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
+    `Action::bind_problem` refuses and a missing named scene or output, in that order, and
+    `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
+    profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;
@@ -173,7 +177,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   filter chains, each item's placement (its transform, or its geometry and the
   transform view of it), crop, visibility, opacity and blend, each scene's role and
   each item's scene after an `item.move`, each output's kind, target and encoder
-  profile, each profile, each source's audio, and the buses and sends.
+  profile, each profile, each source's audio, the buses and sends, and the hotkey
+  bindings (in `state.get`, ordered by chord).
   `video.snapshot` is not one of those reads: the mock has no compositor and answers
   it with `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
@@ -189,10 +194,14 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
-  characters; `output.clear_key` always succeeds.
-  The keys live in memory, outside the collection: no `rev`, no event, kept when their
-  output is deleted. `output.status` reports `key_set` from them, and
-  `MockEngine::stream_key` lets a client test check what was stored. Unlike an
+  characters; `output.clear_key` always succeeds. The engine's `action_failed` for a
+  key set while that output's start is still opening (#343) has no counterpart: a mock
+  `output.start` settles within the call, so no start is ever opening.
+  The keys live in memory, outside the collection: no `rev`, no event. As in the
+  engine, an applied batch, undo or redo that deletes an output or changes its
+  `OutputKind::key_server` (another scheme, host or port) removes its key (#343).
+  `output.status` reports `key_set` from them, and `MockEngine::stream_key` lets a
+  client test check what was stored. Unlike an
   `Engine` built without `with_key_store`, which answers `action_failed`, the mock
   always has a store, so clients can test the whole flow;
 - `audio.reset_loudness`, which succeeds and does nothing: the mock has no mixer, so it
@@ -209,7 +218,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and sends, a deleted source's audio and sends, and each audio edit back to the values
   it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
-  back with its encoder profile, encoder profile edits undo to the profile as it was,
+  back with its encoder profile and the hotkeys its delete removed, hotkey edits undo
+  to the binding as it was, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with

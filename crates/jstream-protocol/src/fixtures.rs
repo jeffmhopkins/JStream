@@ -23,7 +23,7 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
-use crate::{DeviceId, DeviceInfo};
+use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
@@ -305,6 +305,15 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::BusDelete {
             bus_id: BusId::new("bus_old"),
         },
+        Edit::HotkeySet {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+            },
+        },
+        Edit::HotkeyClear {
+            chord: Chord::new("Ctrl+Digit1"),
+        },
     ];
     // Every blend mode, though the engine draws only `normal` so far.
     edits.extend(BlendMode::ALL.map(|blend| Edit::ItemSetBlend {
@@ -399,6 +408,24 @@ fn send_infos() -> Vec<SendInfo> {
             bus_id: BusId::master(),
             gain_db: db(-6.0),
         },
+    ]
+}
+
+/// The bindings the fixtures report: a scene switch and an output start.
+fn hotkey_bindings() -> Vec<HotkeyBinding> {
+    vec![
+        HotkeyBinding::new(
+            Chord::new("Ctrl+Digit1"),
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+            },
+        ),
+        HotkeyBinding::new(
+            Chord::new("F9"),
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
     ]
 }
 
@@ -952,6 +979,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             encoders: encoder_infos(),
             buses: bus_infos(),
             sends: send_infos(),
+            hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -1052,6 +1080,12 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     scene_id: SceneId::new("scn_mask"),
                 },
             ],
+            hotkeys: vec![HotkeyBinding::new(
+                Chord::new("F5"),
+                &Action::SceneSwitch {
+                    scene_id: SceneId::new("scn_mask"),
+                },
+            )],
         },
         QueryResult::DeviceList {
             devices: vec![DeviceInfo {
@@ -1270,6 +1304,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Filter,
         EntityKind::Bus,
         EntityKind::Device,
+        EntityKind::Hotkey,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -1352,7 +1387,17 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r0"),
-            result: CallResult::Batch { rev: Rev(13) },
+            result: CallResult::Batch {
+                rev: Rev(13),
+                removed_hotkeys: vec![],
+            },
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r1"),
+            result: CallResult::Batch {
+                rev: Rev(14),
+                removed_hotkeys: hotkey_bindings(),
+            },
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r10"),

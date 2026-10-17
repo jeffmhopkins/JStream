@@ -3,6 +3,7 @@
 
 use crate::audio;
 use crate::browser::BrowserKind;
+use crate::chat::ChatKind;
 use crate::color::ColorKind;
 use crate::describe::described;
 use crate::image::ImageKind;
@@ -21,10 +22,10 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
-    /// `browser`, `color`, `image`, `media`, `text`, `waveform`, `spectrum` and
-    /// `youtube_chat` produce frames (`browser` and its `youtube_chat` preset through the
-    /// injected backend, on the GPU). `audio_input`, `desktop_audio` and `app_audio` are
-    /// audio-only: the engine records them, and `create` fails with
+    /// `browser`, `chat_message`, `color`, `image`, `media`, `text`, `waveform`,
+    /// `spectrum` and `youtube_chat` produce frames (`browser` and its `youtube_chat`
+    /// preset through the injected backend, on the GPU). `audio_input`, `desktop_audio`
+    /// and `app_audio` are audio-only: the engine records them, and `create` fails with
     /// [`SourceError::AudioOnly`]. `display`, `webcam` and `window` are described only, so
     /// their sources can be created and configured but fail to start with
     /// [`SourceError::NotBuilt`].
@@ -41,6 +42,7 @@ impl Registry {
         add(Box::new(TextKind::new()));
         add(Box::new(WaveformKind::new()));
         add(Box::new(SpectrumKind::new()));
+        add(Box::new(ChatKind::new()));
         for kind in audio::kinds() {
             add(Box::new(kind));
         }

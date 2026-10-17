@@ -28,6 +28,7 @@ survives outside that artifact.
 | `Panel.dc.html` | Every panel's contents (Scenes, Scene objects, Inspector, Filters, Transitions, Mixer, Outputs, chat, stats…). Imported by `Docking.dc.html`. |
 | `Main.dc.html`, `CanvasFirst.dc.html`, `ShowControl.dc.html` | Directions A, B and C from the first round, kept for comparison. C was rejected. |
 | `canvas.json` | Board layout for the Design canvas. |
+| [`spec-workspace.md`](spec-workspace.md), [`spec-panels.md`](spec-panels.md) | What `Docking.dc.html` and `Panel.dc.html` do, written as requirements with line references. [UI features](../../docs/UI-FEATURES.md) tracks which of them the real UI has. |
 
 Each `.dc.html` is a Design Component: HTML markup with `{{…}}` bindings and
 `<sc-for>` / `<sc-if>` blocks, plus a `class Component extends DCLogic` script whose

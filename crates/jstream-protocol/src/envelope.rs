@@ -11,6 +11,7 @@ use crate::command::{Action, Batch};
 use crate::error::{ProtocolError, WireError};
 use crate::event::Event;
 use crate::history::HistoryCall;
+use crate::hotkey::HotkeyBinding;
 use crate::id::{ClientId, RequestId, Rev};
 use crate::output::SecretString;
 use crate::query::{Query, QueryResult};
@@ -132,6 +133,12 @@ pub enum CallResult {
     Batch {
         /// The revision the batch produced.
         rev: Rev,
+        /// The hotkey bindings the batch removed because their action named an object it
+        /// deleted (ADR-0040 §3), in the order it removed them. Undoing the batch restores
+        /// them. Omitted when there are none, and missing (from a server older than 0.25)
+        /// parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        removed_hotkeys: Vec<HotkeyBinding>,
     },
     /// The action was accepted. Its progress is reported by events. An action whose
     /// answer carries data (`pairing.start`, `youtube.sign_in` and the YouTube broadcast
@@ -167,6 +174,14 @@ impl CallResult {
     /// `youtube.sign_in` and the YouTube broadcast actions.
     pub fn action() -> Self {
         CallResult::Action { result: None }
+    }
+
+    /// A batch result at `rev` that removed no hotkey bindings.
+    pub fn batch(rev: Rev) -> Self {
+        CallResult::Batch {
+            rev,
+            removed_hotkeys: Vec::new(),
+        }
     }
 }
 

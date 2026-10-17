@@ -48,14 +48,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
   `output.set_target`, `output.set_encoder`, `output.delete`, `encoder.create`,
   `encoder.update`, `encoder.delete`, `source.set_audio`, `bus.create`, `bus.rename`,
-  `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`), with `ItemTransform`
+  `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`, `hotkey.set`, `hotkey.clear`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch`, `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
-  `live.set`, `live.cancel`); `Batch`, whose optional `ends_gesture` commits a gesture;
-  and the `Command`/`CommandClass`
+  `live.set`, `live.cancel`), with `Action::named_objects` and `Action::bind_problem`,
+  which every implementation uses to check and follow a hotkey's action; `Batch`, whose
+  optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
@@ -64,7 +65,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
-  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). `OutputKind::key_server` names the
+  server a stream key is bound to (scheme, host and port), which the engine and the
+  mock compare to remove a key that would otherwise follow its output elsewhere (#343).
+- **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
+  `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
+  every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -122,7 +128,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.24 because of bus
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.26 because of
+  live values ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the
+  `live.changed` and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
+  hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
+  `hotkeys` and the batch result's `removed_hotkeys`); 0.24 added bus
   references (the `bus` parameter type and reference, which the `waveform` and
   `spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
   `bus.delete` refused while one refers to its bus); 0.23 added YouTube
@@ -154,10 +164,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
-  encoder profiles), the exact answer to every collection read of it (`output.list`
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output, two
+  encoder profiles and two hotkeys, one of them rebound), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path and encoder profile checks, and `item.set_source` and
+  URL, recording path and encoder profile and hotkey checks, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
   `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a desktop
@@ -200,8 +210,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":24},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":24},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":26},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":26},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -414,7 +424,9 @@ never a type per kind.
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
   or the source whose setting refers to it (`settings.<param>`, or
   `filters.<filter_id>.<param>` for a filter's setting). `delete.plan` returns
-  the batch that removes them with the target (see [Queries](#design)).
+  the batch that removes them with the target (see [Queries](#design)). Hotkey
+  bindings are never blockers: a delete removes the bindings that name its target
+  (below).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
@@ -460,7 +472,11 @@ application name, and is refused if it could carry a credential (`user:password@
 query or a fragment). A key pasted into the path can't be told from a nested
 application name, so it is stored as given. A `record` output (0.9) records to a file
 on the engine's machine: `path` must be absolute (`/…`, `\…`, `C:\…` or `C:/…`), have
-no `..` segment and end in a file name, and
+no `..` segment and end in a file name. As for an `absolute` asset path, it must not
+start with a second separator (a UNC share or device, `\\host\share\…`, `\\.\…`,
+`\\?\…`), nor contain `:` but the drive letter's, `?` or `*` (`\??\UNC\…`), nor
+end in a DOS device name (`NUL`, `nul.mp4`, `CON`, `COM1`, `LPT1`, …), by the same rule
+as an asset path's last component. And
 `container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
@@ -478,10 +494,23 @@ so it is set with the `output.set_key` action and removed with `output.clear_key
 from YouTube on each `output.start` ([YouTube](#design)), so it needs no
 `output.set_key`. Its ID must be ASCII letters, digits, `-` and `_`, at most 128 bytes.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
-error, query or log carries it, and `output.status` reports only `key_set`. A key
-outlives `output.delete`, so undoing the delete gives back a working output; a client
-that deletes for good also sends `output.clear_key`, which succeeds for an output no
-longer in the collection. Its errors carry fixed reasons that never quote the key.
+error, query or log carries it, and `output.status` reports only `key_set`. A key is
+bound to the server it was set for (#343): when an applied batch, undo or redo deletes
+the output, or points it at another server (`OutputKind::key_server`: scheme, host and
+port; a new path on the same server keeps the key), the engine removes the key from the
+credential store, and refuses that output's `output.start` with `action_failed` until
+the key is gone. So a retarget never sends the old key to the new server, and an output
+re-created with a deleted one's ID starts with no key. Undoing the delete or the
+retarget restores the target but not the secret: set it again with `output.set_key`.
+A start already opening when the retarget lands opens the server it checked, so while
+an output's `output.start` is opening, `output.set_key` for it fails with
+`action_failed`: a key sent for the new server waits until the start has settled.
+The two stay edits under the classification rule above: their effect on the collection
+state, and its inverse, are unchanged, and the key, which is not collection state, is
+removed by the engine guarding it, as a deleted output's runtime state is dropped.
+`output.clear_key` succeeds for an output no longer in the collection. No message
+changed, so this changes no `PROTOCOL_VERSION`. Its errors carry fixed reasons that
+never quote the key.
 
 Encoder profiles (0.13) are collection state as well
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
@@ -496,6 +525,49 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 2 s, software, AAC 160 kbit/s). Both apply from the output's next `output.start`.
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
+
+Hotkey bindings (0.25) are collection state too
+([ADR-0024 §5](../../docs/adr/0024-scene-structure.md),
+[ADR-0040 §3](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)):
+a `Chord` bound to an `Action`, which a client that listens for keys sends when the
+chord is pressed. The engine only stores bindings; the desktop host (OS-global
+shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon none.
+- **Chords.** Zero or more of the modifiers `Ctrl`, `Alt`, `Shift` and `Meta`, each at
+  most once and in that order, then one key, joined by `+`: `F1`, `Ctrl+Digit1`,
+  `Ctrl+Shift+KeyM`. The key is a W3C UI Events
+  [`KeyboardEvent.code`](https://www.w3.org/TR/uievents-code/) value from
+  `Chord::KEYS` (letters, digits, punctuation, function keys F1–F24, editing and
+  arrow keys, the keypad and the media keys): the physical key, whatever the layout,
+  which is what browsers and Tauri's global-shortcut API report. A chord has exactly
+  one spelling, so two bindings are on the same keys exactly when their strings are
+  equal. Anything else is `invalid_argument` on `chord`, with `Chord::problem`'s reason.
+- **`hotkey.set {chord, action}`** binds a chord; its inverse is `hotkey.clear`. It is
+  refused with `already_exists` (entity `hotkey`, the chord as `id`) for a chord that
+  is bound: rebinding is a batch of `hotkey.clear` then `hotkey.set`. `action` is an
+  action request, checked as an `action` call is, and only actions can be bound, so a
+  hotkey never adds to an undo history. `output.set_key` can't be bound (its stream key
+  would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)), nor
+  can the preview actions (they serve only the sending session), `live.set` and
+  `live.cancel` (their gesture belongs to the sending session), `pairing.start` and
+  `device.revoke` (the server answers them for the client that asks), or the
+  `youtube.*` actions (YouTube is driven through the UI,
+  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)): each is
+  `invalid_argument` on `action.type`. A scene or output the action names must exist,
+  else `not_found`.
+- **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
+  inverse is `hotkey.set` with the action.
+- **Deleting what a binding names removes the binding**, in the same edit:
+  `scene.delete`, `source.delete`, `output.delete` and `encoder.delete` drop every
+  binding whose action names their target (`Action::named_objects`; today only scenes
+  and outputs are named), and their inverses restore the
+  bindings after the target. If another client has bound one of those chords since,
+  that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
+  A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`
+  lists the ones its batch would (`hotkeys`), so a client can say "this also removes
+  the hotkey Ctrl+Digit1".
+- Reads report a binding as a `HotkeyBinding {chord, action}` whose `action` is plain
+  JSON, so a client older than an action type still reads the collection; it keeps the
+  binding and can't run it. `HotkeyBinding::action` parses it.
 
 ### Batches, revisions and `expected_rev`
 
@@ -515,7 +587,8 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   batch applied with a key. A retry with the same key is not applied again and gets the
   original result, even if `rev` has moved on since.
 - Results: a successful batch answers `{"kind":"batch","rev":N}`, the revision it
-  produced. Queries that read collection state report the `rev` they read.
+  produced, with `removed_hotkeys` when its deletes removed hotkey bindings (0.25;
+  omitted when there are none). Queries that read collection state report the `rev` they read.
 
 ### Queries
 
@@ -526,9 +599,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty), and the `buses` and `sends`
-  (as `bus.list`; missing from a pre-0.19 server, both parse as empty). A client reads
-  it on connecting, and again after a `state.changed` it didn't cause.
+  missing from a pre-0.13 server, it parses as empty), the `buses` and `sends`
+  (as `bus.list`; missing from a pre-0.19 server, both parse as empty) and every
+  hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
+  parses as empty). A client reads it on connecting, and again after a
+  `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
@@ -570,7 +645,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `scene` sources that show it, and the cascade stops there, since deleting a source
   deletes no scene. A bus is held only by settings references, which the plan clears;
   its `bus.delete` takes its sends. A target nothing refers to plans just its own
-  delete. The client
+  delete. `hotkeys` lists the bindings the batch removes with what they name, ordered
+  by chord (0.25; omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
@@ -691,8 +767,8 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
 
 ### Live values
 
-Live values keep a drag, a fader move or a live dialog to one batch and one undo step
-([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). A client opens a **gesture**,
+Live values (0.26) keep a drag, a fader move or a live dialog to one batch and one undo
+step ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). A client opens a **gesture**,
 named by a `gesture_id` it chooses, and sends its values as it goes:
 
 ```json
@@ -975,7 +1051,7 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
   ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
 - **Not in 0.11 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
-  the engine's runtime source sizes, and live geometry values, which arrived later
+  the engine's runtime source sizes, and live geometry values, which arrived in 0.26
   with `live.set` ([Live values](#design)). Both are later minors.
 
 ### Binary streams

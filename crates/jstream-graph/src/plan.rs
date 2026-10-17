@@ -4,12 +4,14 @@
 //! Rejection stays the only delete: `scene.delete`, `source.delete` and `bus.delete`
 //! refuse while anything refers to their target. The plan spells out the removal as ordinary edits,
 //! so the client can show it, and its undo is the batch's normal inverse.
+//! Hotkey bindings are not blockers: the deletes remove those that name their targets
+//! (ADR-0040 §3), and the plan lists them.
 
 use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
-    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, ItemId, ProtocolError, QueryResult,
-    Settings, SourceId, SourceKind,
+    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, ProtocolError,
+    QueryResult, Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -28,6 +30,8 @@ impl Graph {
     /// - one `filter.set_settings` per remaining filter whose settings do, likewise;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
     /// - the delete of the target.
+    ///
+    /// It also lists, ordered by chord, the hotkey bindings those deletes remove.
     pub fn delete_plan(&self, target: &DeleteTarget) -> Result<QueryResult, ProtocolError> {
         let state = &self.state;
         let (target, last) = match target {
@@ -147,9 +151,24 @@ impl Graph {
                 .map(|source_id| Edit::SourceDelete { source_id }),
         );
         edits.push(last);
+        let hotkeys = state
+            .hotkeys()
+            .filter(|(_, action)| {
+                action.named_objects().iter().any(|&(entity, id)| {
+                    deleted.iter().any(|node| match node {
+                        Node::Scene(s) => entity == EntityKind::Scene && s.as_str() == id,
+                        Node::Source(s) => entity == EntityKind::Source && s.as_str() == id,
+                        // No action names a bus, so no binding can.
+                        Node::Bus(_) => false,
+                    })
+                })
+            })
+            .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+            .collect();
         Ok(QueryResult::DeletePlan {
             rev: self.rev,
             edits,
+            hotkeys,
         })
     }
 }
@@ -205,6 +224,7 @@ mod tests {
                 edits: vec![Edit::SceneDelete {
                     scene_id: SceneId::new("a"),
                 }],
+                hotkeys: vec![],
             })
         );
     }

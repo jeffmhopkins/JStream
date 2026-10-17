@@ -43,7 +43,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace, control or non-ASCII characters, and\n`action_failed` when the engine has no credential store or the store refuses.",
+          "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace, control or non-ASCII characters, and\n`action_failed` when the engine has no credential store, the store refuses, or\nthe output's `output.start` is still opening its target (#343): send it again\nonce the start has settled.",
           "properties": {
             "key": {
               "$ref": "#/$defs/SecretString",
@@ -1001,6 +1001,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               "const": "batch",
               "type": "string"
             },
+            "removed_hotkeys": {
+              "description": "The hotkey bindings the batch removed because their action named an object it\ndeleted (ADR-0040 §3), in the order it removed them. Undoing the batch restores\nthem. Omitted when there are none, and missing (from a server older than 0.25)\nparses as empty.",
+              "items": {
+                "$ref": "#/$defs/HotkeyBinding"
+              },
+              "type": "array"
+            },
             "rev": {
               "$ref": "#/$defs/Rev",
               "description": "The revision the batch produced."
@@ -1114,6 +1121,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "height"
       ],
       "type": "object"
+    },
+    "Chord": {
+      "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
+      "type": "string"
     },
     "ClientId": {
       "description": "A connected client, assigned by the server in `welcome`. Undo history and the\naudit log are keyed by it.",
@@ -1415,7 +1426,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create` with its role (omitted for `scene`), then\n`scene.reorder` to its old display position (unless it was last), then each\ndeleted item's `item.remove` inverse, from bottom to top.",
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Hotkey bindings whose action names the scene are not blockers: they\nare removed with it (ADR-0040 §3). Inverse: `scene.create` with its role (omitted\nfor `scene`), then `scene.reorder` to its old display position (unless it was\nlast), then each deleted item's `item.remove` inverse, from bottom to top, then\n`hotkey.set` for each removed binding.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1911,7 +1922,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's or filter's settings refer to it: remove those items, or clear\nthose references, first (in the same batch if needed). Deleting a source that\nothers were copied from is allowed: their `duplicated_from` then reads as absent.\nIts sends go with it. Inverse: `source.create` with its name, kind, settings and\n`duplicated_from`, then `send.remove` of its master send if it had none,\n`send.set` for each send that `source.create` doesn't restore as it was,\n`source.set_audio` if its audio settings were not the defaults, and `filter.add`\nfor each of its filters, video chain first, in chain order.",
+          "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's or filter's settings refer to it: remove those items, or clear\nthose references, first (in the same batch if needed). Deleting a source that\nothers were copied from is allowed: their `duplicated_from` then reads as absent.\nIts sends go with it, and so do the hotkey bindings whose action names it\n(ADR-0040 §3). Inverse: `source.create` with its name, kind, settings and\n`duplicated_from`, then `send.remove` of its master send if it had none,\n`send.set` for each send that `source.create` doesn't restore as it was,\n`source.set_audio` if its audio settings were not the defaults, and `filter.add`\nfor each of its filters, video chain first, in chain order, then `hotkey.set` for\neach removed binding.",
           "properties": {
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -2139,7 +2150,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept.\nInverse: `output.set_target` with the previous target.",
+          "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept only\nwhile the server stays the same (scheme, host and port; the path may change): a\nnew server removes the key from the credential store, so the old key never goes\nto it, and needs a new `output.set_key`. Inverse: `output.set_target` with the\nprevious target, which can't restore a removed key.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -2189,7 +2200,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key stays in the credential store, so undoing the delete restores a\nworking output; `output.clear_key` removes it. Inverse: `output.create` with its\nkind.",
+          "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key is removed from the credential store, so an output created later\nwith the same ID doesn't inherit it. Hotkey bindings whose action names the output\nare removed with it (ADR-0040 §3). Inverse: `output.create` with its kind,\n`output.set_encoder` if it had a profile, then `hotkey.set` for each removed\nbinding; it can't restore the key: set it again with `output.set_key`.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -2307,6 +2318,47 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "profile_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Binds a key chord to an action (ADR-0024 §5). A client that listens for keys\nsends the action when the chord is pressed; the engine only stores the binding.\nOnly actions can be bound, so pressing a hotkey never adds to an undo history.\nRejected with `invalid_argument` for a chord that isn't valid (see [`Chord`]) or\nan action that can't be bound (`output.set_key`, whose stream key is never stored\nin the collection), with `already_exists` (entity `hotkey`) for a chord that is\nalready bound (rebinding is a batch of `hotkey.clear` then `hotkey.set`), and with\n`not_found` for a scene or output the action names that doesn't exist. Deleting\nthat object later removes the binding with it (ADR-0040 §3). Inverse:\n`hotkey.clear`.",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/Action",
+              "description": "The action request it runs, checked as an `action` call is."
+            },
+            "chord": {
+              "$ref": "#/$defs/Chord",
+              "description": "The chord, such as `Ctrl+Digit1` or `F1`."
+            },
+            "type": {
+              "const": "hotkey.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "chord",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes a hotkey binding. Rejected with `not_found` (entity `hotkey`) for a chord\nthat isn't bound. Inverse: `hotkey.set` with its action.",
+          "properties": {
+            "chord": {
+              "$ref": "#/$defs/Chord",
+              "description": "The chord to unbind."
+            },
+            "type": {
+              "const": "hotkey.clear",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "chord"
           ],
           "type": "object"
         },
@@ -2635,6 +2687,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "device",
           "description": "A paired device (0.21). Only an error answering `device.revoke` names it, so a\nclient older than 0.21, which sends none, never reads it.",
+          "type": "string"
+        },
+        {
+          "const": "hotkey",
+          "description": "A hotkey binding, named by its chord.",
           "type": "string"
         }
       ]
@@ -3305,6 +3362,24 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "HotkeyBinding": {
+      "description": "One hotkey binding, as `state.get`, `delete.plan` and a batch result report it.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "The action request the chord runs, as `hotkey.set` bound it. A client sends it as\nan `action` call when the chord is pressed. Read as plain JSON, so a client older\nthan an action type still reads the collection: it keeps the binding and can't\nrun it. [`HotkeyBinding::action`] parses it."
+        },
+        "chord": {
+          "$ref": "#/$defs/Chord",
+          "description": "The chord."
+        }
+      },
+      "required": [
+        "chord",
+        "action"
+      ],
+      "type": "object"
+    },
     "IdempotencyKey": {
       "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
       "type": "string"
@@ -3708,7 +3783,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The file format."
             },
             "path": {
-              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one with control\ncharacters or a `..` segment, and one that ends in a separator or names no\nfile. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
+              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one that starts\nwith two separators (a Windows UNC or device path, `\\\\host\\share\\…`,\n`\\\\.\\…` or `\\\\?\\…`), one with `:` other than a drive letter's, `?`, `*`,\ncontrol characters or a `..` segment, one that ends in a separator or names\nno file, and one whose file name is a DOS device name, in any case and with\nor without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,\n`LPT1`, …), which Windows opens in place of a file. `output.start` also fails\nwhen the path is not absolute on the engine's own machine.",
               "type": "string"
             },
             "type": {
@@ -4185,7 +4260,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, every output, every encoder profile, and the buses and sends) at one\nrevision: what a client\nreads on connecting, after a `state.changed` it didn't cause, or before an edit it\nsends with `expected_rev`.",
+          "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, every output, every encoder profile, the buses and sends, and every hotkey\nbinding) at one revision: what a client\nreads on connecting, after a `state.changed` it didn't cause, or before an edit it\nsends with `expected_rev`.",
           "properties": {
             "type": {
               "const": "state.get",
@@ -4370,7 +4445,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The batch that deletes a scene, source or bus together with everything that\nrefers to it, which `scene.delete`, `source.delete` and `bus.delete` alone refuse\n(their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,\ndeletes the `scene` sources that show a deleted scene (and their items), and sets\nsettings references to the target to `null`, keeping the sources that hold them.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
+          "description": "The batch that deletes a scene, source or bus together with everything that\nrefers to it, which `scene.delete`, `source.delete` and `bus.delete` alone refuse\n(their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,\ndeletes the `scene` sources that show a deleted scene (and their items), and sets\nsettings references to the target to `null`, keeping the sources that hold them.\nIt also lists the hotkey bindings the delete removes with what they name\n(ADR-0040 §3), which need no edit of their own. The client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
           "properties": {
             "target": {
               "$ref": "#/$defs/DeleteTarget",
@@ -4565,6 +4640,14 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "Every encoder profile, ordered by ID. Missing (from a server older than\n0.13) parses as empty.",
               "items": {
                 "$ref": "#/$defs/EncoderProfileInfo"
+              },
+              "type": "array"
+            },
+            "hotkeys": {
+              "default": [],
+              "description": "Every hotkey binding, ordered by chord. Missing (from a server older than\n0.25) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/HotkeyBinding"
               },
               "type": "array"
             },
@@ -4907,6 +4990,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The edits, in order: `item.remove` for the items that place a deleted source,\n`source.set_settings` and `filter.set_settings` setting each reference to a\ndeleted object to `null`, `source.delete` for the `scene` sources that show a deleted scene, and last the\ndelete of the target itself.",
               "items": {
                 "$ref": "#/$defs/Edit"
+              },
+              "type": "array"
+            },
+            "hotkeys": {
+              "description": "The hotkey bindings the batch removes because their action names an object it\ndeletes, ordered by chord, so the client can say \"this also removes the hotkey\nCtrl+Digit1\". The deletes remove them; undo restores them. Omitted when there\nare none, and missing (from a server older than 0.25) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/HotkeyBinding"
               },
               "type": "array"
             },
@@ -5959,5 +6049,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.24"
+  "title": "JStream protocol 0.26"
 }

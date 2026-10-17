@@ -588,10 +588,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set` and `send.remove` edit
   sources' audio, the buses and the send matrix ([ADR-0028](adr/0028-audio-model-v2.md),
   protocol 0.19).
+  `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
+  ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.25). Deleting the scene or
+  output an action names removes its bindings in the same edit, the batch result lists
+  them as `removed_hotkeys`, and undo restores them
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
-  `output.status` reports only `key_set`.
+  `output.status` reports only `key_set`. A key is bound to its output's server: an
+  applied change that deletes the output or points it at another scheme, host or port
+  removes the key, so it never goes to a server it wasn't set for (#343).
 - **Actions** (`output.start`, `scene.switch`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
@@ -613,8 +620,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   and set a scene's `transition_in` and `transition_out` and an item's transition
   settings. The scene-switch action takes an optional preset.
 - **Live values** (`live.set`, `live.cancel`; query `live.list`; events `live.changed`,
-  `live.ended`): actions that override live-adjustable parameters during a drag or a
-  live dialog, with no `rev` bump or undo step; one batch carrying `ends_gesture`
+  `live.ended`; protocol 0.26): actions that override live-adjustable parameters during
+  a drag or a live dialog, with no `rev` bump or undo step; one batch carrying `ends_gesture`
   commits the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). Built for item
   placements and crops; audio faders follow with the mixer's parameter channel.
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
@@ -644,7 +651,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source (or, from protocol 0.24, a bus) with everything
-  that refers to it, and the `rev` it was planned at; `bus.list` (protocol 0.19) → the buses and sends; audio levels are
+  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends; audio levels are
   the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
@@ -733,7 +740,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -750,9 +757,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 314 KB
-  of `tools/list` today, the `live` tool's share most of the edit schemas `item` and
-  `batch` carry, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 484 KB
+  of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
+  of the edit schemas `item` and `batch` do, because `live.set` takes edits and
+  `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
@@ -976,7 +984,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
-  `jstream-graph`, which checks a loaded collection as it checks edits. `jstream-core`
+  `jstream-graph`, which checks a loaded collection as it checks edits. A field added
+  for new collection state (encoder profiles, hotkey bindings) is omitted when empty,
+  so a file without it is still valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
