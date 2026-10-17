@@ -18,12 +18,13 @@ use crate::geometry::ItemGeometry;
 use crate::hotkey::Chord;
 use crate::id::{
     BusId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId, OutputId, Rev,
-    SceneId, SourceId, VideoMixId,
+    SceneId, SourceId, TransitionPresetId, VideoMixId,
 };
 use crate::mix::VideoMix;
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::preview::PreviewCodec;
 use crate::settings::Settings;
+use crate::transition::{Easing, ItemTransition};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -77,7 +78,8 @@ pub enum Edit {
     /// those references, first (in the same batch if needed). Hotkey bindings whose
     /// action names the scene are not blockers: they are removed with it (ADR-0040 §3).
     /// Inverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`
-    /// to its old display position (unless it was last), then each deleted item's
+    /// to its old display position (unless it was last), `scene.set_transitions` if it
+    /// had an override, then each deleted item's
     /// `item.remove` inverse, from bottom to top, then `hotkey.set` for each removed
     /// binding.
     #[serde(rename = "scene.delete")]
@@ -125,7 +127,8 @@ pub enum Edit {
     /// the removed item's scene, ID and source, its placement in the field matching its
     /// form (`transform` or `geometry`), and its opacity and blend where they differ from
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
-    /// top), `item.set_crop` if it was cropped, and `item.set_visible` if it was hidden.
+    /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and
+    /// `item.set_transition` if its transition settings were not the default.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -576,6 +579,96 @@ pub enum Edit {
         /// The chord to unbind.
         chord: Chord,
     },
+    /// Adds a transition preset (ADR-0029, ADR-0037). Inverse: `transition.delete`.
+    #[serde(rename = "transition.create")]
+    TransitionCreate {
+        /// The new preset's ID, chosen by the client. Rejected if it exists.
+        preset_id: TransitionPresetId,
+        /// Display name.
+        name: String,
+        /// A transition kind `kind.list` reports (`cut`, `fade`, `move`), else
+        /// `invalid_argument`.
+        kind: String,
+        /// How long one item takes, in milliseconds; at most 60000.
+        duration_ms: u32,
+        /// The curve its items follow unless they set their own.
+        easing: Easing,
+        /// Initial settings, checked against the kind's descriptor as `source.create`'s
+        /// are. Parameters left out take their defaults. Omitted means all defaults.
+        #[serde(default, skip_serializing_if = "Settings::is_empty")]
+        settings: Settings,
+    },
+    /// Changes a transition preset. Fields left out keep their values; `patch` changes
+    /// settings as `source.set_settings` does. A new `kind` replaces the settings with
+    /// that kind's defaults, overlaid by `patch`. Inverse: `transition.update` with the
+    /// previous values of what it changed (and, after a kind change, the previous kind
+    /// and every previous setting).
+    #[serde(rename = "transition.update")]
+    TransitionUpdate {
+        /// The preset to change.
+        preset_id: TransitionPresetId,
+        /// A new display name.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        /// A new transition kind, checked as in `transition.create`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<String>,
+        /// A new duration, in milliseconds; at most 60000.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u32>,
+        /// A new easing.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        easing: Option<Easing>,
+        /// Parameter ID to new value, or `null` for the default.
+        #[serde(default, skip_serializing_if = "Settings::is_empty")]
+        patch: Settings,
+    },
+    /// Deletes a transition preset, and clears every scene's `transition_in` and
+    /// `transition_out` that names it. Hotkey bindings whose `scene.switch` names it
+    /// are removed with it (ADR-0040 §3). The default preset can't be deleted
+    /// (`invalid_argument`): make another one the default first. Inverse:
+    /// `transition.create` with its name, kind, timing and settings, then
+    /// `scene.set_transitions` for each scene it cleared, then `hotkey.set` for each
+    /// removed binding.
+    #[serde(rename = "transition.delete")]
+    TransitionDelete {
+        /// The preset to delete.
+        preset_id: TransitionPresetId,
+    },
+    /// Makes a preset the default: the one a switch uses when neither the switch nor
+    /// the scenes name one. Inverse: `transition.set_default` with the previous default.
+    #[serde(rename = "transition.set_default")]
+    TransitionSetDefault {
+        /// The preset, which must exist, else `not_found`.
+        preset_id: TransitionPresetId,
+    },
+    /// Sets the presets a scene overrides switches with: `transition_in` when switching
+    /// into it, `transition_out` when switching out of it. A switch that names a preset
+    /// wins over both, and `transition_in` wins over the other scene's `transition_out`.
+    /// Each must name an existing preset, else `not_found`; omitted means none. Inverse:
+    /// `scene.set_transitions` with the previous two.
+    #[serde(rename = "scene.set_transitions")]
+    SceneSetTransitions {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The preset for switching into this scene, or none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transition_in: Option<TransitionPresetId>,
+        /// The preset for switching out of this scene, or none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transition_out: Option<TransitionPresetId>,
+    },
+    /// Replaces an item's transition settings (ADR-0029 §6): its delay, easing, whether
+    /// it may glide to other scenes, and how it appears and disappears without a
+    /// partner. A `delay_ms` over 60000 is `invalid_argument`. Inverse:
+    /// `item.set_transition` with the previous settings.
+    #[serde(rename = "item.set_transition")]
+    ItemSetTransition {
+        /// The item to change.
+        item_id: ItemId,
+        /// Its new settings.
+        transition: ItemTransition,
+    },
     /// Changes some of an audio source's settings (ADR-0028): the fields sent change,
     /// the others keep their values, and sending none is `invalid_argument`. A source
     /// without audio is `invalid_argument` on `source_id`. A `scene` source has no fader
@@ -719,6 +812,12 @@ impl Edit {
             Edit::OutputSetVideoMix { .. } => "output.set_video_mix",
             Edit::HotkeySet { .. } => "hotkey.set",
             Edit::HotkeyClear { .. } => "hotkey.clear",
+            Edit::TransitionCreate { .. } => "transition.create",
+            Edit::TransitionUpdate { .. } => "transition.update",
+            Edit::TransitionDelete { .. } => "transition.delete",
+            Edit::TransitionSetDefault { .. } => "transition.set_default",
+            Edit::SceneSetTransitions { .. } => "scene.set_transitions",
+            Edit::ItemSetTransition { .. } => "item.set_transition",
         }
     }
 }
@@ -910,15 +1009,32 @@ pub enum Action {
         /// The channel the stream was opened on.
         channel: u32,
     },
-    /// Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every
-    /// output that shows program) shows it from the next frame. The program scene is
-    /// runtime state, not collection state (ADR-0030): the switch changes no `rev`, is
-    /// never undone, and emits `studio.changed`, which `studio.get` reads back. Switching
-    /// to the scene already on program succeeds and emits nothing. Fails with
-    /// `not_found` for a scene not in the collection.
+    /// Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`
+    /// names, else the scene's `transition_in`, else the current program scene's
+    /// `transition_out`, else the default preset. A `cut`, a zero duration, or a preset
+    /// whose kind the engine doesn't have shows the scene from the next frame. A switch
+    /// during a transition starts from what is on screen. The program scene is runtime
+    /// state, not collection state (ADR-0030): the switch changes no `rev`, is never
+    /// undone, and emits `studio.changed` naming the preset it used, which `studio.get`
+    /// reads back. Switching to the scene already on program succeeds and emits nothing.
+    /// Fails with `not_found` for a scene or a preset not in the collection.
     #[serde(rename = "scene.switch")]
     SceneSwitch {
         /// The scene to put on program.
+        scene_id: SceneId,
+        /// The preset to use, overriding the scenes' and the default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preset_id: Option<TransitionPresetId>,
+    },
+    /// Puts a scene on preview, the scene studio mode prepares before it goes on program
+    /// with `scene.switch`. Preview is runtime state like program: it changes no `rev`,
+    /// is never undone, and emits `studio.changed`. It never affects what an output
+    /// shows unless the output's mix is the preview mix. Setting the scene already on
+    /// preview succeeds and emits nothing. Fails with `not_found` for a scene not in
+    /// the collection.
+    #[serde(rename = "studio.set_preview")]
+    StudioSetPreview {
+        /// The scene to put on preview.
         scene_id: SceneId,
     },
     /// Opens pairing for one more device (ADR-0044): the server draws a one-time
@@ -965,6 +1081,7 @@ impl Action {
             Action::SceneSwitch { .. } => "scene.switch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
+            Action::StudioSetPreview { .. } => "studio.set_preview",
         }
     }
 
@@ -978,7 +1095,19 @@ impl Action {
             | Action::OutputClearKey { output_id } => {
                 vec![(EntityKind::Output, output_id.as_str())]
             }
-            Action::SceneSwitch { scene_id } => vec![(EntityKind::Scene, scene_id.as_str())],
+            Action::SceneSwitch {
+                scene_id,
+                preset_id,
+            } => {
+                let mut named = vec![(EntityKind::Scene, scene_id.as_str())];
+                if let Some(preset_id) = preset_id {
+                    named.push((EntityKind::Transition, preset_id.as_str()));
+                }
+                named
+            }
+            Action::StudioSetPreview { scene_id } => {
+                vec![(EntityKind::Scene, scene_id.as_str())]
+            }
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
             Action::AudioResetLoudness {}
@@ -1035,7 +1164,8 @@ impl Action {
             | Action::OutputStop { .. }
             | Action::OutputClearKey { .. }
             | Action::AudioResetLoudness {}
-            | Action::SceneSwitch { .. } => None,
+            | Action::SceneSwitch { .. }
+            | Action::StudioSetPreview { .. } => None,
         }
     }
 }

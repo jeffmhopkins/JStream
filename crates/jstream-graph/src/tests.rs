@@ -647,6 +647,7 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
                     target: target("rtmps://a.rtmps.youtube.com:443/live2"),
                 },
                 encoder_profile: None,
+                filters: Default::default(),
                 video_mix: None,
             }],
         }
@@ -753,6 +754,7 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                     container: RecordContainer::Mp4,
                 },
                 encoder_profile: None,
+                filters: Default::default(),
                 video_mix: None,
             }],
         }
@@ -1094,10 +1096,11 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Action, AudioFollow, BusId, Chord, Crop, DeleteTarget, Edit, EncoderProfile,
-        EncoderProfileId, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, MixInput,
-        MixResolution, OutputId, RateControl, Rev, SceneId, SceneRole, Settings, Size, SourceId,
-        SourceKind, Vec2, VideoMix, VideoMixId,
+        Action, AudioFollow, BusId, Chord, Crop, DeleteTarget, Easing, Edit, EncoderProfile,
+        EncoderProfileId, Finite32, FitMode, Glide, ItemEasing, ItemGeometry, ItemId,
+        ItemTransform, ItemTransition, MixInput, MixResolution, OutputId, RateControl, Rev,
+        SceneId, SceneRole, Settings, Size, SourceId, SourceKind, TransitionEffect,
+        TransitionPresetId, Vec2, VideoMix, VideoMixId,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1136,14 +1139,37 @@ mod property {
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
         let mixes: Vec<String> = state.video_mixes().map(|m| m.id().to_string()).collect();
-        let filters: Vec<(String, String)> = state
-            .sources()
-            .flat_map(|s| {
-                s.filters()
+        // Every filter with its owner: sources', outputs' and the master's.
+        let mut filters: Vec<(jstream_protocol::FilterOwner, String)> = Vec::new();
+        for source in state.sources() {
+            let owner = jstream_protocol::FilterOwner::Source {
+                source_id: source.id().clone(),
+            };
+            filters.extend(
+                source
+                    .filters()
                     .all()
-                    .map(|(_, f)| (s.id().to_string(), f.id().to_string()))
-            })
-            .collect();
+                    .map(|(_, f)| (owner.clone(), f.id().to_string())),
+            );
+        }
+        for output in state.outputs() {
+            let owner = jstream_protocol::FilterOwner::Output {
+                output_id: output.id().clone(),
+            };
+            filters.extend(
+                output
+                    .filters()
+                    .all()
+                    .map(|(_, f)| (owner.clone(), f.id().to_string())),
+            );
+        }
+        filters.extend(
+            state
+                .master()
+                .all()
+                .map(|(_, f)| (jstream_protocol::FilterOwner::Master, f.id().to_string())),
+        );
+        let presets: Vec<String> = state.presets().map(|p| p.id().to_string()).collect();
         let buses: Vec<String> = state.buses().map(|b| b.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
@@ -1158,6 +1184,28 @@ mod property {
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let encoder = |rng: &mut Rng| rng.pick(&encoders).unwrap_or_else(|| pool(rng, "enc"));
+        let preset = |rng: &mut Rng| rng.pick(&presets).unwrap_or_else(|| pool(rng, "tr"));
+        // A built-in transition kind, or one in four times a source kind.
+        let kind = |rng: &mut Rng| ["cut", "fade", "move", "color"][rng.below(4)].to_owned();
+        let preset_settings = |rng: &mut Rng| -> Settings {
+            match rng.below(4) {
+                0 => Settings::new(),
+                1 => [("unmatched", json!("slide"))].into_iter().collect(),
+                2 => [("stagger_ms", json!(40)), ("unmatched", Value::Null)]
+                    .into_iter()
+                    .collect(),
+                _ => [("stagger_ms", json!(-1))].into_iter().collect(),
+            }
+        };
+        let duration = |rng: &mut Rng| [0, 300, 600, 70_000][rng.below(4)];
+        let easing = |rng: &mut Rng| {
+            [
+                Easing::EaseInOut,
+                Easing::EaseOut,
+                Easing::Linear,
+                Easing::Spring,
+            ][rng.below(4)]
+        };
         let mix_id = |rng: &mut Rng| rng.pick(&mixes).unwrap_or_else(|| pool(rng, "mix"));
         // A scene one time in two, often one that exists; an odd width one time in eight.
         let mix = |rng: &mut Rng| VideoMix {
@@ -1242,7 +1290,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(48) {
+        match rng.below(55) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1474,11 +1522,10 @@ mod property {
                 index: (rng.below(2) == 0).then(|| index(rng)),
             },
             41 => {
-                let (source, filter) = rng
+                let (owner, filter) = rng
                     .pick(&filters)
-                    .unwrap_or_else(|| (source(rng), pool(rng, "f")));
+                    .unwrap_or_else(|| (owner(source(rng)), pool(rng, "f")));
                 let filter_id = jstream_protocol::FilterId::new(filter);
-                let owner = owner(source);
                 match rng.below(4) {
                     0 => Edit::FilterRemove { owner, filter_id },
                     1 => Edit::FilterSetEnabled {
@@ -1487,9 +1534,14 @@ mod property {
                         enabled: rng.below(2) == 0,
                     },
                     2 => Edit::FilterSetSettings {
+                        patch: match &owner {
+                            jstream_protocol::FilterOwner::Source { .. } => {
+                                super::settings(&[("mask", mask(rng))])
+                            }
+                            _ => super::settings(&[("gain_db", json!(-3.0))]),
+                        },
                         owner,
                         filter_id,
-                        patch: super::settings(&[("mask", mask(rng))]),
                     },
                     _ => Edit::FilterReorder {
                         owner,
@@ -1529,6 +1581,8 @@ mod property {
                     let action = if rng.below(2) == 0 {
                         Action::SceneSwitch {
                             scene_id: SceneId::new(scene(rng)),
+                            preset_id: (rng.below(2) == 0)
+                                .then(|| TransitionPresetId::new(preset(rng))),
                         }
                     } else {
                         Action::OutputStart {
@@ -1538,6 +1592,59 @@ mod property {
                     Edit::HotkeySet { chord, action }
                 }
             }
+            // A gain on the master or an output's audio chain (ADR-0027), mostly in
+            // range.
+            47 => Edit::FilterAdd {
+                owner: match rng.below(3) {
+                    0 => jstream_protocol::FilterOwner::Master,
+                    _ => jstream_protocol::FilterOwner::Output {
+                        output_id: OutputId::new(output(rng)),
+                    },
+                },
+                chain: jstream_protocol::FilterChain::Audio,
+                filter_id: jstream_protocol::FilterId::new(pool(rng, "f")),
+                kind: "gain".into(),
+                settings: super::settings(&[("gain_db", json!([-6.0, 0.0, 99.0][rng.below(3)]))]),
+                enabled: (rng.below(3) == 0).then_some(false),
+                index: (rng.below(2) == 0).then(|| index(rng)),
+            },
+            48 => Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new(pool(rng, "tr")),
+                name: pool(rng, "name "),
+                kind: kind(rng),
+                duration_ms: duration(rng),
+                easing: easing(rng),
+                settings: preset_settings(rng),
+            },
+            49 => Edit::TransitionUpdate {
+                preset_id: TransitionPresetId::new(preset(rng)),
+                name: (rng.below(2) == 0).then(|| pool(rng, "name ")),
+                kind: (rng.below(2) == 0).then(|| kind(rng)),
+                duration_ms: (rng.below(2) == 0).then(|| duration(rng)),
+                easing: (rng.below(2) == 0).then(|| easing(rng)),
+                patch: preset_settings(rng),
+            },
+            50 => Edit::TransitionDelete {
+                preset_id: TransitionPresetId::new(preset(rng)),
+            },
+            51 => Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new(preset(rng)),
+            },
+            52 => Edit::SceneSetTransitions {
+                scene_id: SceneId::new(scene(rng)),
+                transition_in: (rng.below(2) == 0).then(|| TransitionPresetId::new(preset(rng))),
+                transition_out: (rng.below(2) == 0).then(|| TransitionPresetId::new(preset(rng))),
+            },
+            53 => Edit::ItemSetTransition {
+                item_id: ItemId::new(item(rng)),
+                transition: ItemTransition {
+                    delay_ms: [0, 120, 70_000][rng.below(3)],
+                    easing: [ItemEasing::Inherit, ItemEasing::Spring][rng.below(2)],
+                    glide: [Glide::Auto, Glide::Never][rng.below(2)],
+                    appear: [TransitionEffect::Inherit, TransitionEffect::Slide][rng.below(2)],
+                    disappear: [TransitionEffect::None, TransitionEffect::Scale][rng.below(2)],
+                },
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1641,6 +1748,12 @@ mod property {
             "filter.set_settings",
             "filter.reorder",
             "canvas.set_size",
+            "transition.create",
+            "transition.update",
+            "transition.delete",
+            "transition.set_default",
+            "scene.set_transitions",
+            "item.set_transition",
             "source.set_audio",
             "bus.create",
             "bus.rename",
@@ -3838,6 +3951,33 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
     );
 }
 
+#[test]
+fn a_filter_kind_cannot_be_created_as_a_source() {
+    let mut graph = graph().with_kinds([KindDescriptor {
+        kind_id: "clap/org.example.gain".into(),
+        category: KindCategory::AudioFilter,
+        name: "Gain".into(),
+        version: 1,
+        video: false,
+        audio: true,
+        params: vec![],
+    }]);
+    let (field, reason) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::SourceCreate {
+            source_id: SourceId::new("x"),
+            name: "x".into(),
+            kind: SourceKind::Builtin {
+                kind: "clap/org.example.gain".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: None,
+        }],
+    ));
+    assert_eq!(field, "edits.0.kind.kind");
+    assert!(reason.contains("filter kind"), "{reason}");
+}
+
 mod hotkeys {
     //! Hotkey bindings (ADR-0024 §5) and the delete rule of ADR-0040 §3: deleting what a
     //! binding names removes the binding in the same edit, and undo restores both.
@@ -3845,13 +3985,14 @@ mod hotkeys {
     use super::{apply_err, apply_ok, fixture, output_create, plan};
     use crate::Graph;
     use jstream_protocol::{
-        Action, Chord, DeleteTarget, Edit, EntityKind, HotkeyBinding, OutputId, ProtocolError,
-        SceneId, SourceId,
+        Action, Chord, DeleteTarget, Easing, Edit, EntityKind, HotkeyBinding, OutputId,
+        ProtocolError, SceneId, Settings, SourceId, TransitionPresetId,
     };
 
     fn switch(scene: &str) -> Action {
         Action::SceneSwitch {
             scene_id: SceneId::new(scene),
+            preset_id: None,
         }
     }
 
@@ -4140,5 +4281,52 @@ mod hotkeys {
                 id: "b".into(),
             }
         );
+    }
+
+    /// A switch that names a preset binds to it too: the preset must exist, and
+    /// deleting it removes the binding, which undo restores.
+    #[test]
+    fn a_switch_naming_a_preset_follows_the_preset() {
+        let mut graph = fixture();
+        let with_preset = Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: Some(TransitionPresetId::new("wipe")),
+        };
+        assert_eq!(
+            apply_err(&mut graph, vec![set("F5", with_preset.clone())]),
+            ProtocolError::NotFound {
+                entity: EntityKind::Transition,
+                id: "wipe".into(),
+            }
+        );
+        apply_ok(
+            &mut graph,
+            vec![
+                Edit::TransitionCreate {
+                    preset_id: TransitionPresetId::new("wipe"),
+                    name: "Wipe".into(),
+                    kind: "fade".into(),
+                    duration_ms: 500,
+                    easing: Easing::Linear,
+                    settings: Settings::new(),
+                },
+                set("F5", with_preset.clone()),
+                set("F6", switch("a")),
+            ],
+        );
+        let applied = apply_ok(
+            &mut graph,
+            vec![Edit::TransitionDelete {
+                preset_id: TransitionPresetId::new("wipe"),
+            }],
+        );
+        assert_eq!(chords(&graph), ["F6"]);
+        assert_eq!(
+            applied.removed_hotkeys,
+            vec![HotkeyBinding::new(Chord::new("F5"), &with_preset)]
+        );
+        apply_ok(&mut graph, applied.inverse.edits);
+        assert_eq!(chords(&graph), ["F5", "F6"]);
+        assert_eq!(graph.state().hotkey(&Chord::new("F5")), Some(&with_preset));
     }
 }
