@@ -72,6 +72,7 @@ jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }
 jstream-platform-linux = { path = "crates/jstream-platform-linux" }
+jstream-platform-macos = { path = "crates/jstream-platform-macos" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
 jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
 jstream-protocol = { path = "crates/jstream-protocol" }
@@ -98,6 +99,14 @@ png = { version = "0.18", default-features = false }
 # The web UI framework (ADR-0045): client-side rendering only, no server functions or
 # hydration. Its `csr` feature also turns on `getrandom`'s browser backend.
 leptos = { version = "0.8", default-features = false, features = ["csr"] }
+# `mach_absolute_time` and `mach_timebase_info` for the macOS media clock (ADR-0063 §5).
+# Maintained bindings to <mach/mach_time.h> (R-UNSAFE-004), already in the tree at 0.6
+# under wasmtime; no build script and no default features.
+mach2 = { version = "0.6", default-features = false }
+# Foundation through the objc2 framework crates (ADR-0063 §12), for the running macOS
+# version (`NSProcessInfo`). The 0.3 line wgpu's Metal backend already uses; no build
+# script. No default features: only `std` and the classes the macOS crate calls.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSProcessInfo"] }
 # Property tests with shrinking (`jstream-graph`'s `tests/`), test-only. Held at 1.11:
 # 1.12 moves to `rand` 0.10, a second `rand` beside the 0.9 already in the tree
 # (R-DEP-005). No default features: no `fork`/`timeout` (`rusty-fork`, `tempfile`) and
