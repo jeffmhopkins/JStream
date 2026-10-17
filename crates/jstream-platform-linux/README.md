@@ -17,7 +17,7 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
-ADR is **proposed**, and this crate is a **draft** that follows it. Layer 2, and one of
+ADR is **accepted**; this crate is its first part, and the rest follows in later PRs. Layer 2, and one of
 the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
@@ -33,7 +33,7 @@ library is `PlatformError::MissingComponent`, with the package to install. Every
 calls Linux is under `cfg(target_os = "linux")`. On other targets the crate builds just its
 platform-independent helpers, which are tested on every platform.
 
-This draft has:
+This first part has:
 - **`MonotonicClock`** (`MediaClock`): `CLOCK_MONOTONIC` in **100 ns ticks**
   (`timebase()`), the unit the Windows backend uses. PipeWire and V4L2 stamp their data
   on the same clock in nanoseconds, so their timestamps map with a division

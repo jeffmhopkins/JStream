@@ -116,7 +116,7 @@ mod backend {
 
     fn not_built(what: &str) -> PlatformError {
         PlatformError::Unsupported {
-            what: format!("{what} through PipeWire (draft: not built yet, ADR-0060)"),
+            what: format!("{what} through PipeWire (not built yet, ADR-0060)"),
         }
     }
 

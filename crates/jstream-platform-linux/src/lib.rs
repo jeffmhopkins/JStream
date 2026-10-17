@@ -1,5 +1,5 @@
 //! Linux platform backends: the implementations of the `jstream-platform` traits on Linux,
-//! as ADR-0060 (proposed) lays them out. **A draft**: it has the `CLOCK_MONOTONIC` media
+//! as ADR-0060 lays them out. The first part: it has the `CLOCK_MONOTONIC` media
 //! clock (`MonotonicClock`), session and support-tier detection (`Session`), the
 //! ScreenCast portal's capture targets (`PortalCapture`), run-time loading of libpipewire
 //! (`PipeWire`, behind `PipeWireAudio`) and libva, and VA-API H.264 encoder probing

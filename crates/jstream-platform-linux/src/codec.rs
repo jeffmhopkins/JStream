@@ -103,7 +103,7 @@ mod backend {
             let encoder = choose_encoder(encoders, config)?;
             Err(PlatformError::Unsupported {
                 what: format!(
-                    "a VA-API H.264 session on {} (draft: encode sessions are not built yet, \
+                    "a VA-API H.264 session on {} (encode sessions are not built yet, \
                      ADR-0060)",
                     encoder.node
                 ),

@@ -190,7 +190,7 @@ mod backend {
             };
             Err(PlatformError::Unsupported {
                 what: format!(
-                    "{pick:?} capture through the ScreenCast portal (draft: the portal's D-Bus \
+                    "{pick:?} capture through the ScreenCast portal (the portal's D-Bus \
                      transport and PipeWire stream are not built yet, ADR-0060)"
                 ),
             })
