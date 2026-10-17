@@ -126,17 +126,32 @@ fn chat_rate_is_none_without_polls_and_counts_messages_per_minute() {
     let start = Instant::now();
     let mut rate = ChatRate::new();
     assert_eq!(rate.per_minute(start), None);
-    // 10 messages, then 20 more 30 s later: 30 messages over 30 s is 60 a minute.
-    rate.record(start, 10);
+    // A first poll's 500 messages are a backlog from before the stream: the window's
+    // start, not a burst, so one poll alone gives no rate.
+    rate.record(start, 500);
+    assert_eq!(rate.per_minute(start), None);
+    // 20 messages arrived in the 30 s up to the next poll: 40 a minute.
     rate.record(start + Duration::from_secs(30), 20);
     let per_minute = rate
         .per_minute(start + Duration::from_secs(30))
-        .expect("polls in the window");
-    assert!((per_minute - 60.0).abs() < 1e-9, "{per_minute}");
-    // A first poll alone counts over at least a second, not over zero time.
-    let mut first = ChatRate::new();
-    first.record(start, 5);
-    assert_eq!(first.per_minute(start), Some(300.0));
+        .expect("two polls in the window");
+    assert!((per_minute - 40.0).abs() < 1e-9, "{per_minute}");
+}
+
+#[test]
+fn chat_rate_reads_a_steady_chat_at_its_rate_as_the_window_slides() {
+    // The review's case (#594 B1): 60 messages a minute, polled every 30 s.
+    let start = Instant::now();
+    let mut rate = ChatRate::new();
+    for poll in 0..=4 {
+        rate.record(start + Duration::from_secs(30 * poll), 30);
+    }
+    for at in [120, 121, 135, 149] {
+        let per_minute = rate
+            .per_minute(start + Duration::from_secs(at))
+            .expect("polls in the window");
+        assert!((per_minute - 60.0).abs() < 1e-9, "at {at} s: {per_minute}");
+    }
 }
 
 #[test]
@@ -145,11 +160,12 @@ fn chat_rate_forgets_polls_older_than_the_window() {
     let mut rate = ChatRate::new();
     rate.record(start, 100);
     rate.record(start + Duration::from_secs(50), 6);
-    // At 70 s the first poll is past the window; 6 messages since 50 s, over 20 s.
+    rate.record(start + Duration::from_secs(70), 4);
+    // At 70 s the first poll is past the window; the 4 messages since 50 s, over 20 s.
     let per_minute = rate
         .per_minute(start + Duration::from_secs(70))
-        .expect("one poll left");
-    assert!((per_minute - 18.0).abs() < 1e-9, "{per_minute}");
+        .expect("two polls left");
+    assert!((per_minute - 12.0).abs() < 1e-9, "{per_minute}");
     // Long after, nothing is left: no data, not a quiet chat.
     assert_eq!(rate.per_minute(start + CHAT_RATE_WINDOW * 3), None);
 }

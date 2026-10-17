@@ -95,8 +95,10 @@ Contents:
   or when the owner hides it, and a hidden like count. `STATS_INTERVAL` (60 s) is the
   low fixed rate the engine polls at (ADR-0041 §5); this crate keeps no timer.
   `ChatRate` turns the message count of each chat poll into messages per minute over
-  the last minute (`CHAT_RATE_WINDOW`), `None` with no poll in it, keeping at most 128
-  counts and never a message.
+  the last minute (`CHAT_RATE_WINDOW`): the messages of the polls after the oldest one
+  in the window, over the time from it to the newest, since a poll returns what arrived
+  since the one before (so a first poll's backlog is not a burst). It is `None` until
+  two polls are in the window, and keeps at most 128 counts, never a message.
 - **`fake`** (feature `fake`, and in this crate's tests): `FakeTransport` replays
   queued responses and records requests. Tests run on JSON fixtures in `fixtures/`,
   shaped after the API reference's documented responses, so no test uses the network

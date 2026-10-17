@@ -25,8 +25,9 @@ pub const STATS_INTERVAL: Duration = Duration::from_secs(60);
 /// The window [`ChatRate`] counts messages over.
 pub const CHAT_RATE_WINDOW: Duration = Duration::from_secs(60);
 
-/// The most chat polls [`ChatRate`] keeps. Polls come at the interval the API asks for,
-/// which is never shorter than a second, so a minute's window fits.
+/// The most chat polls [`ChatRate`] keeps. Polls come at the interval the API asks for
+/// (`pollingIntervalMillis`), assumed here to be at least half a second, so a minute's
+/// window fits; if polls come faster, the cap only shortens the window.
 const MAX_CHAT_POLLS: usize = 128;
 
 /// The `part`s `videos.list` is asked for: the live details for the viewer count, and
@@ -138,19 +139,22 @@ impl ChatRate {
     }
 
     /// Messages per minute at `now`, over the polls of the last [`CHAT_RATE_WINDOW`].
-    /// `None` before any poll in the window, so "no data" isn't shown as a quiet chat.
+    /// `None` until two polls are in the window, so "no data" isn't shown as a quiet
+    /// chat.
     ///
-    /// The span is from the oldest poll kept to `now`, at least a second, so a first
-    /// poll's backlog doesn't read as a burst at an infinite rate; with a full window
-    /// it is the window itself.
+    /// A poll returns the messages that arrived since the poll before it, so the oldest
+    /// poll kept is only the window's start: the rate is the messages of the polls after
+    /// it, over the time from it to the newest. A first poll's backlog is that start, not
+    /// a burst.
     pub fn per_minute(&mut self, now: Instant) -> Option<f64> {
         self.forget_before(now);
         let (oldest, _) = *self.polls.front()?;
-        let messages: usize = self.polls.iter().map(|(_, n)| n).sum();
-        let span = now
-            .saturating_duration_since(oldest)
-            .max(Duration::from_secs(1))
-            .min(CHAT_RATE_WINDOW);
+        let (newest, _) = *self.polls.back()?;
+        let span = newest.saturating_duration_since(oldest);
+        if span.is_zero() {
+            return None;
+        }
+        let messages: usize = self.polls.iter().skip(1).map(|(_, n)| n).sum();
         Some(messages as f64 * 60.0 / span.as_secs_f64())
     }
 
