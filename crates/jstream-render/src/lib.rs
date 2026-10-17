@@ -22,8 +22,8 @@ pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
 pub use error::RenderError;
 pub use filter::{
-    ContentBox, ExternalFilter, FilterClock, Lut, LutError, PRELUDE as FILTER_PRELUDE,
-    VideoFilter, descriptors as video_filter_descriptors, lut_image,
+    ContentBox, ExternalFilter, FilterClock, Lut, LutError, PRELUDE as FILTER_PRELUDE, VideoFilter,
+    descriptors as video_filter_descriptors, lut_image,
 };
 pub use gpu::OpenOptions;
 pub use image::Image;
