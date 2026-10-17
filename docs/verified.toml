@@ -3087,7 +3087,7 @@ stamp = { hash = "b3:7b5a1d8b0b60bed1", by = "agent:wave-owner", note = "merge-m
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/progress.rs"]
-stamp = { hash = "b3:c9b742f8a0c98b24", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "progress.rs change (#473): docs progress now also counts the (#N) of each '* ...' line in a wave landing squash. The bootstrap bullet still says docs progress lists the entries the merged history contradicts, which holds; the detail is in DOCS#generated, updated in this PR. cargo test -p xtask passes, and docs progress on main no longer reports wave-landed rows as unmerged." }
+stamp = { hash = "b3:9a4f4c0318d10742", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "progress.rs gains the optional needs field, its validation, the What's left table and sweep lines for planned or review items without needs and done items still listing it; the bootstrap bullet (generate writes the README's progress block, docs progress lists stale entries) still holds, and DOCS#generated now describes needs" }
 
 ["DOCS#dependency-lint"."body"]
 stamp = { hash = "b3:416056ff5f5233ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }
@@ -3126,7 +3126,7 @@ stamp = { hash = "b3:74359364a23f0470", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:991579db231715d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
 
 ["DOCS#ttl"."body"]
-stamp = { hash = "b3:e67dd72e603695c3", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Re-read against sweep.yml: new Roadmap progress step runs xtask docs progress (full history from fetch-depth 0) into the issue; added its bullet; deny, docs-due, update dry-run, override audit, one pinned issue and not-built list unchanged" }
+stamp = { hash = "b3:b5e19598d2324056", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "the weekly sweep bullet now also says docs progress lists rows whose needs is missing (planned or review) or left over (done), matching progress.rs's stale(); the other sweep bullets are unchanged" }
 
 ["DOCS#ttl"."file:.github/workflows/sweep.yml"]
 stamp = { hash = "b3:397125d6e5564cee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
@@ -3196,6 +3196,12 @@ stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXH
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
 stamp = { hash = "b3:1fdf8e7084ac49ed", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
+
+["ROADMAP#endgame"."body"]
+stamp = { hash = "b3:51a30f126bdeee93", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section, whole text re-read: done means every M0-M3 item in docs/progress.toml is done, merged on main with its Windows run passed where it needs one, and an item leaves M3 only when the maintainer moves it to Later; it links README#progress's What's left table generated from needs. Five steps, side by side, ordered by what lands first: 1 land the open waves in milestone order (RUNBOOK-WAVES#landing), build items finishing into their wave; 2 Windows runs by the maintainer, re-run after a later build changes an item; 3 the maintainer's ADR-0058 OAuth client, until which daemon sign-in and signed-in YouTube features stay hidden, and which platforms are supported (Linux first, macOS stays or moves to Later); 4 Linux after its codec-path ADR and macOS after its own ADR, as M3 plans; 5 release check running the M1-M3 demos from a clean checkout, 1.0 being the maintainer's call since it removes the deprecated forms (ADR-0022). All hold against the rows and those docs." }
+
+["ROADMAP#endgame"."dep:docs/adr/0055-wave-branches.md#decision"]
+stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section: done means every M0-M3 item in docs/progress.toml is done (merged, Windows run passed); the five steps match the open waves (ADR-0055 order), the hardware items, ADR-0058's OAuth client, the pending supported-platforms ADR, and ADR-0022's 1.0 removal of deprecated forms; the README What's left table it links is generated from needs" }
 
 ["ROADMAP#m0"."body"]
 stamp = { hash = "b3:4a8d454e82a1390d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
@@ -3291,7 +3297,7 @@ stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:eb6fa77b409dd104", by = "agent:wave-owner", note = "says merge-main --from resolves conflicts the same way and lists sections to re-read; still true now that it also prints each one's earlier branch notes, which DOCS#verification describes" }
 
 ["RUNBOOK-WAVES#landing"."body"]
-stamp = { hash = "b3:292b39f21348b128", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "landing steps gain step 5: after the landing PR merges, a PR on main moves the wave's progress.toml rows from review to done or hardware (with the pending run in note), keeping review while a PR is open; step 6 (branch deleted) unchanged; wave/m1 landing (#464) review N1 asked for it" }
+stamp = { hash = "b3:4658abf796c67b1a", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "step 5 now also drops or updates each landed row's needs; the rest of the landing steps are unchanged and match the progress.toml rules" }
 
 ["RUNBOOK-WAVES#landing"."dep:REVIEW.md#gather"]
 stamp = { hash = "b3:8bf3f0afb967b2ae", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }

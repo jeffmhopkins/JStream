@@ -463,8 +463,9 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     `review_every` has passed), and any `cargo xtask docs check` failure on `main`;
   - reports `cargo update --dry-run`: compatible updates, and dependencies held back by a
     version requirement or the toolchain;
-  - lists the entries of `docs/progress.toml` that the merged history contradicts
-    (`cargo xtask docs progress`, [Generated content](#generated));
+  - lists the entries of `docs/progress.toml` that the merged history contradicts, and
+    rows whose `needs` is missing or left over (`cargo xtask docs progress`,
+    [Generated content](#generated));
   - lists every PR merged with `governance-approved` or `review-override` in the past
     eight days (the override audit, [R-GOV-002](RULES.md#R-GOV-002));
   - **rewrites one pinned issue, "Weekly sweep"**, instead of opening new ones, and
@@ -566,12 +567,17 @@ It also generates one block from data rather than from docs:
   `docs/progress.toml`. That file lists the milestones and each roadmap item's
   milestone, title, `status` (`done`, `hardware` for merged work still waiting on a run
   on Windows hardware, named by a `note`, `review`, or `planned`) and the PRs that
-  deliver it, and `docs check` fails when it doesn't parse or breaks those rules. A PR
-  that delivers or advances an item updates its entry, so the README changes with the
-  work. `cargo xtask docs progress` compares the file with the merged history (the
-  `(#N)` of each squash commit, the `(#N)` of each `* …` line in a wave's landing squash,
-  which lists the PRs the wave carried, and item IDs that PR titles name in parentheses)
-  and prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
+  deliver it. An item not yet `done` lists in `needs` the steps it still needs, in order
+  (`build`, `wave`, `hardware` or `maintainer`; a `hardware` item without it needs its
+  run), and the block's **What's left** table shows each such item with them, linking
+  the order they land in ([ROADMAP › Endgame](../ROADMAP.md#endgame)). `docs check`
+  fails when the file doesn't parse or breaks those rules. A PR that delivers or advances
+  an item updates its entry, so the README changes with the work.
+  `cargo xtask docs progress` compares the file with the merged history (the `(#N)` of
+  each squash commit, the `(#N)` of each `* …` line in a wave's landing squash, which
+  lists the PRs the wave carried, and item IDs that PR titles name in parentheses) and
+  prints, as Markdown, the entries it contradicts, the `planned` and `review` items with
+  no `needs` and the `done` items still listing it; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.
 
 <a id="governance"></a>
