@@ -135,8 +135,8 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
 **The hardware check.** `examples/page_check.rs` (features `cef` and `helper`) lays the
 helper out in the build's folder as it ships (CEF's `bootstrap.exe` copied as
 `jstream-browser-helper.exe` beside the helper's DLL), then opens the built-in test page
-(or `--url`) through the CEF backend on the engine's own device and QPC clock, as the
-daemon will once the engine hands out its device, and reports the frames and audio that
+(or `--url`) through the CEF backend on a device of the media adapter and the QPC clock,
+as the daemon's pages do before a program stage lends its own context, and reports the frames and audio that
 arrive, a custom-CSS change the page reacts to, the requests refused (the built-in page
 loads one image from outside its folder), and the shutdown time. It runs on Windows only.
 
