@@ -34,8 +34,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   `batch`, which carries their edits, is open-world too), and the decoding of tool
   arguments into protocol calls, which refuses an output edit with a `youtube` target.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
-  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`;
-  `youtube.*` events are dropped.
+  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`; a
+  `live.changed` may be merged into an unread one of its gesture, and `youtube.*`
+  events are dropped.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.
@@ -69,8 +70,8 @@ target stays open to agents), and the `events` feed drops `youtube.*` events. `d
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
-| `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
 
@@ -79,7 +80,10 @@ is the protocol's own object, tagged by `type`, and its schema is the protocol's
 schemas under `oneOf`. The two batch options apply to edits and history ops only
 ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): an action or query that
 carries them is rejected. The `history` tool undoes and redoes the session's own steps,
-never another client's. Unknown argument keys are rejected too, so a misspelt
+never another client's. The `live` tool (`live.set`, `live.cancel`, `live.list`) previews
+placements and crops without a `rev` change; the agent commits a gesture with `batch`
+and `ends_gesture` ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and the
+gestures it leaves open expire when its session ends. Unknown argument keys are rejected too, so a misspelt
 `expected_rev` can't silently drop the concurrency check. Each tool's `inputSchema`
 carries, under `$defs`, every protocol definition it refers to, so it stands alone. Tool
 names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-root test
@@ -231,8 +235,16 @@ Consequences). A tick carries running totals, so the feed keeps only the newest 
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
 counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
-the same way as `meters`: each one is a full reading of the levels. `youtube.*` events
-are dropped as they arrive and take no `seq`: YouTube is for people (ADR-0058 §3). A read drains
+the same way as `meters`: each one is a full reading of the levels. `live.changed`
+arrives up to 30 times a second per gesture while someone drags, so it would push other
+events out too. Each carries the newest values of what changed, so a newer one can stand
+in for an older one of the same gesture: the feed merges the newer values over the older
+event's, in place, when no read has returned that event yet, only `live.changed` events
+follow it, and none of those sets a parameter the newer one sets. The merged event keeps
+its `seq`, so the numbers stay contiguous, `dropped` stays exact, nothing a reader has
+seen changes, and every value keeps its order. An unread drag holds one buffered event.
+`youtube.*` events are dropped as they arrive and take no `seq`: YouTube is for people
+(ADR-0058 §3). A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 

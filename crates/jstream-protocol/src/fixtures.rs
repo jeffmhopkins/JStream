@@ -23,11 +23,13 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
-use crate::{DeviceId, DeviceInfo};
+use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
+use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
+use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -304,6 +306,15 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::BusDelete {
             bus_id: BusId::new("bus_old"),
         },
+        Edit::HotkeySet {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+            },
+        },
+        Edit::HotkeyClear {
+            chord: Chord::new("Ctrl+Digit1"),
+        },
     ];
     // Every blend mode, though the engine draws only `normal` so far.
     edits.extend(BlendMode::ALL.map(|blend| Edit::ItemSetBlend {
@@ -401,6 +412,24 @@ fn send_infos() -> Vec<SendInfo> {
     ]
 }
 
+/// The bindings the fixtures report: a scene switch and an output start.
+fn hotkey_bindings() -> Vec<HotkeyBinding> {
+    vec![
+        HotkeyBinding::new(
+            Chord::new("Ctrl+Digit1"),
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+            },
+        ),
+        HotkeyBinding::new(
+            Chord::new("F9"),
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+    ]
+}
+
 /// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
 fn recording_profile() -> EncoderProfile {
     EncoderProfile {
@@ -475,6 +504,13 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputClearKey {
             output_id: OutputId::new("out_yt"),
         },
+        Action::LiveSet {
+            gesture_id: GestureId::new("drag_1"),
+            values: live_values(),
+        },
+        Action::LiveCancel {
+            gesture_id: GestureId::new("drag_1"),
+        },
         Action::YoutubeSignIn,
         Action::YoutubeSignOut,
         Action::YoutubeCreateBroadcast {
@@ -523,6 +559,27 @@ pub(crate) fn actions() -> Vec<Action> {
     ]
 }
 
+/// A two-item drag: one item moved, the other cropped.
+fn live_values() -> Vec<Edit> {
+    vec![
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+            geometry: corner_box(),
+        },
+        Edit::ItemSetCrop {
+            item_id: ItemId::new("itm_2"),
+            scene_id: None,
+            crop: Crop {
+                left: 4,
+                top: 0,
+                right: 4,
+                bottom: 0,
+            },
+        },
+    ]
+}
+
 pub(crate) fn queries() -> Vec<Query> {
     vec![
         Query::SceneList,
@@ -542,6 +599,8 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::CaptureTargets,
+        Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
             status: BroadcastListStatus::All,
@@ -922,6 +981,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             encoders: encoder_infos(),
             buses: bus_infos(),
             sends: send_infos(),
+            hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -965,6 +1025,34 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
+        },
+        QueryResult::CaptureTargets {
+            targets: vec![
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::Display,
+                    target: r"monitor:\\.\DISPLAY1".into(),
+                    name: "DISPLAY1".into(),
+                    size: Some(PixelSize {
+                        width: 2560,
+                        height: 1440,
+                    }),
+                    primary: true,
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::Window,
+                    target: "hwnd:0x1a2b".into(),
+                    name: "Untitled - Notepad".into(),
+                    size: None,
+                    primary: false,
+                },
+            ],
+        },
+        QueryResult::LiveList {
+            gestures: vec![GestureInfo {
+                gesture_id: GestureId::new("drag_1"),
+                client_id: ClientId::new("cli_7"),
+                values: live_values(),
+            }],
         },
         QueryResult::YoutubeStatus {
             auth: YoutubeAuth::SignedIn,
@@ -1015,6 +1103,12 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     scene_id: SceneId::new("scn_mask"),
                 },
             ],
+            hotkeys: vec![HotkeyBinding::new(
+                Chord::new("F5"),
+                &Action::SceneSwitch {
+                    scene_id: SceneId::new("scn_mask"),
+                },
+            )],
         },
         QueryResult::DeviceList {
             devices: vec![DeviceInfo {
@@ -1089,6 +1183,25 @@ pub(crate) fn events() -> Vec<Event> {
             output_packets: 7,
         },
     });
+    events.push(Event::LiveChanged {
+        gesture_id: GestureId::new("drag_1"),
+        client_id: ClientId::new("cli_7"),
+        values: live_values(),
+    });
+    events.push(Event::LiveEnded {
+        gesture_id: GestureId::new("drag_1"),
+        client_id: ClientId::new("cli_7"),
+        outcome: LiveOutcome::Committed,
+        rev: Some(Rev(17)),
+    });
+    for outcome in [LiveOutcome::Cancelled, LiveOutcome::Expired] {
+        events.push(Event::LiveEnded {
+            gesture_id: GestureId::new("drag_2"),
+            client_id: ClientId::new("cli_8"),
+            outcome,
+            rev: None,
+        });
+    }
     for auth in [
         YoutubeAuth::Unavailable,
         YoutubeAuth::SignedOut,
@@ -1214,6 +1327,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Filter,
         EntityKind::Bus,
         EntityKind::Device,
+        EntityKind::Hotkey,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -1244,6 +1358,16 @@ pub(crate) fn client_messages() -> Vec<ClientMessage> {
             edits: edits(),
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
+        }),
+    ));
+    msgs.push(request(
+        2,
+        Call::Batch(Batch {
+            edits: live_values(),
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: Some(GestureId::new("drag_1")),
         }),
     ));
     msgs.push(request(
@@ -1286,7 +1410,17 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r0"),
-            result: CallResult::Batch { rev: Rev(13) },
+            result: CallResult::Batch {
+                rev: Rev(13),
+                removed_hotkeys: vec![],
+            },
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r1"),
+            result: CallResult::Batch {
+                rev: Rev(14),
+                removed_hotkeys: hotkey_bindings(),
+            },
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r10"),

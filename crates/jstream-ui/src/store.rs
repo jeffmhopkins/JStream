@@ -452,12 +452,13 @@ pub async fn apply(
         edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     if let Some(rev) = expected_rev {
         batch = batch.expecting(rev);
     }
     match session.control.call(Call::Batch(batch)).await?.result {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         _ => Err(unexpected("a batch")),
     }
 }
@@ -476,7 +477,7 @@ pub async fn plan_delete(
     target: DeleteTarget,
 ) -> Result<(Rev, Vec<Edit>), ControlError> {
     match query(session, Query::DeletePlan { target }).await? {
-        QueryResult::DeletePlan { rev, edits } => Ok((rev, edits)),
+        QueryResult::DeletePlan { rev, edits, .. } => Ok((rev, edits)),
         other => Err(unexpected(other.name())),
     }
 }
@@ -587,6 +588,7 @@ mod tests {
             edits,
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         }));
         now(batch).unwrap_or_else(|e| panic!("batch failed: {e}"));
         let state = now(session.control.call(Call::Query {

@@ -199,8 +199,10 @@ Both passes are one command buffer and one `queue.submit`. `FrameSync::stage` ru
 before that submit, for every distinct hold the scene samples, and the command buffer
 ends by transitioning each of those textures to `PRESENT` (on D3D12 the `COMMON` state
 the platform's other APIs read a shared texture in), which `stage` requires of the
-submit. `render_into` does the same. The compositor lets go of the holds after the
-submit, so it keeps no platform texture busy between frames. The output texture is the
+submit. `render_into` does the same. Staging comes after every other step that can
+fail (targets, vertex buffer, readback buffer), so a refused canvas or readback stages
+nothing. The compositor lets go of the holds after the submit, so it keeps no platform
+texture busy between frames. The output texture is the
 compositor's own, not a shared encode target, so nothing transitions it.
 
 ### Resources kept across frames
@@ -332,9 +334,10 @@ kinds.
   a drop shadow, an outside outline or a glow).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync` is staged once the pass has
-  recorded, right before the submit, and the submit hands its texture back in
-  `PRESENT`, as `render` does. The prelude's `frame.time` is that time wrapped
+  that move or hold frames. An imported input's `FrameSync`, and that of any image the
+  filter reads besides it (`Ctx::hold`), is staged once the pass has recorded, right
+  before the submit, and the submit hands those textures back in `PRESENT`, as `render`
+  does. The prelude's `frame.time` is that time wrapped
   to a day (better than 10 ms in an `f32`) and jumps back once a day, so a kind that
   moves with time computes its phase on the CPU in `f64` and passes it in its `Params`.
 - A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
@@ -458,7 +461,39 @@ toward that side, or the stroke width. The input is drawn 1:1 at the matching in
 reports the inset, a placement fits the grown frame rather than the original content
 box.
 
-Assets and references (V3): not yet.
+Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
+`scene_mask`. Each reads one external image that the chain runtime hands over with
+`VideoFilter::set_reference(Option<Arc<Image>>)` (a defaulted `Pass::set_reference`
+underneath): render opens no files (R-RT-002), so V0 resolves the asset or scene
+reference and decodes it. A kind passes its input through unchanged until both its
+reference setting is non-`null` and an image is set, and refuses an image from another
+compositor. A reference's `FrameSync` is staged and handed back with the input's, once
+per submit even when the reference is the input itself; a mask test passes one
+imported frame as both and counts one stage.
+
+- `apply_lut` (`lut`: asset, `cube` or `png`; `amount` 0 to 1, default 1). The table
+  maps sRGB-encoded straight colour, the `.cube` convention: the shader unpremultiplies,
+  encodes, looks up, mixes with the input by `amount` in encoded values, then decodes
+  and premultiplies; alpha is kept. `Lut::parse_cube` is a pure-Rust `.cube` parser
+  (`LUT_3D_SIZE` 2 to 64, `DOMAIN_MIN`/`DOMAIN_MAX` or `LUT_3D_INPUT_RANGE`, comments,
+  `TITLE` and other keywords ignored; 1D tables, bad sizes, wrong row counts and bad
+  numbers are a `LutError`). A domain other than 0 to 1 is resampled onto it, so input
+  outside the domain clamps. `Lut::from_tiled_rgba8` reads the common PNG layout (a
+  square of `k * k` tiles of `k² x k²`, 512x512 for 64 points, blue choosing the tile)
+  from decoded RGBA8. `lut_image(compositor, lut)` makes the reference image: the blue
+  slices as near-square 2D tiles (512x512 for 64 points, so no adapter limit is near),
+  stored `Rgba16Float` through a one-function data upload in `image.rs`, values clamped to
+  0 to 1. The shader recovers the size from the image's dimensions and does the
+  trilinear lookup as two bilinear taps in adjacent slices at texel centres; an image
+  that is not such a layout passes the input through. `Lut`, `LutError` and
+  `lut_image` are crate-internal until V0 re-exports them.
+- `image_mask` (`image`: asset, png/jpg/jpeg/webp/gif/bmp; `mode` alpha or luma;
+  `invert`) and `scene_mask` (`scene`: scene reference, its composited layer; `mode`
+  alpha, luma or clip; `invert`). The mask is stretched over the frame and scales the
+  premultiplied input: by its alpha, by BT.709 luma of its sRGB-encoded colour times its
+  alpha (`#808080` keeps about half), or for `clip` by 1 where the scene's alpha is at
+  least one half and 0 elsewhere (a hard clip that ignores translucency). `invert` uses
+  one minus the coverage. OBS's colour blend modes for image masks are not offered.
 
 <a id="testing"></a>
 ## Testing
@@ -506,7 +541,8 @@ a non-axis-aligned box turning about its centre.
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
-staged once per submit and not staged when the item is hidden. Nested scenes
+staged once per submit, and not staged when the item is hidden or when a readback
+too large for a buffer refuses the render. Nested scenes
 (`render_image`), three pixel tests and an ownership check: an image placed in
 another scene lands where its scene put the item and is transparent elsewhere, and
 survives a later `render`; a half-opaque item stays exact in linear light; images

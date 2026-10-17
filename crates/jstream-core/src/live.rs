@@ -47,13 +47,13 @@ use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock, MediaDecoders};
 use jstream_protocol::{Settings, SourceId, SourceKind};
 use jstream_sources::{
-    AudioScopes, BrowserBackend, Context, MediaAudio, Painter, Registry, Source, SourceAudio,
-    SourceError,
+    AudioScopes, BrowserBackend, CaptureSpec, Context, MediaAudio, Painter, Registry, Source,
+    SourceAudio, SourceError,
 };
 
 use crate::lock;
 use crate::runtime::{FRAME_DEN, FRAME_NUM};
-use crate::snapshot::Frame;
+use crate::snapshot::{Frame, Look};
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
 /// thread never keeps it alive.
@@ -391,26 +391,31 @@ impl LiveSources {
         self.worker.now()
     }
 
-    /// Starts a plan of the program mix: the [`frame`](Self::frame) calls until the next
+    /// Starts a plan of the program mix: the [`look`](Self::look) calls until the next
     /// one are the sources it reaches.
     pub(crate) fn begin_plan(&mut self) {
         self.plan += 1;
     }
 
-    /// The frame `source_id` shows at `now`, numbered from `versions` when it is new,
-    /// and when it is next replaced. `None` when the source has no live instance.
+    /// What `source_id` shows at `now`: what the pipeline captures for a capture source,
+    /// else its frame, numbered from `versions` when it is new, and when that frame is
+    /// next replaced. `None` when the source has no live instance.
     ///
     /// A source the previous plan didn't reach, though an earlier one did or it was
     /// built before it, is shown again first ([`Source::show`]).
-    pub(crate) fn frame(
+    pub(crate) fn look(
         &mut self,
         source_id: &SourceId,
         now: MediaTime,
         versions: &mut u64,
-    ) -> Option<(Frame, Option<MediaTime>)> {
+    ) -> Option<Look> {
         let plan = self.plan;
         let entry = self.entries.get_mut(source_id)?;
         let running = entry.running.as_mut()?;
+        if let Some(spec) = running.source.capture() {
+            // A window source with no window chosen shows nothing.
+            return (*spec != CaptureSpec::Window(None)).then(|| Look::Capture(spec.clone()));
+        }
         let at = since(now, running.start);
         if running.planned + 1 < plan {
             running.source.show(at);
@@ -428,18 +433,19 @@ impl LiveSources {
                         frame
                     }
                 };
-                return Some((frame, next));
+                return Some(Look::Frame(frame, next));
             }
             if jstream_sources::opens_browser(&entry.kind) {
                 // Not painted yet: the stand-in, until a re-plan finds the first paint.
                 let (frame, _) = Self::cpu_frame(source_id, running, at, now, versions)?;
-                return Some((frame, next));
+                return Some(Look::Frame(frame, next));
             }
         }
-        Self::cpu_frame(source_id, running, at, now, versions)
+        let (frame, next) = Self::cpu_frame(source_id, running, at, now, versions)?;
+        Some(Look::Frame(frame, next))
     }
 
-    /// [`Self::frame`] from the source's CPU frame at `at`, its own time.
+    /// [`Self::look`]'s frame from the source's CPU frame at `at`, its own time.
     fn cpu_frame(
         source_id: &SourceId,
         running: &mut Running,

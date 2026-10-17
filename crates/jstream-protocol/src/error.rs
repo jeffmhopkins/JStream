@@ -183,6 +183,8 @@ pub enum EntityKind {
     /// A paired device (0.21). Only an error answering `device.revoke` names it, so a
     /// client older than 0.21, which sends none, never reads it.
     Device,
+    /// A hotkey binding, named by its chord.
+    Hotkey,
 }
 
 impl fmt::Display for EntityKind {
@@ -196,6 +198,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Filter => "filter",
             EntityKind::Bus => "bus",
             EntityKind::Device => "device",
+            EntityKind::Hotkey => "hotkey",
         })
     }
 }

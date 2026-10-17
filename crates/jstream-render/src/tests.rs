@@ -652,8 +652,57 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
     );
 }
 
+/// A readback too large for a buffer fails before any hold is staged, so the scene's
+/// frame is neither armed on a later submit nor kept by the compositor (#391).
+#[test]
+fn a_refused_readback_stages_and_keeps_no_hold() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let srgb = srgb_texture(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let count = Arc::new(AtomicUsize::new(0));
+    let sync: Arc<dyn FrameSync> = Arc::new(CountSync(Arc::clone(&count)));
+    let info = VideoFrameInfo {
+        size: FrameSize::new(2, 2).unwrap(),
+        format: PixelFormat::Rgba8,
+        color: ColorInfo::default(),
+        pts: MediaTime::zero(Timebase::NANOS),
+    };
+    let frame = GpuFrame::new(srgb, info, Arc::clone(&sync));
+    let image = opened.compositor.import_frame(&frame).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let scene = Scene {
+        canvas: FrameSize::new(4, 2).unwrap(),
+        background: Color::BLACK,
+        items: &items,
+    };
+    let holders = Arc::strong_count(&sync);
+    // Two rows padded to 256 bytes need 512; the vertex buffer fits in less.
+    opened.compositor.cap_buffer_size(511);
+    assert!(matches!(
+        opened.compositor.render(&scene, true),
+        Err(RenderError::Readback { .. })
+    ));
+    assert_eq!(count.load(Ordering::SeqCst), 0, "nothing was staged");
+    assert_eq!(
+        Arc::strong_count(&sync),
+        holders,
+        "the compositor keeps no hold after the error"
+    );
+
+    // Without readback the same scene renders, staging the hold once.
+    opened.compositor.render(&scene, false).expect("render");
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+    assert_eq!(Arc::strong_count(&sync), holders);
+}
+
 /// A straight-alpha `Rgba8UnormSrgb` texture, the kind `import` takes, filled with one colour.
-fn srgb_texture(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4]) -> wgpu::Texture {
+pub(crate) fn srgb_texture(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> wgpu::Texture {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -737,7 +786,8 @@ pub(crate) fn unorm_texture(
     texture
 }
 
-struct CountSync(Arc<AtomicUsize>);
+/// A [`FrameSync`] that counts how many times it is staged.
+pub(crate) struct CountSync(pub(crate) Arc<AtomicUsize>);
 
 impl std::fmt::Debug for CountSync {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -944,7 +994,9 @@ fn the_cache_frees_after_the_frame_fence() {
         .expect("resize");
     assert_eq!(cache.pending(), 1);
     assert!(cache.reclaim().is_none(), "frame {frame} has not ended");
-    drop(cache.end_frame(compositor));
+    // `end_frame` polls without blocking, so a GPU that has already finished this
+    // frame's (empty) work hands the replaced texture back here: count it too (#502).
+    let first = cache.end_frame(compositor).map_or(0, |freed| freed.len());
 
     // The next frame uses only "kept": "swapped" retires after this frame's fence.
     cache.begin_frame();
@@ -957,7 +1009,7 @@ fn the_cache_frees_after_the_frame_fence() {
         .poll(wgpu::PollType::wait_indefinitely())
         .expect("poll");
     let late = cache.reclaim().map_or(0, |freed| freed.len());
-    assert_eq!(early + late, 2, "both retired textures come back");
+    assert_eq!(first + early + late, 2, "both retired textures come back");
     assert_eq!((cache.live(), cache.pending()), (1, 0));
     assert_eq!(cache.drain().len(), 1);
 }
