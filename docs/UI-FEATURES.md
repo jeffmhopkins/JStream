@@ -55,7 +55,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 0 | 1 | 6 | 0 | 1 |
-| [Header bar](#header) | 9 | 0 | 3 | 3 | 3 | 0 |
+| [Header bar](#header) | 9 | 0 | 3 | 4 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 0 | 0 | 9 | 1 | 0 |
 | [Canvas](#canvas) | 18 | 1 | 6 | 7 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
@@ -67,10 +67,10 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
-| [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
+| [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **3** | **24** | **62** | **40** | **1** |
+| **Total** | **130** | **6** | **26** | **63** | **34** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -110,7 +110,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ⬜ | Needs [docking](#docking). |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | `stats.tick` has drop totals only; fps and CPU need engine stats (decision register D39). |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
-| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | 🔒 | T1 (#260) and T1u (#304). |
+| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ⬜ | UI only: the engine has no studio-mode switch, so the studio bar under the canvas (#304) is always shown; the button would hide it. |
 | HD-07 | Record button | Starts and stops recording. | ⬜ | Start/stop the recording outputs; the Outputs panel already does it per output. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | 🟡 | Built in the Outputs panel (starts every stopped or failed stream output whose key is set); it moves to the header. |
@@ -123,7 +123,7 @@ covers = ["crates/jstream-ui/src/app.rs"]
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
 Today the shell is one fixed grid: Scenes over Sources on the left, the canvas in the
-middle, an inspector with Properties and Outputs tabs (and the pairing panel under them) on the right, the mixer along the
+middle with the studio-mode bar under it, an inspector with Properties and Outputs tabs (and the pairing panel under them) on the right, the mixer along the
 bottom. Nothing moves, resizes or collapses.
 
 | ID | Feature | Requirement | Status | Notes |
@@ -350,16 +350,17 @@ doesn't show; that stays ([Beyond](#beyond)).
 
 Spec: [panels › transitions](../design/ui-prototype/spec-panels.md#transitions-panel),
 [workspace › transitions](../design/ui-prototype/spec-workspace.md#scenes-keyframes-transitions).
-All of it waits on T1 (#260), whose UI is T1u (#304).
+The engine side is T1 (#260); T1u (#304) builds the studio bar under the canvas, with
+the presets and each scene's overrides in a section under it.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🔒 | T1. |
-| TR-02 | Preset fields | Duration; Move: stagger, items in one scene only (Fade, Scale, Slide); easing (Ease in-out, Ease out, Linear, Spring). | 🔒 | T1. |
-| TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🔒 | T1. |
-| TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | 🔒 | T1 ([ADR-0029](adr/0029-transitions.md)). |
+| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🟡 | A list of presets under the studio bar, each with its name, a line such as "Fade, 300 ms, ease in and out" (a cut shows only its kind) and a "Default" badge on the default, then an "Add a preset" form. It is not the spec's picker. |
+| TR-02 | Preset fields | Duration; Move: stagger, items in one scene only (Fade, Scale, Slide); easing (Ease in-out, Ease out, Linear, Spring). | ✅ | The kind's own fields come from `kind.describe`. |
+| TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🟡 | Make default and Delete are built (Delete is off for the default); no override counts yet. |
+| TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | ✅ | The engine resolves it ([ADR-0029](adr/0029-transitions.md)); the studio bar names the preset it will use and why. |
 | TR-05 | Move transition | Pairs items by source, interpolates placement, retargets mid-transition; unmatched items fade, scale or slide. | 🔒 | Engine side of T1. |
-| TR-06 | Studio mode | Preview and program, Transition and Cut. | 🔒 | T1u (#304). |
+| TR-06 | Studio mode | Preview and program, Transition and Cut. | ✅ | With "Swap" putting the old program scene on preview. |
 
 <a id="live-panels"></a>
 ## Stream stats, live chat and agent activity

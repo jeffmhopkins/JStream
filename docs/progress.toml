@@ -747,8 +747,8 @@ needs = ["build"]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "planned"
-note = "draft #304, on T1"
+status = "review"
+prs = [304]
 needs = ["build"]
 
 [[item]]

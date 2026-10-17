@@ -285,7 +285,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
                 </div>
             })}
             <aside class="region scenes"><Scenes /><Sources /></aside>
-            <section class="region canvas"><Canvas /></section>
+            <section class="region canvas"><Canvas /><crate::panels::StudioMode /></section>
             <aside class="region inspector">
                 <Inspector />
                 <crate::pairing::Pairing />

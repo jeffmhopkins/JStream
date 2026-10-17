@@ -72,6 +72,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Canvas** (`canvas.spec.js`): the program scene's box is drawn where the seed put it;
   a drag sends nothing until the drop, then one edit that undo and redo reverse; arrow
   keys nudge (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
+- **Studio mode** (`studio.spec.js`): a scene picked for preview goes to program with
+  Transition, the old program scene comes back on preview, and the canvas follows
+  program; Transition and Cut are off while preview is the program scene; a value the
+  preset form refused keeps the preset from being added. The mock engine refuses
+  preset edits, so the edits the preset form sends are tested natively.
 
 <a id="running"></a>
 ## Running them
