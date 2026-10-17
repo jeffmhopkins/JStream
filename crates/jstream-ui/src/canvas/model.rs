@@ -178,7 +178,7 @@ pub async fn commit(
         .await?
         .result
     {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         _ => Err(CanvasError::UnexpectedAnswer {
             call: "item.set_geometry",
         }),
@@ -319,6 +319,7 @@ mod tests {
             edits,
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         })))
         .expect("setup batch");
         now(control.call(Call::Action {

@@ -1,0 +1,65 @@
+{
+  "kind": "youtube#liveChatMessageListResponse",
+  "etag": "fixture",
+  "pollingIntervalMillis": 3500,
+  "nextPageToken": "GO2tqPrW_IcDILe9y7LW_4cD",
+  "pageInfo": { "totalResults": 4, "resultsPerPage": 4 },
+  "items": [
+    {
+      "kind": "youtube#liveChatMessage",
+      "id": "LCC.text-1",
+      "snippet": {
+        "type": "textMessageEvent",
+        "liveChatId": "Cg0KC2ZpeHR1cmUtY2hhdA",
+        "authorChannelId": "UCviewer",
+        "publishedAt": "2026-10-15T15:00:01.000Z",
+        "hasDisplayContent": true,
+        "displayMessage": "hello\u0007 <b>world</b>",
+        "textMessageDetails": { "messageText": "hello\u0007 <b>world</b>" }
+      },
+      "authorDetails": {
+        "channelId": "UCviewer",
+        "channelUrl": "http://www.youtube.com/channel/UCviewer",
+        "displayName": "Viewer\nOne",
+        "profileImageUrl": "https://yt3.ggpht.com/fixture",
+        "isVerified": false,
+        "isChatOwner": false,
+        "isChatSponsor": true,
+        "isChatModerator": true
+      }
+    },
+    {
+      "kind": "youtube#liveChatMessage",
+      "id": "LCC.super-1",
+      "snippet": {
+        "type": "superChatEvent",
+        "publishedAt": "2026-10-15T15:00:02.000Z",
+        "displayMessage": "$5.00 from Fan: great stream",
+        "superChatDetails": {
+          "amountMicros": "5000000",
+          "currency": "USD",
+          "amountDisplayString": "$5.00",
+          "userComment": "great stream",
+          "tier": 2
+        }
+      },
+      "authorDetails": { "channelId": "UCfan", "displayName": "Fan", "isVerified": true }
+    },
+    {
+      "kind": "youtube#liveChatMessage",
+      "id": "LCC.deleted",
+      "snippet": {
+        "type": "messageDeletedEvent",
+        "displayMessage": "",
+        "messageDeletedDetails": { "deletedMessageId": "LCC.text-0" }
+      },
+      "authorDetails": { "channelId": "UCowner", "displayName": "Owner", "isChatOwner": true }
+    },
+    {
+      "kind": "youtube#liveChatMessage",
+      "id": "LCC.poll",
+      "snippet": { "type": "pollEvent", "displayMessage": "A poll started" },
+      "authorDetails": { "channelId": "UCowner", "displayName": "Owner" }
+    }
+  ]
+}

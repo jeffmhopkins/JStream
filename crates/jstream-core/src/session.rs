@@ -114,13 +114,13 @@ impl Control for InProcessControl {
         let executed = match self.client_id() {
             None => {
                 tracing::debug!("call refused: no hello yet");
-                Executed::Ready(Err(ProtocolError::HandshakeRequired))
+                Executed::Ready(Box::new(Err(ProtocolError::HandshakeRequired)))
             }
             Some(client_id) => self.engine.execute(&client_id, &id, call, &self.previews),
         };
         match executed {
             Executed::Ready(result) => Box::pin(future::ready(
-                result
+                (*result)
                     .map(|result| Response { id, result })
                     .map_err(ControlError::from),
             )),
