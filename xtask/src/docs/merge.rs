@@ -42,10 +42,33 @@ pub(crate) struct Merge {
     pub(crate) committed: bool,
     /// Sections stale after the merge, as `DOC#anchor`; empty unless `committed`.
     pub(crate) stale: Vec<String>,
-    /// For each stale section, the notes this branch had written on it before the merge
-    /// (on entries that differ from the merge base's), so the re-verify can carry them
-    /// forward (docs/DOCS.md#notes).
-    pub(crate) notes: BTreeMap<String, Vec<String>>,
+    /// For each stale section, its stale inputs: the note this branch had written on each
+    /// before the merge and the merged commits that changed it, so the re-verify can keep
+    /// the one and name the other (docs/DOCS.md#notes).
+    pub(crate) inputs: BTreeMap<String, Vec<StaleInput>>,
+}
+
+/// One stale input of a section after a merge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StaleInput {
+    /// The input, keyed as in the ledger (`body`, `file:<path>`, `dep:<reference>`).
+    pub(crate) input: String,
+    /// This branch's note on it before the merge, when the branch had written its own entry.
+    pub(crate) note: Option<String>,
+    /// The merged commits that changed the file the input lives in, as `<hash> <subject>`.
+    pub(crate) commits: Vec<String>,
+}
+
+/// The merge `docs merge-main` made last on this branch: the latest merge on its
+/// first-parent chain that no `origin/main` or `origin/wave/*` branch contains.
+#[derive(Debug, Clone)]
+pub(crate) struct MergePoint {
+    /// The branch before the merge (the merge's first parent).
+    ours: String,
+    /// What was merged (the merge's second parent).
+    theirs: String,
+    /// Their merge base.
+    base: String,
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<Output> {
@@ -103,8 +126,8 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     if out.status.success() {
         report.committed = true;
         report.migrated = migrate_inline(root)?;
-        report.stale = stale_sections(root)?;
-        report.notes = branch_notes(root, &report.stale)?;
+        report.inputs = stale_report(root)?;
+        report.stale = report.inputs.keys().cloned().collect();
         return Ok(report);
     }
     if !git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
@@ -172,8 +195,8 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
         git_ok(root, &["commit", "-q", "--no-edit"])?;
         report.committed = true;
         report.migrated = migrate_inline(root)?;
-        report.stale = stale_sections(root)?;
-        report.notes = branch_notes(root, &report.stale)?;
+        report.inputs = stale_report(root)?;
+        report.stale = report.inputs.keys().cloned().collect();
     }
     Ok(report)
 }
@@ -187,43 +210,94 @@ fn ledger_at(root: &Path, rev: &str) -> Result<ledger::Ledger> {
     Ok(ledger::Ledger::parse(&String::from_utf8_lossy(&out.stdout)).unwrap_or_default())
 }
 
-/// For each of `stale`, the distinct notes the branch wrote on it: notes on entries of the
-/// merge's first parent that differ from the merge base's entry. Called after the merge
-/// commit, so `HEAD^1` is the branch and `HEAD^2` what was merged. A merge-main that only
-/// ran `docs migrate` on top leaves the merge at `HEAD~1`; both are tried.
-fn branch_notes(root: &Path, stale: &[String]) -> Result<BTreeMap<String, Vec<String>>> {
-    let mut out = BTreeMap::new();
-    if stale.is_empty() {
-        return Ok(out);
+/// The latest merge on this branch's first-parent chain, unless it is already on
+/// `origin/main` or an `origin/wave/*` branch (a merge the branch inherited, not one it
+/// made); `None` when there is no such merge.
+pub(crate) fn last_merge(root: &Path) -> Result<Option<MergePoint>> {
+    let merge = git_ok(
+        root,
+        &["rev-list", "--first-parent", "--merges", "-n1", "HEAD"],
+    )?;
+    let merge = String::from_utf8_lossy(&merge).trim().to_owned();
+    if merge.is_empty() {
+        return Ok(None);
     }
-    let merge = ["HEAD", "HEAD~1"].into_iter().find(|rev| {
-        git(root, &["rev-parse", "-q", "--verify", &format!("{rev}^2")])
-            .is_ok_and(|o| o.status.success())
-    });
-    let Some(merge) = merge else { return Ok(out) };
-    let (ours, theirs) = (format!("{merge}^1"), format!("{merge}^2"));
+    let upstream = git_ok(
+        root,
+        &[
+            "for-each-ref",
+            "--contains",
+            &merge,
+            "--format=%(refname)",
+            &format!("refs/remotes/{REMOTE}/{BRANCH}"),
+            &format!("refs/remotes/{REMOTE}/wave/"),
+        ],
+    )?;
+    if !upstream.is_empty() {
+        return Ok(None);
+    }
+    let rev = |r: &str| -> Result<String> {
+        Ok(String::from_utf8_lossy(&git_ok(root, &["rev-parse", r])?)
+            .trim()
+            .to_owned())
+    };
+    let (ours, theirs) = (rev(&format!("{merge}^1"))?, rev(&format!("{merge}^2"))?);
     let base = git_ok(root, &["merge-base", &ours, &theirs])?;
     let base = String::from_utf8_lossy(&base).trim().to_owned();
-    let (branch, base) = (ledger_at(root, &ours)?, ledger_at(root, &base)?);
-    for key in stale {
-        let Some(stamp) = branch.sections.get(key) else {
-            continue;
-        };
-        let before = base.sections.get(key);
-        let mut notes: Vec<String> = Vec::new();
-        for (input, e) in stamp {
-            if before.and_then(|b| b.get(input)) == Some(e) {
-                continue;
-            }
-            if let Some(n) = &e.note
-                && !notes.contains(n)
-            {
-                notes.push(n.clone());
-            }
+    Ok(Some(MergePoint { ours, theirs, base }))
+}
+
+/// The ledger entries this branch had written itself before `point`'s merge: those of
+/// the merge's first parent that differ from the merge base's, by section.
+pub(crate) fn branch_entries(
+    root: &Path,
+    point: &MergePoint,
+) -> Result<BTreeMap<String, ledger::Stamp>> {
+    let (branch, base) = (ledger_at(root, &point.ours)?, ledger_at(root, &point.base)?);
+    Ok(branch
+        .sections
+        .into_iter()
+        .filter_map(|(key, stamp)| {
+            let before = base.sections.get(&key);
+            let own: ledger::Stamp = stamp
+                .into_iter()
+                .filter(|(input, e)| before.and_then(|b| b.get(input)) != Some(e))
+                .collect();
+            (!own.is_empty()).then_some((key, own))
+        })
+        .collect())
+}
+
+/// Each stale section after a merge commit with its stale inputs, each with this branch's
+/// earlier note and the merged commits that changed it (none listed when the branch has no
+/// merge of its own).
+fn stale_report(root: &Path) -> Result<BTreeMap<String, Vec<StaleInput>>> {
+    let stale = stale_map(root)?;
+    let point = last_merge(root)?;
+    let own = match &point {
+        Some(p) => branch_entries(root, p)?,
+        None => BTreeMap::new(),
+    };
+    let mut out = BTreeMap::new();
+    for (key, inputs) in stale {
+        let mut list = Vec::new();
+        for (input, path) in inputs {
+            let Some(p) = &point else { break };
+            let range = format!("{}..{}", p.base, p.theirs);
+            let log = git_ok(root, &["log", "--format=%h %s", &range, "--", &path])?;
+            list.push(StaleInput {
+                note: own
+                    .get(&key)
+                    .and_then(|s| s.get(&input))
+                    .and_then(|e| e.note.clone()),
+                commits: String::from_utf8_lossy(&log)
+                    .lines()
+                    .map(str::to_owned)
+                    .collect(),
+                input,
+            });
         }
-        if !notes.is_empty() {
-            out.insert(key.clone(), notes);
-        }
+        out.insert(key, list);
     }
     Ok(out)
 }
@@ -423,16 +497,16 @@ fn resolve_generated(path: &str, text: &str) -> Result<String, String> {
     Ok(theirs)
 }
 
-/// Sections whose ledger stamp doesn't match their inputs, or that need one and have
-/// none, as `DOC#anchor`.
-pub(crate) fn stale_sections(root: &Path) -> Result<Vec<String>> {
+/// Each stale section (as `DOC#anchor`) with the inputs that differ from its stamp, each
+/// with the file it lives in. A section whose inputs can't be computed has none listed.
+fn stale_map(root: &Path) -> Result<BTreeMap<String, Vec<(String, String)>>> {
     let l = load(root)?;
     let by_path: BTreeMap<&str, &parse::Doc> =
         l.docs.iter().map(|d| (d.path.as_str(), d)).collect();
     let files = hash::Files::new(root, &l.files);
     // A ledger that doesn't parse holds no stamps: everything is stale.
     let ledger = ledger::Ledger::read(root).unwrap_or_default();
-    let mut stale = Vec::new();
+    let mut stale = BTreeMap::new();
     for doc in &l.docs {
         for s in &doc.sections {
             let Some(meta) = &s.meta else { continue };
@@ -444,14 +518,36 @@ pub(crate) fn stale_sections(root: &Path) -> Result<Vec<String>> {
                 continue;
             }
             let key = super::section_key(doc, &s.anchor);
-            let fresh = hash::inputs(doc, &s.anchor, &covers, &deps, &files, &by_path)
-                .is_ok_and(|i| ledger::diff(ledger.sections.get(&key), &i).is_empty());
-            if !fresh {
-                stale.push(key);
+            let changed = match hash::inputs(doc, &s.anchor, &covers, &deps, &files, &by_path) {
+                Ok(i) => ledger::diff(ledger.sections.get(&key), &i),
+                Err(_) => {
+                    stale.insert(key, Vec::new());
+                    continue;
+                }
+            };
+            if !changed.is_empty() {
+                let located = changed
+                    .into_iter()
+                    .map(|input| {
+                        let path = input_path(&doc.path, &input);
+                        (input, path)
+                    })
+                    .collect();
+                stale.insert(key, located);
             }
         }
     }
     Ok(stale)
+}
+
+/// The file a ledger input lives in: the doc itself for `body`, the covered file for
+/// `file:<path>[#view]`, and the target doc for `dep:<path>[#anchor[/key]]`.
+fn input_path(doc: &str, input: &str) -> String {
+    let path = match input.split_once(':') {
+        Some(("file" | "dep", rest)) => rest,
+        _ => doc,
+    };
+    path.split('#').next().unwrap_or(path).to_owned()
 }
 
 #[cfg(test)]

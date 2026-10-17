@@ -194,6 +194,53 @@ pub(crate) fn restamp(
         .collect()
 }
 
+/// Where a note written by `docs verify --merge` turns from this branch's note to what the
+/// merge changed. A later merge's `--merge` drops everything from here on before adding its
+/// own: what an earlier merge brought in is part of the base by then, not this branch's
+/// change.
+pub(crate) const MERGE_MARK: &str = " | merge: ";
+
+/// The note `docs verify --merge` writes on an entry: the branch's `earlier` note, without
+/// any earlier merge's addendum, then `merge`, what this merge changed in the input.
+pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
+    let own = earlier
+        .map(|n| n.split_once(MERGE_MARK).map_or(n, |(own, _)| own).trim())
+        .filter(|n| !n.is_empty());
+    match own {
+        Some(own) => format!("{own}{MERGE_MARK}{merge}"),
+        None => format!("merge: {merge}"),
+    }
+}
+
+/// The stamp `docs verify --merge` writes after `docs merge-main`. `branch` is the entries
+/// this branch had written itself before the merge. Each entry that `restamp` would rewrite,
+/// and each the branch had written whose input the merge has since changed (as when a
+/// re-verify after the merge replaced the branch's note), gets [`merge_note`] of the branch's
+/// note on it. The rest are kept, and removed inputs dropped, as `restamp` does.
+pub(crate) fn restamp_merge(
+    old: Option<&Stamp>,
+    inputs: &BTreeMap<String, String>,
+    branch: Option<&Stamp>,
+    by: &str,
+    merge: &str,
+) -> Stamp {
+    inputs
+        .iter()
+        .map(|(k, h)| {
+            let own = branch.and_then(|b| b.get(k));
+            let e = match old.and_then(|o| o.get(k)) {
+                Some(e) if &e.hash == h && own.is_none_or(|o| &o.hash == h) => e.clone(),
+                _ => Entry {
+                    hash: h.clone(),
+                    by: Some(by.to_owned()),
+                    note: Some(merge_note(own.and_then(|o| o.note.as_deref()), merge)),
+                },
+            };
+            (k.clone(), e)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +520,20 @@ mod tests {
             }
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merge_notes_keep_the_branch_part() {
+        let m = MERGE_MARK;
+        assert_eq!(merge_note(Some("pr part"), "now"), format!("pr part{m}now"));
+        assert_eq!(
+            merge_note(Some(&format!("pr part{m}earlier")), "now"),
+            format!("pr part{m}now")
+        );
+        assert_eq!(merge_note(None, "now"), "merge: now");
+        assert_eq!(
+            merge_note(Some(&format!("{m}earlier")), "now"),
+            "merge: now"
+        );
     }
 }
