@@ -292,6 +292,40 @@ pub(crate) struct PwMetadataMethods {
     >,
 }
 
+/// `struct pw_node_info` in <pipewire/node.h>, up to `props` (the fields after it are
+/// never read).
+#[repr(C)]
+pub(crate) struct PwNodeInfo {
+    pub(crate) id: u32,
+    pub(crate) max_input_ports: u32,
+    pub(crate) max_output_ports: u32,
+    pub(crate) change_mask: u64,
+    pub(crate) n_input_ports: u32,
+    pub(crate) n_output_ports: u32,
+    pub(crate) state: c_int,
+    pub(crate) error: *const c_char,
+    pub(crate) props: *const SpaDict,
+}
+
+/// `struct pw_node_events` in <pipewire/node.h>, version 0.
+#[repr(C)]
+pub(crate) struct PwNodeEvents {
+    pub(crate) version: u32,
+    pub(crate) info: Option<unsafe extern "C" fn(*mut c_void, *const PwNodeInfo)>,
+    pub(crate) param:
+        Option<unsafe extern "C" fn(*mut c_void, c_int, u32, u32, u32, *const SpaPod)>,
+}
+
+/// `struct pw_node_methods` in <pipewire/node.h>, version 0 (only `add_listener` is
+/// called).
+#[repr(C)]
+pub(crate) struct PwNodeMethods {
+    pub(crate) version: u32,
+    pub(crate) add_listener: Option<
+        unsafe extern "C" fn(*mut c_void, *mut SpaHook, *const PwNodeEvents, *mut c_void) -> c_int,
+    >,
+}
+
 /// `PW_VERSION_STREAM_EVENTS`.
 pub(crate) const PW_VERSION_STREAM_EVENTS: u32 = 2;
 /// `PW_VERSION_CORE_EVENTS`'s version 0 (see [`PwCoreEvents`]).
@@ -302,6 +336,10 @@ pub(crate) const PW_VERSION_REGISTRY_EVENTS: u32 = 0;
 pub(crate) const PW_VERSION_METADATA_EVENTS: u32 = 0;
 /// `PW_VERSION_REGISTRY`.
 pub(crate) const PW_VERSION_REGISTRY: u32 = 3;
+/// `PW_VERSION_NODE_EVENTS`.
+pub(crate) const PW_VERSION_NODE_EVENTS: u32 = 0;
+/// `PW_VERSION_NODE`.
+pub(crate) const PW_VERSION_NODE: u32 = 3;
 /// `PW_VERSION_METADATA`.
 pub(crate) const PW_VERSION_METADATA: u32 = 3;
 /// `PW_ID_CORE`.
@@ -518,6 +556,11 @@ mod tests {
         assert_eq!(offset_of!(PwRegistryMethods, bind), 16);
         assert_eq!(offset_of!(PwMetadataEvents, property), 8);
         assert_eq!(offset_of!(PwMetadataMethods, add_listener), 8);
+        assert_eq!(offset_of!(PwNodeInfo, change_mask), 16);
+        assert_eq!(offset_of!(PwNodeInfo, props), 48);
+        assert_eq!(offset_of!(PwNodeEvents, info), 8);
+        assert_eq!(size_of::<PwNodeEvents>(), 24);
+        assert_eq!(offset_of!(PwNodeMethods, add_listener), 8);
     }
 
     #[test]

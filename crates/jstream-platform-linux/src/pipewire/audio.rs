@@ -24,11 +24,12 @@ use jstream_platform::{
 use super::ffi::{
     self, CHUNK_SKIP, FLAG_AUTOCONNECT, FLAG_MAP_BUFFERS, Fns, PW_DIRECTION_INPUT,
     PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_ID_CORE, PW_VERSION_CORE_EVENTS, PW_VERSION_METADATA,
-    PW_VERSION_METADATA_EVENTS, PW_VERSION_REGISTRY, PW_VERSION_REGISTRY_EVENTS,
-    PW_VERSION_STREAM_EVENTS, Ptr, PwBuffer, PwCoreEvents, PwCoreInfo, PwCoreMethods,
-    PwMetadataEvents, PwMetadataMethods, PwRegistryEvents, PwRegistryMethods, PwStreamEvents,
-    PwTime, STATE_ERROR, STATE_STREAMING, STATE_UNCONNECTED, SpaDict, SpaHook, SpaInterface,
-    SpaPod, TYPE_CLIENT, TYPE_METADATA, TYPE_NODE,
+    PW_VERSION_METADATA_EVENTS, PW_VERSION_NODE, PW_VERSION_NODE_EVENTS, PW_VERSION_REGISTRY,
+    PW_VERSION_REGISTRY_EVENTS, PW_VERSION_STREAM_EVENTS, Ptr, PwBuffer, PwCoreEvents, PwCoreInfo,
+    PwCoreMethods, PwMetadataEvents, PwMetadataMethods, PwNodeEvents, PwNodeInfo, PwNodeMethods,
+    PwRegistryEvents, PwRegistryMethods, PwStreamEvents, PwTime, STATE_ERROR, STATE_STREAMING,
+    STATE_UNCONNECTED, SpaDict, SpaHook, SpaInterface, SpaPod, TYPE_CLIENT, TYPE_METADATA,
+    TYPE_NODE,
 };
 use super::graph::{Graph, Plan, packet_hns};
 use crate::MonotonicClock;
@@ -54,6 +55,9 @@ struct State {
     /// The bound `default` metadata object, once the registry announced it.
     metadata: Ptr,
     metadata_hook: Box<SpaHook>,
+    /// The bound device nodes, whose info carries their channel count, each with its
+    /// listener's hook. Destroyed in `Connection::drop`.
+    nodes: Vec<(Ptr, Box<SpaHook>)>,
     /// The sequence number of the round trip being waited for, and whether it is done.
     pending: c_int,
     done: bool,
@@ -147,6 +151,7 @@ impl Connection {
             registry_hook: SpaHook::boxed(),
             metadata: ptr::null_mut(),
             metadata_hook: SpaHook::boxed(),
+            nodes: Vec::new(),
             pending: 0,
             done: false,
             error: None,
@@ -341,6 +346,9 @@ impl Drop for Connection {
         unsafe {
             (fns.thread_loop_stop)(self.thread_loop);
             let state = &mut *self.state;
+            for (node, _) in &state.nodes {
+                (fns.proxy_destroy)(*node);
+            }
             if !state.metadata.is_null() {
                 (fns.proxy_destroy)(state.metadata);
             }
@@ -360,7 +368,8 @@ impl Drop for Connection {
 }
 
 /// Runs `f` on the state behind `data`, catching a panic (R-UNSAFE-005). A panic
-/// stops a stream's handler from being called again.
+/// fails the stream: its handler is told once, through a guarded `on_error`, and isn't
+/// called again.
 ///
 /// # Safety
 /// `data` is the connection's state pointer, and the caller is the loop's thread
@@ -371,6 +380,12 @@ unsafe fn with(data: *mut c_void, f: impl FnOnce(&mut State)) {
     if catch_unwind(AssertUnwindSafe(|| f(&mut *state))).is_err()
         && let Some(stream) = state.stream.as_mut()
     {
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            stream.fail(PlatformError::InvalidState {
+                what: "the audio stream",
+                state: "its audio callback panicked, so it was stopped",
+            });
+        }));
         stream.failed = true;
     }
 }
@@ -457,6 +472,9 @@ unsafe extern "C" fn on_global(
             let props = ffi::dict(props);
             if ty == TYPE_NODE {
                 s.graph.add(id, &props);
+                if s.graph.is_device(id) {
+                    s.bind_node(id);
+                }
             } else if ty == TYPE_CLIENT {
                 s.graph.add_client(id, &props);
             } else if ty == TYPE_METADATA
@@ -526,7 +544,61 @@ static METADATA_EVENTS: PwMetadataEvents = PwMetadataEvents {
     property: Some(on_metadata_property),
 };
 
+unsafe extern "C" fn on_node_info(data: *mut c_void, info: *const PwNodeInfo) {
+    // SAFETY: registered with the state (see `with`); `info` and its dict are valid for
+    // the call.
+    unsafe {
+        with(data, |s| {
+            let Some(info) = info.as_ref() else { return };
+            let props = ffi::dict(info.props);
+            s.graph.set_node_info(info.id, &props);
+        });
+    }
+}
+
+static NODE_EVENTS: PwNodeEvents = PwNodeEvents {
+    version: PW_VERSION_NODE_EVENTS,
+    info: Some(on_node_info),
+    param: None,
+};
+
 impl State {
+    /// Binds device node `id` for its info (its channel count; see `graph`). On the
+    /// loop's thread, from the registry's `global` event, so its first info arrives
+    /// before the round trip that follows.
+    fn bind_node(&mut self, id: u32) {
+        let Ok(ty) = CString::new(TYPE_NODE) else {
+            return;
+        };
+        // SAFETY: the registry is a live proxy whose methods are `pw_registry_methods`;
+        // `pw_registry_bind` returns a new proxy (freed in `Connection::drop`), whose
+        // methods are `pw_node_methods`. The hook is boxed in the state and the listener
+        // data is the state, both alive until the proxy is destroyed.
+        unsafe {
+            let Some((reg, object)) = methods::<PwRegistryMethods>(self.registry) else {
+                return;
+            };
+            let Some(bind) = reg.bind else { return };
+            let node = bind(object, id, ty.as_ptr(), PW_VERSION_NODE, 0);
+            if node.is_null() {
+                return;
+            }
+            let mut hook = SpaHook::boxed();
+            if let Some((n, n_object)) = methods::<PwNodeMethods>(node)
+                && let Some(add) = n.add_listener
+            {
+                let data: *mut State = self;
+                add(
+                    n_object,
+                    &raw mut *hook,
+                    &raw const NODE_EVENTS,
+                    data.cast(),
+                );
+            }
+            self.nodes.push((node, hook));
+        }
+    }
+
     /// Binds the `default` metadata object `id` and listens to its properties. On the
     /// loop's thread, from the registry's `global` event.
     fn bind_metadata(&mut self, id: u32) {
@@ -698,11 +770,14 @@ impl StreamState {
         };
         // SAFETY: as above.
         let c = unsafe { &*chunk };
+        let stride = self.channels * 4;
         if c.flags & CHUNK_SKIP != 0 {
+            // The frames are lost but still count, so the next packet's position jumps
+            // (when the chunk says how many there were).
+            self.position += (c.size as usize / stride) as u64;
             self.discontinuity = true;
             return;
         }
-        let stride = self.channels * 4;
         let offset = (c.offset as usize).min(maxsize);
         let size = (c.size as usize).min(maxsize - offset);
         let mut frames = size / stride;

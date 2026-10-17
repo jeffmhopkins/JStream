@@ -121,9 +121,9 @@ mod backend {
     ///
     /// Each call reads the registry on a new connection, and each stream has its own
     /// connection and thread. A stream asks for interleaved `f32` at the graph's clock
-    /// rate (`default.clock.rate`, usually 48 kHz) in the device's channel layout
-    /// (mono, stereo or 5.1; any other count as stereo), and PipeWire's stream adapter
-    /// converts to it. Desktop audio records the default sink's monitor, and
+    /// rate (`default.clock.rate`, usually 48 kHz) in the device's channel layout (mono,
+    /// stereo or 5.1, from the device node's info; any other count, or a default with no
+    /// device yet, as stereo), and PipeWire's stream adapter converts to it. Desktop audio records the default sink's monitor, and
     /// application audio the process's first playback stream.
     #[derive(Debug)]
     pub struct PipeWireAudio {
@@ -146,13 +146,26 @@ mod backend {
         }
     }
 
+    /// The file name of `pid`'s executable from `/proc`, else its `comm`; `None` when
+    /// neither can be read (another user's process, or a pid from another namespace).
+    fn exe_name(pid: u32) -> Option<String> {
+        let dir = std::path::PathBuf::from(format!("/proc/{pid}"));
+        std::fs::read_link(dir.join("exe"))
+            .ok()
+            .and_then(|p| p.file_name()?.to_str().map(str::to_owned))
+            .or_else(|| {
+                let comm = std::fs::read_to_string(dir.join("comm")).ok()?;
+                Some(comm.trim_end().to_owned()).filter(|c| !c.is_empty())
+            })
+    }
+
     impl AudioIo for PipeWireAudio {
         fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
             Ok(self.connect()?.graph().devices())
         }
 
         fn processes(&self) -> Result<Vec<AudioProcess>, PlatformError> {
-            Ok(self.connect()?.graph().processes())
+            Ok(self.connect()?.graph().processes(exe_name))
         }
 
         fn input_format(&self, target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {

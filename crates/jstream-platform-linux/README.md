@@ -84,24 +84,29 @@ It has:
   (1.0). **`PipeWireAudio`** (`AudioIo`, ADR-0060 §4) is built on it. Each call
   connects to the user's daemon on its own `pw_thread_loop` (`pipewire/audio.rs`) and
   reads the registry with two core round trips: nodes, clients, the core's
-  `default.clock.rate` and the `default` metadata's `default.audio.source` and
-  `default.audio.sink`. No daemon is a missing component whose remedy starts it.
+  `default.clock.rate`, the `default` metadata's `default.audio.source` and
+  `default.audio.sink`, and each device node's info, bound for its channel count
+  (`audio.channels`, else the length of `audio.position`), which a registry global
+  never carries. No daemon is a missing component whose remedy starts it.
   `pipewire/graph.rs` turns that into devices (`Audio/Source`, `Audio/Source/Virtual`,
   `Audio/Sink` and `Audio/Duplex` nodes, with `node.name` as the stable id), the
-  processes playing audio (`Stream/Output/Audio` nodes, with the pid from the node or
-  else its client's `pipewire.sec.pid`), and which node each target connects to:
-  `target.object`, with `stream.capture.sink` for an output's loopback, and a process's
-  loopback recording its first playback stream. A stream is fixed to interleaved `f32`
-  at the graph's rate in the device's layout (mono, stereo or 5.1; `spa/audio.rs`
-  builds and parses the format pods), so PipeWire converts and the handler never sees a
-  format change. `process` runs on the stream's own loop thread: input packets carry
-  their device position and a media-clock time from `pw_stream_get_time_n` (the
-  capture time, before the device's delay), a skipped buffer marks a discontinuity, and
-  output asks the handler to fill each buffer. A named device or process whose node is
+  processes playing audio (`Stream/Output/Audio` nodes, with the pid from their
+  client's `pipewire.sec.pid` and the executable's name from `/proc`, else the
+  application's name), and which node each target connects to: `target.object`, with
+  `stream.capture.sink` for an output's loopback, and a process's loopback recording
+  its first playback stream. A stream is fixed to interleaved `f32` at the graph's rate
+  in the device's layout (mono, stereo or 5.1; any other count, or a default with no
+  device, as stereo; `spa/audio.rs` builds and parses the format pods), so PipeWire
+  converts and the handler never sees a format change. `process` runs on the stream's
+  own loop thread: input packets carry their device position and a media-clock time
+  from `pw_stream_get_time_n` (the capture time, before the device's delay), a skipped
+  buffer marks a discontinuity and its frames still count in the position, and output
+  asks the handler to fill each buffer. A named device or process whose node is
   removed is `DeviceLost`; a default follows the session manager. The callbacks catch
-  panics (R-UNSAFE-005), and a panicking handler isn't called again. Dropping the stream
-  stops its callbacks before it returns, without telling the handler it failed. Choosing between PipeWire and the ALSA fallback
-  (ADR-0060 §8) isn't wired yet.
+  panics (R-UNSAFE-005): a panicking handler is told once, with `InvalidState`, and
+  isn't called again. Dropping the stream stops its callbacks before it returns,
+  without telling the handler it failed. Choosing between PipeWire and the ALSA
+  fallback (ADR-0060 §8) isn't wired yet.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) and encode entry point (full, then low-power) its driver offers. The display

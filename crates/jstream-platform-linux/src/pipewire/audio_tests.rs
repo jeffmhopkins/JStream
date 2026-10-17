@@ -7,6 +7,9 @@
 //!     node.name=jstream-test-sink media.class=Audio/Sink object.linger=1 }'
 //! pw-cli create-node adapter '{ factory.name=support.null-audio-sink
 //!     node.name=jstream-test-source media.class=Audio/Source/Virtual object.linger=1 }'
+//! pw-cli create-node adapter '{ factory.name=support.null-audio-sink
+//!     node.name=jstream-test-sink-51 media.class=Audio/Sink object.linger=1
+//!     audio.position=[FL FR FC LFE RL RR] }'
 //! cargo test -p jstream-platform-linux --features hw-tests -- --ignored audio_tests
 //! ```
 
@@ -70,7 +73,8 @@ impl AudioInputHandler for Recorder {
         if !packet.samples.len().is_multiple_of(self.channels) {
             s.ragged += 1;
         }
-        if packet.device_position != s.next {
+        // A jump is a gap unless the packet says frames were lost (a skipped buffer).
+        if packet.device_position != s.next && !packet.flags.discontinuity {
             s.gaps += 1;
         }
         s.next = packet.device_position + (packet.samples.len() / self.channels) as u64;
@@ -255,6 +259,16 @@ fn our_own_playback_is_recorded_by_process_and_desktop_loopback() {
     wait_for("this process in the list", || {
         audio.processes().unwrap().iter().any(|p| p.pid == pid)
     });
+    // Named by its executable, from `/proc`.
+    let exe = std::env::current_exe().unwrap();
+    let exe = exe.file_name().unwrap().to_str().unwrap();
+    assert!(
+        audio
+            .processes()
+            .unwrap()
+            .iter()
+            .any(|p| p.pid == pid && p.exe == exe)
+    );
     for target in [
         AudioInputTarget::ProcessLoopback { pid },
         AudioInputTarget::DefaultOutputLoopback,
@@ -295,4 +309,60 @@ fn unknown_targets_are_not_found() {
         audio.input_format(&AudioInputTarget::Input(gone)),
         Err(PlatformError::NotFound { .. })
     ));
+}
+
+/// The 5.1 null sink's layout comes from its node's info (its global doesn't carry one).
+#[test]
+#[ignore = "needs a PipeWire daemon (see the module doc)"]
+fn a_surround_sink_is_planned_in_its_own_layout() {
+    let (_one, audio) = audio();
+    let sink = DeviceId::new("jstream-test-sink-51");
+    let format = audio
+        .input_format(&AudioInputTarget::OutputLoopback(sink))
+        .expect("the 5.1 test sink (see the module doc)");
+    assert_eq!(format.channels(), 6);
+}
+
+/// Panics on its first packet.
+struct Panicky {
+    errors: Arc<Mutex<Vec<PlatformError>>>,
+}
+
+impl AudioInputHandler for Panicky {
+    fn on_packet(&mut self, _packet: &AudioPacket<'_>) {
+        panic!("a handler bug");
+    }
+
+    fn on_error(&mut self, error: &PlatformError) {
+        self.errors
+            .lock()
+            .expect("the errors lock")
+            .push(error.clone());
+    }
+}
+
+/// A panicking handler is told the stream failed, once, and isn't called again.
+#[test]
+#[ignore = "needs a PipeWire daemon (see the module doc)"]
+fn a_panicking_handler_is_told_the_stream_failed() {
+    let (_one, audio) = audio();
+    need(&audio, AudioDirection::Input);
+    let errors = Arc::new(Mutex::new(Vec::new()));
+    let stream = audio
+        .open_input(
+            &AudioInputTarget::DefaultInput,
+            Box::new(Panicky {
+                errors: Arc::clone(&errors),
+            }),
+        )
+        .unwrap();
+    wait_for("the error", || !errors.lock().unwrap().is_empty());
+    std::thread::sleep(Duration::from_millis(100));
+    drop(stream);
+    let errors = errors.lock().unwrap();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        matches!(errors[0], PlatformError::InvalidState { .. }),
+        "{errors:?}"
+    );
 }

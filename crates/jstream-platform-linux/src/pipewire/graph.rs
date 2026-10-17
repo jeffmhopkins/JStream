@@ -6,14 +6,17 @@
 //! - A **device** is a node whose `media.class` is `Audio/Source`,
 //!   `Audio/Source/Virtual` (input), `Audio/Sink` (output) or `Audio/Duplex` (both). Its
 //!   [`DeviceId`] is its `node.name`, which is stable across restarts, unlike its global
-//!   id. Its name is `node.description`, else `node.nick`, else `node.name`.
+//!   id. Its name is `node.description`, else `node.nick`, else `node.name`. Its channel
+//!   count isn't in the registry's global (PipeWire copies only a fixed set of keys
+//!   there), so `audio` binds each device node and reads `audio.channels`, else the
+//!   length of `audio.position`, from the node's info ([`Graph::set_node_info`]).
 //! - The **defaults** are the `default.audio.source` and `default.audio.sink` keys of the
 //!   `default` metadata object, each `{"name": "<node.name>"}`.
 //! - An **application playing audio** is a `Stream/Output/Audio` node. Its process is
-//!   the node's `application.process.id` and `application.process.binary` when it sets
-//!   them, else its client's (by the node's `client.id`): the client's own
-//!   `application.process.id`, else `pipewire.sec.pid`, which the daemon fills in from
-//!   the socket.
+//!   its client's (by the node's `client.id`) `pipewire.sec.pid`, which the daemon fills
+//!   in from the socket; neither global carries `application.process.*`. The
+//!   executable's name comes from the caller (`/proc` on Linux), else the node's or the
+//!   client's `application.name`, else the node's name.
 
 use std::collections::BTreeMap;
 
@@ -39,20 +42,18 @@ pub(crate) struct Node {
     nick: Option<String>,
     /// `object.serial`: unique for the daemon's lifetime, unlike `id`, which is reused.
     serial: Option<String>,
-    pid: Option<u32>,
-    binary: Option<String>,
     app_name: Option<String>,
     /// `client.id`: the global id of the client that made it.
     client: Option<u32>,
+    /// From the node's info, once read (see the module doc).
     channels: Option<u32>,
 }
 
-/// One client from the registry: who a stream node's process is when the node doesn't
-/// say.
+/// One client from the registry: whose process a stream node is.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Client {
+    /// `pipewire.sec.pid`.
     pid: Option<u32>,
-    binary: Option<String>,
     app_name: Option<String>,
 }
 
@@ -81,12 +82,15 @@ impl Node {
             description: get("node.description"),
             nick: get("node.nick"),
             serial: get("object.serial"),
-            pid: number(props, "application.process.id"),
-            binary: get("application.process.binary"),
             app_name: get("application.name"),
             client: number(props, "client.id"),
-            channels: number(props, "audio.channels"),
+            channels: None,
         })
+    }
+
+    /// Whether it is a device (an input, an output or both), whose info `audio` reads.
+    pub(crate) fn is_device(&self) -> bool {
+        self.records() || self.plays()
     }
 
     fn records(&self) -> bool {
@@ -203,14 +207,36 @@ impl Graph {
         }
     }
 
+    /// Whether node `id` is a device.
+    pub(crate) fn is_device(&self, id: u32) -> bool {
+        self.nodes.get(&id).is_some_and(Node::is_device)
+    }
+
+    /// Takes a node's info properties, for its channel count: `audio.channels`, else the
+    /// number of `audio.position` entries (`[FL FR]` or `FL,FR`).
+    pub(crate) fn set_node_info(&mut self, id: u32, props: &[(String, String)]) {
+        let Some(node) = self.nodes.get_mut(&id) else {
+            return;
+        };
+        let positions = prop(props, "audio.position").map(|p| {
+            p.split(|c: char| c == ',' || c == '[' || c == ']' || c.is_whitespace())
+                .filter(|s| !s.is_empty())
+                .count()
+        });
+        let channels = number(props, "audio.channels")
+            .or_else(|| positions.and_then(|n| u32::try_from(n).ok()))
+            .filter(|&n| n > 0);
+        if channels.is_some() {
+            node.channels = channels;
+        }
+    }
+
     /// Adds or replaces a client from a `global` event.
     pub(crate) fn add_client(&mut self, id: u32, props: &[(String, String)]) {
         self.clients.insert(
             id,
             Client {
-                pid: number(props, "application.process.id")
-                    .or_else(|| number(props, "pipewire.sec.pid")),
-                binary: prop(props, "application.process.binary"),
+                pid: number(props, "pipewire.sec.pid"),
                 app_name: prop(props, "application.name"),
             },
         );
@@ -222,19 +248,17 @@ impl Graph {
         self.clients.remove(&id);
     }
 
-    /// The process playing `n`, and its executable: the node's own, else its client's.
-    /// `None` when neither says.
-    fn process_of(&self, n: &Node) -> Option<(u32, String)> {
-        let client = n.client.and_then(|c| self.clients.get(&c));
-        let pid = n.pid.or_else(|| client?.pid)?;
-        let exe = n
-            .binary
+    /// The process playing `n`, from its client; `None` without one.
+    fn pid_of(&self, n: &Node) -> Option<u32> {
+        self.clients.get(&n.client?)?.pid
+    }
+
+    /// A name for `n`'s application when the executable's isn't known.
+    fn app_name_of(&self, n: &Node) -> String {
+        n.app_name
             .clone()
-            .or_else(|| client?.binary.clone())
-            .or_else(|| n.app_name.clone())
-            .or_else(|| client?.app_name.clone())
-            .unwrap_or_else(|| n.name.clone());
-        Some((pid, exe))
+            .or_else(|| self.clients.get(&n.client?)?.app_name.clone())
+            .unwrap_or_else(|| n.name.clone())
     }
 
     /// Takes a `default` metadata property. `None` clears it.
@@ -285,18 +309,19 @@ impl Graph {
         out
     }
 
-    /// The processes with a playback stream, once each, by pid. A stream whose process
-    /// is unknown (see the module doc) isn't listed. PipeWire doesn't report a parent.
-    pub(crate) fn processes(&self) -> Vec<AudioProcess> {
+    /// The processes with a playback stream, once each, by pid, with the executable's
+    /// name from `exe_of` when it knows it. A stream whose process is unknown (see the
+    /// module doc) isn't listed. PipeWire doesn't report a parent.
+    pub(crate) fn processes(&self, exe_of: impl Fn(u32) -> Option<String>) -> Vec<AudioProcess> {
         let mut by_pid: BTreeMap<u32, AudioProcess> = BTreeMap::new();
         for n in self.nodes.values().filter(|n| n.is_app_playback()) {
-            let Some((pid, exe)) = self.process_of(n) else {
+            let Some(pid) = self.pid_of(n) else {
                 continue;
             };
-            by_pid.entry(pid).or_insert(AudioProcess {
+            by_pid.entry(pid).or_insert_with(|| AudioProcess {
                 pid,
                 parent_pid: None,
-                exe,
+                exe: exe_of(pid).unwrap_or_else(|| self.app_name_of(n)),
             });
         }
         by_pid.into_values().collect()
@@ -364,9 +389,7 @@ impl Graph {
                 let node = self
                     .nodes
                     .values()
-                    .find(|n| {
-                        n.is_app_playback() && self.process_of(n).is_some_and(|(p, _)| p == *pid)
-                    })
+                    .find(|n| n.is_app_playback() && self.pid_of(n) == Some(*pid))
                     .ok_or_else(|| not_found("application playing audio", pid.to_string()))?;
                 let target = node.serial.clone().unwrap_or_else(|| node.name.clone());
                 plan(
@@ -475,7 +498,6 @@ mod tests {
                 ("node.name", "alsa_input.pci-0000_00_1f.3.analog-stereo"),
                 ("node.description", "Built-in Audio Analog Stereo"),
                 ("media.class", "Audio/Source"),
-                ("audio.channels", "2"),
             ]),
         );
         g.add(
@@ -487,7 +509,6 @@ mod tests {
                 ),
                 ("node.description", "Built-in Audio Surround 5.1"),
                 ("media.class", "Audio/Sink"),
-                ("audio.channels", "6"),
             ]),
         );
         g.add(
@@ -496,9 +517,12 @@ mod tests {
                 ("node.name", "echo-cancel-source"),
                 ("node.nick", "Echo cancel"),
                 ("media.class", "Audio/Source/Virtual"),
-                ("audio.channels", "1"),
             ]),
         );
+        // The channel counts come from the nodes' info, not their globals.
+        g.set_node_info(40, &props(&[("audio.channels", "2")]));
+        g.set_node_info(41, &props(&[("audio.position", "FL,FR,FC,LFE,RL,RR")]));
+        g.set_node_info(42, &props(&[("audio.position", "[ MONO ]")]));
         g.add(
             43,
             &props(&[
@@ -512,8 +536,7 @@ mod tests {
                 ("node.name", "Firefox"),
                 ("media.class", "Stream/Output/Audio"),
                 ("object.serial", "812"),
-                ("application.process.id", "4242"),
-                ("application.process.binary", "firefox"),
+                ("client.id", "80"),
             ]),
         );
         g.add(
@@ -522,8 +545,7 @@ mod tests {
                 ("node.name", "Firefox"),
                 ("media.class", "Stream/Output/Audio"),
                 ("object.serial", "815"),
-                ("application.process.id", "4242"),
-                ("application.process.binary", "firefox"),
+                ("client.id", "80"),
             ]),
         );
         g.add(
@@ -533,7 +555,13 @@ mod tests {
                 ("media.class", "Stream/Output/Audio"),
             ]),
         );
-        // A stream that names only its client, whose pid the daemon filled in.
+        g.add_client(
+            80,
+            &props(&[
+                ("pipewire.sec.pid", "4242"),
+                ("application.name", "Firefox"),
+            ]),
+        );
         g.add(
             64,
             &props(&[
@@ -547,7 +575,6 @@ mod tests {
             &props(&[
                 ("pipewire.sec.pid", "9208"),
                 ("application.name", "speech-dispatcher"),
-                ("application.process.binary", "sd_dummy"),
             ]),
         );
         g.add(
@@ -555,10 +582,11 @@ mod tests {
             &props(&[
                 ("node.name", "mpv"),
                 ("media.class", "Stream/Output/Audio"),
-                ("application.process.id", "77"),
+                ("client.id", "81"),
                 ("application.name", "mpv Media Player"),
             ]),
         );
+        g.add_client(81, &props(&[("pipewire.sec.pid", "77")]));
         g.add(
             70,
             &props(&[("node.name", "v4l2_input"), ("media.class", "Video/Source")]),
@@ -636,7 +664,8 @@ mod tests {
 
     #[test]
     fn processes_are_playback_streams_once_per_pid() {
-        let p = graph().processes();
+        // Only Firefox's executable is known (as `/proc` would say).
+        let p = graph().processes(|pid| (pid == 4242).then(|| "firefox".to_owned()));
         assert_eq!(
             p,
             [
@@ -653,14 +682,14 @@ mod tests {
                 AudioProcess {
                     pid: 9208,
                     parent_pid: None,
-                    exe: "sd_dummy".into()
+                    exe: "speech-dispatcher".into()
                 },
             ]
         );
     }
 
     #[test]
-    fn a_stream_without_a_pid_is_its_clients_process() {
+    fn a_streams_process_is_its_clients() {
         let mut g = graph();
         let plan = g
             .input(&AudioInputTarget::ProcessLoopback { pid: 9208 })
@@ -669,22 +698,41 @@ mod tests {
             (plan.target, plan.watch),
             (Some("speech-dispatcher".into()), Some(64))
         );
-        // The client's own `application.process.id` wins over the socket's pid.
-        g.add_client(
-            90,
-            &props(&[
-                ("application.process.id", "9300"),
-                ("pipewire.sec.pid", "9208"),
-            ]),
-        );
-        assert!(
-            g.processes()
-                .iter()
-                .any(|p| p.pid == 9300 && p.exe == "speech-dispatcher")
-        );
         // Without the client, the stream has no process.
         g.remove(90);
-        assert!(g.processes().iter().all(|p| p.pid != 9300 && p.pid != 9208));
+        assert!(g.processes(|_| None).iter().all(|p| p.pid != 9208));
+        assert!(matches!(
+            g.input(&AudioInputTarget::ProcessLoopback { pid: 9208 }),
+            Err(PlatformError::NotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn device_layouts_come_from_node_info() {
+        let mut g = graph();
+        let layout = |g: &Graph, name: &str| {
+            g.output(&AudioOutputTarget::Output(DeviceId::new(name)))
+                .unwrap()
+                .layout
+        };
+        // No info yet: stereo.
+        assert_eq!(layout(&g, "bluez_headset"), ChannelLayout::Stereo);
+        g.set_node_info(43, &props(&[("audio.position", "[ FL FR FC LFE RL RR ]")]));
+        assert_eq!(layout(&g, "bluez_headset"), ChannelLayout::Surround51);
+        // `audio.channels` wins, and info without either keeps what was known.
+        g.set_node_info(
+            43,
+            &props(&[("audio.channels", "1"), ("audio.position", "FL,FR")]),
+        );
+        assert_eq!(layout(&g, "bluez_headset"), ChannelLayout::Mono);
+        g.set_node_info(43, &props(&[("node.name", "bluez_headset")]));
+        assert_eq!(layout(&g, "bluez_headset"), ChannelLayout::Mono);
+        // Only devices are bound for their info; info for an unknown node is ignored.
+        assert!(g.is_device(43) && !g.is_device(60) && !g.is_device(999));
+        g.set_node_info(999, &props(&[("audio.channels", "6")]));
+        // A count with no layout of its own (here 4) is planned as stereo.
+        g.set_node_info(43, &props(&[("audio.channels", "4")]));
+        assert_eq!(layout(&g, "bluez_headset"), ChannelLayout::Stereo);
     }
 
     #[test]
@@ -862,11 +910,12 @@ mod tests {
             &props(&[
                 ("node.name", "x"),
                 ("media.class", "Audio/Sink"),
-                ("audio.channels", "two"),
-                ("application.process.id", "-3"),
+                ("audio.channels", "6"),
+                ("client.id", "-3"),
             ]),
         )
         .unwrap();
-        assert_eq!((n.channels, n.pid), (None, None));
+        // A global's `audio.channels` (which PipeWire never sends) isn't read.
+        assert_eq!((n.channels, n.client), (None, None));
     }
 }
