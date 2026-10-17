@@ -138,8 +138,8 @@ mod backend {
     use std::time::{Duration, Instant};
 
     use jstream_platform::{
-        Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
-        DeviceId, PlatformError, VideoSurface,
+        Capture, CaptureCursor, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget,
+        CaptureTargetInfo, CursorCapture, DeviceId, PlatformError, VideoSurface,
     };
 
     use super::PortalPick;
@@ -383,13 +383,14 @@ mod backend {
             }
         }
 
-        /// Starts a capture of `target`, restoring `source`'s grant when one is named,
-        /// else the last grant of that kind.
+        /// Starts a capture of `target`, restoring `options`' source's grant when one is
+        /// named, else the last grant of that kind, with the pointer as `options` ask.
         fn open(
             &self,
             target: &CaptureTarget,
-            source: Option<&str>,
+            options: &CaptureOptions,
         ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+            let source = options.source.as_deref();
             let Some(pick) = Self::pick(target) else {
                 let (kind, id) = match target {
                     CaptureTarget::Display(id) => ("display", id.as_str()),
@@ -454,6 +455,10 @@ mod backend {
                 &portal,
                 self.tokens.get(grant),
             )?;
+            if options.cursor == CursorCapture::Metadata {
+                h = h.with_cursor_metadata();
+            }
+            let cursor_metadata = h.sends_cursor_metadata();
             let forgets = self.tokens.forgets(grant);
             let (granted, fd) = match run(&mut bus, &mut h) {
                 Ok(done) => done,
@@ -467,7 +472,13 @@ mod backend {
             }
             let shared = Arc::new(Shared::new());
             let node = granted.streams[0].node_id;
-            let video = match VideoStream::connect(pw.library(), fd, node, Arc::clone(&shared)) {
+            let video = match VideoStream::connect(
+                pw.library(),
+                fd,
+                node,
+                Arc::clone(&shared),
+                cursor_metadata,
+            ) {
                 Ok(v) => v,
                 Err(e) => {
                     close(&mut bus, Some(&granted.session));
@@ -480,6 +491,11 @@ mod backend {
                 watcher: Some(watcher),
                 shared,
                 pick,
+                cursor: if cursor_metadata {
+                    CaptureCursor::Hidden
+                } else {
+                    CaptureCursor::NotSent
+                },
                 _pw: pw,
             }))
         }
@@ -556,7 +572,7 @@ mod backend {
         }
 
         fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
-            self.open(target, None)
+            self.open(target, &CaptureOptions::default())
         }
 
         fn start_with(
@@ -564,7 +580,7 @@ mod backend {
             target: &CaptureTarget,
             options: &CaptureOptions,
         ) -> Result<Box<dyn CaptureStream>, PlatformError> {
-            self.open(target, options.source.as_deref())
+            self.open(target, options)
         }
 
         fn forget_source(&self, source: &str) {
@@ -632,11 +648,16 @@ mod backend {
         watcher: Option<Watcher>,
         shared: Arc<Shared>,
         pick: PortalPick,
+        /// The pointer as of the last `latest`; `NotSent` without cursor metadata.
+        cursor: CaptureCursor,
         _pw: PipeWire,
     }
 
     impl CaptureStream for PortalStream {
         fn latest(&mut self) -> Result<Option<VideoSurface>, PlatformError> {
+            if let Some(cursor) = self.shared.cursor.take() {
+                self.cursor = cursor;
+            }
             if let Some(frame) = self.shared.mailbox.take() {
                 return Ok(Some(frame));
             }
@@ -655,6 +676,10 @@ mod backend {
                 frames_skipped: self.shared.skipped.load(Ordering::Relaxed),
                 frames_undecodable: 0,
             }
+        }
+
+        fn cursor(&self) -> CaptureCursor {
+            self.cursor.clone()
         }
     }
 
@@ -873,7 +898,10 @@ mod backend {
 mod hw_tests {
     use std::time::{Duration, Instant};
 
-    use jstream_platform::{Capture, CaptureTarget, DeviceId, MediaClock, VideoSurface};
+    use jstream_platform::{
+        Capture, CaptureCursor, CaptureOptions, CaptureTarget, CursorCapture, DeviceId, MediaClock,
+        VideoSurface,
+    };
 
     use crate::{MonotonicClock, PortalCapture, Session};
 
@@ -908,6 +936,33 @@ mod hw_tests {
         );
         let mut again = capture.start(&target).expect("restored without a dialog");
         let _ = again.latest();
+    }
+
+    /// Move the pointer over the picked screen while this runs.
+    #[test]
+    #[ignore = "needs a desktop session with the ScreenCast portal and PipeWire"]
+    fn portal_capture_sends_the_pointer_as_metadata() {
+        let capture = PortalCapture::new(Session::from_env());
+        let target = CaptureTarget::Display(DeviceId::new("portal:display"));
+        let options = CaptureOptions::default().with_cursor(CursorCapture::Metadata);
+        let mut stream = capture
+            .start_with(&target, &options)
+            .expect("pick a screen in the dialog");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let _ = stream.latest().expect("capturing");
+            if let CaptureCursor::Shown { image, .. } = stream.cursor() {
+                assert!(image.size().width() > 0);
+                break;
+            }
+            assert_ne!(
+                stream.cursor(),
+                CaptureCursor::NotSent,
+                "this portal doesn't offer cursor metadata"
+            );
+            assert!(Instant::now() < deadline, "no pointer within 10 s");
+            std::thread::sleep(Duration::from_millis(16));
+        }
     }
 }
 
