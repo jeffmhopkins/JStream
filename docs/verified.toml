@@ -405,7 +405,7 @@ stamp = { hash = "b3:f9a28c5f6a89969b", by = "agent:t1-studio", note = "Tool lis
 stamp = { hash = "b3:2244d7361a342573", by = "agent:t1-studio", note = "Tool list matches tools.snap's 24 tools; schema size about 315 KB | merge: Merged main via wave/m1-3: tools.snap regenerated at 550948 bytes, still about 550 KB; 25 noun tools" }
 
 ["ARCH#packaging"."body"]
-stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's State and Building-the-zip bullets (dist.rs, .cargo/config.toml, after-review dist job) stand beside #298's sandboxed helper (bootstrap exe renamed plus the DLL, same certificate if signed); now that the helper exists, the zip bullet says it and the CEF runtime are not in the zip yet, which matches dist.rs (it ships no helper); holds" }
+stamp = { hash = "b3:987ee853ad57ee09", by = "agent:vcam-242", note = "Added one sentence to the Virtual camera bullet: the registered DLL stays in the app's folder and the maintainer accepted that risk, linking THREAT-MODEL#vcam for the detail; the one-UAC-prompt, HKLM and S2 findings are unchanged and still match vcam_register.rs" }
 
 ["ARCH#packaging"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
@@ -3696,7 +3696,7 @@ stamp = { hash = "b3:5506fd7891457520" }
 stamp = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: stale via ARCH#packaging (P1's dist, #298's helper, the helper not yet in the zip); the hardware-check steps build and register the DLL by hand as before; holds" }
+stamp = { hash = "b3:987ee853ad57ee09", by = "agent:vcam-242", note = "Packaging only gained the accepted-risk sentence about the product's DLL folder; the smoke steps (copy outside the profile, regsvr32 elevated) are unaffected" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."file:crates/jstream-vcam-windows/examples/vcam_smoke/main.rs"]
 stamp = { hash = "b3:741967485a750fec" }
@@ -3714,7 +3714,7 @@ stamp = { hash = "b3:b6a3f609729e0f1f" }
 stamp = { hash = "b3:ecfd9b5f74db77b1" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: stale via ARCH#packaging, where P1's dist job, #298's sandboxed helper and a line saying the helper and CEF runtime are not in the zip yet changed; the DLL and its registration text are unaffected; holds" }
+stamp = { hash = "b3:987ee853ad57ee09", by = "agent:vcam-242", note = "Packaging only gained the accepted-risk sentence about the DLL's folder; the purpose section's COM, frames, trust and HKLM registration description is unaffected and still matches the crate" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. This section's claims about unsafe still hold." }
@@ -4239,7 +4239,7 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
 ["THREAT-MODEL#vcam"."body"]
-stamp = { hash = "b3:22d241d0aeefeac2", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+stamp = { hash = "b3:62bca2b615177c07", by = "agent:vcam-242", note = "Moved #242 out of Gaps into a maintainer-accepted risk quoting Jeff's decision: DLL stays in the app's user-writable folder, swappable without a prompt, runs in Frame Server's svchost as LOCAL SERVICE; matches register.rs/vcam_register.rs (HKLM, path beside the exe, one runas prompt) and ADR-0020's 'registers the DLL from its own folder'" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
