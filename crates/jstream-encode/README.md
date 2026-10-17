@@ -229,9 +229,6 @@ it writes a target again only when it holds the frame's only clone.
 
 - **Rate control** beyond what the platform encoder does with the configured
   `RateControl`: no bitrate adaptation or reconfiguration of a running session.
-- **GPU frames in the engine.** The engine does not open sessions with `open_on` yet:
-  that needs its render thread to write NV12 encode targets
-  ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 4).
 - `tracing` spans ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing` is a workspace
   dependency now, but this crate doesn't use it yet; it reports through its counters
   and `StreamEnd`. Spans would go on the control side (session start and end), not in
