@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md", "docs/adr/0064-nested-scene-folders.md"]
 -->
 
 ```
@@ -260,7 +260,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
   person). Folders change no rendering, switching or nesting; scenes keep their flat
   display order, and a variant sits under its parent, never in a folder. A folder sits in
-  at most one other (`parent`, which ADR-0024 leaves room for), never inside itself, and
+  at most one other (`parent`, [ADR-0064](adr/0064-nested-scene-folders.md)), never inside itself, and
   the folders in one parent show in folder order. A folder that holds anything, or a
   label a source carries, can't be deleted; `delete.plan` moves what the folder holds up
   to its parent, or takes the label off its sources. Labels and
@@ -402,16 +402,18 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the master at 0 dB. A send always runs from a source to a bus, and filters have no
   sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
   the program stage's mixer while it runs.
+  Folders (a tree), labels, scenes' and sources' organisation metadata, and hotkey
+  bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), video filter kinds, blend modes other than `normal`,
   bus monitors, per-placement effects, the transition fields, 3D
   geometry, variants and overrides (so no edit drops
-  any yet), `background`, hotkeys, an output's mix, audio buses and chains, the
+  any yet), `background`, an output's mix, audio buses and chains, the
   `YouTube` kind, and everything outside `sources`, `scenes`,
-  `outputs`, `encoders`, `audio`, `folders` and `labels`. The collection file saves
-  everything built so far, encoder profiles, each output's profile, `duplicated_from`,
-  buses, sends, source audio, folders, labels and organisation metadata included
-  ([Persistence](#persistence)).
+  `outputs`, `encoders`, `audio`, `folders`, `labels` and `hotkeys`. The collection
+  file saves everything built so far, encoder profiles, each output's profile,
+  `duplicated_from`, buses, sends, source audio, filters, folders, labels,
+  organisation metadata and hotkeys included ([Persistence](#persistence)).
   The program scene is built in `jstream-core` as runtime state, so the file doesn't
   hold it (no preview scene yet).
 
@@ -659,7 +661,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
-  batch that deletes a scene or source (or, from protocol 0.24, a bus) with everything
+  batch that deletes a scene or source (or, from protocol 0.24, a bus, or a folder or
+  label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name; audio levels are the `meters.tick` event, not a query).
@@ -694,7 +697,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)), and so does a `bus.delete`
   refused because a setting draws the bus (protocol 0.24: a `bus` reference, as the
-  `waveform` and `spectrum` kinds' `audio` setting holds).
+  `waveform` and `spectrum` kinds' `audio` setting holds), and a `folder.delete` or
+  `label.delete` refused because a scene or folder is in the folder or a source carries
+  the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
   `preview.subscribe` opens a stream of the program mix for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes, in H.264
@@ -750,7 +755,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -995,7 +1000,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
-  for new collection state (encoder profiles, hotkey bindings) is omitted when empty,
+  for new collection state (encoder profiles, hotkey bindings, folders, labels and
+  organisation metadata) is omitted when empty or at its default,
   so a file without it is still valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

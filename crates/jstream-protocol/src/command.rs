@@ -528,9 +528,10 @@ pub enum Edit {
         /// The new display name.
         name: String,
     },
-    /// Moves a folder into another folder, or to the top level. A parent that would put
-    /// the folder inside itself is `invalid_argument` (field `parent`), and a parent that
-    /// doesn't exist `not_found`. Inverse: `folder.set_parent` with the previous parent.
+    /// Moves a folder into another folder, or to the top level (ADR-0064: folders nest).
+    /// A parent that would put the folder inside itself is `invalid_argument` (field
+    /// `parent`), and a parent that doesn't exist `not_found`. Inverse:
+    /// `folder.set_parent` with the previous parent.
     #[serde(rename = "folder.set_parent")]
     FolderSetParent {
         /// The folder to move.

@@ -91,7 +91,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
-  `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus),
+  `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
+  folder or a label),
   `studio.get`, `device.list`, `live.list` and `capture.targets`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo` and
   `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and
@@ -630,7 +631,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   missing from a pre-0.13 server, it parses as empty), the `buses` and `sends`
   (as `bus.list`; missing from a pre-0.19 server, both parse as empty) and every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
-  parses as empty). A client reads it on connecting, and again after a
+  parses as empty), and the `folders` and `labels` in their orders (each omitted when
+  empty, so it parses as empty from an older server). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
@@ -670,7 +672,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
-  `{"type":"bus","bus_id":…}`) with everything that refers to it, as `edits` and the
+  `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
+  `{"type":"label","label_id":…}`; their plans are described with folders and labels
+  above), with everything that refers to it, as `edits` and the
   `rev` it was planned at, or `not_found` for a missing target (and
   `invalid_argument` on `target.bus_id` for the master, which is never deleted). In order, the edits remove the items that place a
   deleted source, set every settings reference to a deleted object to `null` (one
@@ -1011,7 +1015,7 @@ after 1.0:
   sends, but if one's bus has since been deleted by another client, the undo fails with
   `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
   answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
-  filter edits. The encoder enums (`VideoCodec`,
+  filter edits, as the organisation edits add `folder` and `label` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or

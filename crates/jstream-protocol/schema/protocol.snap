@@ -2468,7 +2468,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Moves a folder into another folder, or to the top level. A parent that would put\nthe folder inside itself is `invalid_argument` (field `parent`), and a parent that\ndoesn't exist `not_found`. Inverse: `folder.set_parent` with the previous parent.",
+          "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself is `invalid_argument` (field\n`parent`), and a parent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
           "properties": {
             "folder_id": {
               "$ref": "#/$defs/FolderId",
