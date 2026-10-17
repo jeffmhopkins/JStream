@@ -65,8 +65,9 @@ pub fn register_secret(value: &str) {
 /// reports' redaction ([`register_secret`]), so a panic that quotes a stream key or a
 /// refresh token writes `***` in its place (#353). It wraps the daemon's key store, so
 /// a key is registered when `output.set_key` stores it and when the publish opener
-/// reads it, before anything could format it; [`OAuthTokenStore`] works the same way
-/// for a refresh token once the daemon signs in to YouTube. Only digests are kept.
+/// reads it, before anything could format it. It wraps YouTube's token store too, so
+/// [`OAuthTokenStore`] registers a refresh token as YouTube stores or loads it. Only
+/// digests are kept.
 #[cfg(any(windows, test))]
 pub struct Redacting<S: ?Sized>(pub std::sync::Arc<S>);
 

@@ -445,9 +445,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `crash::Redacting`, which
   registers each secret as it is stored or loaded, and every YouTube refresh token,
   since `serve.rs` hands YouTube its Credential Manager token store behind
-  `crash::Redacting` too. Secrets that pass through neither store are not registered:
-  a YouTube output's stream key from `Youtube::ingest` and the OAuth access token,
-  once the daemon streams to a YouTube-bound output;
+  `crash::Redacting` too. Secrets that pass through neither store are not registered
+  yet: a YouTube-bound output's stream key, which core reads with `Youtube::ingest`
+  and hands straight to its connect, and the OAuth access token (left open on #353);
   only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
   whose stderr line would quote the message unredacted. A panic in a tokio task writes
