@@ -6,8 +6,7 @@
 //! [`SceneMeta::problem`]), so the mock rejects exactly what the engine rejects.
 
 use super::{
-    Collection, already_exists, check_id, check_index, check_name, invalid, not_found,
-    wire_index,
+    Collection, already_exists, check_id, check_index, check_name, invalid, not_found, wire_index,
 };
 use jstream_protocol::{
     Blocker, Edit, EntityKind, FolderId, FolderInfo, LabelId, LabelInfo, ProtocolError, SceneId,
@@ -179,8 +178,7 @@ impl Collection {
             let mut current = Some(parent.clone());
             while let Some(folder) = current {
                 if &folder == id {
-                    let chain: Vec<String> =
-                        path.iter().rev().map(|f| format!("`{f}`")).collect();
+                    let chain: Vec<String> = path.iter().rev().map(|f| format!("`{f}`")).collect();
                     return Err(invalid(
                         at,
                         "parent",
@@ -211,7 +209,12 @@ impl Collection {
         let fi = self.folder_index(id)?;
         let blockers = self.folder_blockers(id);
         if !blockers.is_empty() {
-            return Err(blocked(at, "folder_id", &format!("folder `{id}`"), blockers));
+            return Err(blocked(
+                at,
+                "folder_id",
+                &format!("folder `{id}`"),
+                blockers,
+            ));
         }
         let folder = self.folders.remove(fi);
         let mut inverse = vec![Edit::FolderCreate {
@@ -365,7 +368,12 @@ impl Collection {
 }
 
 /// Checks a label's name, colour and icon, in the graph's order.
-fn check_label(name: &str, color: &str, icon: Option<&str>, at: usize) -> Result<(), ProtocolError> {
+fn check_label(
+    name: &str,
+    color: &str,
+    icon: Option<&str>,
+    at: usize,
+) -> Result<(), ProtocolError> {
     check_name(name, at)?;
     check_color(color).map_err(|reason| invalid(at, "color", reason))?;
     if let Some(icon) = icon {

@@ -3,7 +3,8 @@
 //! feature.
 //!
 //! [`MockEngine`] holds a tiny collection (scenes, items, sources, configured outputs,
-//! encoder profiles, and the audio buses and sends),
+//! encoder profiles, the audio buses and sends, and the folders, labels and
+//! organisation metadata),
 //! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
