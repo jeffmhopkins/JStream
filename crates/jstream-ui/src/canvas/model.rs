@@ -320,6 +320,7 @@ mod tests {
             edits,
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         })))
         .expect("setup batch");
         now(control.call(Call::Action {

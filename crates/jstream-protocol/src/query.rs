@@ -10,6 +10,7 @@ use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::hotkey::HotkeyBinding;
 use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId, TransitionPresetId};
 use crate::kind::{KindDescriptor, KindSummary};
+use crate::live::GestureInfo;
 use crate::output::OutputInfo;
 use crate::settings::Settings;
 use crate::transition::{ItemTransition, TransitionsInfo};
@@ -82,6 +83,12 @@ pub enum Query {
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
+    /// Lists the open live-value gestures (ADR-0032), every client's, ordered by client
+    /// and gesture ID, with the values each holds now: what a client that connects
+    /// during a drag reads to show it. Live values are runtime state, not collection
+    /// state, so the result carries no `rev`.
+    #[serde(rename = "live.list")]
+    LiveList,
     /// Whether the engine is signed in to YouTube. Never calls YouTube.
     #[serde(rename = "youtube.status")]
     YoutubeStatus,
@@ -171,6 +178,7 @@ impl Query {
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
+            Query::LiveList => "live.list",
             Query::YoutubeStatus => "youtube.status",
             Query::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
             Query::YoutubeListStreams { .. } => "youtube.list_streams",
@@ -273,7 +281,7 @@ pub enum QueryResult {
         #[serde(default)]
         hotkeys: Vec<HotkeyBinding>,
         /// The transition presets and which one is the default (ADR-0029). Missing
-        /// (from a server older than 0.26) parses as the one `cut` preset every
+        /// (from a server older than 0.27) parses as the one `cut` preset every
         /// collection starts with.
         #[serde(default)]
         transitions: TransitionsInfo,
@@ -320,7 +328,7 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
         /// The scene on preview, which `studio.set_preview` sets. Omitted only while the
-        /// collection has no scene, and by a server older than 0.26.
+        /// collection has no scene, and by a server older than 0.27.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preview_scene: Option<SceneId>,
     },
@@ -331,6 +339,12 @@ pub enum QueryResult {
         rev: Rev,
         /// The profiles, ordered by ID.
         encoders: Vec<EncoderProfileInfo>,
+    },
+    /// The result of `live.list`.
+    #[serde(rename = "live.list")]
+    LiveList {
+        /// The open gestures, ordered by client ID, then gesture ID.
+        gestures: Vec<GestureInfo>,
     },
     /// The result of `youtube.status`. Runtime state, so it carries no `rev`.
     #[serde(rename = "youtube.status")]
@@ -408,6 +422,7 @@ impl QueryResult {
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::LiveList { .. } => "live.list",
             QueryResult::YoutubeStatus { .. } => "youtube.status",
             QueryResult::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
             QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",

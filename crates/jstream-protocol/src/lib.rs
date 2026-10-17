@@ -20,6 +20,7 @@ mod history;
 mod hotkey;
 mod id;
 mod kind;
+mod live;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
@@ -58,12 +59,15 @@ pub use geometry::{
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
-    BusId, ClientId, DeviceId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId,
-    RequestId, Rev, SceneId, SourceId, TransitionPresetId,
+    BusId, ClientId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId,
+    OutputId, RequestId, Rev, SceneId, SourceId, TransitionPresetId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
+};
+pub use live::{
+    GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
 };
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use preview::{

@@ -398,6 +398,7 @@ fn parse_batch(mut args: &[&str]) -> Result<Batch, CliError> {
         edits,
         expected_rev,
         idempotency_key,
+        ends_gesture: None,
     })
 }
 
@@ -1081,6 +1082,7 @@ mod tests {
                 ],
                 expected_rev: Some(Rev(4)),
                 idempotency_key: Some(IdempotencyKey::new("k1")),
+                ends_gesture: None,
             }
         );
     }

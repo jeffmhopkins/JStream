@@ -84,6 +84,52 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or\nover-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. The gesture ends with a batch carrying\n`ends_gesture`, with `live.cancel`, or when its client's session ends.",
+          "properties": {
+            "gesture_id": {
+              "$ref": "#/$defs/GestureId",
+              "description": "The gesture, chosen by the client and unique among its open gestures."
+            },
+            "type": {
+              "const": "live.set",
+              "type": "string"
+            },
+            "values": {
+              "description": "The values, as setter edits: the same edits the committing batch carries.",
+              "items": {
+                "$ref": "#/$defs/Edit"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "gesture_id",
+            "values"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Ends one of the client's gestures without a commit: its parameters show their\ncollection values again, and no edit is made. Succeeds when the client has no\nsuch gesture open, so a retry is safe.",
+          "properties": {
+            "gesture_id": {
+              "$ref": "#/$defs/GestureId",
+              "description": "The gesture to cancel."
+            },
+            "type": {
+              "const": "live.cancel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "gesture_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4, kept by ADR-0058) and\nreturns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens\nit in a browser; Google then redirects to a listener the engine opened on\n`127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the\nOS credential store and emits `youtube.status_changed` (`signed_in`, or\n`signed_out` when the user declines or the sign-in times out after 5 minutes).\nSent again while a sign-in waits, it returns the same URL. Sent while signed in,\nit starts a new sign-in, which replaces the account once it finishes. Fails with\n`action_failed` when no YouTube OAuth client is configured.",
           "properties": {
             "type": {
@@ -518,6 +564,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "minItems": 1,
           "type": "array"
+        },
+        "ends_gesture": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GestureId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Commits one of the client's open gestures (ADR-0032): when the batch applies, the\ngesture ends in the same step, and its live values give way to the committed\nstate. A gesture the client has not open is `invalid_argument` (field\n`ends_gesture`), and nothing is applied. A batch that fails leaves the gesture\nopen."
         },
         "expected_rev": {
           "anyOf": [
@@ -3026,7 +3083,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The scene now on preview. Omitted when the collection has no scene left, and\nby a server older than 0.26."
+              "description": "The scene now on preview. Omitted when the collection has no scene left, and\nby a server older than 0.27."
             },
             "program_scene": {
               "anyOf": [
@@ -3114,6 +3171,76 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "seq",
             "drops"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A gesture's live values changed (ADR-0032): the newest value of each parameter\nthat changed since the gesture's last `live.changed`, as setter edits. The engine\ncoalesces them per gesture to at most 30 a second, so a slow client gets fewer,\nnewer values, never a backlog; the last values before the gesture ends are always\nsent. Live values are runtime state: no `rev` changes.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client that holds it."
+            },
+            "gesture_id": {
+              "$ref": "#/$defs/GestureId",
+              "description": "The gesture."
+            },
+            "type": {
+              "const": "live.changed",
+              "type": "string"
+            },
+            "values": {
+              "description": "The parameters' new values.",
+              "items": {
+                "$ref": "#/$defs/Edit"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "gesture_id",
+            "client_id",
+            "values"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A gesture ended, and its parameters show their collection values again. For\n`committed`, the committing batch's `state.changed` comes first, and `rev` is the\nrevision it produced.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client that held it."
+            },
+            "gesture_id": {
+              "$ref": "#/$defs/GestureId",
+              "description": "The gesture."
+            },
+            "outcome": {
+              "$ref": "#/$defs/LiveOutcome",
+              "description": "How it ended."
+            },
+            "rev": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Rev"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The committing batch's revision, for `committed` only."
+            },
+            "type": {
+              "const": "live.ended",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "gesture_id",
+            "client_id",
+            "outcome"
           ],
           "type": "object"
         },
@@ -3337,6 +3464,36 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "GestureId": {
+      "description": "A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by\nthe client that opens it, and unique among that client's open gestures.",
+      "type": "string"
+    },
+    "GestureInfo": {
+      "description": "One open gesture, in a `live.list` result.",
+      "properties": {
+        "client_id": {
+          "$ref": "#/$defs/ClientId",
+          "description": "The client that opened it."
+        },
+        "gesture_id": {
+          "$ref": "#/$defs/GestureId",
+          "description": "The gesture, as its client named it."
+        },
+        "values": {
+          "description": "The value of each parameter it holds now, as setter edits. A parameter another\ngesture took over is not among them.",
+          "items": {
+            "$ref": "#/$defs/Edit"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "gesture_id",
+        "client_id",
+        "values"
+      ],
+      "type": "object"
     },
     "Glide": {
       "description": "Whether an item may pair with an item of another scene in a `move` transition.",
@@ -3856,6 +4013,26 @@ source: crates/jstream-protocol/src/fixtures.rs
         "version"
       ],
       "type": "object"
+    },
+    "LiveOutcome": {
+      "description": "How a gesture ended, in `live.ended`.",
+      "oneOf": [
+        {
+          "const": "committed",
+          "description": "A batch with `ends_gesture` applied; its `rev` is in the event.",
+          "type": "string"
+        },
+        {
+          "const": "cancelled",
+          "description": "Its client sent `live.cancel`.",
+          "type": "string"
+        },
+        {
+          "const": "expired",
+          "description": "Its client's session ended.",
+          "type": "string"
+        }
+      ]
     },
     "Loudness": {
       "description": "BS.1770 loudness, in LUFS. Each value is absent until enough audio has been measured\nfor it, and while the signal is below the absolute gate (−70 LUFS).",
@@ -4546,6 +4723,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Lists the open live-value gestures (ADR-0032), every client's, ordered by client\nand gesture ID, with the values each holds now: what a client that connects\nduring a drag reads to show it. Live values are runtime state, not collection\nstate, so the result carries no `rev`.",
+          "properties": {
+            "type": {
+              "const": "live.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Whether the engine is signed in to YouTube. Never calls YouTube.",
           "properties": {
             "type": {
@@ -4876,7 +5066,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   }
                 ]
               },
-              "description": "The transition presets and which one is the default (ADR-0029). Missing\n(from a server older than 0.26) parses as the one `cut` preset every\ncollection starts with."
+              "description": "The transition presets and which one is the default (ADR-0029). Missing\n(from a server older than 0.27) parses as the one `cut` preset every\ncollection starts with."
             },
             "type": {
               "const": "state.get",
@@ -5009,7 +5199,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The scene on preview, which `studio.set_preview` sets. Omitted only while the\ncollection has no scene, and by a server older than 0.26."
+              "description": "The scene on preview, which `studio.set_preview` sets. Omitted only while the\ncollection has no scene, and by a server older than 0.27."
             },
             "program_scene": {
               "anyOf": [
@@ -5055,6 +5245,27 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "rev",
             "encoders"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `live.list`.",
+          "properties": {
+            "gestures": {
+              "description": "The open gestures, ordered by client ID, then gesture ID.",
+              "items": {
+                "$ref": "#/$defs/GestureInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "live.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "gestures"
           ],
           "type": "object"
         },
@@ -6368,5 +6579,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.26"
+  "title": "JStream protocol 0.27"
 }

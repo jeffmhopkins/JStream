@@ -32,6 +32,7 @@ use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
+use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -584,6 +585,13 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputClearKey {
             output_id: OutputId::new("out_yt"),
         },
+        Action::LiveSet {
+            gesture_id: GestureId::new("drag_1"),
+            values: live_values(),
+        },
+        Action::LiveCancel {
+            gesture_id: GestureId::new("drag_1"),
+        },
         Action::YoutubeSignIn,
         Action::YoutubeSignOut,
         Action::YoutubeCreateBroadcast {
@@ -640,6 +648,27 @@ pub(crate) fn actions() -> Vec<Action> {
     ]
 }
 
+/// A two-item drag: one item moved, the other cropped.
+fn live_values() -> Vec<Edit> {
+    vec![
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+            geometry: corner_box(),
+        },
+        Edit::ItemSetCrop {
+            item_id: ItemId::new("itm_2"),
+            scene_id: None,
+            crop: Crop {
+                left: 4,
+                top: 0,
+                right: 4,
+                bottom: 0,
+            },
+        },
+    ]
+}
+
 pub(crate) fn queries() -> Vec<Query> {
     vec![
         Query::SceneList,
@@ -659,6 +688,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
             status: BroadcastListStatus::All,
@@ -1122,6 +1152,13 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             encoders: encoder_infos(),
         },
+        QueryResult::LiveList {
+            gestures: vec![GestureInfo {
+                gesture_id: GestureId::new("drag_1"),
+                client_id: ClientId::new("cli_7"),
+                values: live_values(),
+            }],
+        },
         QueryResult::YoutubeStatus {
             auth: YoutubeAuth::SignedIn,
         },
@@ -1259,6 +1296,25 @@ pub(crate) fn events() -> Vec<Event> {
             output_packets: 7,
         },
     });
+    events.push(Event::LiveChanged {
+        gesture_id: GestureId::new("drag_1"),
+        client_id: ClientId::new("cli_7"),
+        values: live_values(),
+    });
+    events.push(Event::LiveEnded {
+        gesture_id: GestureId::new("drag_1"),
+        client_id: ClientId::new("cli_7"),
+        outcome: LiveOutcome::Committed,
+        rev: Some(Rev(17)),
+    });
+    for outcome in [LiveOutcome::Cancelled, LiveOutcome::Expired] {
+        events.push(Event::LiveEnded {
+            gesture_id: GestureId::new("drag_2"),
+            client_id: ClientId::new("cli_8"),
+            outcome,
+            rev: None,
+        });
+    }
     for auth in [
         YoutubeAuth::Unavailable,
         YoutubeAuth::SignedOut,
@@ -1415,6 +1471,16 @@ pub(crate) fn client_messages() -> Vec<ClientMessage> {
             edits: edits(),
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
+        }),
+    ));
+    msgs.push(request(
+        2,
+        Call::Batch(Batch {
+            edits: live_values(),
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: Some(GestureId::new("drag_1")),
         }),
     ));
     msgs.push(request(

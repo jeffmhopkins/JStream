@@ -362,6 +362,7 @@ pub fn collection() -> Batch {
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
+        ends_gesture: None,
     }
 }
 
@@ -501,6 +502,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 edits: vec![],
                 expected_rev: Some(Rev(0)),
                 idempotency_key: None,
+                ends_gesture: None,
             },
             ProtocolError::RevConflict {
                 expected: Rev(0),
@@ -512,6 +514,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 edits: vec![],
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             ProtocolError::EmptyBatch,
         ),
@@ -687,6 +690,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 ],
                 expected_rev: Some(COLLECTION_REV),
                 idempotency_key: None,
+                ends_gesture: None,
             },
             ProtocolError::NotFound {
                 entity: EntityKind::Item,
@@ -849,6 +853,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 ],
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             ProtocolError::NotFound {
                 entity: EntityKind::Output,
@@ -1063,6 +1068,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                     .collect(),
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),
@@ -1094,6 +1100,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                     .collect(),
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             invalid(
                 "edits.14.bus_id",

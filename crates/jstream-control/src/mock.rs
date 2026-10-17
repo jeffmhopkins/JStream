@@ -9,10 +9,16 @@
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
 //! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
 //! scenes they set (`studio.get`),
-//! `state.changed`, `studio.changed` and `output.state_changed` events, and per-client
-//! undo and redo. Each [`MockEngine::connect`] opens one client session. It does no
-//! persistence or real output work, and knows no transition preset but the initial
-//! `cut` (ADR-0029): every switch cuts, and the `transition.*` edits are not mocked.
+//! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
+//! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
+//! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
+//! session. It does no persistence or real output work, and knows no transition preset
+//! but the initial `cut` (ADR-0029): every switch cuts, and the `transition.*` edits are
+//! not mocked.
+//!
+//! The mock has no render thread, so a gesture's values are released the moment it ends,
+//! and it sends one `live.changed` per `live.set` instead of coalescing them: the engine
+//! sends at most that many.
 //!
 //! Undo and redo build the same inverse edits as `jstream-graph`, but detect conflicts
 //! more strictly than the engine: once any other client has changed the collection since
@@ -27,12 +33,13 @@ use jstream_protocol::KindDescriptor;
 use jstream_protocol::{
     Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, Chord, ClientId, Crop, Edit,
     EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32,
-    GeometryError, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
-    IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo,
-    SourceKind, TransitionPresetId, TransitionStarted, TransitionsInfo, Welcome,
+    GeometryError, GestureId, GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding,
+    INITIAL_PRESET, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition,
+    LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind,
+    OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
+    RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo,
+    SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo, SourceKind,
+    TransitionPresetId, TransitionStarted, TransitionsInfo, Welcome, is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -217,13 +224,23 @@ impl Control for MockControl {
 }
 
 impl Drop for MockControl {
-    /// Ends this session's event streams and drops its undo history: the session is
-    /// gone, as when a socket closes.
+    /// Ends this session's event streams, drops its undo history and expires its open
+    /// gestures: the session is gone, as when a socket closes.
     fn drop(&mut self) {
         let mine = std::mem::take(&mut *lock(&self.subscriptions));
         close_all(mine);
         if let Some(client_id) = lock(&self.client_id).take() {
-            lock(&self.shared).history.forget(&client_id);
+            let mut state = lock(&self.shared);
+            state.history.forget(&client_id);
+            let open: Vec<GestureId> = state
+                .gestures
+                .keys()
+                .filter(|(owner, _)| *owner == client_id)
+                .map(|(_, gesture_id)| gesture_id.clone())
+                .collect();
+            for gesture_id in open {
+                state.end_gesture(&client_id, &gesture_id, LiveOutcome::Expired, None);
+            }
         }
     }
 }
@@ -256,6 +273,26 @@ struct State {
     program: Option<SceneId>,
     /// The scene on preview, which follows the same rules.
     preview: Option<SceneId>,
+    /// Every client's open gestures, with the value of each parameter each holds.
+    gestures: BTreeMap<(ClientId, GestureId), BTreeMap<Param, Edit>>,
+    /// Which gesture holds each parameter: at most one.
+    holders: BTreeMap<Param, (ClientId, GestureId)>,
+}
+
+/// A parameter a live value overrides: an item's placement (`false`) or its crop
+/// (`true`). Ordered as the engine orders them, placements first, so `live.changed` and
+/// `live.list` list values in the same order.
+type Param = (bool, ItemId);
+
+/// The parameter `value` sets, if it is live-adjustable.
+fn param_of(value: &Edit) -> Option<Param> {
+    match value {
+        Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
+            Some((false, item_id.clone()))
+        }
+        Edit::ItemSetCrop { item_id, .. } => Some((true, item_id.clone())),
+        _ => None,
+    }
 }
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
@@ -521,6 +558,17 @@ impl State {
         {
             return Ok(result.clone());
         }
+        // The engine checks `ends_gesture` before the graph's own checks.
+        if let Some(gesture_id) = &batch.ends_gesture
+            && !self
+                .gestures
+                .contains_key(&(client_id.clone(), gesture_id.clone()))
+        {
+            return Err(ProtocolError::invalid_argument(
+                "ends_gesture",
+                format!("the client has no open gesture `{gesture_id}`"),
+            ));
+        }
         // Same order as `jstream_graph::Graph::apply`: the revision check comes first.
         let current = self.collection.rev;
         if let Some(expected) = batch.expected_rev
@@ -542,6 +590,15 @@ impl State {
                 .insert((client_id.clone(), key), result.clone());
         }
         self.changed(client_id, request_id, rev, None);
+        if let Some(gesture_id) = batch.ends_gesture {
+            self.remove_gesture(client_id, &gesture_id);
+            self.emit(Event::LiveEnded {
+                gesture_id,
+                client_id: client_id.clone(),
+                outcome: LiveOutcome::Committed,
+                rev: Some(rev),
+            });
+        }
         Ok(result)
     }
 
@@ -662,7 +719,8 @@ impl State {
     }
 
     /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, `state.changed` is emitted, and the program scene is reconciled.
+    /// collection, live values on deleted items go, `state.changed` is emitted, and the
+    /// program scene is reconciled.
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -671,6 +729,12 @@ impl State {
         cause: Option<HistoryDirection>,
     ) {
         self.sync_outputs();
+        let items = &self.collection.items;
+        self.holders
+            .retain(|(_, item_id), _| items.contains_key(item_id));
+        for values in self.gestures.values_mut() {
+            values.retain(|(_, item_id), _| items.contains_key(item_id));
+        }
         self.emit(Event::StateChanged {
             rev,
             client_id: client_id.clone(),
@@ -772,6 +836,13 @@ impl State {
             }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            Action::LiveSet { gesture_id, values } => {
+                return self.live_set(client_id, gesture_id, values);
+            }
+            Action::LiveCancel { gesture_id } => {
+                self.end_gesture(client_id, &gesture_id, LiveOutcome::Cancelled, None);
+                return Ok(CallResult::action());
+            }
             Action::OutputSetKey { output_id, key } => {
                 // The engine's order: the output must be configured, then the key valid.
                 if !self.collection.outputs.contains_key(&output_id) {
@@ -907,6 +978,17 @@ impl State {
                 rev: self.collection.rev,
                 encoders: self.collection.encoder_infos(),
             },
+            Query::LiveList => QueryResult::LiveList {
+                gestures: self
+                    .gestures
+                    .iter()
+                    .map(|((client_id, gesture_id), values)| GestureInfo {
+                        gesture_id: gesture_id.clone(),
+                        client_id: client_id.clone(),
+                        values: values.values().cloned().collect(),
+                    })
+                    .collect(),
+            },
             Query::BusList => QueryResult::BusList {
                 rev: self.collection.rev,
                 buses: self.collection.bus_infos(),
@@ -922,6 +1004,111 @@ impl State {
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
+    }
+
+    /// `live.set`, checked in the engine's order: the shape of the message, then each
+    /// value against the collection as a batch's edits are, named `values.<n>`.
+    fn live_set(
+        &mut self,
+        client_id: &ClientId,
+        gesture_id: GestureId,
+        values: Vec<Edit>,
+    ) -> Result<CallResult, ProtocolError> {
+        let invalid = |field: String, reason: &str| ProtocolError::invalid_argument(field, reason);
+        if values.is_empty() {
+            return Err(invalid("values".into(), "must name at least one value"));
+        }
+        if values.len() > MAX_LIVE_VALUES {
+            return Err(invalid("values".into(), "must name at most 256 values"));
+        }
+        if let Some(at) = values.iter().position(|value| !is_live_adjustable(value)) {
+            return Err(invalid(format!("values.{at}.type"), "not live-adjustable"));
+        }
+        let key = (client_id.clone(), gesture_id);
+        let open = self
+            .gestures
+            .keys()
+            .filter(|(owner, _)| owner == client_id)
+            .count();
+        if !self.gestures.contains_key(&key) && open >= MAX_GESTURES_PER_CLIENT {
+            return Err(invalid("gesture_id".into(), "16 gestures are open"));
+        }
+        let running = self.running();
+        let mut check = self.collection.clone();
+        for (at, value) in values.iter().enumerate() {
+            check
+                .apply(value.clone(), at, &running)
+                .map_err(|error| match error {
+                    ProtocolError::InvalidArgument {
+                        field,
+                        reason,
+                        blockers,
+                    } => ProtocolError::InvalidArgument {
+                        field: match field.strip_prefix("edits.") {
+                            Some(rest) => format!("values.{rest}"),
+                            None => field,
+                        },
+                        reason,
+                        blockers,
+                    },
+                    other => other,
+                })?;
+        }
+        let mut changed = BTreeMap::new();
+        for value in values {
+            let Some(param) = param_of(&value) else {
+                continue;
+            };
+            if let Some(holder) = self.holders.insert(param.clone(), key.clone())
+                && holder != key
+                && let Some(other) = self.gestures.get_mut(&holder)
+            {
+                other.remove(&param);
+            }
+            changed.insert(param, value);
+        }
+        self.gestures
+            .entry(key.clone())
+            .or_default()
+            .extend(changed.clone());
+        self.emit(Event::LiveChanged {
+            gesture_id: key.1,
+            client_id: key.0,
+            values: changed.into_values().collect(),
+        });
+        Ok(CallResult::action())
+    }
+
+    /// Ends `client_id`'s gesture without a commit, if it is open, and emits `live.ended`.
+    fn end_gesture(
+        &mut self,
+        client_id: &ClientId,
+        gesture_id: &GestureId,
+        outcome: LiveOutcome,
+        rev: Option<Rev>,
+    ) {
+        if self.remove_gesture(client_id, gesture_id) {
+            self.emit(Event::LiveEnded {
+                gesture_id: gesture_id.clone(),
+                client_id: client_id.clone(),
+                outcome,
+                rev,
+            });
+        }
+    }
+
+    /// Closes a gesture and lets go of the parameters it held. Returns whether it was open.
+    fn remove_gesture(&mut self, client_id: &ClientId, gesture_id: &GestureId) -> bool {
+        let key = (client_id.clone(), gesture_id.clone());
+        let Some(values) = self.gestures.remove(&key) else {
+            return false;
+        };
+        for param in values.keys() {
+            if self.holders.get(param) == Some(&key) {
+                self.holders.remove(param);
+            }
+        }
+        true
     }
 
     /// Queues `event` for every live subscriber, and forgets subscriptions that were
@@ -2456,6 +2643,7 @@ mod tests {
             ],
             expected_rev: Some(Rev(0)),
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, edits), Ok(Rev(1)));
         assert_eq!(engine.rev(), Rev(1));
@@ -2522,6 +2710,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(1)));
         assert_eq!(
@@ -2552,6 +2741,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         let error = batch(&*control, cycle).expect_err("cycle");
         assert!(matches!(
@@ -2835,6 +3025,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, teardown), Ok(Rev(2)));
         let empty = state(&*control);
@@ -3057,6 +3248,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, more), Ok(Rev(2)));
         let Ok(QueryResult::SourceList { rev, sources }) = query(&*control, Query::SourceList)
@@ -3099,6 +3291,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, unplace), Ok(Rev(3)));
         let Ok(QueryResult::SourceList { sources, .. }) = query(&*control, Query::SourceList)
@@ -3134,6 +3327,7 @@ mod tests {
             edits,
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         let setup = edits(vec![
             create("a"),
@@ -3210,6 +3404,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(2)));
         let cycle = Batch::single(Edit::ItemSetSource {
@@ -3232,6 +3427,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, retarget), Ok(Rev(3)));
         let Ok(QueryResult::ItemList { items, .. }) = query(
@@ -3280,6 +3476,7 @@ mod tests {
                 ],
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
         )
         .expect("created");
@@ -3300,6 +3497,7 @@ mod tests {
                 edits: vec![wave(serde_json::Value::Null), delete],
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
         )
         .expect("cleared, then deleted");
@@ -3455,6 +3653,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(1)));
         let roles = |control: &dyn Control| match query(control, Query::SceneList) {
@@ -3495,6 +3694,7 @@ mod tests {
             edits: vec![mv("i1", "g", 0), mv("i2", "g", 1)],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, grouped), Ok(Rev(2)));
         assert_eq!(items(&*control, "a"), ["gi"]);
@@ -3567,6 +3767,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, back), Ok(Rev(5)));
         assert_eq!(items(&*control, "a"), ["i1", "gi"]);
@@ -3606,6 +3807,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(1)));
         let before = state(&*control);
@@ -3626,6 +3828,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, group), Ok(Rev(2)));
         let grouped = state(&*control);
@@ -3654,6 +3857,7 @@ mod tests {
             edits: vec![create("a"), webcam(), add("a", "i1", "webcam")],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(1)));
         let before = state(&*control);
@@ -3671,6 +3875,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, fade), Ok(Rev(2)));
         let faded = state(&*control);
@@ -3696,6 +3901,7 @@ mod tests {
             edits: vec![],
             expected_rev: Some(Rev(5)),
             idempotency_key: None,
+            ends_gesture: None,
         };
         // `jstream_graph::Graph::apply` answers this with `rev_conflict` too.
         let error = batch(&*control, empty_and_stale).expect_err("stale");
@@ -3757,6 +3963,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         let error = batch(&*control, edits).expect_err("fails");
         assert_eq!(
@@ -3775,6 +3982,7 @@ mod tests {
             edits: vec![],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         let empty = batch(&*control, empty).expect_err("empty");
         assert_eq!(code(&empty), Some("empty_batch"));

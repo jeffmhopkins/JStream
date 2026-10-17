@@ -452,6 +452,7 @@ pub async fn apply(
         edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     if let Some(rev) = expected_rev {
         batch = batch.expecting(rev);
@@ -587,6 +588,7 @@ mod tests {
             edits,
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         }));
         now(batch).unwrap_or_else(|e| panic!("batch failed: {e}"));
         let state = now(session.control.call(Call::Query {

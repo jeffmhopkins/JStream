@@ -33,6 +33,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
   kind, and `HistoryDirection` (`undo`, `redo`), the `cause` of a `state.changed` and
   the `direction` of a `history_empty` error.
+- **Live values** (`live.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
+  `LiveOutcome` (`committed`, `cancelled`, `expired`), `GestureInfo` (one open gesture
+  in a `live.list` result), the limits `MAX_GESTURES_PER_CLIENT` (16) and
+  `MAX_LIVE_VALUES` (256), and `is_live_adjustable`, which says which setters `live.set`
+  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`), so every
+  implementation agrees.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
@@ -50,10 +56,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `scene.switch` with its optional `preset_id`, `studio.set_preview`,
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
-  `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`),
-  with `Action::named_objects` and `Action::bind_problem`, which every implementation
-  uses to check and follow a hotkey's action;
-  `Batch`; and the `Command`/`CommandClass`
+  `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
+  `live.set`, `live.cancel`), with `Action::named_objects` and `Action::bind_problem`,
+  which every implementation uses to check and follow a hotkey's action; `Batch`, whose
+  optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
@@ -82,9 +88,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus),
-  `studio.get` and `device.list`, with `QueryResult` and the `SceneSummary`,
-  `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo` shapes the reads report.
-  `state.get` carries the `Canvas`, and `ItemInfo`
+  `studio.get`, `device.list` and `live.list`, with `QueryResult` and the
+  `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo` shapes the
+  reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
@@ -110,7 +116,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (Transitions above).
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
   (program, preview and the transition a switch started), `events.dropped`,
-  `stats.tick`, `meters.tick`, `youtube.status_changed` and `youtube.health_changed`.
+  `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
+  `live.changed` and `live.ended`.
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), and the binary
@@ -121,7 +128,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs (`BusId::master()` is
-  the one fixed ID, `master`), `Rev`, and `PROTOCOL_VERSION`.
+  the one fixed ID, `master`; a `GestureId` is chosen by the client), `Rev`, and
+  `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
   NaN, infinity and out-of-range numbers at construction and deserialization. Computed
   results (`CanvasPoint`, `ContentRect`, `LegacyQuad`) use plain `f32`.
@@ -133,11 +141,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.26 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.27 because of
   transition presets and studio mode's preview (the `transition.*` edits,
   `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
   `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
-  `transition` entity kind and kind category); 0.25 added
+  `transition` entity kind and kind category); 0.26 added live values
+  ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the `live.changed`
+  and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
   hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
   `hotkeys` and the batch result's `removed_hotkeys`); 0.24 added bus
   references (the `bus` parameter type and reference, which the `waveform` and
@@ -217,8 +227,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":24},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":24},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":26},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":26},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -554,7 +564,8 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   action request, checked as an `action` call is, and only actions can be bound, so a
   hotkey never adds to an undo history. `output.set_key` can't be bound (its stream key
   would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)), nor
-  can the preview actions (they serve only the sending session), `pairing.start` and
+  can the preview actions (they serve only the sending session), `live.set` and
+  `live.cancel` (their gesture belongs to the sending session), `pairing.start` and
   `device.revoke` (the server answers them for the client that asks), or the
   `youtube.*` actions (YouTube is driven through the UI,
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)): each is
@@ -580,7 +591,7 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
 
 [ADR-0029](../../docs/adr/0029-transitions.md) and
 [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
-the model (0.26). A transition preset is collection state:
+the model (0.27). A transition preset is collection state:
 `{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
 kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
 `settings` are checked against its descriptor as a source's are (`unmatched`, the
@@ -644,7 +655,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
   parses as empty), and the transition presets with the default (`transitions`;
-  missing from a pre-0.26 server, it parses as the one initial `cut`). A client reads
+  missing from a pre-0.27 server, it parses as the one initial `cut`). A client reads
   it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
@@ -670,7 +681,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview
-  (`preview_scene`, 0.26), each omitted only while the collection has no scene. Runtime
+  (`preview_scene`, 0.27), each omitted only while the collection has no scene. Runtime
   state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
@@ -809,11 +820,54 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   undoing its `output.create`, which fails with `invalid_argument` until the output
   stops.
 - `history_empty` (`direction`) means there is nothing to undo or redo.
-- Actions (outputs, stream keys), queries and history calls are never steps. The engine
+- Actions (outputs, stream keys, live values), queries and history calls are never
+  steps; a gesture's step is its committing batch. The engine
   keeps 100 steps per client by default, in memory, for the session's lifetime.
 
-Live values, which keep a drag to one batch and one undo step, are the other half of
-ADR-0032 and are not built yet.
+### Live values
+
+Live values (0.26) keep a drag, a fader move or a live dialog to one batch and one undo
+step ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). A client opens a **gesture**,
+named by a `gesture_id` it chooses, and sends its values as it goes:
+
+```json
+{"type":"request","id":"r7","call":{"kind":"action","action":{"type":"live.set","gesture_id":"drag_1","values":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":800,"y":450},"size":{"width":480,"height":270}}}]}}}
+{"type":"response","id":"r7","result":{"kind":"action"}}
+{"type":"request","id":"r9","call":{"kind":"batch","edits":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":820,"y":450},"size":{"width":480,"height":270}}}],"ends_gesture":"drag_1"}}
+```
+
+- `live.set {gesture_id, values}` opens the gesture if it is new and sets its values:
+  setter edits, the same ones a batch carries. Each overrides one parameter on output
+  from the next render tick, and replaces the gesture's earlier value for it. A live
+  value is runtime state: it never changes `rev`, is never an undo step, is never saved,
+  and `state.get` and `item.list` never show it. The live-adjustable setters are
+  `item.set_transform`, `item.set_geometry` (one parameter, the placement) and
+  `item.set_crop`; audio faders and kind parameters marked `live` follow as their
+  real-time paths exist. Values are checked as a batch's edits are, named
+  `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
+  values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
+  message is applied. The engine never refuses a `live.set` for arriving fast; a client
+  keeps one per gesture in flight and sends its newest values when the answer comes.
+- **Commit:** the client sends one ordinary batch with the final values and
+  `ends_gesture`. It is one `rev`, one undo step whose inverse restores the values from
+  before the gesture, and one audit entry. The gesture ends with it. A batch whose
+  `ends_gesture` names no gesture the client has open is `invalid_argument` (field
+  `ends_gesture`), and a batch that fails leaves the gesture open.
+- **Cancel:** `live.cancel {gesture_id}` ends the gesture without a commit; it succeeds
+  when there is nothing to cancel, so a retry is safe. A gesture also ends,
+  `expired`, when its client's session ends.
+- **Two gestures, one parameter:** a parameter is held by one gesture at a time. A
+  `live.set` naming a parameter another gesture holds takes it over (last writer
+  wins); the other keeps the rest. A gesture left holding nothing stays open, and
+  counts toward the client's 16, until the client commits it, cancels it or
+  disconnects, so its `ends_gesture` still works. A batch that changes a held parameter changes the
+  collection, but the live value still shows until the gesture ends. A batch that
+  deletes an item drops its live values.
+- `live.list` returns every open gesture, ordered by client and gesture ID, with the
+  values each holds now, for a client that connects during one. It carries no `rev`.
+
+`live.set` and `live.cancel` are actions: never undoable, never batchable, answering
+`{"kind":"action"}`.
 
 ### Events
 
@@ -836,7 +890,16 @@ After `welcome`, the server pushes every event to every client.
   transition lasts in milliseconds (`duration_ms`, 0 for a cut), so a client can show
   progress; no event marks the end. Program and preview are runtime state, so it
   carries no `rev` ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
-  Added in 0.16; `preview_scene` and `transition` in 0.26.
+  Added in 0.16; `preview_scene` and `transition` in 0.27.
+- `live.changed {gesture_id, client_id, values}` carries the newest value of each
+  parameter a gesture changed since its last one. The engine coalesces it per gesture
+  to at most 30 a second, so a slow client gets fewer, newer values; the values a
+  gesture had not sent yet always go out before it ends. Until
+  [open question 7](#open-questions) every client receives it.
+- `live.ended {gesture_id, client_id, outcome, rev?}` says a gesture ended: `committed`
+  with the committing batch's `rev`, whose `state.changed` comes first, `cancelled` or
+  `expired`. A client that doesn't know these events ignores them and shows committed
+  state only.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -975,11 +1038,11 @@ after 1.0:
   sends, but if one's bus has since been deleted by another client, the undo fails with
   `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
   answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
-  filter edits. 0.26 adds the `EntityKind` value `transition` in the same way, but also
+  filter edits. 0.27 adds the `EntityKind` value `transition` in the same way, but also
   the `KindCategory` value `transition`, which `kind.list` reports for every transition
-  kind, so a client older than 0.26 can't parse `kind.list` from a 0.26 server. From
-  0.26 `KindCategory` parses an unknown value as `Unknown`, so a later category won't
-  break a 0.26 client. The encoder enums (`VideoCodec`,
+  kind, so a client older than 0.27 can't parse `kind.list` from a 0.27 server. From
+  0.27 `KindCategory` parses an unknown value as `Unknown`, so a later category won't
+  break a 0.27 client. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
@@ -1054,8 +1117,8 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
   ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
 - **Not in 0.11 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
-  the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
-  which need the live-value channel. Both are later minors.
+  the engine's runtime source sizes, and live geometry values, which arrived in 0.26
+  with `live.set` ([Live values](#design)). Both are later minors.
 
 ### Binary streams
 
@@ -1136,8 +1199,8 @@ described above.
    `history.undo` and `history.redo` are a fourth kind of call, `history`, which
    carries no command (it applies a batch of edits the engine already holds), so
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
-   (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are not
-   built yet.
+   (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are built
+   for item placements and crops ([Live values](#design)), not yet for audio faders.
 5. **Actions that change collection state.** Settled by
    [ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md): the program
    scene is runtime state, not collection state, so `scene.switch` is an action that
@@ -1145,13 +1208,14 @@ described above.
 6. **Idempotency.** How long the engine remembers keys (count or time), and whether a
    reused key with a different batch is an error (`idempotency_key_reused`).
 7. **Event subscriptions.** Every client gets every event in this cut, including
-   `stats.tick` (0.6). High-rate events (`stats.tick`, meters) will need opt-in
-   subscriptions. Until then every client receives a tick about once a second while
-   the pipeline runs.
+   `stats.tick` (0.6) and `live.changed`. High-rate events (`stats.tick`,
+   `live.changed`, meters) will need opt-in subscriptions. Until then every client
+   receives a tick about once a second while the pipeline runs, and up to 30
+   `live.changed` a second per gesture while someone drags.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
-   fallbacks from 0.9 and `KindCategory` from 0.26, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
+   fallbacks from 0.9 and `KindCategory` from 0.27, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
    outputs (see Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?

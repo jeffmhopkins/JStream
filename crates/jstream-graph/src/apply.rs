@@ -117,6 +117,7 @@ impl Graph {
                 edits: inverse,
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
         })
     }
