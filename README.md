@@ -60,7 +60,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 97 of 112 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 22 items, by next step: 🔨 build 11, 🌊 its wave lands 2, 🧪 Windows run 7, 👤 maintainer 2</summary>
+<summary><b>What's left</b>: 22 items, by next step: 🔨 build 12, 🌊 its wave lands 1, 🧪 Windows run 7, 👤 maintainer 2</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -84,7 +84,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | drafts #319 and #323 |  |
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🌊 its wave lands, then 🔨 build | effect packs #368 land with wave/m1-2; full 3D transforms to build | #359 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
-| CL1 | CLAP plugin host | M3 | 🌊 its wave lands, then 🔨 build, then 🧪 Windows run | parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
+| CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; CLAP filters to run; then a live-audio Windows run (#342 tracks the host's hardware run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | M3 | 🔨 build |  |  |
 | MAC1 | macOS platform crate | M3 | 👤 maintainer, then 🔨 build | the maintainer decides whether it stays in M3; then the macOS ADR |  |
 | LNX1 | Linux codec path and platform crate | M3 | 👤 maintainer, then 🔨 build | the maintainer decides platform support; then the Linux codec-path ADR |  |
@@ -252,7 +252,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 land with wave/m1-2; full 3D transforms to build | #359 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
-| CL1 | CLAP plugin host | ⏳ planned: parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
+| CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; CLAP filters to run; then a live-audio Windows run (#342 tracks the host's hardware run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | ⏳ planned |  |
 | MAC1 | macOS platform crate | ⏳ planned: the maintainer decides whether it stays in M3; then the macOS ADR |  |
 | LNX1 | Linux codec path and platform crate | ⏳ planned: the maintainer decides platform support; then the Linux codec-path ADR |  |
