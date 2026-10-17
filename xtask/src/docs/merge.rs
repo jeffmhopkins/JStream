@@ -7,8 +7,12 @@
 //! be re-read anyway; which entry the merge keeps doesn't matter, only that the section is
 //! reported as stale. A branch from before ADR-0053 also conflicts on the inline
 //! `verified` lines main moved to the ledger; main's side (no line) is taken the same way,
-//! and inline stamps the branch added are then moved by `docs migrate`. Every other
-//! conflict is left untouched for a person.
+//! and inline stamps the branch added are then moved by `docs migrate`.
+//!
+//! A conflict wholly inside `@generated` blocks, such as two PRs each regenerating the
+//! README's progress table, is resolved by taking that branch's side and rewriting every
+//! block from the merged sources, as `docs generate` would (ADR-0038). Every other conflict
+//! is left untouched for a person.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -29,12 +33,19 @@ pub(crate) struct Merge {
     pub(crate) stamps: Vec<String>,
     /// What `docs migrate` did after the merge, when the branch still had inline stamps.
     pub(crate) migrated: Option<super::Migrate>,
+    /// Files whose conflict was only inside `@generated` blocks, rewritten from the merged
+    /// sources.
+    pub(crate) generated: Vec<String>,
     /// Conflicted files left for a person, with the reason.
     pub(crate) refused: Vec<(String, String)>,
     /// Whether the merge was committed.
     pub(crate) committed: bool,
     /// Sections stale after the merge, as `DOC#anchor`; empty unless `committed`.
     pub(crate) stale: Vec<String>,
+    /// For each stale section, the notes this branch had written on it before the merge
+    /// (on entries that differ from the merge base's), so the re-verify can carry them
+    /// forward (docs/DOCS.md#notes).
+    pub(crate) notes: BTreeMap<String, Vec<String>>,
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<Output> {
@@ -93,6 +104,7 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
         report.committed = true;
         report.migrated = migrate_inline(root)?;
         report.stale = stale_sections(root)?;
+        report.notes = branch_notes(root, &report.stale)?;
         return Ok(report);
     }
     if !git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
@@ -124,7 +136,11 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
                     if path == ledger::PATH {
                         resolve_ledger(&text)
                     } else {
-                        resolve(path, &text)
+                        resolve(path, &text).or_else(|why| {
+                            let text = resolve_generated(path, &text).map_err(|_| why)?;
+                            report.generated.push(path.to_owned());
+                            Ok((text, Vec::new()))
+                        })
                     }
                 })
         } else {
@@ -141,13 +157,75 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     }
     report.stamps.sort();
     report.stamps.dedup();
+    if report.refused.is_empty() && !report.generated.is_empty() {
+        let g = super::write_generated(root)?;
+        for d in &g.problems {
+            report
+                .refused
+                .push((d.path.clone(), format!("`docs generate`: {}", d.msg)));
+        }
+        for (path, _, _) in &g.files {
+            git_ok(root, &["add", "--", path])?;
+        }
+    }
     if report.refused.is_empty() {
         git_ok(root, &["commit", "-q", "--no-edit"])?;
         report.committed = true;
         report.migrated = migrate_inline(root)?;
         report.stale = stale_sections(root)?;
+        report.notes = branch_notes(root, &report.stale)?;
     }
     Ok(report)
+}
+
+/// The ledger as it was at `rev`; empty when the file is missing or doesn't parse there.
+fn ledger_at(root: &Path, rev: &str) -> Result<ledger::Ledger> {
+    let out = git(root, &["show", &format!("{rev}:{}", ledger::PATH)])?;
+    if !out.status.success() {
+        return Ok(ledger::Ledger::default());
+    }
+    Ok(ledger::Ledger::parse(&String::from_utf8_lossy(&out.stdout)).unwrap_or_default())
+}
+
+/// For each of `stale`, the distinct notes the branch wrote on it: notes on entries of the
+/// merge's first parent that differ from the merge base's entry. Called after the merge
+/// commit, so `HEAD^1` is the branch and `HEAD^2` what was merged. A merge-main that only
+/// ran `docs migrate` on top leaves the merge at `HEAD~1`; both are tried.
+fn branch_notes(root: &Path, stale: &[String]) -> Result<BTreeMap<String, Vec<String>>> {
+    let mut out = BTreeMap::new();
+    if stale.is_empty() {
+        return Ok(out);
+    }
+    let merge = ["HEAD", "HEAD~1"].into_iter().find(|rev| {
+        git(root, &["rev-parse", "-q", "--verify", &format!("{rev}^2")])
+            .is_ok_and(|o| o.status.success())
+    });
+    let Some(merge) = merge else { return Ok(out) };
+    let (ours, theirs) = (format!("{merge}^1"), format!("{merge}^2"));
+    let base = git_ok(root, &["merge-base", &ours, &theirs])?;
+    let base = String::from_utf8_lossy(&base).trim().to_owned();
+    let (branch, base) = (ledger_at(root, &ours)?, ledger_at(root, &base)?);
+    for key in stale {
+        let Some(stamp) = branch.sections.get(key) else {
+            continue;
+        };
+        let before = base.sections.get(key);
+        let mut notes: Vec<String> = Vec::new();
+        for (input, e) in stamp {
+            if before.and_then(|b| b.get(input)) == Some(e) {
+                continue;
+            }
+            if let Some(n) = &e.note
+                && !notes.contains(n)
+            {
+                notes.push(n.clone());
+            }
+        }
+        if !notes.is_empty() {
+            out.insert(key.clone(), notes);
+        }
+    }
+    Ok(out)
 }
 
 /// After a merge commit: runs `docs migrate` and commits what it changed, if anything, so
@@ -305,6 +383,45 @@ fn resolve(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
     Ok((theirs, stamps))
 }
 
+/// Resolves every conflict in `text` (the conflicted contents of `path`) to the merged
+/// branch's side, provided each conflict on both sides lies strictly inside a
+/// `@generated` block that `docs generate` writes. The caller then rewrites the blocks from the merged sources, so the
+/// side taken doesn't matter. Returns the resolved text, or why the file is left alone.
+fn resolve_generated(path: &str, text: &str) -> Result<String, String> {
+    if !is_tracked(path) {
+        return Err("not a tracked doc".to_owned());
+    }
+    let (ours, theirs, hunks) = sides(text)?;
+    for (side, is_main) in [(&ours, false), (&theirs, true)] {
+        // Only blocks a generator owns: a conflict in any other block would keep the
+        // merged branch's side with nothing to rewrite it.
+        let names = [
+            super::generate::STATUS_BLOCK,
+            super::generate::INDEX_BLOCK,
+            super::progress::BLOCK,
+        ];
+        let mut inside = Vec::new();
+        let mut open = false;
+        for line in side.lines() {
+            let line = line.trim_end();
+            if names.iter().any(|n| line == super::generate::end(n)) {
+                open = false;
+            }
+            inside.push(open);
+            if names.iter().any(|n| line == super::generate::begin(n)) {
+                open = true;
+            }
+        }
+        for h in &hunks {
+            let (a, b) = if is_main { h.theirs } else { h.ours };
+            if (a..b).any(|k| !inside.get(k).copied().unwrap_or(false)) {
+                return Err("a conflict outside `@generated` blocks".to_owned());
+            }
+        }
+    }
+    Ok(theirs)
+}
+
 /// Sections whose ledger stamp doesn't match their inputs, or that need one and have
 /// none, as `DOC#anchor`.
 pub(crate) fn stale_sections(root: &Path) -> Result<Vec<String>> {
@@ -361,6 +478,34 @@ mod tests {
             "||||||| base\nverified = { hash = \"b3:0\", by = \"a:z\", note = \"base\" }\n=======\n",
         );
         assert_eq!(resolve("T.md", &diff3).expect("diff3").0, out);
+    }
+
+    #[test]
+    fn generated_only_conflicts_take_main() {
+        let block = |o: &str, t: &str| {
+            format!(
+                "# R\n\n<!-- @generated begin progress -->\n| a |\n<<<<<<< HEAD\n{o}=======\n{t}>>>>>>> origin/wave/m1\n<!-- @generated end progress -->\n\nAfter.\n"
+            )
+        };
+        let text = block("7 left.\n", "8 left.\n");
+        assert_eq!(
+            resolve_generated("README.md", &text).expect("generated-only"),
+            "# R\n\n<!-- @generated begin progress -->\n| a |\n8 left.\n<!-- @generated end progress -->\n\nAfter.\n"
+        );
+        let outside = text.replace(
+            "\nAfter.\n",
+            "\n<<<<<<< HEAD\nOurs.\n=======\nMain.\n>>>>>>> m\n",
+        );
+        let marker = "# R\n\n<<<<<<< HEAD\n<!-- @generated begin progress -->\n=======\n>>>>>>> m\nx\n<!-- @generated end progress -->\n";
+        let unowned = text.replace("progress -->", "other -->");
+        for (path, text) in [
+            ("README.md", unowned.as_str()),
+            ("README.md", outside.as_str()),
+            ("README.md", marker),
+            ("a.rs", text.as_str()),
+        ] {
+            assert!(resolve_generated(path, text).is_err(), "{text}");
+        }
     }
 
     #[test]

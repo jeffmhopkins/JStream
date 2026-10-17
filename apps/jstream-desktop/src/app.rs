@@ -26,6 +26,8 @@ pub const COLLECTION: &str = "collection.json";
 pub struct Options {
     /// `--ui-dir <dir>`: the UI bundle to serve instead of the `ui` folder beside the exe.
     pub ui_dir: Option<PathBuf>,
+    /// `--no-vcam`: run the engine without the virtual camera.
+    pub no_vcam: bool,
 }
 
 /// Parses the arguments after the program name.
@@ -38,9 +40,10 @@ pub fn parse(args: &[OsString]) -> Result<Options, String> {
                 Some(dir) if !dir.is_empty() => options.ui_dir = Some(PathBuf::from(dir)),
                 _ => return Err("`--ui-dir` needs a folder".to_owned()),
             },
+            Some("--no-vcam") => options.no_vcam = true,
             _ => {
                 return Err(format!(
-                    "unknown argument `{}`; the app takes only `--ui-dir <folder>`",
+                    "unknown argument `{}`; the app takes only `--ui-dir <folder>` and `--no-vcam`",
                     arg.to_string_lossy()
                 ));
             }
@@ -92,9 +95,16 @@ pub fn start(options: &Options, exe_dir: Option<&Path>, data: Option<&Path>) -> 
         let logs = data.join("logs");
         let audit = jstream_core::AuditFile::open(&logs)
             .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
-        let engine = host::engine(&data.join(COLLECTION), data, Arc::new(audit))?;
+        let engine = host::engine(
+            &data.join(COLLECTION),
+            data,
+            Arc::new(audit),
+            !options.no_vcam,
+        )?;
         Host::start(engine, ui::ORIGIN)
     })();
+    let vcam = host::vcam_status(exe_dir, !options.no_vcam);
+    tracing::info!(vcam = vcam.as_str(), "virtual camera");
     let host = match host {
         Ok(host) => host,
         Err(error) => return problem(error),
@@ -112,7 +122,7 @@ pub fn start(options: &Options, exe_dir: Option<&Path>, data: Option<&Path>) -> 
         host.stop();
         return Startup::problem(message);
     }
-    let script = bootstrap::script(ui::ORIGIN, host.ws_url(), host.token());
+    let script = bootstrap::script(ui::ORIGIN, host.ws_url(), host.token(), vcam.as_str());
     Startup {
         ui,
         script: Some(script),
@@ -162,12 +172,20 @@ mod tests {
     }
 
     #[test]
-    fn the_command_line_takes_only_a_ui_folder() {
+    fn the_command_line_takes_a_ui_folder_and_the_vcam_toggle() {
         assert_eq!(parse(&args(&[])), Ok(Options::default()));
         assert_eq!(
             parse(&args(&["--ui-dir", "dist"])),
             Ok(Options {
-                ui_dir: Some(PathBuf::from("dist"))
+                ui_dir: Some(PathBuf::from("dist")),
+                no_vcam: false,
+            })
+        );
+        assert_eq!(
+            parse(&args(&["--no-vcam", "--ui-dir", "dist"])),
+            Ok(Options {
+                ui_dir: Some(PathBuf::from("dist")),
+                no_vcam: true,
             })
         );
         assert!(parse(&args(&["--ui-dir"])).is_err());

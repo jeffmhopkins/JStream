@@ -14,7 +14,7 @@
 //! dependency entries (ADR-0042).
 //! In covered workflow files, the commit SHA and version comment of `uses:` pins are
 //! ignored, so Dependabot pin bumps don't stale the doc that specifies the workflow
-//! (ADR-0018; review N5 on #7).
+//! (ADR-0018, now ADR-0056; review N5 on #7).
 
 use std::collections::BTreeMap;
 use std::path::Path;

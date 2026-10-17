@@ -136,6 +136,8 @@ mod tests {
             source_id: SourceId::new(source_id),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         }
     }
 

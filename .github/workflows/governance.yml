@@ -9,7 +9,7 @@
 # though, so an edit to this file is only caught by being a listed governance change.
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
-# Dependabot proposes updates (ADR-0018). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+# Dependabot proposes updates (ADR-0056). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
 
 name: governance
 

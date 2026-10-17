@@ -27,7 +27,9 @@ enforced_by = ["review"]
 applies_to = ["crates/**"]
 -->
 Every capability is first a command, query, event or stream in `jstream-protocol`.
-UI, MCP and CLI are built on the protocol, never beside it. There are no UI-only features.
+UI, MCP and CLI are built on the protocol, never beside it. There are no UI-only features,
+except YouTube's account features (the `youtube.*` commands, queries and events), which
+[ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) keeps from agents.
 
 <a id="R-ARCH-002"></a>
 ### R-ARCH-002: Crate layering
@@ -203,7 +205,8 @@ applies_to = ["crates/**"]
 -->
 Only crates whose metadata declares `unsafe_allowed = true` may contain `unsafe`:
 `jstream-platform-windows`, `jstream-platform-macos`, `jstream-platform-linux`,
-`jstream-vcam-windows`, `jstream-browser` (ADR-0046) and `*-sys`. All other crates have `#![forbid(unsafe_code)]`,
+`jstream-vcam-windows`, `jstream-browser` (ADR-0046), `jstream-browser-helper` (ADR-0048,
+for its `RunWinMain` export) and `*-sys`. All other crates have `#![forbid(unsafe_code)]`,
 and lint-deps checks that it's present.
 
 <a id="R-UNSAFE-002"></a>
@@ -398,7 +401,7 @@ applies_to = [".github/workflows/**"]
 -->
 Every third-party action is referenced as `owner/action@<full commit SHA> # vX.Y.Z`. Mutable
 tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
-([ADR-0018](adr/0018-ci-supply-chain-policy.md)).
+([ADR-0056](adr/0056-ci-supply-chain-policy-v2.md)).
 
 <a id="testing"></a>
 ## Testing
@@ -492,7 +495,8 @@ Protocol commands are named `noun.verb` in snake_case (`scene.create`). MCP tool
 match `^[a-zA-Z0-9_-]{1,128}$` ([Anthropic tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use)),
 which rules out the protocol's `.`. So the tools are generated from the protocol and grouped
 by noun ([ARCH › MCP](ARCHITECTURE.md#mcp)): each command or query `noun.verb` is an `op` of
-the tool named after its noun (`scene`), and reaches exactly one tool. Tool names are
+the tool named after its noun (`scene`), and reaches exactly one tool. The one exception is
+the `youtube` noun, whose ops reach no tool ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). Tool names are
 unique. IDs are opaque strings.
 
 <a id="R-API-003"></a>
@@ -543,7 +547,8 @@ token (even on localhost), except `POST /api/v1/pair` while a pairing code is op
 ([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
 device token, never the control token, as the `__Host-jstream_device` cookie. Every
 listener validates the `Host` header, and
-the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
+the `Origin` header when one is present. A device token is accepted only over loopback
+or TLS. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>
@@ -603,7 +608,7 @@ applies_to = [".github/workflows/**"]
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
 On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
-`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
+`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist` and `macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
 the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
@@ -623,6 +628,7 @@ every other check runs. The wave's PR into `main` runs every check ([ADR-0055](a
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
+| `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0020](adr/0020-portable-windows-distribution.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |

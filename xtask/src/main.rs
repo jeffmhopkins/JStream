@@ -1,6 +1,6 @@
 //! `cargo xtask`: repository automation.
 //!
-//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance, docs/DOCS.md#dependency-lint
+//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance, docs/DOCS.md#dependency-lint, docs/ARCHITECTURE.md#packaging
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -8,6 +8,7 @@
     reason = "xtask is a command-line tool; stderr is its UI"
 )]
 
+mod dist;
 mod docs;
 mod governance;
 mod lint_deps;
@@ -19,6 +20,14 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     match args.first().map(String::as_str) {
+        Some("dist") => match dist::run(&args[1..], &root) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("xtask dist: {e:#}");
+                ExitCode::from(2)
+            }
+        },
         Some("docs") => match docs::run(&args[1..], &root) {
             Ok(true) => ExitCode::SUCCESS,
             Ok(false) => ExitCode::FAILURE,
@@ -46,6 +55,10 @@ fn main() -> ExitCode {
         _ => {
             eprintln!("usage: cargo xtask <command>\n\ncommands:");
             for (name, what) in [
+                (
+                    "dist",
+                    "the portable Windows zip (ADR-0020): [--ui-dir <dir>] [--out <dir>]",
+                ),
                 ("docs check", "check the documentation graph (docs/DOCS.md)"),
                 (
                     "docs generate",

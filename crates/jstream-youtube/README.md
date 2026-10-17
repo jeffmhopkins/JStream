@@ -12,12 +12,12 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
 -->
 
 Layer-2 client for Google sign-in and the
 [YouTube Live API](https://developers.google.com/youtube/v3/live/getting-started), the
-optional half of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) (the
+optional half of [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) (the
 generic RTMPS output works with a stream key alone). It has no media code and no
 `unsafe`. Its JStream dependency is [`jstream-platform`](../jstream-platform/README.md#purpose),
 for `Secret`. Its third-party ones are `rustls` (with `ring`) and `rustls-native-certs`
@@ -50,12 +50,12 @@ Contents:
     `BUILT_IN_CLIENT_SECRET` are the "Desktop app" client JStream ships. Both are empty
     until the maintainer gives their values, and while the ID is empty a build has no
     client and the engine keeps YouTube's API features off.
-  - **Scopes** (ADR-0041 §4): `Scope::Readonly` (`youtube.readonly`) for listing and
+  - **Scopes** (ADR-0041 §4, kept by ADR-0058): `Scope::Readonly` (`youtube.readonly`) for listing and
     stream health, `Scope::Manage` (`youtube`) for creating, binding and transitioning.
     The Live API reference pages list exactly these: the list methods accept either
     (or `youtube.force-ssl`), the write methods `youtube` or `youtube.force-ssl`. A
     granted `force-ssl` counts as `Manage`. JStream signs in once, asking for
-    `Manage` alone, which the reads accept too (ADR-0041 §4); `Readonly` stays for a
+    `Manage` alone, which the reads accept too (ADR-0041 §4, kept by ADR-0058); `Readonly` stays for a
     grant that holds only it.
   - A refresh refused with `invalid_grant` is `YoutubeError::SignInRequired`.
 - **`LoopbackRedirect`:** the redirect listener, bound to `127.0.0.1` on an OS-chosen
@@ -112,7 +112,7 @@ Contents:
   ([R-TEST-004](../../docs/RULES.md#R-TEST-004)); the HTTPS tests use a TLS server on
   loopback with certificates made at test time.
 - **Errors:** one `thiserror` enum, `YoutubeError`. `is_quota` recognises quota and
-  rate-limit reasons, which the engine surfaces as protocol errors (ADR-0041 §5).
+  rate-limit reasons, which the engine surfaces as protocol errors (ADR-0041 §5, kept by ADR-0058).
 
 **Secrets** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): tokens, codes, the client
 secret and stream keys are held as `Secret`s. The request head that carries the bearer
@@ -131,4 +131,5 @@ leaves them out: YouTube is for people, not agents (ADR-0058 §3).
 
 **Not yet:** sending chat as the channel, the engine's chat polling with its
 per-collection opt-in switch and its `youtube.chat.feature` action,
-`liveChatMessages.streamList` where the API offers it (ADR-0058 §5), audience stats from ADR-0041, and quota accounting.
+`liveChatMessages.streamList` where the API offers it (ADR-0058 §5), audience stats
+from ADR-0041 (kept by ADR-0058), and quota accounting.

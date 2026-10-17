@@ -33,12 +33,12 @@ use crate::error::AudioError;
 
 /// Objects that can wait to be freed. Every input sends at most two of each kind (one
 /// from the mixer, one from the producer), every bus one (from the mixer), every input
-/// and bus its chain (a bus also its master chain), every output tap itself, every
+/// and bus its chain (a bus also its master chain), every input its monitor block, every output tap itself, every
 /// removed filter itself (a master filter one copy per bus), and the mixer applies at
 /// most a command queue's worth of changes per block, so a few blocks' worth fits with
 /// room to spare.
 const QUEUE_CAP: usize =
-    6 * MAX_INPUTS + 6 * MAX_BUSES + 2 * MAX_OUTPUT_TAPS + (4 + MAX_BUSES) * COMMAND_CAP;
+    7 * MAX_INPUTS + 6 * MAX_BUSES + 2 * MAX_OUTPUT_TAPS + (4 + MAX_BUSES) * COMMAND_CAP;
 
 /// How long the collector sleeps between drains. Freeing late costs only memory.
 const POLL: Duration = Duration::from_millis(10);
@@ -48,6 +48,7 @@ enum Retired {
     Shared(Arc<InputShared>),
     Bus(Arc<BusShared>),
     Chain(Box<Chain>),
+    Block(Box<[[f32; 2]]>),
     Kernel(Box<Kernel>),
     Kernels(MasterKernels),
     Tap(Tap),
@@ -108,6 +109,11 @@ impl Retirer {
         self.hand_off(Retired::Chain(chain));
     }
 
+    /// An input's monitor block.
+    pub(crate) fn block(&self, block: Box<[[f32; 2]]>) {
+        self.hand_off(Retired::Block(block));
+    }
+
     pub(crate) fn kernel(&self, kernel: Box<Kernel>) {
         self.hand_off(Retired::Kernel(kernel));
     }
@@ -147,6 +153,7 @@ fn collect(rx: &Receiver<Retired>) {
                 Ok(Retired::Shared(shared)) => drop(shared),
                 Ok(Retired::Bus(bus)) => drop(bus),
                 Ok(Retired::Chain(chain)) => drop(chain),
+                Ok(Retired::Block(block)) => drop(block),
                 Ok(Retired::Kernel(kernel)) => drop(kernel),
                 Ok(Retired::Kernels(kernels)) => drop(kernels),
                 Ok(Retired::Tap(tap)) => drop(tap),
