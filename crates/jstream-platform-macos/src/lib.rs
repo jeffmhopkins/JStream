@@ -7,8 +7,10 @@
 //! `annexb_access_unit`), the AudioToolbox AAC-LC encoder, whose raw access units are
 //! framed and timed by `AacFramer`, and display and window capture through
 //! ScreenCaptureKit (`ScreenCaptureKitCapture`) on CPU frames, behind the Screen Recording
-//! permission, and the Keychain store for stream keys and OAuth tokens (`MacosKeychain`).
-//! Audio (`CoreAudioIo`) and decoding report `Unsupported` until their
+//! permission, the Keychain store for stream keys and OAuth tokens (`MacosKeychain`), and
+//! Core Audio devices and input recording through the HAL (`CoreAudioIo`), behind the
+//! Microphone permission. Audio output,
+//! desktop and application audio, and decoding report `Unsupported` until their
 //! follow-ups land. Layer 2, and one of the crates allowed `unsafe` (R-UNSAFE-001): every
 //! system call is wrapped here behind safe APIs.
 //!
