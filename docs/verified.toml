@@ -4026,7 +4026,7 @@ stamp = { hash = "b3:128bf552bd7be538", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:claude-ui-features", note = "app.rs: the status bar shows brand, URL, protocol, client, rev and Disconnect with no menus (HD-01 partial, HD-02/03 to build); panels/outputs.rs: go_live_targets starts stopped or failed RTMP outputs with a key and each card starts and stops its own output (HD-09 partial, HD-07 to build). HD-05/06/08 blockers are E2b #317, T1/T1u, A6b." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude-ui-features", note = "app.rs: the status bar shows brand, URL, protocol, client, rev and Disconnect with no menus (HD-01 partial, HD-02/03 to build); panels/outputs.rs: go_live_targets starts stopped or failed RTMP outputs with a key and each card starts and stops its own output (HD-09 partial, HD-07 to build). HD-05/06/08 blockers are E2b #317, T1/T1u, A6b." }
+stamp = { hash = "b3:7f4c9893edf3724b", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "outputs.rs changes only in its tests: the OutputInfo fixtures gain video_mix: None (E2). The panel shows no video mix yet. HD-01..09 statuses unchanged" }
 
 ["UI-FEATURES#inspector"."body"]
 stamp = { hash = "b3:d31ba81be56d0df5", by = "agent:claude-ui-features", note = "panels/properties.rs: the settings form from kind.describe with groups, advanced, visible_if and Reset, and no placement, crop, opacity or blend controls, so IN-01/02/04/06 to IN-08 to build; IN-03/05/09/10 locked on source.sizes, X1 and T1 as noted." }
@@ -4062,7 +4062,7 @@ stamp = { hash = "b3:54e4380a88fc2840", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:3cbe7856eda760ab", by = "agent:claude-ui-features", note = "panels/outputs.rs: output cards with status badges, start/stop, keys, encoder profile and health, but no program-output row or FX button (OU-02 partial; OU-01/03 on D8p, OU-04 on A6b and the OAuth client)." }
 
 ["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude-ui-features", note = "panels/outputs.rs: output cards with status badges, start/stop, keys, encoder profile and health, but no program-output row or FX button (OU-02 partial; OU-01/03 on D8p, OU-04 on A6b and the OAuth client)." }
+stamp = { hash = "b3:7f4c9893edf3724b", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "outputs.rs changes only in its tests: the OutputInfo fixtures gain video_mix: None (E2). The panel shows no video mix yet. OU-01..04 statuses unchanged" }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:e0fff104df6bbece", by = "agent:claude-ui-features", note = "panels/scenes.rs: rows with a Program badge and a hover Program button, up/down reorder buttons, double-click rename, delete and the New scene name field (SC-02, SC-04, SC-05 partial; SC-10 cut button); folders, labels and keyframes are B11 #323 and K1 as noted." }
