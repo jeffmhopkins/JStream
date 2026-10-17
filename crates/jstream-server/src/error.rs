@@ -22,6 +22,13 @@ pub enum ServerError {
         /// What is wrong with it.
         reason: &'static str,
     },
+    /// A configured connection limit or timeout is zero, so the server would refuse or
+    /// drop everything.
+    #[error("invalid server config: `{field}` must be greater than zero")]
+    InvalidLimit {
+        /// The [`ServerConfig`](crate::ServerConfig) field.
+        field: &'static str,
+    },
     /// The configured UI directory is missing or isn't a directory.
     #[error("unusable UI directory `{}`: {source}", dir.display())]
     UiDir {
@@ -29,6 +36,14 @@ pub enum ServerError {
         dir: PathBuf,
         /// What is wrong with it.
         source: io::Error,
+    },
+    /// The device file (`ServerConfig::device_file`) can't be read or is broken.
+    #[error("unusable device file `{}`: {reason}", path.display())]
+    DeviceFile {
+        /// The file as configured.
+        path: PathBuf,
+        /// What is wrong with it.
+        reason: String,
     },
     /// The listening socket could not be opened.
     #[error("could not listen on {addr}: {source}")]

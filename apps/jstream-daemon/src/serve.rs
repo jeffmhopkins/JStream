@@ -4,13 +4,17 @@
 //! over RTMP(S).
 
 use crate::args::Options;
+use crate::youtube;
 use anyhow::Context;
 use jstream_core::{AuditSink, Engine};
 use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::future::Future;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+#[cfg(any(all(windows, feature = "cef"), test))]
+use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
 #[cfg(any(windows, test))]
 use {
     jstream_core::{LivePublish, OpenPublish, PublishError},
@@ -37,7 +41,11 @@ pub type Connect =
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows, when a
 /// backend can't be created (the QPC clock).
-pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Arc<Engine>> {
+pub fn engine(
+    options: &Options,
+    audit: Arc<dyn AuditSink>,
+    youtube: Option<youtube::Client>,
+) -> anyhow::Result<Arc<Engine>> {
     let mut engine = Engine::new().with_audit(audit);
     if let Some(path) = &options.collection {
         // The error names the file and what is wrong with it.
@@ -51,16 +59,74 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
         .iter()
         .cloned()
         .fold(engine, Engine::with_output);
+    let engine = with_youtube(engine, youtube);
     #[cfg(windows)]
-    let engine = live(
-        engine,
-        windows_backends()?,
-        Arc::new(jstream_platform_windows::WindowsCredentials),
-        rtmp(),
-    );
+    let engine = {
+        let backends = windows_backends()?;
+        #[cfg(feature = "cef")]
+        let (gpu, clock) = (Arc::clone(&backends.gpu), Arc::clone(&backends.clock));
+        let engine = live(
+            engine,
+            backends,
+            Arc::new(jstream_platform_windows::WindowsCredentials),
+            rtmp(),
+        );
+        // After `with_backends`, so pages start on the media clock. Clones share the
+        // engine's sources, so this gives the browser to `engine` too.
+        #[cfg(feature = "cef")]
+        let _ = cef_browser(Engine::clone(&engine), gpu.as_ref(), clock, options);
+        engine
+    };
     #[cfg(not(windows))]
     let engine = Arc::new(engine);
     Ok(engine)
+}
+
+/// YouTube with JStream's built-in OAuth client (ADR-0058), or the developer's
+/// `client` when one is given, keeping the account's refresh token in Windows
+/// Credential Manager. While the built-in client is empty, as it is until the maintainer
+/// registers one, and on other platforms, `youtube.status` answers `unavailable`. Never
+/// fails the start: a transport that can't be built is logged, and YouTube stays
+/// unavailable.
+fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
+    #[cfg(windows)]
+    {
+        if client.is_none() && jstream_youtube::BUILT_IN_CLIENT_ID.is_empty() {
+            tracing::info!("YouTube is unavailable: this build has no OAuth client");
+            return engine;
+        }
+        let transport = match jstream_youtube::HttpsTransport::new() {
+            Ok(transport) => Arc::new(transport),
+            Err(error) => {
+                tracing::warn!(%error, "YouTube is unavailable: no HTTPS transport");
+                return engine;
+            }
+        };
+        let tokens = Arc::new(jstream_platform_windows::WindowsCredentials);
+        if let Some(client) = client {
+            tracing::info!("YouTube sign-in is available, with the developer's OAuth client");
+            return youtube::set_up(engine, client, transport, tokens);
+        }
+        match jstream_core::YoutubeSetup::built_in(transport, tokens) {
+            Some(setup) => {
+                tracing::info!("YouTube sign-in is available");
+                engine.with_youtube(setup)
+            }
+            None => engine,
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        if let Some(client) = client {
+            // Unused here: dropped without a word about its values.
+            drop((client.id, client.secret));
+            tracing::warn!(
+                "YouTube is unavailable: it keeps its sign-in in the OS credential store, \
+                 which the daemon has only on Windows"
+            );
+        }
+        engine
+    }
 }
 
 /// The Windows backends. Creating them opens no device: each opens what it needs when
@@ -69,7 +135,8 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
 #[cfg(windows)]
 fn windows_backends() -> anyhow::Result<Backends> {
     use jstream_platform_windows::{
-        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu, WindowsVcam,
+        MfCodecs, MfMediaDecoders, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+        WindowsVcam,
     };
     Ok(Backends {
         clock: Arc::new(QpcClock::new().context("could not open the QPC media clock")?),
@@ -78,8 +145,71 @@ fn windows_backends() -> anyhow::Result<Backends> {
         audio: Arc::new(WasapiAudio::new()),
         codecs: Arc::new(MfCodecs::new()),
         gpu: Arc::new(WindowsGpu::new()),
+        media: Arc::new(MfMediaDecoders::new()),
         vcam: Some(Box::new(WindowsVcam::new())),
     })
+}
+
+/// The CEF browser backend for `browser` sources (feature `cef`, ADR-0046), on a
+/// GPU device of the engine's media adapter, opened through the backends' `gpu`, with
+/// pages' audio stamped on their `clock`.
+///
+/// CEF runs only in the sandboxed browser helper (ADR-0048), which starts when the first
+/// page opens: the helper (`jstream-browser-helper.exe` and its DLL) and CEF's runtime
+/// files go next to the daemon's exe, CEF's cache in the data directory's `cef` folder
+/// and its log in the log directory's `cef.log`. Neither a
+/// missing data directory nor a device that won't open stops the daemon: without a
+/// device, pages still play their audio and only their frames are dropped, and when the
+/// daemon's own path is unknown, browser sources show nothing (both are logged).
+#[cfg(all(windows, feature = "cef"))]
+fn cef_browser(
+    engine: Engine,
+    gpu: &dyn jstream_platform::GpuInterop,
+    clock: Arc<dyn jstream_platform::MediaClock>,
+    options: &Options,
+) -> Engine {
+    use jstream_browser::{CefBackend, CefConfig};
+    let logs = options
+        .log_dir
+        .as_ref()
+        .map(std::path::PathBuf::from)
+        .or_else(crate::logs::default_dir);
+    let Some(state) = jstream_platform::paths::data_dir().or_else(|| logs.clone()) else {
+        tracing::warn!("no data directory for the browser's cache, so browser sources are off");
+        return engine;
+    };
+    let mut config = match CefConfig::beside_exe(&state) {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::warn!(%error, "browser sources are off");
+            return engine;
+        }
+    };
+    config.log_file = logs.map(|dir| dir.join("cef.log"));
+    let gpu = gpu
+        .open_device()
+        .inspect_err(|error| {
+            tracing::warn!(%error, "no GPU device for browser pages: their frames are dropped");
+        })
+        .ok();
+    browse(
+        engine,
+        Arc::new(CefBackend::new(config, clock)),
+        gpu.as_ref(),
+    )
+}
+
+/// Gives `engine` `browser` for its `browser` sources, delivering pages' frames on `gpu`
+/// (`BrowserBackend::use_device`): the device must come first, so the first page's first
+/// paint already has it.
+#[cfg(any(all(windows, feature = "cef"), test))]
+pub fn browse(
+    engine: Engine,
+    browser: Arc<dyn BrowserBackend>,
+    gpu: Option<&GpuContext>,
+) -> Engine {
+    browser.use_device(gpu);
+    engine.with_browser(browser)
 }
 
 /// Connects with `connect_rtmp`, whose errors never carry the key (R-SEC-001).
@@ -162,18 +292,24 @@ fn opener(
     })
 }
 
-/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token`, with MCP's
-/// streamable-HTTP transport on. Each connection and each MCP session gets its own
-/// session (its own `client_id`); all of them share the engine.
+/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token` and the
+/// devices paired in `device_file` (ADR-0044; in memory without one), with MCP's
+/// streamable-HTTP transport on, and the web UI's files from `ui_dir` when given. Each
+/// connection and each MCP session gets its own session (its own `client_id`); all of
+/// them share the engine.
 pub async fn bind(
     engine: Arc<Engine>,
     port: u16,
     token: Token,
+    device_file: Option<PathBuf>,
+    ui_dir: Option<&Path>,
 ) -> Result<Server, jstream_server::ServerError> {
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
     let mut config = ServerConfig::new(token);
     config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     config.mcp = true;
+    config.device_file = device_file;
+    config.ui_dir = ui_dir.map(Path::to_path_buf);
     Server::bind(config, connector).await
 }
 
@@ -255,9 +391,11 @@ mod tests {
         };
         let token = Token::new(TOKEN).expect("a valid token");
         let server = bind(
-            engine(&options, Arc::new(AuditMemory::new())).expect("an engine"),
+            engine(&options, Arc::new(AuditMemory::new()), None).expect("an engine"),
             0,
             token,
+            None,
+            None,
         )
         .await
         .expect("binds");
@@ -341,17 +479,21 @@ mod tests {
     async fn a_port_in_use_fails_to_bind() {
         let token = Token::new(TOKEN).expect("a valid token");
         let server = bind(
-            engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
+            engine(&Options::default(), Arc::new(AuditMemory::new()), None).expect("an engine"),
             0,
             token.clone(),
+            None,
+            None,
         )
         .await
         .expect("binds");
         let port = server.local_addr().port();
         let error = bind(
-            engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
+            engine(&Options::default(), Arc::new(AuditMemory::new()), None).expect("an engine"),
             port,
             token,
+            None,
+            None,
         )
         .await
         .err()
@@ -584,7 +726,7 @@ mod tests {
             ..Options::default()
         };
         let audit = Arc::new(AuditMemory::new());
-        let first = engine(&options, Arc::clone(&audit) as _).expect("an engine");
+        let first = engine(&options, Arc::clone(&audit) as _, None).expect("an engine");
         assert!(file.exists(), "a missing file is created");
         let control = session(&first).await;
         timely(control.call(Call::Batch(Batch::single(Edit::SceneCreate {
@@ -602,7 +744,7 @@ mod tests {
         drop(control);
         drop(first);
 
-        let second = engine(&options, Arc::new(AuditMemory::new())).expect("an engine");
+        let second = engine(&options, Arc::new(AuditMemory::new()), None).expect("an engine");
         let control = session(&second).await;
         match timely(control.call(Call::Query {
             query: Query::SceneList,
@@ -623,7 +765,7 @@ mod tests {
 
         // A file that holds no collection is an error that names it, and is left as it is.
         std::fs::write(&file, "not json").expect("written");
-        let Err(error) = engine(&options, Arc::new(AuditMemory::new())) else {
+        let Err(error) = engine(&options, Arc::new(AuditMemory::new()), None) else {
             panic!("an unloadable file was loaded");
         };
         let message = format!("{error:#}");
@@ -636,5 +778,90 @@ mod tests {
             "not json"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `browse` hands the backend the device before the engine opens any page, and the
+    /// engine opens a page for a `browser` source through it.
+    #[tokio::test]
+    async fn browser_sources_open_pages_through_the_backend() {
+        use jstream_browser::fake::FakeBrowser;
+        use jstream_browser::{BrowserBackend, BrowserError, BrowserPage, PageSpec};
+        use jstream_control::protocol::{Settings, SourceId, SourceKind};
+        use jstream_platform::GpuContext;
+        use std::sync::Mutex;
+
+        /// The fake, recording the order of `use_device` and `open` calls.
+        struct Recording {
+            inner: Arc<FakeBrowser>,
+            calls: Mutex<Vec<&'static str>>,
+        }
+        impl BrowserBackend for Recording {
+            fn open(&self, spec: &PageSpec) -> Result<Box<dyn BrowserPage>, BrowserError> {
+                self.calls.lock().expect("calls").push("open");
+                self.inner.open(spec)
+            }
+            fn use_device(&self, gpu: Option<&GpuContext>) {
+                self.calls.lock().expect("calls").push("use_device");
+                self.inner.use_device(gpu);
+            }
+        }
+
+        let browser = FakeBrowser::new();
+        let recording = Arc::new(Recording {
+            inner: browser.clone(),
+            calls: Mutex::new(Vec::new()),
+        });
+        let page = |id: &str| {
+            Call::Batch(Batch::single(Edit::SourceCreate {
+                source_id: SourceId::new(id),
+                name: id.to_owned(),
+                kind: SourceKind::Builtin {
+                    kind: "browser".into(),
+                },
+                settings: Settings(
+                    [("url".to_owned(), "https://example.com/".into())]
+                        .into_iter()
+                        .collect(),
+                ),
+                duplicated_from: None,
+            }))
+        };
+
+        // A source that exists before the backend arrives (as from `--collection`)
+        // opens when it does, on the device the backend was already given.
+        let engine = Engine::new();
+        let control = session(&engine).await;
+        timely(control.call(page("before")))
+            .await
+            .expect("source.create");
+        let engine = super::browse(engine, recording.clone(), None);
+        /// Waits until `browser` has opened `count` pages.
+        async fn pages(browser: &FakeBrowser, count: usize) {
+            timely(async {
+                while browser.pages().len() < count {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await;
+        }
+        pages(&browser, 1).await;
+        assert_eq!(
+            *recording.calls.lock().expect("calls"),
+            ["use_device", "open"],
+            "the device first, then the existing source's page"
+        );
+        assert!(!browser.has_device(), "no device was given");
+
+        // A source added later opens too.
+        timely(control.call(page("after")))
+            .await
+            .expect("source.create");
+        pages(&browser, 2).await;
+        assert!(browser.pages().iter().all(|page| !page.is_closed()));
+        assert_eq!(
+            *recording.calls.lock().expect("calls"),
+            ["use_device", "open", "open"]
+        );
+        drop(engine);
     }
 }

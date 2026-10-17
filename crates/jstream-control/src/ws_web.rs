@@ -15,20 +15,30 @@
 //! origin (HTTP Basic, when the engine served the page behind it). The browser sets
 //! `Origin` to the page's own and handles `wss://` itself.
 //!
+//! Binary messages are read as array buffers and parsed as [`BinaryFrame`]s into the
+//! channel [`Control::binary`] last opened, which holds at most [`BINARY_BUFFER`] of
+//! them and drops up to a keyframe when full ([`KeyframeGate`]), as on native targets.
+//!
 //! Docs: crates/jstream-control/README.md#design, docs/adr/0006-mcp-full-access.md, docs/adr/0045-leptos-web-ui.md
 
 use crate::WS_PROTOCOL;
-use crate::control::{BoxFuture, Control, EventStream};
+use crate::control::{BinaryStream, BoxFuture, Control, EventStream};
 use crate::error::ControlError;
-use crate::ws_config::{WsConfig, browser_url, disconnected, token_protocol};
+use crate::ws_config::{
+    SocketEnd, WsConfig, browser_url, disconnected, end_reason, token_protocol,
+};
 use futures_channel::{mpsc, oneshot};
+use futures_core::Stream;
 use jstream_protocol::{
-    Call, ClientMessage, Event, Hello, Request, RequestId, Response, ServerMessage, Welcome,
+    BinaryFrame, Call, ClientMessage, Event, Hello, KeyframeGate, Request, RequestId, Response,
+    ServerMessage, Welcome,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
+use std::pin::Pin;
 use std::rc::Rc;
+use std::task::{Context, Poll, Waker};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use web_sys::{BinaryType, CloseEvent, Event as DomEvent, MessageEvent, WebSocket};
@@ -58,6 +68,7 @@ struct Handlers {
     _open: Closure<dyn FnMut(DomEvent)>,
     _message: Closure<dyn FnMut(MessageEvent)>,
     _close: Closure<dyn FnMut(CloseEvent)>,
+    _error: Closure<dyn FnMut(DomEvent)>,
 }
 
 /// What the handle and the socket's handlers share.
@@ -71,6 +82,8 @@ struct State {
     hellos: VecDeque<oneshot::Sender<Result<Welcome, ControlError>>>,
     /// The live event subscriptions; `None` once the connection has closed.
     subscribers: Option<Vec<mpsc::UnboundedSender<Event>>>,
+    /// The binary channel [`Control::binary`] last opened.
+    binary: Option<Rc<RefCell<BinaryQueue>>>,
     /// Why the connection closed, once it has.
     closed: Option<String>,
 }
@@ -87,7 +100,7 @@ impl State {
 
     /// Records why the connection closed, fails whatever is still waiting and ends the
     /// event streams once they have yielded what they buffered. Only the first reason
-    /// is kept.
+    /// is kept, so a `close` after an `error` (or a second of either) changes nothing.
     fn close(&mut self, reason: String) {
         if self.closed.is_some() {
             return;
@@ -103,6 +116,10 @@ impl State {
             let _ = tx.send(Err(disconnected(reason.clone())));
         }
         self.subscribers = None;
+        if let Some(queue) = self.binary.take() {
+            let waker = queue.borrow_mut().close();
+            wake(waker);
+        }
         self.closed = Some(reason);
     }
 }
@@ -143,8 +160,7 @@ impl WsControl {
             WebSocket::new(&url)
         }
         .map_err(|_| disconnected(format!("the browser refused to open `{url}`")))?;
-        // Binary frames (the preview stream) are not designed yet; array buffers keep
-        // them out of the blob store until they are.
+        // Preview frames arrive as array buffers, which are read at once.
         socket.set_binary_type(BinaryType::Arraybuffer);
 
         let (ready_tx, ready_rx) = oneshot::channel();
@@ -177,8 +193,16 @@ impl WsControl {
             let state = Rc::clone(&state);
             let socket = socket.clone();
             Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
-                // Binary frames are not designed yet, and are ignored.
-                let Some(text) = event.data().as_string() else {
+                let data = event.data();
+                let Some(text) = data.as_string() else {
+                    if let Some(buffer) = data.dyn_ref::<js_sys::ArrayBuffer>() {
+                        let bytes = js_sys::Uint8Array::new(buffer).to_vec();
+                        // Out of the borrow before waking: a waker may poll at once.
+                        let queue = state.borrow().binary.clone();
+                        if let Some(queue) = queue {
+                            deliver(&bytes, &queue);
+                        }
+                    }
                     return;
                 };
                 let outcome = dispatch(&text, &mut state.borrow_mut());
@@ -194,23 +218,28 @@ impl WsControl {
             let url = url.clone();
             Closure::<dyn FnMut(CloseEvent)>::new(move |event: CloseEvent| {
                 let mut state = state.borrow_mut();
-                let reason = if state.connecting.is_some() {
-                    format!(
-                        "could not connect to the engine at `{url}`: it is unreachable, or \
-                         it refused the token or this page's origin"
-                    )
-                } else if event.reason().is_empty() {
-                    "the engine closed the connection".to_owned()
-                } else {
-                    format!("the engine closed the connection: {}", event.reason())
-                };
+                let reason = event.reason();
+                let end = SocketEnd::Close { reason: &reason };
+                let reason = end_reason(&url, state.connecting.is_some(), end);
+                state.close(reason);
+            })
+        };
+        // `error` is usually followed by `close`, but not when the page's Content Security
+        // Policy refuses the URL: Chromium then fires only `error` and leaves the socket
+        // `CLOSED`. So `error` ends the session itself; `State::close` keeps the first
+        // reason, and a later `close` changes nothing.
+        let error = {
+            let state = Rc::clone(&state);
+            Closure::<dyn FnMut(DomEvent)>::new(move |_: DomEvent| {
+                let mut state = state.borrow_mut();
+                let reason = end_reason(&url, state.connecting.is_some(), SocketEnd::Error);
                 state.close(reason);
             })
         };
         socket.set_onopen(Some(open.as_ref().unchecked_ref()));
         socket.set_onmessage(Some(message.as_ref().unchecked_ref()));
         socket.set_onclose(Some(close.as_ref().unchecked_ref()));
-        // An `error` event is always followed by `close`, which reports it.
+        socket.set_onerror(Some(error.as_ref().unchecked_ref()));
 
         let control = WsControl {
             socket,
@@ -220,6 +249,7 @@ impl WsControl {
                 _open: open,
                 _message: message,
                 _close: close,
+                _error: error,
             },
         };
         Ok((control, ready_rx))
@@ -240,6 +270,7 @@ impl Drop for WsControl {
         self.socket.set_onopen(None);
         self.socket.set_onmessage(None);
         self.socket.set_onclose(None);
+        self.socket.set_onerror(None);
         // Best effort: the socket may already be closed.
         let _ = self.socket.close();
         self.state
@@ -312,6 +343,91 @@ impl Control for WsControl {
         // Once closed, `tx` is dropped here and the stream ends at once.
         Box::pin(rx)
     }
+
+    fn binary(&self) -> BinaryStream {
+        let queue = Rc::new(RefCell::new(BinaryQueue::default()));
+        let old = {
+            let mut state = self.state.borrow_mut();
+            if state.closed.is_some() {
+                queue.borrow_mut().closed = true;
+                None
+            } else {
+                state.binary.replace(Rc::clone(&queue))
+            }
+        };
+        if let Some(old) = old {
+            let waker = old.borrow_mut().close();
+            wake(waker);
+        }
+        Box::pin(BinaryChannel(queue))
+    }
+}
+
+/// How many binary frames the channel holds before it drops up to a keyframe.
+const BINARY_BUFFER: usize = 16;
+
+/// The binary channel's frames, shared by the handle's stream and the socket's handler.
+#[derive(Default)]
+struct BinaryQueue {
+    frames: VecDeque<BinaryFrame>,
+    gate: KeyframeGate,
+    waker: Option<Waker>,
+    closed: bool,
+}
+
+impl BinaryQueue {
+    /// Queues `frame` unless the gate drops it, and returns the waker to wake.
+    fn push(&mut self, frame: BinaryFrame) -> Option<Waker> {
+        let room = self.frames.len() < BINARY_BUFFER;
+        if self.gate.admit(&frame.header, room) {
+            self.frames.push_back(frame);
+            self.waker.take()
+        } else {
+            None
+        }
+    }
+
+    /// Ends the stream once it has yielded what it holds.
+    fn close(&mut self) -> Option<Waker> {
+        self.closed = true;
+        self.waker.take()
+    }
+}
+
+/// The binary channel's stream.
+struct BinaryChannel(Rc<RefCell<BinaryQueue>>);
+
+impl Stream for BinaryChannel {
+    type Item = BinaryFrame;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<BinaryFrame>> {
+        let mut queue = self.0.borrow_mut();
+        if let Some(frame) = queue.frames.pop_front() {
+            Poll::Ready(Some(frame))
+        } else if queue.closed {
+            Poll::Ready(None)
+        } else {
+            queue.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+/// Wakes `waker`, if there is one, with no borrow held: a waker may poll at once.
+fn wake(waker: Option<Waker>) {
+    if let Some(waker) = waker {
+        waker.wake();
+    }
+}
+
+/// Queues one binary message for the binary channel. A frame this client can't read
+/// is skipped, as the protocol asks.
+fn deliver(bytes: &[u8], queue: &RefCell<BinaryQueue>) {
+    let Ok(frame) = BinaryFrame::parse(bytes) else {
+        return;
+    };
+    let waker = queue.borrow_mut().push(frame);
+    wake(waker);
 }
 
 /// Routes one message from the engine. An unreadable message ends the session (`Err`

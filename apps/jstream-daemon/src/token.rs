@@ -9,7 +9,7 @@ use anyhow::{Context, bail};
 use jstream_server::Token;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Random bytes in a new token: 256 bits.
 const TOKEN_BYTES: usize = 32;
@@ -21,6 +21,15 @@ pub enum Provenance {
     Existing,
     /// The file was created with a new token.
     Created,
+}
+
+/// The file beside the token file that keeps the paired devices (ADR-0044): the token
+/// file's name with `.devices` added (`token` gives `token.devices`). `jstream-server`
+/// reads it, creates it user-only, and keeps only the devices' token digests in it.
+pub fn device_file(token_file: &Path) -> PathBuf {
+    let mut name = token_file.as_os_str().to_owned();
+    name.push(".devices");
+    PathBuf::from(name)
 }
 
 /// Reads the token in `path`, or creates the file with a new token if there is none.
@@ -115,7 +124,7 @@ fn read_existing(path: &Path) -> anyhow::Result<Token> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Provenance, load_or_create, new_token};
+    use super::{Provenance, device_file, load_or_create, new_token};
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -138,6 +147,14 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(path, fs::Permissions::from_mode(0o600)).expect("chmod");
         }
+    }
+
+    #[test]
+    fn the_device_file_sits_beside_the_token_file() {
+        assert_eq!(
+            device_file(Path::new("dir/token")),
+            PathBuf::from("dir/token.devices")
+        );
     }
 
     #[test]

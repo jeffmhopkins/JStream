@@ -156,11 +156,39 @@ snapshot and the graceful stop. That is what CI or a Linux machine can run.
 <!-- @section
 -->
 
-Pending. Going live to YouTube with a plain stream key works as above, with YouTube's
-RTMPS server URL from YouTube Studio. The `youtube.*` flows (sign-in with OAuth, then
-creating the broadcast and binding the output through the API) are added here once the
-daemon's YouTube wiring (roadmap item A6) and the YouTube setup flow (Y3, issue #223)
-have landed.
+Going live to YouTube needs no sign-in and no Google OAuth client
+([ADR-0058](../adr/0058-youtube-sign-in-with-a-jstream-client.md)): use a plain stream
+key as above, with YouTube's RTMPS server URL from YouTube Studio, and turn on
+auto-start (and auto-stop) for the stream in YouTube Studio, so the broadcast goes live
+when data arrives and ends when it stops.
+
+Signing in, to manage broadcasts through the API, is optional and Windows only. It
+uses JStream's own OAuth client (ADR-0058 above), which this build doesn't have yet, so a
+run for now uses a developer's Google Cloud OAuth client of type "Desktop app", with the
+YouTube Data API v3 enabled. The `youtube.*` calls below are a person's: they go over
+the WebSocket API, since MCP has no `youtube` tool and `jstream-cli` has no
+YouTube commands yet. Then:
+
+1. Start the daemon with `--youtube-client <the client's JSON>`, or with
+   `JSTREAM_YOUTUBE_CLIENT_ID` (and `JSTREAM_YOUTUBE_CLIENT_SECRET`) set
+   ([daemon › Usage](../../apps/jstream-daemon/README.md#usage)). Without either,
+   `youtube.status` answers `unavailable` until the built-in client is filled in.
+2. `youtube.status` answers `signed_out`. Call `youtube.sign_in`, open the consent URL
+   it returns, and approve.
+3. `youtube.status` answers `signed_in`. The refresh token is in Credential Manager, so
+   a restart stays signed in.
+4. Create a broadcast (`youtube.create_broadcast`) or pick one
+   (`youtube.list_broadcasts`), and bind a stream to it (`youtube.bind_broadcast`).
+   Create an output with the `youtube { broadcast_id }` target and start it.
+   `youtube.health_changed` reports the stream's health.
+5. Starting the output doesn't take the broadcast live: broadcasts are created without
+   auto-start. Once the health is good, call `youtube.transition_broadcast` with `to:
+   testing`, then `to: live`.
+6. To end, call `youtube.transition_broadcast` with `to: complete`, then stop the
+   output.
+7. `youtube.sign_out` removes the token.
+
+This path has not yet been run on hardware: issue #337 holds its run, step by step.
 
 <a id="results"></a>
 ## Reporting results

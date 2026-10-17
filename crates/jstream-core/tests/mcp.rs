@@ -12,8 +12,9 @@ use std::pin::pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
-/// Runs a future that never waits: the MCP server only awaits the engine's futures,
-/// which are ready at once for every call this test makes (only `video.snapshot`
+/// Runs a future that never waits: the MCP server only waits on the engine's futures
+/// (the hello wait's timer never starts when `hello` is ready at once), which are ready at
+/// once for every call this test makes (only `video.snapshot`
 /// waits, on the engine's snapshot thread).
 fn block_on<F: Future>(future: F) -> F::Output {
     let mut future = pin!(future);
