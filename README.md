@@ -215,7 +215,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | E3d | Composite to NV12 on the GPU | 🔍 in review | #280 |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
-| Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review | #363, #375 |
+| Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: chat reading and the featured message (#363); chat preset of the browser source (#375); audience stats in jstream-youtube (#594); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | 🔍 in review | #486 |
 | MAC1 | macOS platform crate | 🔍 in review: ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); the list of processes Core Audio knows, part 9 (#589) | #511, #513, #533, #543, #554, #566, #570, #583, #586, #589 |
