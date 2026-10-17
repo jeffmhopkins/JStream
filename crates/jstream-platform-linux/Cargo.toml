@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 2
-summary = "First part of ADR-0060: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal capture targets, PipeWire and VA-API loaded at run time with `dlopen`, VA-API H.264 encoder probing"
+summary = "First part of ADR-0060: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal capture targets, PipeWire and VA-API loaded at run time with `dlopen`, VA-API H.264 encoder probing, AAC encoding through `jstream-aac` (ADR-0061, ADR-0062)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
@@ -26,6 +26,12 @@ allow_attributes_without_reason = "deny"  # R-RS-009
 undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [features]
+default = ["aac-encoder"]
+# JStream's own AAC-LC encoder (`jstream-aac`) as Linux's AAC encoder (ADR-0061, within
+# ADR-0062's limits). On by default. ADR-0062's re-check clause switches the encoder off
+# in a release by taking it out of `default`: the dependency then leaves the build and
+# AAC encoding reports `Unsupported`.
+aac-encoder = ["dep:jstream-aac"]
 # Platform tests against a real Linux desktop (docs/RULES.md#testing): a PipeWire daemon,
 # the ScreenCast portal and a GPU with a VA-API driver. Additive, off by default, and the
 # tests are also `#[ignore]`d. Run them on such a machine with
@@ -33,6 +39,7 @@ undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 hw-tests = []
 
 [dependencies]
+jstream-aac = { workspace = true, optional = true }
 jstream-platform.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]

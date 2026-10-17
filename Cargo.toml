@@ -59,6 +59,7 @@ image-webp = { version = "0.2", default-features = false }
 insta = { version = "1", default-features = false }
 # JavaScript built-ins (`Array`) for the browser WebSocket client. Part of wasm-bindgen.
 js-sys = { version = "0.3", default-features = false, features = ["std"] }
+jstream-aac = { path = "crates/jstream-aac" }
 jstream-audio = { path = "crates/jstream-audio" }
 jstream-browser = { path = "crates/jstream-browser" }
 jstream-control = { path = "crates/jstream-control" }
@@ -142,8 +143,13 @@ tauri = { version = "2.12", default-features = false, features = ["wry", "common
 # Tauri's build script: generates the app context from `tauri.conf.json` and embeds the
 # Windows resources (icon, manifest).
 tauri-build = { version = "2.7", default-features = false, features = ["config-json"] }
+# Test-only reference AAC decoder for jstream-aac's round-trip tests (ADR-0062: never
+# shipped): Symphonia's pure-Rust AAC-LC decoder, MPL-2.0, and the core crate its decoder
+# API is in. Neither has default features; `symphonia-core`'s optional `rustfft` stays off.
+symphonia-codec-aac = { version = "0.6", default-features = false }
+symphonia-core = { version = "0.6", default-features = false }
 thiserror = { version = "2", default-features = false, features = ["std"] }
-tokio = { version = "1", default-features = false }
+tokio ={ version = "1", default-features = false }
 # No TLS feature: plain `ws://` only, so no `rustls`/`ring` in the tree yet.
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect"] }
 toml = "1"
@@ -201,4 +207,9 @@ panic = "unwind"   # R-UNSAFE-005: catch_unwind at FFI boundaries needs unwindin
 # for a real-time audio thread in a debug app, and for jstream-audio's minutes-long
 # drift simulations in `cargo test`.
 [profile.dev.package.jstream-audio]
+opt-level = 3
+
+# The AAC encoder likewise: unoptimised, its quantization loops can't keep up with
+# real time in a debug app, and its round-trip tests encode seconds of audio.
+[profile.dev.package.jstream-aac]
 opt-level = 3

@@ -1,10 +1,10 @@
 //! Codecs on Linux (ADR-0060 §6, §7).
 //!
 //! Video encode goes through VA-API. There is no software H.264 encoder until the download
-//! of Cisco's OpenH264 binary lands, and no AAC encoder until the Rust AAC-LC encoder
-//! exists (ADR-0061).
+//! of Cisco's OpenH264 binary lands (ADR-0061). Audio encode is JStream's own AAC-LC
+//! encoder (`crate::aac`, ADR-0061 and ADR-0062), unless the `aac-encoder` feature is off.
 //! For now, [`VaapiCodecs`] lists the encoders the probe finds and picks one for a
-//! configuration; opening the session itself reports `Unsupported` until the VA-API
+//! configuration; opening a video session itself reports `Unsupported` until the VA-API
 //! encode path lands.
 
 use jstream_platform::media::Codec;
@@ -63,8 +63,8 @@ mod backend {
     use super::choose_encoder;
     use crate::{VaEncoder, probe_encoders};
 
-    /// Codecs through VA-API (ADR-0060 §6). For now it lists and chooses encoders;
-    /// sessions report `Unsupported`.
+    /// Codecs through VA-API (ADR-0060 §6), and the Rust AAC-LC encoder. For now it lists
+    /// and chooses video encoders, and video sessions report `Unsupported`.
     #[derive(Debug)]
     pub struct VaapiCodecs {
         /// What the probe found, or why it couldn't run (libva missing).
@@ -90,15 +90,17 @@ mod backend {
     impl Codecs for VaapiCodecs {
         fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
             let encoders = self.encoders.as_deref().unwrap_or_default();
-            Ok(encoders
-                .iter()
-                .map(|e| CodecInfo {
-                    name: format!("VA-API H.264 ({}, {})", e.vendor, e.node),
-                    codec: Codec::H264,
-                    role: CodecRole::VideoEncoder,
-                    hardware: true,
-                })
-                .collect())
+            let video = encoders.iter().map(|e| CodecInfo {
+                name: format!("VA-API H.264 ({}, {})", e.vendor, e.node),
+                codec: Codec::H264,
+                role: CodecRole::VideoEncoder,
+                hardware: true,
+            });
+            #[cfg(feature = "aac-encoder")]
+            let list = video.chain([crate::aac::aac_encoder_info()]).collect();
+            #[cfg(not(feature = "aac-encoder"))]
+            let list = video.collect();
+            Ok(list)
         }
 
         fn video_encoder(
@@ -120,13 +122,21 @@ mod backend {
             &self,
             config: &AudioEncoderConfig,
         ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
-            Err(PlatformError::Unsupported {
-                what: format!(
-                    "{:?} encoding on Linux (no AAC encoder until the Rust AAC-LC encoder \
-                     exists, ADR-0060 question 2)",
-                    config.codec
-                ),
-            })
+            #[cfg(feature = "aac-encoder")]
+            {
+                crate::aac::RustAacEncoder::open(config)
+                    .map(|e| Box::new(e) as Box<dyn AudioEncoder>)
+            }
+            #[cfg(not(feature = "aac-encoder"))]
+            {
+                Err(PlatformError::Unsupported {
+                    what: format!(
+                        "{:?} encoding on Linux (this build has the AAC encoder switched \
+                         off, ADR-0062)",
+                        config.codec
+                    ),
+                })
+            }
         }
 
         fn video_decoder(
