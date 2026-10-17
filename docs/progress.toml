@@ -842,7 +842,7 @@ milestone = "M3"
 title = "macOS platform crate"
 status = "review"
 prs = [511, 513, 533, 543, 554]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554)"
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Core Audio devices and input recording, part 5"
 
 [[item]]
 id = "LNX1"

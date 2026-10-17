@@ -25,7 +25,7 @@ wrapped here behind safe APIs, with RAII types for what the system hands back
 **Bindings are maintained crates** (ADR-0063 §12, [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)).
 Apple's frameworks are called through the objc2 framework crates, at the versions wgpu's
 Metal backend already uses (`objc2-foundation`, `-core-foundation`, `-core-media`,
-`-core-video`, `-video-toolbox`, `-audio-toolbox`, `-core-audio-types`,
+`-core-video`, `-video-toolbox`, `-audio-toolbox`, `-core-audio`, `-core-audio-types`,
 `-screen-capture-kit` and `-core-graphics` so far, with `objc2`, `block2` and `dispatch2`
 for ScreenCaptureKit's classes, blocks and queues), and Mach time through `mach2`. They
 carry their generated bindings and link frameworks with `#[link]`, so the crate type-checks from any host with `cargo clippy -p jstream-platform-macos --target aarch64-apple-darwin`; linking and the
@@ -105,14 +105,38 @@ It has:
   again, and nothing retries on its own. ScreenCaptureKit's `UserDeclined` maps to the same error.
   `screen_recording_granted` reads the state without prompting. A grant takes effect
   when JStream restarts.
-- **`CoreAudioIo`** (`AudioIo`) checks the floor when created and refuses desktop and
-  application audio before 14.2 (`check_input`). Listing and opening report
+- **`CoreAudioIo`** (`AudioIo`) checks the floor when created. **`devices`** lists
+  the HAL's devices (`kAudioHardwarePropertyDevices`) under their persistent UID
+  (`kAudioDevicePropertyDeviceUID`), once for each direction they have channels in, each
+  with its name and whether it is that direction's system default. **`open_input`**
+  records the default input, followed when the system default changes, or one input by
+  UID. It plans the device first: every input stream's virtual format must be
+  native-endian `f32` PCM and the nominal rate a whole number of hertz, or it reports
+  `Unsupported`. One channel is mono and two are stereo; any other count is recorded as
+  stereo from the device's preferred stereo pair
+  (`kAudioDevicePropertyPreferredChannelsForStereo`, else its first two channels), the
+  "downmix to stereo" default in [jstream-platform](../jstream-platform/README.md#open-questions).
+  It never resamples. An IOProc on the device (`AudioDeviceCreateIOProcID`) runs on Core
+  Audio's real-time IO thread: it interleaves each cycle's buffers into a buffer
+  allocated before the start, in chunks of that buffer (at least 512 frames, or the
+  device's IO buffer size), and hands each chunk to the handler without allocating,
+  locking or logging, catching any panic. A packet's device position counts frames from
+  the stream's first sample time (`mSampleTime`), so lost frames show as a jump, flagged
+  as a discontinuity; its time is the cycle's host time on `MachClock`, plus the chunk's
+  offset. A watcher thread per stream, woken by HAL property listeners (the default
+  input, and the device's liveness, nominal rate and input configuration) and every
+  500 ms, stops the IOProc before changing anything: it moves a default stream to a new
+  default with the same format (positions carry on, flagged as a discontinuity) and ends
+  a stream whose device is gone or changed format with `DeviceLost`. `input_format`
+  plans the same way without opening. Without the Microphone permission macOS records
+  silence rather than failing. Desktop and application audio are refused before 14.2
+  (`check_input`) and, like `processes` and playing audio (`open_output`), report
   `Unsupported` for now.
 
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
   proves the synchronisation;
-- Core Audio devices and streams, and process taps for desktop and application audio;
+- Core Audio output streams, and process taps for desktop and application audio;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
 - AVFoundation webcams;
@@ -126,7 +150,8 @@ Tests run on every platform where they can: the capture's target IDs, names, siz
 layouts and statuses, permission steps and error mapping are platform independent. The
 macOS ones (the clock, reading the release, encoding with VideoToolbox, which falls back
 to Apple's software encoder on a Mac without a hardware one, encoding AAC with
-AudioToolbox, and opening the capture backend) need no permission, so they run in the
+AudioToolbox, opening the capture backend, and listing audio devices and their input
+formats) need no permission, so they run in the
 `macos` CI job. The `hw-tests` feature is for tests that need the Screen Recording,
 Camera, Microphone or system audio recording permission (listing and capturing a display,
-and the missing-permission error), or the hardware encoders, which run by hand on a Mac.
+the missing-permission error, and recording the default input), or the hardware encoders, which run by hand on a Mac.
