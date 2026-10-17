@@ -60,7 +60,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Canvas](#canvas) | 18 | 1 | 6 | 7 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
-| [Scenes panel](#scenes) | 10 | 1 | 3 | 1 | 5 | 0 |
+| [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
 | [Scene objects panel](#objects) | 9 | 0 | 3 | 5 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 0 | 0 | 6 | 4 | 0 |
 | [Transform panel](#transform) | 4 | 0 | 0 | 4 | 0 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **7** | **23** | **56** | **43** | **1** |
+| **Total** | **130** | **7** | **23** | **59** | **40** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -220,12 +220,12 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-01 | Scene list | Scenes in display order, with type icons; click selects; groups hidden. | ✅ | Icons come with WS-04. |
 | SC-02 | "program" badge | The scene on program shows "program" in red after its name. | 🟡 | Built as a "Program" pill; restyle. |
 | SC-03 | Search | "Search scenes" filters by name, keeping parents of matches. | ⬜ | |
-| SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Reordering exists as ▲/▼ buttons. Into a folder is 🔒 with SC-06. |
+| SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Reordering exists as ▲/▼ buttons. Into a folder is `scene.set_folder` (SC-06). |
 | SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | 🟡 | Built today with inline controls (double-click rename, ✕, "New scene name" field); they move to menus and keys. |
-| SC-06 | Folders | Folders organise scenes; collapsible. | 🔒 | B11 (#323). |
+| SC-06 | Folders | Folders organise scenes; collapsible. | ⬜ | `folder.*` and `scene.set_folder`; folders nest ([ADR-0024](adr/0024-scene-structure.md) §3, [ADR-0064](adr/0064-nested-scene-folders.md), #323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | 🔒 | K1. |
-| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🔒 | B11 (#323). |
-| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | 🔒 | B11 (#323). |
+| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | ⬜ | `label.*`, `source.set_meta` and `scene.set_meta` (ADR-0024 §4, #323). |
+| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | ⬜ | Filtering is client-side over `state.get`'s labels and favourites (#323). |
 | SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | 🔒 | Today a hover "Program" button cuts; the click-to-switch rule follows T1's studio mode. |
 
 <a id="objects"></a>
@@ -260,7 +260,7 @@ the source's settings move to the Properties dialog (DL-02).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | ⬜ | Labels and favourite are 🔒 with SC-08. |
+| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | ⬜ | Labels and favourite: `source.set_meta` (SC-08). |
 | IN-02 | Parameters | X, Y, W, H in px, and Rotation, as number fields bound to the canvas. | ⬜ | `item.set_geometry`. |
 | IN-03 | Size in % | W % and H % of the source's own size. | 🔒 | Source sizes as runtime state (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md)) aren't in the protocol. |
 | IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ⬜ | |
@@ -443,8 +443,9 @@ starts when the one before it has passed review.
    reference ↔ clone, groups, edit keys, copy and paste (CM-01 to CM-06, DL-01, DL-02,
    DL-06, OB-03, OB-04, KB-04, KB-05).
 6. **Filters:** panel, rows, add and settings dialogs (FL-01 to FL-05, DL-04, DL-05).
-7. **Trees and mixer:** search, drag to reorder, mixer master card and vertical meters
-   (SC-03, SC-04, SC-05, OB-01, OB-02, OB-06 to OB-09, MX-01 to MX-04).
+7. **Trees and mixer:** search, drag to reorder, folders, labels and favourites, mixer
+   master card and vertical meters (SC-03 to SC-06, SC-08, SC-09, OB-01, OB-02, OB-06 to
+   OB-09, MX-01 to MX-04).
 
 🔒 rows follow their engine items: each of those PRs, or a UI PR right after it, flips its
 rows here.
