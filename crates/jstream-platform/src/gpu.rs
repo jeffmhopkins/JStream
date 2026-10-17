@@ -36,6 +36,29 @@ pub struct GpuContext {
     device: wgpu::Device,
     adapter: wgpu::Adapter,
     id: AdapterId,
+    key: ContextKey,
+}
+
+/// Which [`GpuContext`] something was made on: equal only for the same context.
+///
+/// `wgpu::Device`'s own equality compares IDs that each wgpu instance numbers from
+/// zero, so devices of two instances can compare equal. A texture is only valid on its
+/// own device, so code that must not sample another context's texture compares these.
+#[derive(Clone)]
+pub struct ContextKey(Arc<()>);
+
+impl PartialEq for ContextKey {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for ContextKey {}
+
+impl fmt::Debug for ContextKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ContextKey({:p})", Arc::as_ptr(&self.0))
+    }
 }
 
 impl GpuContext {
@@ -54,6 +77,7 @@ impl GpuContext {
             device,
             adapter,
             id,
+            key: ContextKey(Arc::new(())),
         }
     }
 
@@ -75,6 +99,11 @@ impl GpuContext {
     /// Which adapter this is.
     pub fn adapter_id(&self) -> AdapterId {
         self.id
+    }
+
+    /// This context's key, the same for nothing else.
+    pub fn key(&self) -> ContextKey {
+        self.key.clone()
     }
 
     /// The platform's state, if it is of type `T`. A platform uses this to recognise its
@@ -153,6 +182,14 @@ pub trait FrameSync: Send + Sync + fmt::Debug {
     /// [`PlatformError::InvalidState`] for a queue of another device or backend, and
     /// [`PlatformError::Os`] when the driver refuses.
     fn stage(&self, queue: &wgpu::Queue) -> Result<(), PlatformError>;
+
+    /// The implementation, for the platform that made the hold to recognise its own, as
+    /// [`GpuContext::platform`] does for contexts: an encoder reading a frame on the
+    /// platform's other API finds the texture's raw objects through it. `None`, the
+    /// default, for a hold no platform reads back.
+    fn platform(&self) -> Option<&dyn Any> {
+        None
+    }
 }
 
 /// A frame in a texture shared with the platform: what capture delivers on the GPU path,

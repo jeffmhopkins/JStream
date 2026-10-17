@@ -8,6 +8,7 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use jstream_mux::amf0::Amf0Value;
+use jstream_mux::flv::{ExVideoPacketType, VideoFourCc, ex_video_tag_body};
 
 use super::*;
 use crate::rtmp::publisher::tests::{KEY, Mode, accepting_script, fake_server_until, key, url};
@@ -15,6 +16,8 @@ use crate::rtmp::test_util::{Duplex, duplex};
 
 /// An AVC sequence header (frame type 1, codec 7, `AVCPacketType` 0).
 const AVC_HEADER: [u8; 9] = [0x17, 0, 0, 0, 0, 1, 0x64, 0, 0x1F];
+/// An AVC end of sequence (`AVCPacketType` 2), as `jstream-mux` writes it.
+const AVC_END: [u8; 5] = [0x17, 2, 0, 0, 0];
 /// An AAC sequence header (`AACPacketType` 0) with a 2-byte `AudioSpecificConfig`.
 const AAC_HEADER: [u8; 4] = [0xAF, 0, 0x12, 0x10];
 /// A raw AAC frame.
@@ -345,6 +348,128 @@ fn a_loss_before_the_first_frame_still_resends_the_avc_header() {
         "the AVC header first: {video:?}"
     );
     assert!(video[1].contains("len=25"), "then the keyframe: {video:?}");
+}
+
+/// An enhanced RTMP video tag body (HEVC or AV1), built as `jstream-mux` builds it.
+fn ex_video(keyframe: bool, packet_type: ExVideoPacketType, fourcc: VideoFourCc) -> Vec<u8> {
+    let payload: &[u8] = match packet_type {
+        ExVideoPacketType::SequenceEnd => &[],
+        ExVideoPacketType::SequenceStart => &[0x01, 0x02, 0x03],
+        _ if keyframe => &[0xAA; 20],
+        _ => &[0xBB; 10],
+    };
+    ex_video_tag_body(keyframe, packet_type, fourcc, 0, payload).unwrap()
+}
+
+/// Every enhanced RTMP `VideoPacketType`, and the legacy AVC layout, is classified as
+/// what the resync needs: only `SequenceStart` is kept as the header (never
+/// `SequenceEnd`), and only a coded keyframe resumes video (#399).
+#[test]
+fn classifies_enhanced_and_legacy_video_tags() {
+    use ExVideoPacketType::{CodedFrames, CodedFramesX, SequenceEnd, SequenceStart};
+    for fourcc in [VideoFourCc::Hevc, VideoFourCc::Av1] {
+        let class = |key, packet_type| classify_video(&ex_video(key, packet_type, fourcc));
+        assert!(class(true, SequenceStart) == Packet::Header, "{fourcc:?}");
+        assert!(class(true, CodedFrames) == Packet::Keyframe, "{fourcc:?}");
+        assert!(class(true, CodedFramesX) == Packet::Keyframe, "{fourcc:?}");
+        assert!(class(false, CodedFrames) == Packet::Other, "{fourcc:?}");
+        assert!(class(false, CodedFramesX) == Packet::Other, "{fourcc:?}");
+        assert!(class(true, SequenceEnd) == Packet::Other, "{fourcc:?}");
+        assert!(class(false, SequenceEnd) == Packet::Other, "{fourcc:?}");
+    }
+    // Packet types `jstream-mux` doesn't write: Metadata (4), MPEG2TSSequenceStart (5),
+    // Multitrack (6), ModEx (7), each on a keyframe; and a command frame (type 5).
+    for first in [0x94, 0x95, 0x96, 0x97, 0xD1] {
+        let body = [first, b'h', b'v', b'c', b'1', 0];
+        assert!(classify_video(&body) == Packet::Other, "{first:#x}");
+    }
+    // The legacy AVC layout is unchanged.
+    assert!(classify_video(&AVC_HEADER) == Packet::Header);
+    assert!(classify_video(&keyframe()) == Packet::Keyframe);
+    assert!(classify_video(&inter()) == Packet::Other);
+    // An AVC end of sequence (`AVCPacketType` 2) is on a keyframe but is neither a
+    // header nor a point to resume at (#411).
+    assert!(classify_video(&AVC_END) == Packet::Other);
+    assert!(classify_video(&[0x27, 2, 0, 0, 0]) == Packet::Other);
+}
+
+/// An enhanced RTMP (HEVC or AV1) or legacy AVC stream survives a link drop: the
+/// sequence header is re-sent before the next coded keyframe and video resumes there;
+/// inter frames and an end of sequence sent while resyncing are dropped, and the end of
+/// sequence doesn't replace the cached header (#399, #411).
+#[test]
+fn video_resends_sequence_header_and_resumes_at_keyframe() {
+    let mut cases = Vec::new();
+    for (fourcc, coded) in [
+        (VideoFourCc::Hevc, ExVideoPacketType::CodedFrames),
+        (VideoFourCc::Av1, ExVideoPacketType::CodedFramesX),
+    ] {
+        cases.push((
+            format!("{fourcc:?}"),
+            ex_video(true, ExVideoPacketType::SequenceStart, fourcc),
+            ex_video(true, coded, fourcc),
+            ex_video(false, coded, fourcc),
+            ex_video(true, ExVideoPacketType::SequenceEnd, fourcc),
+        ));
+    }
+    cases.push((
+        "Avc".to_owned(),
+        AVC_HEADER.to_vec(),
+        keyframe(),
+        inter(),
+        AVC_END.to_vec(),
+    ));
+    for (name, start, idr, inter, end) in cases {
+        let (log_tx, logs) = channel();
+        let connections = Arc::new(AtomicUsize::new(0));
+        let connector: Connector<Duplex> = Arc::new(move || {
+            let (client, server) = duplex();
+            let hang_up = (connections.fetch_add(1, Ordering::SeqCst) == 0).then_some(2);
+            let log_tx = log_tx.clone();
+            thread::spawn(move || {
+                let log = fake_server_until(server, Mode::Accept, url().tc_url(), hang_up);
+                let _ = log_tx.send(log);
+            });
+            let mut p = RtmpPublisher::publish(client, &url(), &key())?;
+            p.get_mut().nonblocking = true;
+            Ok(p)
+        });
+        let clock = FakeClock::new();
+        let mut p =
+            ReconnectingPublisher::new(connector().unwrap(), connector, policy(), clock.clock());
+        let mut states = States::new();
+
+        p.send_video(0, &start).unwrap();
+        p.send_video(0, &idr).unwrap();
+        logs.recv().unwrap(); // the server has hung up
+        p.send_video(33, &inter).unwrap();
+        states.record(&p);
+        assert_eq!(p.state(), LinkState::Reconnecting, "{name}");
+
+        clock.advance(Duration::from_secs(1));
+        poll_until(&mut p, &mut states, |p| p.state() == LinkState::Active).unwrap();
+        // Resyncing: these wait for the keyframe and are dropped.
+        p.send_video(66, &inter).unwrap();
+        p.send_video(80, &end).unwrap();
+        p.send_video(100, &idr).unwrap();
+        p.send_video(133, &inter).unwrap();
+        assert_eq!(p.stats().dropped_video, 3, "{name}: {:?}", p.stats());
+        drop(p.finish().unwrap());
+
+        let second = logs.recv().unwrap();
+        let media: Vec<_> = second
+            .iter()
+            .filter(|l| l.starts_with("video"))
+            .cloned()
+            .collect();
+        let line =
+            |t: u32, body: &[u8]| format!("video t={t} len={} first={:#04x}", body.len(), body[0]);
+        assert_eq!(
+            media,
+            [line(100, &start), line(100, &idr), line(133, &inter)],
+            "{name}"
+        );
+    }
 }
 
 /// Sessions over in-memory pipes whose server ends the test holds. The server has

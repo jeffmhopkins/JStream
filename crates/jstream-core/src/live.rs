@@ -11,8 +11,31 @@
 //!
 //! [`snapshot::plan`](crate::snapshot) asks the live source of every item it reaches for
 //! its frame at the current time on the media clock, and when that frame next changes.
-//! The thread re-plans at the earliest such time, so an animated image advances on the
-//! clock; a still frame is planned once.
+//! The thread re-plans at the earliest such time, so an animated image or a video
+//! advances on the clock; a still frame is planned once. A source that draws its frames
+//! as they come due (a [`Painter`]: the `waveform` and `spectrum` kinds) is painted by
+//! the thread just before it re-plans, holding no engine lock, so asking it for its
+//! frame under the collection lock only hands out the frame painted last. A source that
+//! a plan reaches after plans that didn't is told it is shown again ([`Source::show`]),
+//! so a media file can restart. A source built before plans that didn't reach it (on a
+//! scene that isn't the program yet, or behind a hidden item) counts as shown again when
+//! one first does.
+//!
+//! A media file's sound is heard while the latest plan reaches it
+//! ([`LiveSources::end_plan`]). The engine hands its audio to the program stage, which
+//! mixes it like an audio source (`crate::audio_sources`): [`LiveSources::take_audio`]
+//! says when what there is to mix changed. A source with audio of its own that it makes
+//! itself (`browser`, [`Source::audio`]) hands it to the program stage's audio inputs
+//! once it is built ([`LiveSources::audio`]), whether or not a plan reaches it.
+//!
+//! A `browser` source paints on the GPU (ADR-0021). While a program stage runs on a
+//! platform GPU context, the browser engine paints on that context's device
+//! ([`LiveSources::use_gpu`]), and the plan takes each source's newest texture
+//! (`Source::gpu_frame`) in place of its transparent stand-in, which the render thread
+//! samples where it is. Pages repaint on their own, so such a source asks for a re-plan
+//! every program frame, as an animation asks at its next frame; a page that has not
+//! painted yet asks too. Without a context the browser engine has no device and the
+//! source shows its stand-in.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -21,12 +44,16 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
-use jstream_platform::MediaClock;
+use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock, MediaDecoders};
 use jstream_protocol::{Settings, SourceId, SourceKind};
-use jstream_sources::{Context, Registry, Source, SourceError};
+use jstream_sources::{
+    AudioScopes, BrowserBackend, CaptureSpec, Context, MediaAudio, Painter, Registry, Source,
+    SourceAudio, SourceError,
+};
 
 use crate::lock;
-use crate::snapshot::Frame;
+use crate::runtime::{FRAME_DEN, FRAME_NUM};
+use crate::snapshot::{Frame, Look};
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
 /// thread never keeps it alive.
@@ -40,8 +67,10 @@ pub(crate) trait LiveHost: Send + Sync {
 /// The live sources of one engine. Lives in the engine state, under the collection lock.
 pub(crate) struct LiveSources {
     registry: Arc<Registry>,
-    ctx: Context,
+    /// Declared before `ctx`, so the running sources drop first: a `browser` page closes
+    /// while the backend in `ctx` is still there.
     entries: BTreeMap<SourceId, Entry>,
+    ctx: Context,
     /// Numbers the builds, so a result installs only if nothing changed the source
     /// since it was asked for.
     tickets: u64,
@@ -49,7 +78,34 @@ pub(crate) struct LiveSources {
     host: Weak<dyn LiveHost>,
     /// Whether the thread has been started.
     started: bool,
+    /// Numbers the plans of the program mix, from 1, so a source can tell whether the
+    /// previous plan reached it.
+    plan: u64,
+    /// Whether a source's sound came, went or moved on the clock since
+    /// [`take_audio`](Self::take_audio) last said.
+    audio_changed: bool,
+    /// The program stage's GPU context, which the browser engine paints on, while one
+    /// runs.
+    context: Option<ContextKey>,
 }
+
+/// A live source's sound, for the program stage to mix.
+#[derive(Clone, Debug)]
+pub(crate) struct LiveAudio {
+    /// The build it came from: a new build is a new input.
+    pub(crate) ticket: u64,
+    /// The source's time zero on the media clock, which its audio is stamped from.
+    pub(crate) start: MediaTime,
+    pub(crate) audio: MediaAudio,
+}
+
+impl PartialEq for LiveAudio {
+    fn eq(&self, other: &Self) -> bool {
+        self.ticket == other.ticket && self.start == other.start
+    }
+}
+
+impl Eq for LiveAudio {}
 
 /// What the engine wants for one source, and what it runs now.
 struct Entry {
@@ -63,9 +119,19 @@ struct Entry {
 /// A built source and the frame it showed last.
 struct Running {
     source: Box<dyn Source>,
+    /// The build it came from.
+    ticket: u64,
+    /// Its sound, if it has any.
+    audio: Option<MediaAudio>,
     /// When it was built, on the media clock: its time zero.
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
+    /// The last plan that reached it, or the plan current when it was built, so the
+    /// first plan to reach it after that counts as showing it again when one between
+    /// didn't.
+    planned: u64,
+    /// The texture it showed last, for a source that paints on the GPU.
+    shown_gpu: Option<(GpuFrame, Frame)>,
 }
 
 /// One source to build.
@@ -112,6 +178,9 @@ impl LiveSources {
             worker: Arc::new(Worker::new(Arc::new(SystemClock::new()))),
             host,
             started: false,
+            plan: 0,
+            audio_changed: false,
+            context: None,
         }
     }
 
@@ -129,14 +198,72 @@ impl LiveSources {
             source.start = now;
             running = true;
         }
+        self.audio_changed = true;
         let replan = running || lock(&self.worker.queue).wake.is_some();
         if replan {
             self.start();
         }
+        self.share_painters();
         let mut queue = lock(&self.worker.queue);
         queue.clock = clock;
         queue.wake = replan.then_some(now);
         self.worker.wake.notify_all();
+    }
+
+    /// The program mix's and the buses' audio, for the `waveform` and `spectrum`
+    /// sources.
+    pub(crate) fn set_audio_scopes(&mut self, scopes: Arc<AudioScopes>) {
+        self.ctx.audio = Some(scopes);
+    }
+
+    /// The platform's media files, which `media` sources play through. Sources built
+    /// before have none, so they are built again now, from `state`, the collection's:
+    /// one loaded before the host injected backends would otherwise wait for its next
+    /// edit (#422).
+    pub(crate) fn set_media(
+        &mut self,
+        media: Arc<dyn MediaDecoders>,
+        state: &jstream_graph::State,
+    ) {
+        self.ctx.media = Some(media);
+        for entry in self.entries.values_mut() {
+            entry.settings = Settings::new();
+        }
+        self.sync(state);
+    }
+
+    /// The browser engine `browser` sources and its presets (`youtube_chat`) open their
+    /// pages in. Sources of those kinds built before have none, so they are built again.
+    pub(crate) fn set_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
+        self.ctx.browser = Some(browser);
+        for entry in self
+            .entries
+            .values_mut()
+            .filter(|e| jstream_sources::opens_browser(&e.kind))
+        {
+            entry.settings = Settings::new();
+        }
+    }
+
+    /// Gives the browser engine the program stage's GPU context to paint on, or takes
+    /// it away (`None`) when the stage stops. A browser engine set after this gets the
+    /// device from the next stage.
+    pub(crate) fn use_gpu(&mut self, context: Option<&GpuContext>) {
+        self.context = context.map(GpuContext::key);
+        if let Some(browser) = &self.ctx.browser {
+            browser.use_device(context);
+        }
+        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            running.shown_gpu = None;
+        }
+    }
+
+    /// The audio of every running source that has its own, by source.
+    pub(crate) fn audio(&self) -> BTreeMap<SourceId, Arc<dyn SourceAudio>> {
+        self.entries
+            .iter()
+            .filter_map(|(id, entry)| Some((id.clone(), entry.running.as_ref()?.source.audio()?)))
+            .collect()
     }
 
     /// The folder behind `collection` asset references: the collection file's.
@@ -154,11 +281,16 @@ impl LiveSources {
     /// source that is new or whose settings changed, and drops the ones deleted.
     pub(crate) fn sync(&mut self, state: &jstream_graph::State) {
         let registry = Arc::clone(&self.registry);
+        let before = self.entries.len();
         self.entries.retain(|id, _| {
             state
                 .source(id)
                 .is_some_and(|s| framed(&registry, s.kind()).is_some())
         });
+        self.audio_changed |= self.entries.len() != before;
+        if self.entries.len() != before {
+            self.share_painters();
+        }
         let mut jobs = Vec::new();
         for source in state.sources() {
             let Some(kind) = framed(&registry, source.kind()) else {
@@ -203,11 +335,17 @@ impl LiveSources {
         if entry.ticket != built.ticket {
             return false;
         }
-        entry.running = match built.result {
+        let plan = self.plan;
+        self.audio_changed = true;
+        let running = match built.result {
             Ok(source) => Some(Running {
+                audio: source.sound(),
                 source,
+                ticket: built.ticket,
                 start: self.worker.now(),
                 shown: None,
+                planned: plan,
+                shown_gpu: None,
             }),
             // A kind that is described but not built yet draws what it drew before C1b:
             // a `display` source shows the pipeline's capture.
@@ -222,7 +360,30 @@ impl LiveSources {
                 None
             }
         };
+        let painted = running
+            .as_ref()
+            .is_some_and(|r| r.source.painter().is_some())
+            || entry
+                .running
+                .as_ref()
+                .is_some_and(|r| r.source.painter().is_some());
+        entry.running = running;
+        if painted {
+            self.share_painters();
+        }
         true
+    }
+
+    /// Hands the thread every running source's painter and its time zero, after the
+    /// set of painted sources or their timing changed.
+    fn share_painters(&mut self) {
+        let painters = self
+            .entries
+            .values()
+            .filter_map(|e| e.running.as_ref())
+            .filter_map(|r| Some((r.source.painter()?, r.start)))
+            .collect();
+        lock(&self.worker.queue).painters = painters;
     }
 
     /// The current time on the clock sources run on.
@@ -230,16 +391,68 @@ impl LiveSources {
         self.worker.now()
     }
 
-    /// The frame `source_id` shows at `now`, numbered from `versions` when it is new,
-    /// and when it is next replaced. `None` when the source has no live instance.
-    pub(crate) fn frame(
+    /// Starts a plan of the program mix: the [`look`](Self::look) calls until the next
+    /// one are the sources it reaches.
+    pub(crate) fn begin_plan(&mut self) {
+        self.plan += 1;
+    }
+
+    /// What `source_id` shows at `now`: what the pipeline captures for a capture source,
+    /// else its frame, numbered from `versions` when it is new, and when that frame is
+    /// next replaced. `None` when the source has no live instance.
+    ///
+    /// A source the previous plan didn't reach, though an earlier one did or it was
+    /// built before it, is shown again first ([`Source::show`]).
+    pub(crate) fn look(
         &mut self,
         source_id: &SourceId,
         now: MediaTime,
         versions: &mut u64,
-    ) -> Option<(Frame, Option<MediaTime>)> {
-        let running = self.entries.get_mut(source_id)?.running.as_mut()?;
+    ) -> Option<Look> {
+        let plan = self.plan;
+        let entry = self.entries.get_mut(source_id)?;
+        let running = entry.running.as_mut()?;
+        if let Some(spec) = running.source.capture() {
+            // A window source with no window chosen shows nothing.
+            return (*spec != CaptureSpec::Window(None)).then(|| Look::Capture(spec.clone()));
+        }
         let at = since(now, running.start);
+        if running.planned + 1 < plan {
+            running.source.show(at);
+        }
+        running.planned = plan;
+        if let Some(context) = &self.context {
+            let next = next_program_frame(now);
+            if let Some(texture) = running.source.gpu_frame() {
+                let frame = match &running.shown_gpu {
+                    Some((shown, frame)) if *shown == texture => frame.clone(),
+                    _ => {
+                        *versions = versions.saturating_add(1);
+                        let frame = Frame::from_gpu(texture.clone(), context.clone(), *versions);
+                        running.shown_gpu = Some((texture, frame.clone()));
+                        frame
+                    }
+                };
+                return Some(Look::Frame(frame, next));
+            }
+            if jstream_sources::opens_browser(&entry.kind) {
+                // Not painted yet: the stand-in, until a re-plan finds the first paint.
+                let (frame, _) = Self::cpu_frame(source_id, running, at, now, versions)?;
+                return Some(Look::Frame(frame, next));
+            }
+        }
+        let (frame, next) = Self::cpu_frame(source_id, running, at, now, versions)?;
+        Some(Look::Frame(frame, next))
+    }
+
+    /// [`Self::look`]'s frame from the source's CPU frame at `at`, its own time.
+    fn cpu_frame(
+        source_id: &SourceId,
+        running: &mut Running,
+        at: MediaTime,
+        now: MediaTime,
+        versions: &mut u64,
+    ) -> Option<(Frame, Option<MediaTime>)> {
         let video = match running.source.frame(at) {
             Ok(video) => video,
             Err(err) => {
@@ -261,6 +474,41 @@ impl LiveSources {
             .next_change(at)
             .and_then(|change| after(running.start, change, now.timebase()));
         Some((frame, next))
+    }
+
+    /// Ends a plan of the program mix: a source's sound is heard while the plan reached
+    /// it.
+    pub(crate) fn end_plan(&self) {
+        let plan = self.plan;
+        for running in self.entries.values().filter_map(|e| e.running.as_ref()) {
+            if let Some(audio) = &running.audio {
+                audio.set_audible(running.planned == plan);
+            }
+        }
+    }
+
+    /// Every live source's sound, if that changed since the last call.
+    pub(crate) fn take_audio(&mut self) -> Option<BTreeMap<SourceId, LiveAudio>> {
+        if !std::mem::take(&mut self.audio_changed) {
+            return None;
+        }
+        let audio = self
+            .entries
+            .iter()
+            .filter_map(|(id, entry)| {
+                let running = entry.running.as_ref()?;
+                let audio = running.audio.clone()?;
+                Some((
+                    id.clone(),
+                    LiveAudio {
+                        ticket: running.ticket,
+                        start: running.start,
+                        audio,
+                    },
+                ))
+            })
+            .collect();
+        Some(audio)
     }
 
     /// Asks the thread to re-plan at `at`, or at no set time.
@@ -329,6 +577,14 @@ fn since(now: MediaTime, start: MediaTime) -> MediaTime {
         .unwrap_or_else(|_| MediaTime::zero(Timebase::MILLIS))
 }
 
+/// One program frame after `now`, when a source that paints on the GPU is planned again.
+fn next_program_frame(now: MediaTime) -> Option<MediaTime> {
+    let period = MediaTime::new(1, Timebase::new(FRAME_NUM, FRAME_DEN).ok()?)
+        .rescale(now.timebase(), Rounding::Up)
+        .ok()?;
+    now.checked_add(period).ok()
+}
+
 /// The clock time `change` after `start`, rounded up so the frame is due by then.
 fn after(start: MediaTime, change: MediaTime, timebase: Timebase) -> Option<MediaTime> {
     change
@@ -349,6 +605,9 @@ struct Queue {
     wake: Option<MediaTime>,
     /// Builds taken but not installed yet, so `settled` waits for them too.
     building: usize,
+    /// The running sources that draw their frames as they come due, with each one's
+    /// time zero: the thread paints them before every re-plan.
+    painters: Vec<(Arc<dyn Painter>, MediaTime)>,
     clock: Arc<dyn MediaClock>,
     closed: bool,
 }
@@ -360,6 +619,7 @@ impl Worker {
                 jobs: VecDeque::new(),
                 wake: None,
                 building: 0,
+                painters: Vec::new(),
                 clock,
                 closed: false,
             }),
@@ -395,7 +655,8 @@ impl Worker {
 /// What the thread does next.
 enum Next {
     Build(Job),
-    Replan,
+    /// Paint these at this time, then re-plan.
+    Replan(Vec<(Arc<dyn Painter>, MediaTime)>, MediaTime),
     Exit,
 }
 
@@ -423,7 +684,7 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                 let now = queue.clock.now();
                 if now >= due {
                     queue.wake = None;
-                    break Next::Replan;
+                    break Next::Replan(queue.painters.clone(), now);
                 }
                 let wait = until(now, due);
                 queue = worker
@@ -435,10 +696,17 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
         };
         match next {
             Next::Exit => return,
-            Next::Replan => match host.upgrade() {
-                Some(host) => host.replan(),
-                None => return,
-            },
+            Next::Replan(painters, now) => {
+                // Drawing can take milliseconds, so it happens here, before the re-plan
+                // takes the collection lock and asks for the painted frames.
+                for (painter, start) in painters {
+                    painter.paint(since(now, start));
+                }
+                match host.upgrade() {
+                    Some(host) => host.replan(),
+                    None => return,
+                }
+            }
             Next::Build(job) => {
                 let result = job.registry.create(&job.kind, &job.settings, &job.ctx);
                 let built = Built {

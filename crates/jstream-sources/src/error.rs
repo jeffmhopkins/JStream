@@ -29,6 +29,14 @@ pub enum SourceError {
         /// The kind asked for.
         kind_id: String,
     },
+    /// The source is a `display` or `window` capture: the platform's capture backend
+    /// delivers its frames to the engine's render thread, so it has none to hand out
+    /// ([`Source::capture`](crate::Source::capture)).
+    #[error("the `{kind_id}` source's frames come from the platform's capture")]
+    Captured {
+        /// The source's kind.
+        kind_id: String,
+    },
     /// A setting is missing or doesn't have its descriptor's type. The engine checks
     /// settings before a source exists, so this means a caller skipped that check.
     #[error("setting `{param}`: {reason}")]
@@ -92,6 +100,17 @@ pub enum SourceError {
         /// Which limit it passed.
         what: String,
     },
+    /// The kind plays through a platform backend the engine wasn't given, such as media
+    /// files on a platform without a media backend, or a browser source in an engine
+    /// built without browser sources.
+    #[error("this engine has no {backend} backend")]
+    NoBackend {
+        /// The backend, such as "media file" or "browser".
+        backend: &'static str,
+    },
+    /// The browser backend could not open a `browser` source's page.
+    #[error(transparent)]
+    Browser(#[from] jstream_browser::BrowserError),
     /// A frame could not be built.
     #[error(transparent)]
     Media(#[from] jstream_media::MediaError),

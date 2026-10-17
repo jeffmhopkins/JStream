@@ -1,4 +1,4 @@
-# Dependabot: weekly grouped update PRs. Policy: docs/adr/0018-ci-supply-chain-policy.md
+# Dependabot: weekly grouped update PRs. Policy: docs/adr/0056-ci-supply-chain-policy-v2.md
 # Titles follow Conventional Commits so the pr-title check passes (R-GIT-002).
 # Cooldown: new releases wait 5 days before Dependabot proposes them, so a freshly published
 # compromised release is likely to be caught upstream first (maintainer decision on PR #7).
@@ -41,6 +41,10 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # 1.12 moves to `rand` 0.10, a second `rand` beside tungstenite's 0.9 (R-DEP-005).
       - dependency-name: proptest
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # 0.8 adds `alloca`, which compiles C with `cc` and is not on lint-deps' native-code
+      # allowlist (R-DEP-002). Held at 0.7 until that is decided (#431; PR #398 failed).
+      - dependency-name: criterion
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     commit-message:
       prefix: build

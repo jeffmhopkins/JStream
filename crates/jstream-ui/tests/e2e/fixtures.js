@@ -67,6 +67,11 @@ export async function connect(page, daemon) {
   await expect(page.getByRole('button', { name: 'Disconnect' })).toBeVisible();
 }
 
+/** Opens the inspector's page `name` (`Properties`, `Outputs`). */
+export async function inspectorPage(page, name) {
+  await page.getByRole('tab', { name }).click();
+}
+
 /** The status bar's revision, as a number. */
 export async function rev(page) {
   const text = await page.locator('.status-bar').getByText(/^rev \d+$/).textContent();

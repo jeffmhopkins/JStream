@@ -6,17 +6,23 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use jstream_platform::GpuFrame;
+
 use crate::compositor::Compositor;
 use crate::error::RenderError;
-use crate::image::Image;
+use crate::image::{Alpha, Image};
 
-/// The images one compositor draws every frame: uploads of source frames, and the
-/// layers nested scenes are composited into. Each is keyed by an ID of the caller's
-/// (a source, a scene at a depth), so a frame that shows the same thing again reuses
-/// the texture instead of allocating one.
+/// Imports of other textures kept under one key: a platform that delivers frames from a
+/// ring of textures gets one bind group per texture, not one per frame.
+const KEPT_IMPORTS: usize = 8;
+
+/// The images one compositor draws every frame: uploads of source frames, imports of
+/// GPU frames, and the layers nested scenes are composited into. Each is keyed by an ID
+/// of the caller's (a source, a scene at a depth), so a frame that shows the same thing
+/// again reuses the texture instead of allocating one.
 ///
-/// A frame runs [`Self::begin_frame`], then [`Self::upload`] or [`Self::layer`] for
-/// everything it draws, then submits its passes and calls [`Self::end_frame`]. An entry
+/// A frame runs [`Self::begin_frame`], then [`Self::upload`], [`Self::import`] or
+/// [`Self::layer`] for everything it draws, then submits its passes and calls [`Self::end_frame`]. An entry
 /// the frame did not touch is no longer referenced, so it is retired: kept until the
 /// GPU has finished every frame that used it (the frame fence, a
 /// `Queue::on_submitted_work_done` callback), then handed back by `end_frame` as
@@ -40,6 +46,9 @@ struct Entry {
     version: u64,
     /// The last frame that referenced this entry.
     used: u64,
+    /// For an import: the imports of the key's other textures, each with the last frame
+    /// it was the entry's image. None of them holds a [`jstream_platform::FrameSync`].
+    kept: Vec<(Image, u64)>,
 }
 
 /// An image no frame references any more, waiting for the GPU to finish `after`.
@@ -110,7 +119,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
     ) -> Result<&Image, RenderError> {
         let frame = self.frame;
         let reuse = self.live.get(key).is_some_and(|entry| {
-            entry.image.target().is_none()
+            entry.image.is_upload()
                 && entry.image.width() == width
                 && entry.image.height() == height
         });
@@ -125,6 +134,99 @@ impl<K: Ord + Clone> ResourceCache<K> {
         }
         let image = compositor.upload_rgba8(width, height, rgba)?;
         Ok(self.replace(key, image, version))
+    }
+
+    /// The image for `key` showing `frame`, a frame on this compositor's device, and
+    /// marks it used this frame. Nothing is copied: the frame's texture is sampled as
+    /// [`Compositor::import_frame`] samples it.
+    ///
+    /// The image carries the frame's [`jstream_platform::FrameSync`] hold until
+    /// [`Self::end_frame`], so each render that draws it stages the hold, and the cache
+    /// keeps no hold past the frame: the platform can reuse the texture once the GPU is
+    /// done with it. The import itself is kept. A frame in a texture this key showed
+    /// recently reuses that texture's image (and bind group), so a platform's ring of
+    /// textures costs one import per texture. A frame in a texture of another size
+    /// retires the kept imports of the old size.
+    ///
+    /// # Errors
+    /// As for [`Compositor::import`]. The entry is left as it was.
+    pub fn import(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        frame: &GpuFrame,
+    ) -> Result<&Image, RenderError> {
+        self.import_as(compositor, key, frame, Alpha::Straight)
+    }
+
+    /// [`Self::import`] of a frame whose texture holds sRGB code values already
+    /// multiplied by alpha, as a browser page paints them, sampled as
+    /// [`Compositor::import_premultiplied`] samples it. An entry under `key` imported
+    /// the other way is replaced.
+    ///
+    /// # Errors
+    /// As for [`Compositor::import_premultiplied`]. The entry is left as it was.
+    pub fn import_premultiplied(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        frame: &GpuFrame,
+    ) -> Result<&Image, RenderError> {
+        self.import_as(compositor, key, frame, Alpha::PremultipliedSrgb)
+    }
+
+    fn import_as(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        frame: &GpuFrame,
+        alpha: Alpha,
+    ) -> Result<&Image, RenderError> {
+        let frame_no = self.frame;
+        let texture = frame.texture();
+        let sync = Some(Arc::clone(frame.sync()));
+        let reuse = self
+            .live
+            .get(key)
+            .is_some_and(|entry| entry.image.is_import_as(alpha));
+        if !reuse {
+            let image = compositor.import_as(texture.clone(), sync, alpha)?;
+            return Ok(self.replace(key, image, 0));
+        }
+        let entry = self.live.get_mut(key).ok_or_else(|| missing("an import"))?;
+        if entry.image.texture() != texture {
+            let kept = entry
+                .kept
+                .iter()
+                .position(|(image, _)| image.texture() == texture);
+            let image = match kept {
+                Some(index) => entry.kept.swap_remove(index).0,
+                None => compositor.import_as(texture.clone(), None, alpha)?,
+            };
+            let mut old = std::mem::replace(&mut entry.image, image);
+            old.set_sync(None);
+            entry.kept.push((old, entry.used));
+            let size = (texture.width(), texture.height());
+            let mut index = 0;
+            while index < entry.kept.len() {
+                let (image, _) = &entry.kept[index];
+                if (image.width(), image.height()) != size {
+                    let (image, after) = entry.kept.swap_remove(index);
+                    self.retired.push(Retired { image, after });
+                } else {
+                    index += 1;
+                }
+            }
+            if entry.kept.len() > KEPT_IMPORTS
+                && let Some(oldest) = (0..entry.kept.len()).min_by_key(|&i| entry.kept[i].1)
+            {
+                let (image, after) = entry.kept.swap_remove(oldest);
+                self.retired.push(Retired { image, after });
+            }
+        }
+        entry.image.set_sync(sync);
+        entry.used = frame_no;
+        Ok(&entry.image)
     }
 
     /// The layer for `key` at `width` by `height`, for [`Compositor::render_into`], and
@@ -165,26 +267,31 @@ impl<K: Ord + Clone> ResourceCache<K> {
         self.live.len()
     }
 
+    /// How many imports are kept for `key` besides its current image.
+    pub fn kept_imports(&self, key: &K) -> usize {
+        self.live.get(key).map_or(0, |entry| entry.kept.len())
+    }
+
     /// How many retired images are still waiting for their frame's fence.
     pub fn pending(&self) -> usize {
         self.retired.len()
     }
 
-    /// Ends the frame after its passes were submitted. Retires every entry this frame
-    /// did not use, arms the frame fence, polls the device without blocking, and hands
+    /// Ends the frame after its passes were submitted. Drops the frame holds of this
+    /// frame's imports, retires every entry this frame did not use, arms the frame fence, polls the device without blocking, and hands
     /// back the retired images whose last frame the GPU has finished. `None` when there
     /// are none, so a steady frame allocates nothing here beyond the fence callback.
     pub fn end_frame(&mut self, compositor: &Compositor) -> Option<Reclaimed> {
         let frame = self.frame;
+        for entry in self.live.values_mut() {
+            entry.image.set_sync(None);
+        }
         let stale = self.live.iter().any(|(_, entry)| entry.used < frame);
         if stale {
             let live = std::mem::take(&mut self.live);
             for (key, entry) in live {
                 if entry.used < frame {
-                    self.retired.push(Retired {
-                        image: entry.image,
-                        after: entry.used,
-                    });
+                    self.retire(entry);
                 } else {
                     self.live.insert(key, entry);
                 }
@@ -220,10 +327,11 @@ impl<K: Ord + Clone> ResourceCache<K> {
     /// Everything the cache holds, live or retired, for the caller to drop when the
     /// compositor itself is going away.
     pub fn drain(&mut self) -> Reclaimed {
-        let mut all: Vec<Image> = std::mem::take(&mut self.live)
-            .into_values()
-            .map(|entry| entry.image)
-            .collect();
+        let mut all: Vec<Image> = Vec::new();
+        for entry in std::mem::take(&mut self.live).into_values() {
+            all.push(entry.image);
+            all.extend(entry.kept.into_iter().map(|(image, _)| image));
+        }
         all.extend(self.retired.drain(..).map(|retired| retired.image));
         Reclaimed(all)
     }
@@ -233,20 +341,41 @@ impl<K: Ord + Clone> ResourceCache<K> {
             image,
             version,
             used: self.frame,
+            kept: Vec::new(),
         };
         let slot = match self.live.entry(key.clone()) {
             std::collections::btree_map::Entry::Occupied(mut slot) => {
                 let old = std::mem::replace(slot.get_mut(), entry);
-                self.retired.push(Retired {
-                    image: old.image,
-                    after: old.used,
-                });
+                retire(&mut self.retired, old);
                 slot.into_mut()
             }
             std::collections::btree_map::Entry::Vacant(slot) => slot.insert(entry),
         };
         &slot.image
     }
+}
+
+impl<K> ResourceCache<K> {
+    fn retire(&mut self, entry: Entry) {
+        retire(&mut self.retired, entry);
+    }
+}
+
+/// Retires `entry` and the imports it kept. The holds go now: a retired image is only
+/// waiting for the frame fence, which no frame hold is needed for.
+fn retire(retired: &mut Vec<Retired>, entry: Entry) {
+    let Entry {
+        mut image,
+        used,
+        kept,
+        ..
+    } = entry;
+    image.set_sync(None);
+    retired.push(Retired { image, after: used });
+    retired.extend(
+        kept.into_iter()
+            .map(|(image, after)| Retired { image, after }),
+    );
 }
 
 fn missing(what: &str) -> RenderError {

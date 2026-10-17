@@ -16,7 +16,8 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
-Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). It is written against
+Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
+features, which are for people, through the UI (ADR-0058 §3). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -28,9 +29,14 @@ Contents (a first cut; [Design](#design) explains the choices):
   serves. A `video.snapshot` result leads with an image content block, the only place
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  and the decoding of tool arguments into protocol calls.
+  less the people-only `youtube.*` ops (`PEOPLE_ONLY`), each with its MCP annotations
+  (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
+  `batch`, which carries their edits, is open-world too), and the decoding of tool
+  arguments into protocol calls, which refuses an output edit with a `youtube` target.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
-  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`.
+  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`; a
+  `live.changed` may be merged into an unread one of its gesture, and `youtube.*`
+  events are dropped.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.
@@ -54,12 +60,18 @@ generated from the protocol's JSON Schema when a `Server` is built: every varian
 named after its noun
 takes it as its `op` argument. A command added to the protocol becomes an op with no
 change here, and a new noun becomes a new tool. The generated list is in the snapshot
-below; its shape is:
+below; its shape is the following. The protocol's `youtube.*` ops get no tool, and a
+call naming one is an unknown op, so none reaches the engine: YouTube is for people,
+through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
+For the same reason an `output.create` or
+`output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
+`batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
+target stays open to agents), and the `events` feed drops `youtube.*` events. `describe_api` still returns the whole schema, YouTube included.
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `privacy`, `scene`, `send`, `source`, `state`, `studio`, `video`, `video_mix` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
-| `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
+| one per noun (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `privacy`, `scene`, `send`, `source`, `state`, `studio`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
 
@@ -68,7 +80,10 @@ is the protocol's own object, tagged by `type`, and its schema is the protocol's
 schemas under `oneOf`. The two batch options apply to edits and history ops only
 ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): an action or query that
 carries them is rejected. The `history` tool undoes and redoes the session's own steps,
-never another client's. Unknown argument keys are rejected too, so a misspelt
+never another client's. The `live` tool (`live.set`, `live.cancel`, `live.list`) previews
+placements and crops without a `rev` change; the agent commits a gesture with `batch`
+and `ends_gesture` ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and the
+gestures it leaves open expire when its session ends. Unknown argument keys are rejected too, so a misspelt
 `expected_rev` can't silently drop the concurrency check. Each tool's `inputSchema`
 carries, under `$defs`, every protocol definition it refers to, so it stands alone. Tool
 names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-root test
@@ -76,6 +91,36 @@ names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-ro
 [`schema/tools.snap`](schema/tools.snap): a protocol change shows up there as the tool
 diff agents will see. After an intended change, regenerate it with
 `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
+
+Every tool carries MCP `annotations`, derived from its ops' classes
+([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), with every hint
+written out because the spec's defaults call a tool destructive and open-world. A tool
+of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool is
+`destructiveHint` when it has an action, a history call or a `delete`/`remove` edit, as
+`batch` is; `canvas`, whose edits only change, is not. `openWorldHint` is true for the
+group tools in `OPEN_WORLD`, today `output`, whose `output.start` publishes to a streaming
+server, and `source`, whose `browser` kind loads any http or https page set as its `url`,
+and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
+covers the whole group, so a client that asks before `output.set_target`, `output.set_key`
+or `output.start` also asks before `output.list`.
+
+Text from outside JStream is marked by where it sits, and the reply keeps its protocol
+shape (ADR-0059): a protocol field holding third-party text is named `remote_*`
+(`REMOTE_PREFIX`; none yet), and the `output` tool's description says that an
+`output.start` `action_failed` `reason` includes the code and description a streaming
+server sent (each at most 512 characters). Nothing delimits the server's words there, so
+the description and the server instructions say the whole `reason` is untrusted. The
+server instructions say both are data, never instructions, and point at the
+annotations. Tested by `annotations_follow_what_each_tool_can_do`,
+`output_tool_marks_remote_rejection_text` and
+`instructions_mark_remote_text_and_tools_carry_annotations`.
+
+The `pairing` and `device` tools (protocol 0.21) need no code here either: the session
+`jstream-server` hands this crate answers them
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), so an agent can
+pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a
+session with no server in front. A `pairing.start` result carries the code, the one
+place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 ### MCP revisions
 
@@ -114,6 +159,7 @@ batches (MCP removed them in 2025-06-18).
 | The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
 | `hello` failed with a lost connection | the same `disconnected` code, saying the call was not sent and that the MCP server must be restarted for a new session, with its own undo history |
+| `hello` wasn't answered within 3 s | the same `disconnected` code, saying the call was not sent and that the next call sends `hello` again ([Session and identity](#design)) |
 | Unknown tool, or a `tools/call` without `name` or with non-object `arguments` | JSON-RPC `-32602` |
 | Unparseable JSON / not a valid request / unknown method | `-32700` / `-32600` / `-32601` |
 
@@ -147,7 +193,10 @@ session must open before the agent goes idle, not at its first tool call. If tha
 engine that accepted the connection and then hangs doesn't hold `initialize` until it
 closes), the request still succeeds, and a client that skips both (a stateless
 client going straight to `tools/call`) gets its `hello` before the next tool call that
-needs the engine, which reports a failure. Later names don't change the session.
+needs the engine, which reports a failure. That `hello` has the same 3 s bound: if it
+runs out, the call isn't sent and fails with `disconnected`, and the call after it sends
+`hello` again (if the engine closed the connection meanwhile, that call reports a lost
+connection, as below). Later names don't change the session.
 `describe_api`, argument errors and `events` reads never call the engine
 ([Events](#design)).
 
@@ -186,7 +235,16 @@ Consequences). A tick carries running totals, so the feed keeps only the newest 
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
 counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
-the same way as `meters`: each one is a full reading of the levels. A read drains
+the same way as `meters`: each one is a full reading of the levels. `live.changed`
+arrives up to 30 times a second per gesture while someone drags, so it would push other
+events out too. Each carries the newest values of what changed, so a newer one can stand
+in for an older one of the same gesture: the feed merges the newer values over the older
+event's, in place, when no read has returned that event yet, only `live.changed` events
+follow it, and none of those sets a parameter the newer one sets. The merged event keeps
+its `seq`, so the numbers stay contiguous, `dropped` stays exact, nothing a reader has
+seen changes, and every value keeps its order. An unread drag holds one buffered event.
+`youtube.*` events are dropped as they arrive and take no `seq`: YouTube is for people
+(ADR-0058 §3). A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 

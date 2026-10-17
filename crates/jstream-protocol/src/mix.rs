@@ -6,7 +6,7 @@
 //! on every `fps_divisor`th tick of the engine's base frame rate. It is collection
 //! state, changed by edits (`video_mix.create`, `video_mix.update`, `video_mix.delete`),
 //! and an output names the one it shows with `output.set_video_mix`. An output that names
-//! none shows the program at the engine's capture size and base rate.
+//! none shows the program at the engine's canvas size and base rate.
 
 use crate::id::{SceneId, VideoMixId};
 use schemars::JsonSchema;
