@@ -846,7 +846,9 @@ status = "planned"
 id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
-status = "planned"
+status = "review"
+prs = [481, 490, 509]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509)"
 
 [[item]]
 id = "LNX2"
@@ -859,3 +861,4 @@ id = "LNX3"
 milestone = "M3"
 title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
 status = "planned"
+note = "patent check ADR-0062 accepted (#508); encoder not started"
