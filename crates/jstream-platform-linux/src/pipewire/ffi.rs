@@ -43,6 +43,29 @@ impl SpaHook {
             priv_: std::ptr::null_mut(),
         })
     }
+
+    /// Unlinks the hook from its listener list, as `spa_hook_remove` does, so it can be
+    /// freed while the object it listens to lives on. A hook never linked is left as is.
+    ///
+    /// # Safety
+    /// The hook is linked into a live list (or not linked at all), and nothing iterates
+    /// that list meanwhile: the caller holds the loop that owns it.
+    pub(crate) unsafe fn remove(&mut self) {
+        if !self.link.next.is_null() {
+            // SAFETY: the function's contract: `next` and `prev` are the list's live
+            // neighbours of this link.
+            unsafe {
+                (*self.link.prev).next = self.link.next;
+                (*self.link.next).prev = self.link.prev;
+            }
+            self.link.next = std::ptr::null_mut();
+            self.link.prev = std::ptr::null_mut();
+        }
+        if let Some(removed) = self.removed {
+            // SAFETY: the callback the listener's owner registered for this hook.
+            unsafe { removed(self) };
+        }
+    }
 }
 
 /// `struct spa_callbacks` in <spa/utils/hook.h>.
@@ -367,8 +390,12 @@ pub(crate) const STATE_ERROR: c_int = -1;
 pub(crate) const STATE_UNCONNECTED: c_int = 0;
 /// `PW_STREAM_STATE_STREAMING`.
 pub(crate) const STATE_STREAMING: c_int = 3;
-/// `SPA_CHUNK_FLAG_CORRUPTED | SPA_CHUNK_FLAG_EMPTY`.
-pub(crate) const CHUNK_SKIP: i32 = (1 << 0) | (1 << 1);
+/// `SPA_CHUNK_FLAG_CORRUPTED`: the chunk's data may be corrupt.
+pub(crate) const CHUNK_CORRUPTED: i32 = 1 << 0;
+/// `SPA_CHUNK_FLAG_EMPTY`: the chunk holds media-specific neutral data, such as silence.
+pub(crate) const CHUNK_EMPTY: i32 = 1 << 1;
+/// `SPA_CHUNK_FLAG_CORRUPTED | SPA_CHUNK_FLAG_EMPTY`: a video frame to skip.
+pub(crate) const CHUNK_SKIP: i32 = CHUNK_CORRUPTED | CHUNK_EMPTY;
 
 pub(crate) type Ptr = *mut c_void;
 
@@ -523,6 +550,34 @@ mod tests {
     use std::mem::{offset_of, size_of};
 
     use super::*;
+
+    /// A removed hook leaves its list linked around it (here, empty again) and itself
+    /// unlinked; removing it again, or a hook never linked, does nothing.
+    #[test]
+    fn a_removed_hook_is_unlinked_from_its_list() {
+        let mut head = Box::new(SpaList {
+            next: std::ptr::null_mut(),
+            prev: std::ptr::null_mut(),
+        });
+        let mut hook = SpaHook::boxed();
+        let h: *mut SpaList = &raw mut *head;
+        let l: *mut SpaList = &raw mut hook.link;
+        // Linked as `spa_list_prepend` does into an empty list.
+        head.next = l;
+        head.prev = l;
+        hook.link.next = h;
+        hook.link.prev = h;
+        // SAFETY: the hook is linked into `head`, which nothing else uses.
+        unsafe { hook.remove() };
+        assert_eq!((head.next, head.prev), (h, h));
+        assert!(hook.link.next.is_null() && hook.link.prev.is_null());
+        // SAFETY: not linked any more.
+        unsafe { hook.remove() };
+        let mut unlinked = SpaHook::boxed();
+        // SAFETY: never linked.
+        unsafe { unlinked.remove() };
+        assert!(unlinked.link.next.is_null());
+    }
 
     /// The layouts match libspa's and libpipewire's on 64-bit Linux, as a C program
     /// printed them with `sizeof` and `offsetof` against PipeWire 1.0.5's headers.

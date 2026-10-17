@@ -87,7 +87,7 @@ It has:
   `default.clock.rate`, the `default` metadata's `default.audio.source` and
   `default.audio.sink`, and each device node's info, bound for its channel count
   (`audio.channels`, else the length of `audio.position`), which a registry global
-  never carries. No daemon is a missing component whose remedy starts it.
+  never carries (a node's proxy is destroyed when its global goes). No daemon is a missing component whose remedy starts it.
   `pipewire/graph.rs` turns that into devices (`Audio/Source`, `Audio/Source/Virtual`,
   `Audio/Sink` and `Audio/Duplex` nodes, with `node.name` as the stable id), the
   processes playing audio (`Stream/Output/Audio` nodes, with the pid from their
@@ -99,8 +99,9 @@ It has:
   device, as stereo; `spa/audio.rs` builds and parses the format pods), so PipeWire
   converts and the handler never sees a format change. `process` runs on the stream's
   own loop thread: input packets carry their device position and a media-clock time
-  from `pw_stream_get_time_n` (the capture time, before the device's delay), a skipped
-  buffer marks a discontinuity and its frames still count in the position, and output
+  from `pw_stream_get_time_n` (the capture time, before the device's delay), a
+  corrupted buffer marks a discontinuity and its frames still count in the position, an
+  empty one (nothing playing into the source) is a silent packet, and output
   asks the handler to fill each buffer. A named device or process whose node is
   removed is `DeviceLost`; a default follows the session manager. The callbacks catch
   panics (R-UNSAFE-005): a panicking handler is told once, with `InvalidState`, and

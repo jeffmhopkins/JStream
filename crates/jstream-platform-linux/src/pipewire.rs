@@ -123,8 +123,11 @@ mod backend {
     /// connection and thread. A stream asks for interleaved `f32` at the graph's clock
     /// rate (`default.clock.rate`, usually 48 kHz) in the device's channel layout (mono,
     /// stereo or 5.1, from the device node's info; any other count, or a default with no
-    /// device yet, as stereo), and PipeWire's stream adapter converts to it. Desktop audio records the default sink's monitor, and
-    /// application audio the process's first playback stream.
+    /// device yet, as stereo), and PipeWire's stream adapter converts to it. Desktop
+    /// audio records the default sink's monitor, and application audio the process's
+    /// first playback stream. A source with nothing playing into it delivers silent
+    /// packets (PipeWire's empty buffers), so input times keep coming; a corrupted
+    /// buffer is a gap, flagged as a discontinuity on the next packet.
     #[derive(Debug)]
     pub struct PipeWireAudio {
         pub(super) pw: PipeWire,
