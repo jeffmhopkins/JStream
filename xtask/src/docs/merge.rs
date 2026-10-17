@@ -69,7 +69,15 @@ pub(crate) struct MergePoint {
     theirs: String,
     /// Their merge base.
     base: String,
+    /// The commit `docs merge-main` left the branch at: the merge, or the `docs migrate`
+    /// commit it made right after it. What changed since is the branch's own later work.
+    after: String,
 }
+
+/// The subject of the commit `docs merge-main` makes after a merge for what `docs migrate`
+/// moved.
+pub(crate) const MIGRATE_SUBJECT: &str =
+    "docs: move inline verified stamps to docs/verified.toml (ADR-0053)";
 
 fn git(root: &Path, args: &[&str]) -> Result<Output> {
     Command::new("git")
@@ -242,7 +250,56 @@ pub(crate) fn last_merge(root: &Path) -> Result<Option<MergePoint>> {
     let (ours, theirs) = (rev(&format!("{merge}^1"))?, rev(&format!("{merge}^2"))?);
     let base = git_ok(root, &["merge-base", &ours, &theirs])?;
     let base = String::from_utf8_lossy(&base).trim().to_owned();
-    Ok(Some(MergePoint { ours, theirs, base }))
+    // The first commit after the merge on the first-parent chain, if it is the one
+    // `merge-main` makes for `docs migrate`, as `<hash> <parent> <subject>`.
+    let next = git_ok(
+        root,
+        &[
+            "log",
+            "--first-parent",
+            "--reverse",
+            "--format=%H %P %s",
+            &format!("{merge}..HEAD"),
+        ],
+    )?;
+    let after = String::from_utf8_lossy(&next)
+        .lines()
+        .next()
+        .and_then(|l| {
+            let (hash, rest) = l.split_once(' ')?;
+            let (parent, subject) = rest.split_once(' ')?;
+            (parent == merge && subject == MIGRATE_SUBJECT).then(|| hash.to_owned())
+        })
+        .unwrap_or(merge);
+    Ok(Some(MergePoint {
+        ours,
+        theirs,
+        base,
+        after,
+    }))
+}
+
+/// Which of `paths` differ in the working tree, committed or not, from what `docs
+/// merge-main` left at `point`: the files this branch changed after its merge.
+pub(crate) fn changed_after(
+    root: &Path,
+    point: &MergePoint,
+    paths: &[String],
+) -> Result<Vec<String>> {
+    let mut out = Vec::new();
+    for path in paths {
+        let diff = git(root, &["diff", "--quiet", &point.after, "--", path])?;
+        match diff.status.code() {
+            Some(0) => {}
+            Some(1) => out.push(path.clone()),
+            _ => bail!(
+                "`git diff --quiet {} -- {path}` failed: {}",
+                point.after,
+                String::from_utf8_lossy(&diff.stderr).trim()
+            ),
+        }
+    }
+    Ok(out)
 }
 
 /// The ledger at the merge base of `HEAD` and `origin/<branch>` (`main`, or the `wave/*`
@@ -332,15 +389,7 @@ fn migrate_inline(root: &Path) -> Result<Option<super::Migrate>> {
     {
         return Ok(None);
     }
-    git_ok(
-        root,
-        &[
-            "commit",
-            "-q",
-            "-m",
-            "docs: move inline verified stamps to docs/verified.toml (ADR-0053)",
-        ],
-    )?;
+    git_ok(root, &["commit", "-q", "-m", MIGRATE_SUBJECT])?;
     Ok(Some(m))
 }
 
@@ -558,7 +607,7 @@ fn stale_map(root: &Path) -> Result<BTreeMap<String, Vec<(String, String)>>> {
 
 /// The file a ledger input lives in: the doc itself for `body`, the covered file for
 /// `file:<path>[#view]`, and the target doc for `dep:<path>[#anchor[/key]]`.
-fn input_path(doc: &str, input: &str) -> String {
+pub(crate) fn input_path(doc: &str, input: &str) -> String {
     let path = match input.split_once(':') {
         Some(("file" | "dep", rest)) => rest,
         _ => doc,
