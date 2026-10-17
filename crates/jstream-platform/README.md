@@ -66,7 +66,8 @@ Contents:
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
   a frame it rejects is dropped and the stream goes on.
-- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes
+- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
+  process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
   format an input target would open in (`input_format`, so the engine can build the
   handler for it before opening), and opens input (microphone, output loopback,

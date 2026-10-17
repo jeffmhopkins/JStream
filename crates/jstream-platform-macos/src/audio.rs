@@ -294,6 +294,22 @@ mod macos_tests {
     }
 
     #[test]
+    fn lists_processes_from_14_2() {
+        let audio = CoreAudioIo::new().expect("backend");
+        match audio.processes() {
+            Ok(processes) => {
+                for process in processes {
+                    assert!(process.pid > 0);
+                    assert!(!process.exe.is_empty(), "pid {}", process.pid);
+                    assert_ne!(process.parent_pid, Some(0));
+                }
+            }
+            Err(PlatformError::MissingComponent { .. }) => {}
+            Err(e) => panic!("listing processes: {e}"),
+        }
+    }
+
+    #[test]
     fn loopback_is_not_built_yet() {
         let audio = CoreAudioIo::new().expect("backend");
         assert!(matches!(

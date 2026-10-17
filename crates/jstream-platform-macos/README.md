@@ -160,8 +160,15 @@ It has:
   from the stream's first output sample time) and the host time its first frame is
   expected to play, on `MachClock`. The handler's channels go to the planned device
   channels, and the rest stay silent; a buffer list the plan doesn't match plays
-  silence until the watcher re-plans. Desktop and application audio are refused before
-  14.2 (`check_input`) and, like `processes`, report `Unsupported` for now.
+  silence until the watcher re-plans. **`processes`** lists, on 14.2 and later, the
+  processes Core Audio knows as audio clients (`kAudioHardwarePropertyProcessObjectList`),
+  which are the ones a process tap can record, not every process as on Windows. Each has
+  its PID, its parent's PID and its executable's file name, read from the kernel by PID
+  (`proc_pidinfo`, `proc_pidpath`), falling back to the kernel's short name, the bundle
+  ID, then the PID; one that exits while being read is left out. Before 14.2 it is
+  `MissingComponent` naming the update. Desktop and
+  application audio are refused before 14.2 (`check_input`) and report `Unsupported`
+  for now.
 
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
