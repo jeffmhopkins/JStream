@@ -2,14 +2,15 @@
 id = "ADR-0020"
 title = "Portable Windows distribution: run the exe, no installer"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0066-portable-windows-distribution-v2.md"
 tier = "maintainer"
 -->
 
 # ADR-0020: Portable Windows distribution: run the exe, no installer
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0066: Portable Windows distribution v2: an optional virtual camera, registered from an administrators-only copy](0066-portable-windows-distribution-v2.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0012](0012-virtual-camera-windows.md). It keeps ADR-0012's virtual-camera

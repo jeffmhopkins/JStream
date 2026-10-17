@@ -364,7 +364,9 @@ kinds.
 - `VideoFilter::new(kind_id, settings)` builds a kind's pass; `set_settings` updates it
   in place, keeping its state; `output_size` is the size it draws for a given input,
   so a filter can change the source's reported size (for example aspect ratio, padding,
-  a drop shadow, an outside outline or a glow).
+  a drop shadow, an outside outline or a glow). `content_box` is where the input's
+  frame sits in that output (a `ContentBox`, see **Bounds** below), and
+  `ContentBox::then` carries a box down a chain.
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
   that move or hold frames. An imported input's `FrameSync`, and that of any image the
@@ -491,9 +493,14 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
 **Bounds.** Drop shadow, outline (outside) and glow grow their output by the effect's
 extent on each side, rounded up to whole pixels: the blur radius plus the offset
 toward that side, or the stroke width. The input is drawn 1:1 at the matching inset, so
-**these filters change the source's reported size**. Until the chain runtime (V0)
-reports the inset, a placement fits the grown frame rather than the original content
-box.
+**these filters change the source's reported size**. Each reports where the input
+landed as its `content_box`: the inset and the input's own size. Every other kind
+reports its whole output, aspect ratio included, since its output is the reshaped
+frame. Down a chain, `ContentBox::then` adds the offsets while each next filter holds
+the previous output 1:1, and takes the next filter's box when it reshapes or resamples
+it. The chain runtime (V0) is meant to fit that box, not the grown frame, to the
+item's bounds, so a shadow hangs outside them; until it lands nothing reads the box,
+and a placement would fit the grown frame.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with

@@ -26,6 +26,8 @@ mod helper;
 #[cfg(any(test, all(windows, feature = "cef")))]
 mod link;
 mod page;
+#[cfg(any(test, all(windows, feature = "helper")))]
+mod permission;
 mod request;
 #[cfg(any(test, all(windows, any(feature = "cef", feature = "helper"))))]
 mod wire;
