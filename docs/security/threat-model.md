@@ -308,7 +308,7 @@ are trusted.
 
 **Controls (in flight, #540):** the producer refuses a control mapping that already
 existed unless its owner is the user, SYSTEM or Administrators and its DACL lets no one
-else in; the DLL checks the owner of a session block's textures and fence as it does the
+but them and LOCAL SERVICE in; the DLL checks the owner of a session block's textures and fence as it does the
 block's.
 
 **Gaps:** a user-writable registered DLL runs in Frame Server (#242); a control mapping
