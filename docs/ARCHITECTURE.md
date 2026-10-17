@@ -57,6 +57,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature, opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, CEF's bootstrap exe renamed plus this crate's DLL, which a host's CEF backend starts and drives over pipes. Hosts that turn on browser sources ship it next to their own exe ([ADR-0048](adr/0048-sandboxed-browser-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
+| `jstream-plugin-host` | Not a host of the engine: the out-of-process CLAP plugin host, one process per CLAP filter instance, started by the engine ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). It talks to the engine only through a shared-memory block and framed messages on its stdin and stdout, never the protocol ([its README](../apps/jstream-plugin-host/README.md#purpose)). |
 
 <a id="principles"></a>
 ## Core principles
@@ -133,17 +134,17 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
-| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, and `paths` (the data folder, ADR-0020). The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0020). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
-| 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
+| 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling; draws an effect through `jstream-render`'s filter harness. No GPU device of its own | no |
@@ -153,10 +154,10 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
-| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
+| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; CLAP filter kinds from plugin scans and the host supervisor (ADR-0035) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature; `jstream-daemon` always links `jstream-browser` to give the engine a browser backend, CEF's with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature; `jstream-daemon` always links `jstream-browser` to give the engine a browser backend, CEF's with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host (plugin-clap, which only it may link, plugin-proto, and the Windows platform crate for its shared block; [ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -191,9 +192,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  monitor { device, tap: PreFilters | PostFilters }
 │                  an audio filter may name a key source (sidechain)
 ├── encoders       EncoderProfile { id, codec, rate_control, … }
-├── master         Master { video_filters[], audio_filters[] }   applies to everything leaving JStream
+├── master         Master { filters { video[], audio[] } }   applies to everything leaving JStream
 ├── privacy        Privacy { look: Blur { strength } | Slate { color | image }, muted_sources: [source_id] }
-└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, video_filters[], audio_filters[] }
+└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, filters { video[], audio[] } }
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_id } } | Record { path, container } | VirtualCam
 ```
 
@@ -201,8 +202,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `preview_scene`, which are runtime state beside the outputs' state, not part of the
   collection or its `rev` ([ADR-0030](adr/0030-studio-state-and-scene-switching.md)).
   `Program` shows `program_scene`, including any transition in progress. A `VideoMix`
-  with input `Program` follows it. The collection's first scene goes on program when it
-  is created, and a deleted program scene gives way to the first scene left.
+  with input `Program` follows it. `Preview` shows `preview_scene`, studio mode's next
+  scene, set by `studio.set_preview`; a switch doesn't move it. The collection's first
+  scene goes on program and on preview when it is created, and a deleted program or
+  preview scene gives way to the first scene left.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
   Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
   shares everything with the other placements of that source except its own placement,
@@ -262,7 +265,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   display order, and a variant sits under its parent, never in a folder. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
-  decision. Deleting the scene, source or output a binding's action names also removes
+  decision. Deleting the scene, source, output or transition preset a binding's action
+  names also removes
   that binding, in the same undoable edit, and undo restores both; `delete.plan` lists
   the bindings it will remove, and a binding is never a delete blocker
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
@@ -275,7 +279,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   filter's kind is a `video_filter` or `audio_filter` kind matching its chain, and the
   `filter.*` edits address it by its owner and its ID, which is unique within the source
   and kept by `source.duplicate`. A disabled filter keeps its place and settings and is
-  bypassed. The audio chain runs on the source's input before its fader. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  bypassed. The audio chain runs on the source's input before its fader. The master
+  stage and each output own `filters { video, audio }` too, edited with the same
+  `filter.*` edits under the owners `master` and `output`
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)); only their audio chains
+  hold filters until video mixes run the video ones, and their filters can't hold a
+  reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
@@ -303,8 +312,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   belongs to the placement, keyed by item ID. **Move** pairs outgoing and incoming items
   that place the same source (the k-th placement with the k-th, in stacking order) and
   interpolates each pair; **Fade** pairs nothing; **Cut** switches on the next tick.
-  Unpaired items appear or disappear with their effect. The fields are reserved with
-  neutral defaults while M1b builds the model; the behaviour comes before or during M2.
+  Unpaired items appear or disappear with their effect. The running transition is
+  runtime state beside `program_scene`, never collection state.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Master and output chains**
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)): the `master` stage applies
@@ -367,21 +376,24 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   plain link that reads as absent once the original is deleted. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
-  refers to, or a scene a source still shows or a setting refers to, is rejected, and so
-  is deleting a bus a setting refers to (a `bus` reference, which never closes a cycle); a
-  reference in a filter's settings is an edge of the filter's source. The
+  refers to, or a scene a source or a video mix still shows or a setting refers to, is
+  rejected, and so is deleting a bus a setting refers to (a `bus` reference, which never
+  closes a cycle); a reference in a filter's settings is an edge of the filter's
+  source.
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
   whose kind is built (`browser` and its `youtube_chat` preset, through the host's
-  browser backend, and `color`, `image`, `media`, `text`, `waveform` and `spectrum`),
-  rebuilt when its settings change, and the program mix shows its frames, animations
-  and videos advancing on the media clock. The audio-only kinds (`audio_input`,
+  browser backend, and `color`, `display`, `image`, `media`, `text`, `waveform`,
+  `spectrum` and `window`), rebuilt when its settings change, and the program mix shows
+  its frames, animations and videos advancing on the media clock, or for `display` and
+  `window` what the output pipeline captures for its `target`. The audio-only kinds (`audio_input`,
   `desktop_audio`, `app_audio`) have no `Source`: while an output runs, the engine
   records each as a mixer input, routed as its audio and sends say, running the
   source's enabled audio filters of the built-in kinds (`gain`, `noise_gate`,
   `compressor`, `limiter`, `delay`). A `browser` page's audio and a `media` file's
   sound are mixer inputs of their running source, routed the same way. No video filter
   kind is built in yet.
-  Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
+  Outputs, ordered by ID, with their `kind`, an optional `encoder_profile` and an
+  optional `video_mix`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
   container: mp4 }`, the path checked to be absolute and to end in a file name, or
   `VirtualCam`, which has no settings and ignores its profile. A stream
@@ -389,8 +401,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
   H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
-  the engine's default; a profile an output uses can't be deleted. The mix is always
-  `Program` until video mixes exist, so outputs share a session by profile alone.
+  the engine's default; a profile an output uses can't be deleted. Video mixes
+  (protocol 0.28), ordered by ID, each with a name besides the fields above: the
+  resolution's sides even and 16 to 8192, the divisor 1 to 60. An output with no mix
+  shows `Program` at the canvas size and base rate; a mix an output shows can't be
+  deleted. Outputs share a session by mix and profile. `Preview` shows `Program`: no
+  mix draws studio mode's preview scene yet.
+  Transition presets (`cut`, `fade` and `move`, built-in kinds with descriptors), the
+  default preset, each scene's `transition_in` and `transition_out` and each item's
+  `transition`: a new collection holds one preset, `cut`, as its default, so a switch
+  cuts until a client adds another.
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
   others with their faders, and the post-fader sends, a new channel source sending to
@@ -399,17 +419,18 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the program stage's mixer while it runs.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), video filter kinds, blend modes other than `normal`,
-  bus monitors, per-placement effects, the transition fields, 3D
+  bus monitors, per-placement effects, 3D
   geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, an output's mix, audio buses and chains, the
-  `YouTube` kind, and everything outside `sources`, `scenes`,
-  `outputs`, `encoders` and `audio`. The collection file saves everything built so
-  far, encoder profiles, each output's profile, `duplicated_from`, buses, sends and
-  source audio included
+  `background`, output audio buses and chains, the `YouTube` kind, a virtual camera's
+  video mix (it always shows the program), and everything outside `sources`, `scenes`,
+  `outputs`, `encoders`, `video_mixes`, `audio`, `hotkeys` and `transitions`. The
+  collection file saves everything built so far, encoder profiles, video mixes, each
+  output's profile and mix, `duplicated_from`, buses, sends, source audio, hotkeys and
+  transitions included
   ([Persistence](#persistence)).
-  The program scene is built in `jstream-core` as runtime state, so the file doesn't
-  hold it (no preview scene yet).
+  The program and preview scenes and the running transition are built in `jstream-core`
+  as runtime state, so the file doesn't hold them.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -431,9 +452,9 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
-| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot and `rev` under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
@@ -443,11 +464,15 @@ mixer threads in [`jstream-audio`'s real-time design](../crates/jstream-audio/RE
 model; a change that would contradict it edits it in the same PR.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), M3, in progress: the shared block
-(`jstream-plugin-proto`) and the mixer's side of it (`jstream-audio`) are built; the
-host process, its restarts and the `stats.tick` count are not yet. Each CLAP filter
+(`jstream-plugin-proto`), the mixer's side of it (`jstream-audio`) and the host
+process (`jstream-plugin-host`) are built, and so are starting hosts
+(`jstream-platform-windows`) and watching and restarting them on a control thread
+(`jstream-core`'s `HostSupervisor`); running a CLAP filter from the graph, which would
+start that supervisor, and the `stats.tick` count are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
-processes read from the same OS counter. Audio crosses through shared-memory rings, and
+processes read from the same OS counter (not built yet: for now the host sleeps a
+quarter block between passes). Audio crosses through shared-memory rings, and
 the mixer never waits on the host: it writes block *n* and reads the processed block
 *n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
 ([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade, by
@@ -497,24 +522,27 @@ when a snapshot references them and destroyed after the frame fence that last us
 
 The **render snapshot** is built. After every applied batch, undo and redo, every stored
 source frame and a collection file's load, the control side re-plans the program mix
-under the collection lock: the reachable scenes, the frames they show and the passes
-that draw them. It publishes that as the next render generation only when it draws
-something new, so a batch that touches nothing on program publishes nothing. The render
-thread loads it without the lock. `video.snapshot` reads it together with `rev` under
-the lock on the control path, and its thread only receives the snapshot. The render
+and the scene each video mix shows under the collection lock: the reachable scenes, the
+frames they show and the passes that draw them. It publishes that as the next render
+generation only when it draws something new, so a batch that touches nothing on program
+or any mix publishes nothing. The render
+thread loads it without the lock. `video.snapshot` and the preview thread read it
+together with `rev` and the live values under the lock, and draw the live values over
+it. The render
 thread draws through a `jstream-render` resource cache keyed by source and by nested
 scene and depth. A frame that shows what the last one showed allocates no texture: an
 unchanged frame is not uploaded again and each nested scene is redrawn into the layer it
 had. An image no frame references is retired, then freed once the GPU has finished the
 last frame that used it (a `Queue::on_submitted_work_done` fence the cache polls without
-blocking). The render thread hands those images, and each render snapshot it replaces,
-to the program stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render
+blocking). The render thread hands those images, and each render snapshot and set of
+live values it replaces, to the program stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render
 thread stamps its reader slot as the handover below says. When a fatal error stops its
 drawing it publishes the stopped marker too: it adopts nothing more and only repeats the
 frame it last drew until teardown. The audio and outputs snapshots are not built.
 
-**Live-value handover** (decided; the render generation and its reader slot are built,
-the parameter channels and the gesture release are not): the engine learns that a
+**Live-value handover** (decided; built for the render thread: its generation, its reader
+slot, its parameter channel and the gesture release. The mixer's channel and generation
+are not, so audio faders have no live values yet): the engine learns that a
 real-time thread holds a committed snapshot through a **generation counter per
 subsystem**. Each time the control side publishes a subsystem's snapshot it bumps that
 subsystem's generation and stores it in the snapshot. Each real-time thread that reads
@@ -578,23 +606,36 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
+  `video_mix.create`, `video_mix.update` and `video_mix.delete` configure video mixes
+  (an input, a resolution and a divisor of the base rate), and `output.set_video_mix`
+  points an output at one or back at the program (protocol 0.28). A mix an output shows
+  can't be deleted, and a mix showing a scene blocks that scene's delete.
   `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
-  `filter.set_settings` and `filter.reorder` edit a source's filter chains, addressed by
-  an `owner` and a filter ID; `SourceInfo.filters` reports them
-  ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22). `source.set_audio`, `bus.create`,
-  `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set` and `send.remove` edit
-  sources' audio, the buses and the send matrix ([ADR-0028](adr/0028-audio-model-v2.md),
-  protocol 0.19).
+  `filter.set_settings` and `filter.reorder` edit the filter chains of a source, the
+  master stage or an output, addressed by an `owner` and a filter ID;
+  `SourceInfo.filters`, `OutputInfo.filters` and `state.get`'s `master` report them
+  ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22;
+  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29).
+  `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
+  `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19).
+  `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
+  ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.25). Deleting the scene,
+  output or transition preset an action names removes its bindings in the same edit, the batch result lists
+  them as `removed_hotkeys`, and undo restores them
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
-  `output.status` reports only `key_set`.
+  `output.status` reports only `key_set`. A key is bound to its output's server: an
+  applied change that deletes the output or points it at another scheme, host or port
+  removes the key, so it never goes to a server it wasn't set for (#343).
 - **Actions** (`output.start`, `scene.switch`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
 - **Program scene** (protocol 0.16, [ADR-0030](adr/0030-studio-state-and-scene-switching.md)):
-  the action `scene.switch { scene_id }` puts a scene on program with a cut, with no
+  the action `scene.switch { scene_id }` puts a scene on program, with no
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
@@ -605,15 +646,24 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
-- **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
-  delete presets (each with a kind and a settings map or patch,
-  [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
-  and set a scene's `transition_in` and `transition_out` and an item's transition
-  settings. The scene-switch action takes an optional preset.
-- **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
-  actions that override live-adjustable parameters during a drag or a live dialog, with
-  no `rev` bump or undo step; one batch commits the gesture
-  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+- **Studio mode** (protocol 0.30): the action `studio.set_preview { scene_id }` puts a
+  scene on preview, also with no `rev` change; `studio.get` and `studio.changed` carry
+  `preview_scene` beside `program_scene`.
+- **Transitions** (protocol 0.30, [ADR-0029](adr/0029-transitions.md)): the edits
+  `transition.create`, `transition.update` and `transition.delete` manage presets (each
+  with a kind and a settings map or patch,
+  [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)),
+  `transition.set_default` sets the default, `scene.set_transitions` sets a scene's
+  `transition_in` and `transition_out`, and `item.set_transition` an item's transition
+  settings. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
+  causes names the preset it ran and how long the transition lasts (0 for a cut).
+  `state.get` reports the presets and the default under `transitions`, and `kind.list`
+  the transition kinds.
+- **Live values** (`live.set`, `live.cancel`; query `live.list`; events `live.changed`,
+  `live.ended`; protocol 0.26): actions that override live-adjustable parameters during
+  a drag or a live dialog, with no `rev` bump or undo step; one batch carrying `ends_gesture`
+  commits the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). Built for item
+  placements and crops; audio faders follow with the mixer's parameter channel.
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
@@ -630,19 +680,22 @@ The wire format, versioning, error codes and compatibility policy are designed i
   that stage is covered by the privacy screen.
 - **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
   its encoder session's profile and the other outputs sharing it, plus the sessions and
-  hardware sessions in use. A profile's settings at start count, so an output started
-  after `encoder.update` gets a session of its own. Planned: when the encoder refuses a
+  hardware sessions in use. A profile's settings and the output's video mix at start
+  count, so an output started after `encoder.update` gets a session of its own, and
+  outputs on different mixes never share one. Planned: when the encoder refuses a
   session, `output.start` fails with a stable session-limit error code naming the
   outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video.snapshot` → the program mix as a PNG in the
+  `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
+  (protocol 0.28), `video.snapshot` → the program mix (not a video mix) as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source (or, from protocol 0.24, a bus) with everything
-  that refers to it, and the `rev` it was planned at; `bus.list` (protocol 0.19) → the buses and sends; audio levels are
-  the `meters.tick` event, not a query).
+  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
+  `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
+  source's `target` can name; audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
@@ -677,7 +730,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `waveform` and `spectrum` kinds' `audio` setting holds).
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
   `preview.subscribe` opens a stream of the program mix for the calling session,
-  scaled down, at most `fps` pictures a second and only when the mix changes, in H.264
+  scaled down, at most `fps` pictures a second and only when the mix changes (as it
+  does throughout a running transition), in H.264
   when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
   session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
   keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
@@ -730,7 +784,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -740,12 +794,17 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
   apart: each read returns the newest tick as `stats` (running totals), so it can't
   evict the state and output events and its drop counts stay visible. `meters.tick`,
-  about ten a second while the mixer runs, is kept the same way, as `meters`. `youtube.*` events are not
-  returned to agents (ADR-0058 §3).
+  about ten a second while the mixer runs, is kept the same way, as `meters`. A drag's
+  `live.changed` events are merged, in place, into the newest one of their gesture that
+  no read has returned yet, while only `live.changed` events for other parameters follow
+  it, so an unread drag holds one buffered event and `seq` has no gaps. `youtube.*`
+  events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 220 KB
-  of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 593 KB
+  of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
+  of the edit schemas `item` and `batch` do, because `live.set` takes edits and
+  `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
@@ -821,8 +880,10 @@ top-left at `position`, clockwise rotation about that corner). Opacity is a stra
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
-when interop is present, and otherwise a device the crate opens with a software adapter
-first. A nested scene is composited into an `Rgba16Float` layer that stays on the GPU
+when interop is present, and otherwise a device the crate opens with a hardware adapter
+first (D3D12 first on Windows); the software adapter is the fallback, so a machine with
+no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that stays
+on the GPU
 and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
 a layer the caller keeps, so a frame allocates no texture for it. The caller walks the
 nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
@@ -834,30 +895,36 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
+browser source's page paints on the same context and is imported the same way, read
+as premultiplied sRGB (`import_premultiplied`), CEF's layout. The
 composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
 on D3D11 into a texture of their own, fence-synchronized both ways, and
 `jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
 ([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
 Nothing writes the encode targets yet. Built-in video filters are kinds with
-descriptors whose passes `apply_filter` draws from one premultiplied `Rgba16Float` image
-into another, of the size the filter reports
+descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
+import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
 runtime that runs a source's video chain before placement is not built yet. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
 
-**Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
-texture blend: during it, the program mix is a synthetic item list whose transforms and
-opacity come from the transition state, drawn by a transition node that reads both
-scenes' source textures. The control thread pairs the items when the switch starts and
-sends the render thread a plan; the render thread only interpolates, and owns the live
-interpolated state, so a switch mid-transition starts from what is on screen. Rotation,
-tilt and turn take the shortest way round. The easing curves are one shared function
-with golden tests. After easing, the compositor clamps values with a hard range: opacity
-to `[0, 1]`, crop to `[0, source size]`, size to `≥ 0` and perspective to `> 0`; the
-spring may overshoot everything else.
+**Transitions** ([ADR-0029](adr/0029-transitions.md), with
+[ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
+during it, the program mix is a synthetic item list whose transforms and opacity come
+from the transition state, drawn over both scenes' source images. The control thread
+pairs the items when the switch starts and publishes the plan in the shot, one
+`jstream_render::transition::Track` per item (a pair, an appearance or a
+disappearance, each with its delay, duration and easing); the render thread only
+samples each track at the frame's media time. A switch mid-transition starts from what
+is on screen: the control thread samples the running plan at the switch time with the
+same function, so both threads agree on it without the render thread keeping any
+state. Rotation, tilt and turn take the shortest way round. The easing curves are one
+shared function (`jstream_protocol::Easing`) with golden tests. After easing, values
+are clamped to a hard range: opacity to `[0, 1]`, crop to `[0, source size]`, size to
+`≥ 0` and perspective to `≥ 1`; the spring may overshoot everything else.
 
 **S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a
 3840x2160 display at 29 Hz and the async `AMDh264Encoder` MFT. The pipeline holds 60
@@ -896,7 +963,9 @@ A browser source is a CEF off-screen browser
 ([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
 ([ADR-0046](adr/0046-browser-crate-and-helper.md),
 [its README](../crates/jstream-browser/README.md)). The desktop app and the daemon wire it
-in behind their off-by-default `cef` features; the program mix doesn't use it yet.
+in behind their off-by-default `cef` features. While a program stage runs on a GPU
+context, the mix draws each page's newest texture there (a premultiplied import, see
+[GPU pipeline](#gpu-pipeline)); otherwise a page shows its transparent stand-in.
 CEF runs in the sandboxed browser helper process, never in the engine's
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), which the engine drives over two named
 pipes. Each `OnAcceleratedPaint`
@@ -969,16 +1038,20 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
-  `jstream-graph`, which checks a loaded collection as it checks edits. `jstream-core`
+  `jstream-graph`, which checks a loaded collection as it checks edits. A field added
+  for new collection state (encoder profiles, hotkey bindings, transition presets and
+  settings) is omitted when empty or at its default (for presets, a new collection's one
+  `cut`), so a file without it is still valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
-  Each stored source and filter records its kind's descriptor version, migrated on load
-  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until
-  kinds ship settings migrations, a source or filter saved at another version is
-  refused on load. A placement's `opacity` and `blend` are written only when they differ
-  from 1 and `normal`, a disabled filter's `enabled` only when false, and the reserved
-  `effects[]` must be empty.
+  Each stored source, filter and transition preset records its kind's descriptor
+  version, migrated on load like the collection
+  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
+  migrations, a source, filter or preset saved at another version is refused on load.
+  A placement's `opacity` and `blend` are written only when they differ from 1 and
+  `normal`, a disabled filter's `enabled` only when false, and the reserved `effects[]`
+  must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

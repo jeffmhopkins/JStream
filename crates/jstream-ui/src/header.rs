@@ -459,6 +459,8 @@ mod tests {
                 output_id: OutputId::new(id),
                 kind,
                 encoder_profile: None,
+                filters: Default::default(),
+                video_mix: None,
             },
             state,
             key_set: true,

@@ -29,9 +29,9 @@ an output with a video chain gets its own) needs no new shape.
 
 Its only JStream dependency is `jstream-platform` (layer 1), whose `media` re-export
 supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependencies:
-`jstream-platform`'s `fake` feature, for `FakeCodecs`, and `wgpu` at the workspace pin
+`jstream-platform`'s `fake` feature, for `FakeCodecs`, `wgpu` at the workspace pin
 with jstream-render's backends, so the GPU-frame tests can make textures on a software
-adapter.
+adapter, and `criterion`, for the benchmarks.
 
 Why a crate: the crate map puts encoder sessions in their own layer-3 crate, between
 the platform traits they drive and the layer-4 outputs that consume them, and it keeps
@@ -190,8 +190,8 @@ SPS and PPS of the first keyframe, which carries them in-band (Annex B). See
 live session for the key or opens and registers one. `SessionKey<M>` is the key ARCH
 describes, `(mix, settings)`, with `M` the engine's mix or bus ID and
 `EncoderSettings` the platform configs. `jstream-core` keys its registry by the
-protocol's encoder profile instead (its ID and settings), because there is only the
-program mix until video mixes exist, and maps the profile to platform configs itself.
+video mix an output shows (with that mix's size and rate) and the protocol's encoder
+profile (its ID and settings), and maps the profile to platform configs itself.
 The registry isn't synchronised; the engine keeps it on the control plane. A session
 lives while an output holds its `Arc`; the output that lets go last should `finish` it
 (it can tell with `Arc::into_inner`).

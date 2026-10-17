@@ -103,7 +103,36 @@ impl Compositor {
         texture: wgpu::Texture,
         sync: Option<Arc<dyn FrameSync>>,
     ) -> Result<Image, RenderError> {
-        image::import(&self.maker(), texture, sync)
+        self.import_as(texture, sync, Alpha::Straight)
+    }
+
+    /// Samples `texture`, as [`Self::import`] does, but holding sRGB code values already
+    /// multiplied by alpha, as a browser page paints (CEF's layout). It must be
+    /// `Rgba8Unorm` or `Bgra8Unorm`, so sampling does not decode it.
+    ///
+    /// The texels are filtered premultiplied, so transparent edges keep no fringe, then
+    /// divided by alpha, decoded from sRGB and multiplied by alpha again in linear light.
+    /// Filtering the code values rather than linear light differs from an upload only
+    /// where the filter mixes texels of different colour.
+    ///
+    /// # Errors
+    /// As for [`Self::import`].
+    pub fn import_premultiplied(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+    ) -> Result<Image, RenderError> {
+        self.import_as(texture, sync, Alpha::PremultipliedSrgb)
+    }
+
+    /// [`Self::import`] or [`Self::import_premultiplied`], by `alpha`.
+    pub(crate) fn import_as(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+        alpha: Alpha,
+    ) -> Result<Image, RenderError> {
+        image::import(&self.maker(), texture, sync, alpha)
     }
 
     /// [`Self::import`] of a [`jstream_platform::GpuFrame`], keeping its [`FrameSync`] hold.
@@ -139,6 +168,8 @@ impl Compositor {
         } else {
             None
         };
+        // Last, so no error between the staging and the submit it arms (#391).
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -260,6 +291,7 @@ impl Compositor {
             });
         }
         self.load(scene)?;
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -292,7 +324,7 @@ impl Compositor {
     /// # Errors
     /// [`RenderError::Invalid`] when `input` came from another compositor,
     /// [`RenderError::TooLarge`] for an output past the adapter limit, and
-    /// [`RenderError::Sync`] when staging an imported input fails.
+    /// [`RenderError::Sync`] when staging an imported input or reference image fails.
     pub fn apply_filter(
         &mut self,
         filter: &mut VideoFilter,
@@ -324,15 +356,19 @@ impl Compositor {
             runtime: &mut self.filters,
             encoder: &mut encoder,
             clock,
+            holds: &mut self.staged,
         };
-        filter.pass_mut().encode(&mut ctx, input, &output)?;
+        ctx.holds.clear();
+        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, &output) {
+            self.staged.clear();
+            return Err(err);
+        }
+        ctx.hold(input);
         // Staged only once recording succeeded, right before the submit it arms, and
-        // handed back to the platform at the end of that submit, as `render` does.
-        self.staged.clear();
-        if let Some(sync) = input.sync() {
+        // handed back to the platform at the end of that submit, as `render` does: the
+        // input's hold and those of the images the filter reads besides it, each once.
+        for (sync, _) in &self.staged {
             sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
-            self.staged
-                .push((Arc::clone(sync), input.texture().clone()));
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
@@ -356,6 +392,13 @@ impl Compositor {
         &self.gpu.adapter
     }
 
+    /// The platform context this compositor was opened on ([`Self::on_context`]), or
+    /// `None` when it opened a device of its own. A texture made on that context can be
+    /// imported here; one from another context or device can't.
+    pub fn context(&self) -> Option<&jstream_platform::ContextKey> {
+        self.gpu.context.as_ref()
+    }
+
     /// A one-line description of the adapter, for logs and test output.
     pub fn adapter_description(&self) -> String {
         self.gpu.description()
@@ -371,6 +414,7 @@ impl Compositor {
             adapter: self.gpu.adapter.clone(),
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
+            context: self.gpu.context.clone(),
         })
     }
 
@@ -603,12 +647,12 @@ impl Compositor {
         Ok(())
     }
 
-    /// Validates `scene`, builds its vertices, stages its frame holds and writes the
-    /// vertex buffer: everything before the passes are recorded.
+    /// Validates `scene`, builds its vertices and writes the vertex buffer. The caller
+    /// stages the frame holds after this and every other step that can fail, so an
+    /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         color::validate(scene.background)?;
         self.prepare(scene)?;
-        self.stage_sources(scene)?;
         self.ensure_vertex_buffer()?;
         if !self.vertices.is_empty() {
             self.gpu
@@ -691,6 +735,14 @@ impl Compositor {
     }
 }
 
+#[cfg(test)]
+impl Compositor {
+    /// Lowers the buffer limit, as a smaller adapter's would be.
+    pub(crate) fn cap_buffer_size(&mut self, bytes: u64) {
+        self.gpu.max_buffer_size = bytes;
+    }
+}
+
 impl std::fmt::Debug for Compositor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Compositor")
@@ -707,9 +759,11 @@ fn push_quad(
     opacity: f32,
     alpha: Alpha,
 ) {
-    let straight = match alpha {
+    // The shader's `mode`: how it turns a filtered sample into premultiplied linear.
+    let mode = match alpha {
         Alpha::Premultiplied => 0.0,
         Alpha::Straight => 1.0,
+        Alpha::PremultipliedSrgb => 2.0,
     };
     let corner = |i: usize| {
         let [x, y] = quad.corners[i];
@@ -724,7 +778,7 @@ fn push_quad(
         push_f32(buf, u);
         push_f32(buf, v);
         push_f32(buf, opacity);
-        push_f32(buf, straight);
+        push_f32(buf, mode);
     }
 }
 

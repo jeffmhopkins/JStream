@@ -135,6 +135,7 @@ pub fn Scenes() -> impl IntoView {
                         &s,
                         Action::SceneSwitch {
                             scene_id: id.clone(),
+                            preset_id: None,
                         },
                     );
                 }

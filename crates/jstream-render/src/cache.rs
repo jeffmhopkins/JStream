@@ -10,7 +10,7 @@ use jstream_platform::GpuFrame;
 
 use crate::compositor::Compositor;
 use crate::error::RenderError;
-use crate::image::Image;
+use crate::image::{Alpha, Image};
 
 /// Imports of other textures kept under one key: a platform that delivers frames from a
 /// ring of textures gets one bind group per texture, not one per frame.
@@ -156,15 +156,41 @@ impl<K: Ord + Clone> ResourceCache<K> {
         key: &K,
         frame: &GpuFrame,
     ) -> Result<&Image, RenderError> {
+        self.import_as(compositor, key, frame, Alpha::Straight)
+    }
+
+    /// [`Self::import`] of a frame whose texture holds sRGB code values already
+    /// multiplied by alpha, as a browser page paints them, sampled as
+    /// [`Compositor::import_premultiplied`] samples it. An entry under `key` imported
+    /// the other way is replaced.
+    ///
+    /// # Errors
+    /// As for [`Compositor::import_premultiplied`]. The entry is left as it was.
+    pub fn import_premultiplied(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        frame: &GpuFrame,
+    ) -> Result<&Image, RenderError> {
+        self.import_as(compositor, key, frame, Alpha::PremultipliedSrgb)
+    }
+
+    fn import_as(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        frame: &GpuFrame,
+        alpha: Alpha,
+    ) -> Result<&Image, RenderError> {
         let frame_no = self.frame;
         let texture = frame.texture();
         let sync = Some(Arc::clone(frame.sync()));
         let reuse = self
             .live
             .get(key)
-            .is_some_and(|entry| entry.image.is_import());
+            .is_some_and(|entry| entry.image.is_import_as(alpha));
         if !reuse {
-            let image = compositor.import(texture.clone(), sync)?;
+            let image = compositor.import_as(texture.clone(), sync, alpha)?;
             return Ok(self.replace(key, image, 0));
         }
         let entry = self.live.get_mut(key).ok_or_else(|| missing("an import"))?;
@@ -175,7 +201,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
                 .position(|(image, _)| image.texture() == texture);
             let image = match kept {
                 Some(index) => entry.kept.swap_remove(index).0,
-                None => compositor.import(texture.clone(), None)?,
+                None => compositor.import_as(texture.clone(), None, alpha)?,
             };
             let mut old = std::mem::replace(&mut entry.image, image);
             old.set_sync(None);
