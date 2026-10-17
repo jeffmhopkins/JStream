@@ -1,5 +1,5 @@
 //! macOS platform backends: the implementations of the `jstream-platform` traits on macOS,
-//! as ADR-0063 (proposed) lays them out. The first part: it has the `mach_absolute_time`
+//! as ADR-0063 lays them out. The first part: it has the `mach_absolute_time`
 //! media clock (`MachClock`), the running release and its support tier (`MacosVersion`,
 //! `support_tier`), four-character codes and `OSStatus` errors, and the VideoToolbox and
 //! AudioToolbox settings for an encoder configuration. Capture (`ScreenCaptureKitCapture`),

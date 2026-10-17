@@ -38,10 +38,12 @@ This first part has:
   `from_host_time` (and `hns_from_mach`, with the `mach_timebase_info` ratio) maps them.
   `now` never decreases, and doesn't allocate, lock or block.
 - **`MacosVersion`**: the running release, read from `NSProcessInfo`, and parsed from
-  strings. **`support_tier`** gives its ADR-0063 tier: Apple Silicon at or above macOS
-  14.0 is supported, Intel is best effort, anything older is not supported
-  (`check_floor`). **`Feature::ProcessTaps`** needs 14.2, and an older release gets a
-  missing-component error that names the update.
+  strings. **`support_tier`** gives its ADR-0063 tier: Apple Silicon on a release Apple
+  still patches (`MacosVersion::OLDEST_PATCHED`, 15 today, mirroring the
+  `macos-security-updated` fact) is supported; macOS 14, and Intel on any release from
+  14.0, are best effort; anything older than 14.0 is not supported (`check_floor`).
+  `OLDEST_PATCHED` moves when that fact does. **`Feature::ProcessTaps`** needs 14.2,
+  and an older release gets a missing-component error that names the update.
 - **`fourcc`**, **`fourcc_str`** and **`os_status`**: four-character codes, and
   `OSStatus` errors shown as their characters or their number. **`cv_pixel_format`** and
   **`pixel_format_from_cv`** map the engine's pixel formats to Core Video's (4:2:0 in
