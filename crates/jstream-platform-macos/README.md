@@ -180,7 +180,9 @@ It has:
   output stream; `ProcessLoopback` taps the one process, which must be one `processes`
   lists (else `NotFound`). Its child processes aren't included, unlike Windows' process
   loopback of a process tree. The stream ends with `DeviceLost` when the aggregate
-  stops working, the tapped output goes, or the tapped process exits. No Microphone
+  stops working, the output it is clocked by goes (the tapped one, or for desktop and
+  application audio the default output when the tap opened, even if the aggregate
+  lives on), or the tapped process exits. No Microphone
   permission is checked: a tap needs the system audio recording permission, which has
   no public API to read. macOS asks when a tap first runs, and without the grant the
   tap records silence. JStream accepts that, with no guessing from the samples and no
