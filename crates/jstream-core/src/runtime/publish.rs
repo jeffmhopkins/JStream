@@ -313,6 +313,77 @@ pub(crate) mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
+    /// Plain `rtmp://` to another machine logs one warning that names the host and
+    /// nothing from the path, where a pasted key would be; `rtmps://` and loopback log
+    /// none (#353). An empty key fails the connect right after the check, so nothing
+    /// goes on the network.
+    #[test]
+    fn plain_rtmp_to_another_machine_warns_with_the_host_only() {
+        use std::fmt;
+        use std::sync::Mutex;
+        use tracing::field::{Field, Visit};
+        use tracing::span::{Attributes, Id, Record};
+        use tracing::{Event, Metadata, Subscriber};
+
+        /// The text of every event.
+        #[derive(Clone, Default)]
+        struct Events(Arc<Mutex<Vec<String>>>);
+
+        struct Text<'a>(&'a mut String);
+
+        impl Visit for Text<'_> {
+            fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+                self.0.push_str(&format!("{}={value:?} ", field.name()));
+            }
+        }
+
+        impl Subscriber for Events {
+            fn enabled(&self, _: &Metadata<'_>) -> bool {
+                true
+            }
+            fn new_span(&self, _: &Attributes<'_>) -> Id {
+                Id::from_u64(1)
+            }
+            fn record(&self, _: &Id, _: &Record<'_>) {}
+            fn record_follows_from(&self, _: &Id, _: &Id) {}
+            fn event(&self, event: &Event<'_>) {
+                let mut text = format!("{} ", event.metadata().level());
+                event.record(&mut Text(&mut text));
+                self.0
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(text);
+            }
+            fn enter(&self, _: &Id) {}
+            fn exit(&self, _: &Id) {}
+        }
+
+        let logged = |url: &str| {
+            let events = Events::default();
+            tracing::subscriber::with_default(events.clone(), || {
+                assert!(connect_rtmp(url, "").is_err(), "an empty key is refused");
+            });
+            events
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        };
+        let warned = logged("rtmp://192.0.2.1/app/live_PASTED-KEY-1234");
+        assert_eq!(warned.len(), 1, "{warned:?}");
+        assert!(warned[0].starts_with("WARN "), "{warned:?}");
+        assert!(warned[0].contains("host=\"192.0.2.1\""), "{warned:?}");
+        assert!(warned[0].contains("rtmps://"), "{warned:?}");
+        assert!(
+            !warned[0].contains("PASTED-KEY"),
+            "the path leaked: {warned:?}"
+        );
+        assert!(!warned[0].contains("/app"), "the path leaked: {warned:?}");
+        assert_eq!(logged("rtmps://192.0.2.1/app"), Vec::<String>::new());
+        assert_eq!(logged("rtmp://127.0.0.1/app"), Vec::<String>::new());
+        assert_eq!(logged("rtmp://localhost/app"), Vec::<String>::new());
+    }
+
     const HANDSHAKE: usize = 1536;
     /// Longer than the 1 ms poll timeout the publisher used to have during the handshake.
     const DELAY: Duration = Duration::from_millis(50);
