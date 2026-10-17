@@ -154,6 +154,8 @@ the batch **touched**.
   `item.set_transform`. A geometry is checked before it is stored: a positive size and
   perspective, finite corners, and neutral tilt, turn, depth and perspective until the
   compositor draws 3D; each failure names its field (`edits.N.geometry.tilt_deg`).
+  A geometry's `flip_h` and `flip_v` are part of it, so they are stored, undone and
+  persisted with it (the collection file writes them only when set).
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
   `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
   accept only `normal` until the compositor draws the other modes. Each is undone by
@@ -387,7 +389,8 @@ edit, shared sources, references and clones (`item.set_source` keeping the item,
 `duplicated_from` link through deletes and undo, and both conversions as one batch),
 cycles (self, 2- and 3-cycles, legal diamonds, and through settings references, one
 case per edge-adding edit), settings checks and defaults,
-placement conversions and their inverses, geometry and canvas validation,
+placement conversions and their inverses, a flip set and undone through
+`item.set_geometry`, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
 output, encoder edits and their inverses (a profile freed and deleted in one batch),
@@ -428,7 +431,7 @@ exactly when something refers to it, a scene's or source's with the blockers the
 works out itself. The
 seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
-1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
+1280×720 canvas, legacy items and a flipped geometry item, two encoder profiles that two outputs use,
 two video mixes that two outputs show, scene `b` made a group, a clone, a
 `duplicated_from` naming a missing source, opacities, a desktop audio source with two
 gain filters, one disabled, a gain filter each on the master and the recording output,
@@ -443,7 +446,7 @@ moves on, and a migration has to load it); a file without `encoders` or any
 `audio` (as saved before audio existed) keeping its audio sources' master sends at
 0 dB; a file without `master` or any output's `filters` (as saved before their chains
 existed) loading with those chains empty and the sources' filters intact; a removed
-master send's round trip; a profile's round trip; a virtual camera's round trip;
+master send's round trip; a profile's round trip; a geometry's flip loading back and a file without one loading unflipped; a virtual camera's round trip;
 transitions' round trip (with the initial `cut` deleted, or kept but changed) and a
 preset of another kind version refused; hotkeys' round trip, and a file whose binding
 names a missing scene refused; a clone's

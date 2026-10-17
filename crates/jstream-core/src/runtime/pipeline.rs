@@ -2794,7 +2794,8 @@ mod tests {
         rgba_from_surface(&grey, &mut out).expect("NV12 full");
         assert_eq!(&out[..4], [200, 200, 200, 255]);
 
-        // BGRA is swizzled; another format is refused and leaves `out` alone.
+        // BGRA is swizzled, and its alpha read as opaque (#451); another format is
+        // refused and leaves `out` alone.
         let bgra = frame(
             PixelFormat::Bgra8,
             1,
@@ -2803,7 +2804,16 @@ mod tests {
             vec![Plane::new(vec![1, 2, 3, 4], 4)],
         );
         rgba_from_surface(&bgra, &mut out).expect("BGRA");
-        assert_eq!(out, [3, 2, 1, 4]);
+        assert_eq!(out, [3, 2, 1, 255]);
+        let rgba = frame(
+            PixelFormat::Rgba8,
+            1,
+            1,
+            ColorInfo::default(),
+            vec![Plane::new(vec![1, 2, 3, 4], 4)],
+        );
+        rgba_from_surface(&rgba, &mut out).expect("RGBA");
+        assert_eq!(out, [1, 2, 3, 255]);
         let i420 = VideoSurface::Cpu(
             VideoFrame::zeroed(VideoFrameInfo {
                 size: FrameSize::new(2, 2).expect("size"),
@@ -2814,7 +2824,7 @@ mod tests {
             .expect("frame"),
         );
         assert_eq!(rgba_from_surface(&i420, &mut out), None);
-        assert_eq!(out, [3, 2, 1, 4]);
+        assert_eq!(out, [1, 2, 3, 255]);
     }
 
     /// Frames with no mix and no session yet.
