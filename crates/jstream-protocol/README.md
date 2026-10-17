@@ -33,6 +33,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
   kind, and `HistoryDirection` (`undo`, `redo`), the `cause` of a `state.changed` and
   the `direction` of a `history_empty` error.
+- **Live values** (`live.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
+  `LiveOutcome` (`committed`, `cancelled`, `expired`), `GestureInfo` (one open gesture
+  in a `live.list` result), the limits `MAX_GESTURES_PER_CLIENT` (16) and
+  `MAX_LIVE_VALUES` (256), and `is_live_adjustable`, which says which setters `live.set`
+  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`), so every
+  implementation agrees.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
@@ -42,13 +48,18 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
   `output.set_target`, `output.set_encoder`, `output.delete`, `encoder.create`,
   `encoder.update`, `encoder.delete`, `source.set_audio`, `bus.create`, `bus.rename`,
-  `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`), with `ItemTransform`
-  (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
+  `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`, `hotkey.set`, `hotkey.clear`,
+  `transition.create`, `transition.update`, `transition.delete`,
+  `transition.set_default`, `scene.set_transitions`, `item.set_transition`), with
+  `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`, `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`,
+  `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
-  `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`);
-  `Batch`; and the `Command`/`CommandClass`
+  `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
+  `live.set`, `live.cancel`), with `Action::named_objects` and `Action::bind_problem`,
+  which every implementation uses to check and follow a hotkey's action; `Batch`, whose
+  optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
@@ -57,7 +68,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
-  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). `OutputKind::key_server` names the
+  server a stream key is bound to (scheme, host and port), which the engine and the
+  mock compare to remove a key that would otherwise follow its output elsewhere (#343).
+- **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
+  `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
+  every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -72,26 +88,36 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus),
-  `studio.get` and `device.list`, with `QueryResult` and the `SceneSummary`,
-  `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo` shapes the reads report.
-  `state.get` carries the `Canvas`, and `ItemInfo`
-  the item's `placement` form and its `geometry`. `video.snapshot` returns the program
-  mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and `youtube.list_streams`
-  read the YouTube account.
+  `studio.get`, `device.list` and `live.list`, with `QueryResult` and the
+  `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo` shapes the
+  reads report. `state.get` carries the `Canvas`, and `ItemInfo`
+  the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
+  overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
+  `youtube.list_streams` read the YouTube account.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer.
+- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md),
+  [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): the
+  built-in transition kinds (`cut`, `fade`, `move`) and their descriptors, `Easing` with
+  `Easing::apply`, the one easing function every implementation shares (golden-tested),
+  `ItemTransition` (an item's delay, easing, glide and appear and disappear effects) with
+  its range check, `TransitionPresetInfo` and `TransitionsInfo` as `state.get` reports
+  them, and `TransitionStarted`, what a `studio.changed` says a switch ran.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
-  `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
-  parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
+  `ParamDescriptor` and `ParamType`, the shapes that describe a source, filter or
+  transition kind's parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
   `source`, `bus` and `asset` references are tagged objects (`Reference`). The per-value checks
   (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
-  shares them. No kind is defined here.
-- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
-  `events.dropped`, `stats.tick`, `meters.tick`, `youtube.status_changed` and
-  `youtube.health_changed`.
+  shares them. No source or filter kind is defined here; the transition kinds are
+  (Transitions above).
+- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
+  (program, preview and the transition a switch started), `events.dropped`,
+  `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
+  `live.changed` and `live.ended`.
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), and the binary
@@ -102,7 +128,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs (`BusId::master()` is
-  the one fixed ID, `master`), `Rev`, and `PROTOCOL_VERSION`.
+  the one fixed ID, `master`; a `GestureId` is chosen by the client), `Rev`, and
+  `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
   NaN, infinity and out-of-range numbers at construction and deserialization. Computed
   results (`CanvasPoint`, `ContentRect`, `LegacyQuad`) use plain `f32`.
@@ -114,7 +141,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.24 because of bus
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.30 because of
+  transition presets and studio mode's preview (the `transition.*` edits,
+  `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
+  `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
+  `transition` entity kind and kind category); 0.26 added live values
+  ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the `live.changed`
+  and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
+  hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
+  `hotkeys` and the batch result's `removed_hotkeys`); 0.24 added bus
   references (the `bus` parameter type and reference, which the `waveform` and
   `spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
   `bus.delete` refused while one refers to its bus); 0.23 added YouTube
@@ -146,10 +181,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
-  encoder profiles), the exact answer to every collection read of it (`output.list`
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output, two
+  encoder profiles and two hotkeys, one of them rebound), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path and encoder profile checks, and `item.set_source` and
+  URL, recording path and encoder profile and hotkey checks, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
   `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a desktop
@@ -192,8 +227,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":24},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":24},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":26},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":26},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -406,7 +441,9 @@ never a type per kind.
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
   or the source whose setting refers to it (`settings.<param>`, or
   `filters.<filter_id>.<param>` for a filter's setting). `delete.plan` returns
-  the batch that removes them with the target (see [Queries](#design)).
+  the batch that removes them with the target (see [Queries](#design)). Hotkey
+  bindings are never blockers: a delete removes the bindings that name its target
+  (below).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
@@ -452,7 +489,11 @@ application name, and is refused if it could carry a credential (`user:password@
 query or a fragment). A key pasted into the path can't be told from a nested
 application name, so it is stored as given. A `record` output (0.9) records to a file
 on the engine's machine: `path` must be absolute (`/…`, `\…`, `C:\…` or `C:/…`), have
-no `..` segment and end in a file name, and
+no `..` segment and end in a file name. As for an `absolute` asset path, it must not
+start with a second separator (a UNC share or device, `\\host\share\…`, `\\.\…`,
+`\\?\…`), nor contain `:` but the drive letter's, `?` or `*` (`\??\UNC\…`), nor
+end in a DOS device name (`NUL`, `nul.mp4`, `CON`, `COM1`, `LPT1`, …), by the same rule
+as an asset path's last component. And
 `container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
@@ -470,10 +511,23 @@ so it is set with the `output.set_key` action and removed with `output.clear_key
 from YouTube on each `output.start` ([YouTube](#design)), so it needs no
 `output.set_key`. Its ID must be ASCII letters, digits, `-` and `_`, at most 128 bytes.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
-error, query or log carries it, and `output.status` reports only `key_set`. A key
-outlives `output.delete`, so undoing the delete gives back a working output; a client
-that deletes for good also sends `output.clear_key`, which succeeds for an output no
-longer in the collection. Its errors carry fixed reasons that never quote the key.
+error, query or log carries it, and `output.status` reports only `key_set`. A key is
+bound to the server it was set for (#343): when an applied batch, undo or redo deletes
+the output, or points it at another server (`OutputKind::key_server`: scheme, host and
+port; a new path on the same server keeps the key), the engine removes the key from the
+credential store, and refuses that output's `output.start` with `action_failed` until
+the key is gone. So a retarget never sends the old key to the new server, and an output
+re-created with a deleted one's ID starts with no key. Undoing the delete or the
+retarget restores the target but not the secret: set it again with `output.set_key`.
+A start already opening when the retarget lands opens the server it checked, so while
+an output's `output.start` is opening, `output.set_key` for it fails with
+`action_failed`: a key sent for the new server waits until the start has settled.
+The two stay edits under the classification rule above: their effect on the collection
+state, and its inverse, are unchanged, and the key, which is not collection state, is
+removed by the engine guarding it, as a deleted output's runtime state is dropped.
+`output.clear_key` succeeds for an output no longer in the collection. No message
+changed, so this changes no `PROTOCOL_VERSION`. Its errors carry fixed reasons that
+never quote the key.
 
 Encoder profiles (0.13) are collection state as well
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
@@ -489,6 +543,84 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
+
+Hotkey bindings (0.25) are collection state too
+([ADR-0024 §5](../../docs/adr/0024-scene-structure.md),
+[ADR-0040 §3](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)):
+a `Chord` bound to an `Action`, which a client that listens for keys sends when the
+chord is pressed. The engine only stores bindings; the desktop host (OS-global
+shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon none.
+- **Chords.** Zero or more of the modifiers `Ctrl`, `Alt`, `Shift` and `Meta`, each at
+  most once and in that order, then one key, joined by `+`: `F1`, `Ctrl+Digit1`,
+  `Ctrl+Shift+KeyM`. The key is a W3C UI Events
+  [`KeyboardEvent.code`](https://www.w3.org/TR/uievents-code/) value from
+  `Chord::KEYS` (letters, digits, punctuation, function keys F1–F24, editing and
+  arrow keys, the keypad and the media keys): the physical key, whatever the layout,
+  which is what browsers and Tauri's global-shortcut API report. A chord has exactly
+  one spelling, so two bindings are on the same keys exactly when their strings are
+  equal. Anything else is `invalid_argument` on `chord`, with `Chord::problem`'s reason.
+- **`hotkey.set {chord, action}`** binds a chord; its inverse is `hotkey.clear`. It is
+  refused with `already_exists` (entity `hotkey`, the chord as `id`) for a chord that
+  is bound: rebinding is a batch of `hotkey.clear` then `hotkey.set`. `action` is an
+  action request, checked as an `action` call is, and only actions can be bound, so a
+  hotkey never adds to an undo history. `output.set_key` can't be bound (its stream key
+  would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)), nor
+  can the preview actions (they serve only the sending session), `live.set` and
+  `live.cancel` (their gesture belongs to the sending session), `pairing.start` and
+  `device.revoke` (the server answers them for the client that asks), or the
+  `youtube.*` actions (YouTube is driven through the UI,
+  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)): each is
+  `invalid_argument` on `action.type`. A scene, output or preset the action names must
+  exist, else `not_found`.
+- **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
+  inverse is `hotkey.set` with the action.
+- **Deleting what a binding names removes the binding**, in the same edit:
+  `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
+  `transition.delete` drop every binding whose action names their target
+  (`Action::named_objects`; today scenes, outputs and the preset a `scene.switch`
+  names), and their inverses restore the
+  bindings after the target. If another client has bound one of those chords since,
+  that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
+  A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`
+  lists the ones its batch would (`hotkeys`), so a client can say "this also removes
+  the hotkey Ctrl+Digit1".
+- Reads report a binding as a `HotkeyBinding {chord, action}` whose `action` is plain
+  JSON, so a client older than an action type still reads the collection; it keeps the
+  binding and can't run it. `HotkeyBinding::action` parses it.
+
+### Transitions and studio mode
+
+[ADR-0029](../../docs/adr/0029-transitions.md) and
+[ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
+the model (0.30). A transition preset is collection state:
+`{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
+kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
+`settings` are checked against its descriptor as a source's are (`unmatched`, the
+effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
+stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
+
+- `transition.create` adds a preset, `transition.update` changes its fields or patches
+  its settings (a new `kind` resets the settings to that kind's defaults, overlaid by
+  the patch), and `transition.delete` removes one, clearing the scene overrides and
+  removing the hotkey bindings that name it in the same edit; its inverse re-creates
+  the preset and restores them. The
+  default preset can't be deleted (`invalid_argument` on `preset_id`);
+  `transition.set_default` moves it. A new collection holds one preset, `cut`, as its
+  default.
+- `scene.set_transitions {scene_id, transition_in?, transition_out?}` sets both of a
+  scene's overrides (absent clears one), and `item.set_transition {item_id,
+  transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,
+  disappear}`, omitted from `ItemInfo` while it is the default.
+- `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
+  (`not_found` when there is no such preset), else the new scene's `transition_in`,
+  else the current scene's `transition_out`, else the default. A switch while a
+  transition runs starts the new one from what is on screen.
+- `studio.set_preview {scene_id}` puts a scene on preview, studio mode's next scene.
+  Like a switch it changes no `rev` and is never undone; a switch leaves preview where
+  it is.
+
+`Easing::apply` is the one easing function every implementation evaluates, so the UI's
+preview of a transition and the engine's render agree.
 
 ### Batches, revisions and `expected_rev`
 
@@ -508,7 +640,8 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   batch applied with a key. A retry with the same key is not applied again and gets the
   original result, even if `rev` has moved on since.
 - Results: a successful batch answers `{"kind":"batch","rev":N}`, the revision it
-  produced. Queries that read collection state report the `rev` they read.
+  produced, with `removed_hotkeys` when its deletes removed hotkey bindings (0.25;
+  omitted when there are none). Queries that read collection state report the `rev` they read.
 
 ### Queries
 
@@ -519,9 +652,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty), and the `buses` and `sends`
-  (as `bus.list`; missing from a pre-0.19 server, both parse as empty). A client reads
-  it on connecting, and again after a `state.changed` it didn't cause.
+  missing from a pre-0.13 server, it parses as empty), the `buses` and `sends`
+  (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
+  hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
+  parses as empty), and the transition presets with the default (`transitions`;
+  missing from a pre-0.30 server, it parses as the one initial `cut`). A client reads
+  it on connecting, and again after a
+  `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
@@ -544,8 +681,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
-- `studio.get`: the scene on program (`program_scene`, omitted only while the collection
-  has no scene). Runtime state, not collection state
+- `studio.get`: the scene on program (`program_scene`) and on preview
+  (`preview_scene`, 0.30), each omitted only while the collection has no scene. Runtime
+  state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
 - `device.list`: the devices paired with the listener this client reached, each with
@@ -563,7 +701,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `scene` sources that show it, and the cascade stops there, since deleting a source
   deletes no scene. A bus is held only by settings references, which the plan clears;
   its `bus.delete` takes its sends. A target nothing refers to plans just its own
-  delete. The client
+  delete. `hotkeys` lists the bindings the batch removes with what they name, ordered
+  by chord (0.25; omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
@@ -593,7 +732,7 @@ server in front answers `unsupported`. The code is a `SecretString`: it never pr
 and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
-`crop`, `visible`, `opacity` and `blend`, and a source with its name, kind, settings and
+`crop`, `visible`, `opacity`, `blend` and `transition`, and a source with its name, kind, settings and
 filters: every property an
 edit sets, so a client can compute any edit, or its inverse, from what it read
 ([Item geometry](#design) says what `transform` and `geometry` hold for each form). The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
@@ -617,10 +756,13 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `canvas.set_size` restores the canvas, and `item.set_geometry` and
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
-item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
-with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
-each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`
+and `item.set_transition` the removed item needs, and undoing `scene.delete` is
+`scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
+was last, `scene.set_transitions` if it had an override, and each item's restore,
+bottom to top. Undoing `transition.delete` is `transition.create`, then a
+`scene.set_transitions` for each override it cleared, and a `hotkey.set` for each
+binding it removed. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, then `source.set_audio` and `send.set` (or `send.remove` of the
@@ -634,7 +776,8 @@ each send the bus had; `source.set_audio`, `bus.set_fader` and `send.set` are ea
 undone by the same edit with the old values, and a new send by `send.remove`. Deleting a source that items still
 place or a setting refers to, a scene that a `scene` source shows or a setting refers
 to, or a bus a setting refers to, is rejected, so no edit removes more than the object
-it names (a bus's sends are part of it). `jstream-graph`'s property
+it names (a bus's sends are part of it), apart from the scene overrides a deleted preset
+clears and the hotkey bindings a delete removes, which its inverse restores. `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
 exactly. A new edit that can't state its inverse in edits needs new edits first.
 
@@ -678,11 +821,54 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   undoing its `output.create`, which fails with `invalid_argument` until the output
   stops.
 - `history_empty` (`direction`) means there is nothing to undo or redo.
-- Actions (outputs, stream keys), queries and history calls are never steps. The engine
+- Actions (outputs, stream keys, live values), queries and history calls are never
+  steps; a gesture's step is its committing batch. The engine
   keeps 100 steps per client by default, in memory, for the session's lifetime.
 
-Live values, which keep a drag to one batch and one undo step, are the other half of
-ADR-0032 and are not built yet.
+### Live values
+
+Live values (0.26) keep a drag, a fader move or a live dialog to one batch and one undo
+step ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). A client opens a **gesture**,
+named by a `gesture_id` it chooses, and sends its values as it goes:
+
+```json
+{"type":"request","id":"r7","call":{"kind":"action","action":{"type":"live.set","gesture_id":"drag_1","values":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":800,"y":450},"size":{"width":480,"height":270}}}]}}}
+{"type":"response","id":"r7","result":{"kind":"action"}}
+{"type":"request","id":"r9","call":{"kind":"batch","edits":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":820,"y":450},"size":{"width":480,"height":270}}}],"ends_gesture":"drag_1"}}
+```
+
+- `live.set {gesture_id, values}` opens the gesture if it is new and sets its values:
+  setter edits, the same ones a batch carries. Each overrides one parameter on output
+  from the next render tick, and replaces the gesture's earlier value for it. A live
+  value is runtime state: it never changes `rev`, is never an undo step, is never saved,
+  and `state.get` and `item.list` never show it. The live-adjustable setters are
+  `item.set_transform`, `item.set_geometry` (one parameter, the placement) and
+  `item.set_crop`; audio faders and kind parameters marked `live` follow as their
+  real-time paths exist. Values are checked as a batch's edits are, named
+  `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
+  values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
+  message is applied. The engine never refuses a `live.set` for arriving fast; a client
+  keeps one per gesture in flight and sends its newest values when the answer comes.
+- **Commit:** the client sends one ordinary batch with the final values and
+  `ends_gesture`. It is one `rev`, one undo step whose inverse restores the values from
+  before the gesture, and one audit entry. The gesture ends with it. A batch whose
+  `ends_gesture` names no gesture the client has open is `invalid_argument` (field
+  `ends_gesture`), and a batch that fails leaves the gesture open.
+- **Cancel:** `live.cancel {gesture_id}` ends the gesture without a commit; it succeeds
+  when there is nothing to cancel, so a retry is safe. A gesture also ends,
+  `expired`, when its client's session ends.
+- **Two gestures, one parameter:** a parameter is held by one gesture at a time. A
+  `live.set` naming a parameter another gesture holds takes it over (last writer
+  wins); the other keeps the rest. A gesture left holding nothing stays open, and
+  counts toward the client's 16, until the client commits it, cancels it or
+  disconnects, so its `ends_gesture` still works. A batch that changes a held parameter changes the
+  collection, but the live value still shows until the gesture ends. A batch that
+  deletes an item drops its live values.
+- `live.list` returns every open gesture, ordered by client and gesture ID, with the
+  values each holds now, for a client that connects during one. It carries no `rev`.
+
+`live.set` and `live.cancel` are actions: never undoable, never batchable, answering
+`{"kind":"action"}`.
 
 ### Events
 
@@ -695,14 +881,26 @@ After `welcome`, the server pushes every event to every client.
   to `rev`, a gap shows that an event was missed.
 - `output.state_changed {output_id, state}` reports runtime state, which is not part of
   the collection, so it carries no `rev`.
-- `studio.changed {program_scene?, client_id, request_id?}` reports a new scene on
-  program, with the request that caused it: a `scene.switch`, or a batch, undo or redo
-  that created
-  the collection's first scene (it goes on program) or deleted the program scene
-  (program moves to the first scene left, or to none). For edits it follows their
-  `state.changed`. A switch to the scene already on program emits nothing.
-  Program is runtime state, so it carries no `rev`
-  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.16.
+- `studio.changed {program_scene?, preview_scene?, transition?, client_id, request_id?}`
+  reports a new scene on program or preview, with the request that caused it: a
+  `scene.switch`, a `studio.set_preview`, or a batch, undo or redo that created the
+  collection's first scene (it goes on program and preview) or deleted the program or
+  preview scene (it moves to the first scene left, or to none). For edits it follows
+  their `state.changed`. A switch, or setting preview, to the scene already there emits
+  nothing. After a switch, `transition` names the preset it ran and how long the
+  transition lasts in milliseconds (`duration_ms`, 0 for a cut), so a client can show
+  progress; no event marks the end. Program and preview are runtime state, so it
+  carries no `rev` ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+  Added in 0.16; `preview_scene` and `transition` in 0.30.
+- `live.changed {gesture_id, client_id, values}` carries the newest value of each
+  parameter a gesture changed since its last one. The engine coalesces it per gesture
+  to at most 30 a second, so a slow client gets fewer, newer values; the values a
+  gesture had not sent yet always go out before it ends. Until
+  [open question 7](#open-questions) every client receives it.
+- `live.ended {gesture_id, client_id, outcome, rev?}` says a gesture ended: `committed`
+  with the committing batch's `rev`, whose `state.changed` comes first, `cancelled` or
+  `expired`. A client that doesn't know these events ignores them and shows committed
+  state only.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -841,7 +1039,11 @@ after 1.0:
   sends, but if one's bus has since been deleted by another client, the undo fails with
   `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
   answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
-  filter edits. The encoder enums (`VideoCodec`,
+  filter edits. 0.30 adds the `EntityKind` value `transition` in the same way, but also
+  the `KindCategory` value `transition`, which `kind.list` reports for every transition
+  kind, so a client older than 0.30 can't parse `kind.list` from a 0.30 server. From
+  0.30 `KindCategory` parses an unknown value as `Unknown`, so a later category won't
+  break a 0.30 client. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
@@ -916,8 +1118,8 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
   ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
 - **Not in 0.11 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
-  the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
-  which need the live-value channel. Both are later minors.
+  the engine's runtime source sizes, and live geometry values, which arrived in 0.26
+  with `live.set` ([Live values](#design)). Both are later minors.
 
 ### Binary streams
 
@@ -998,8 +1200,8 @@ described above.
    `history.undo` and `history.redo` are a fourth kind of call, `history`, which
    carries no command (it applies a batch of edits the engine already holds), so
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
-   (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are not
-   built yet.
+   (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are built
+   for item placements and crops ([Live values](#design)), not yet for audio faders.
 5. **Actions that change collection state.** Settled by
    [ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md): the program
    scene is runtime state, not collection state, so `scene.switch` is an action that
@@ -1007,13 +1209,14 @@ described above.
 6. **Idempotency.** How long the engine remembers keys (count or time), and whether a
    reused key with a different batch is an error (`idempotency_key_reused`).
 7. **Event subscriptions.** Every client gets every event in this cut, including
-   `stats.tick` (0.6). High-rate events (`stats.tick`, meters) will need opt-in
-   subscriptions. Until then every client receives a tick about once a second while
-   the pipeline runs.
+   `stats.tick` (0.6) and `live.changed`. High-rate events (`stats.tick`,
+   `live.changed`, meters) will need opt-in subscriptions. Until then every client
+   receives a tick about once a second while the pipeline runs, and up to 30
+   `live.changed` a second per gesture while someone drags.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
-   fallbacks from 0.9, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
+   fallbacks from 0.9 and `KindCategory` from 0.30, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
    outputs (see Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?

@@ -31,7 +31,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
   allocates, and a frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
-  the `waveform` and `spectrum` kinds draw theirs in a `Painter` instead, and `frame`
+  the `waveform`, `spectrum` and `chat_message` kinds draw theirs in a `Painter`
+  instead, and `frame`
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
   says the program mix shows the source again after plans that didn't reach it; a kind
@@ -48,8 +49,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
-  frame is due (the engine's `jstream-sources` thread does). Painting allocates only
-  while the source's frame pool grows, or when every pooled frame is still held.
+  frame is due (the engine's `jstream-sources` thread does). The `waveform` and
+  `spectrum` painters allocate only while their frame pool grows, or when every pooled
+  frame is still held; `chat_message`'s allocates when it redraws for a newly featured
+  message.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -62,7 +65,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   the `AudioStream` whose drop stops it; `start` is the source's time zero on `clock`.
   `set_audible` says whether the program shows the source; until it does, nothing is
   handed on.
-- `Context`: the folders behind the `collection` and `app` asset roots
+- `Context`: the featured chat message (`chat`, see `chat_message`), the folders
+  behind the `collection` and `app` asset roots
   (`AssetRoots`), the platform's media files (`media`, an
   `Option<Arc<dyn MediaDecoders>>` from `jstream-platform`, `None` until the host
   injects its backends), the injected `BrowserBackend` that `browser` and
@@ -263,6 +267,32 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   messages show. It only shows chat: sending, featuring and moderating need the
   optional API path. YouTube owns the page, so if YouTube changes it, the default CSS
   may stop hiding things.
+- `chat_message` (named "Chat message"): the featured live chat message (ADR-0041 §2,
+  kept by [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). It
+  belongs to the optional API path: messages come from the Live API's chat, which needs
+  JStream's Google OAuth client (built in, empty for now; ADR-0058 §1) and the
+  collection's API chat switch, off by default (ADR-0058 §5). The message is runtime
+  state, not a setting: `Context::chat` holds a `ChatFeature`, a shared slot the host
+  fills with `set(Some(FeaturedMessage { author, badge, text, amount }))` or clears with
+  `set(None)`, and every source created from that context draws what it holds. A header
+  line (badge, a middle dot, the author's name, then a Super Chat's amount) in
+  `author_color` sits over the text in `text_color`, left-aligned, each as narrow as it
+  fits and wrapped at `max_width` less the `padding` (0 doesn't wrap), on `background`
+  with `padding` around both. It draws with the text kind's renderer, so the same font
+  and outline rules apply, and each block counts against the limits as a text source's
+  does; stacking them counts the frame and the blocks it is drawn from. A message these
+  settings or limits can't draw (too wide with no wrapping, or over the memory cap)
+  shows the one transparent pixel instead, and the next message featured is drawn
+  again. `frame` and the painter never fail, and `create` and `update` fail only for
+  the settings themselves, never for the featured message. The bundled
+  font covers Latin text only, so other scripts need a `font`. Every field is a
+  stranger's text and is drawn as plain text: line breaks and other control characters
+  become spaces, and text is cut to 1000 characters and the name, badge and amount to
+  100 each. With nothing featured the frame is one transparent pixel. The slot changes
+  outside the source, so `next_change` asks to be looked at again every 100 ms; the
+  source's `Painter` takes the slot's lock and redraws (and so allocates) only when
+  another message was featured since, and `frame` hands out the frame drawn last
+  without drawing. Every setting but `font` is live.
 - `display`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.

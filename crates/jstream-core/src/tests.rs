@@ -8,8 +8,10 @@ mod audio_routing;
 mod collection;
 mod gpu_capture;
 mod history;
+mod live_values;
 mod preview;
 mod sources;
+mod transitions;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
 mod youtube;
@@ -17,10 +19,10 @@ mod youtube;
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, Hello,
-    IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
-    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole, SourceId, SourceKind,
-    parity,
+    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, GestureId,
+    Hello, IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION,
+    ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole,
+    SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -109,7 +111,7 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
 
 fn batch(control: &dyn Control, batch: Batch) -> Result<Rev, ControlError> {
     match block_on(control.call(Call::Batch(batch)))?.result {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         other => panic!("not a batch result: {other:?}"),
     }
 }
@@ -136,6 +138,7 @@ fn switch_call(scene: &str) -> Call {
     Call::Action {
         action: Action::SceneSwitch {
             scene_id: SceneId::new(scene),
+            preset_id: None,
         },
     }
 }
@@ -318,6 +321,7 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
+        ends_gesture: None,
     };
     assert_eq!(batch(&control, edits), Ok(Rev(1)));
     assert_eq!(engine.rev(), Rev(1));
@@ -336,6 +340,7 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         ],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     let error = batch(&control, failing).expect_err("fails");
     assert_eq!(
@@ -353,6 +358,7 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         edits: vec![],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     assert_eq!(
         code(&batch(&control, empty).expect_err("empty")),
@@ -368,6 +374,7 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         edits: vec![],
         expected_rev: Some(Rev(5)),
         idempotency_key: None,
+        ends_gesture: None,
     };
     assert_eq!(
         code(&batch(&control, empty_and_stale).expect_err("stale")),
@@ -495,6 +502,7 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect_err("a CLAP filter can't be added yet");
@@ -613,7 +621,7 @@ fn an_idempotent_retry_gets_the_original_result() {
     let mut events = control.events();
     let keyed = Batch::single(create("a")).with_idempotency_key(IdempotencyKey::new("k1"));
     let first = block_on(control.call(Call::Batch(keyed.clone()))).expect("first");
-    assert_eq!(first.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(first.result, CallResult::batch(Rev(1)));
     assert_eq!(batch(&control, Batch::single(create("b"))), Ok(Rev(2)));
     // The retry answers before the revision check, so a now-stale `expected_rev` is fine.
     let retry =
@@ -668,6 +676,8 @@ fn events_reach_every_subscriber_in_order() {
         },
         Event::StudioChanged {
             program_scene: Some(SceneId::new("a")),
+            preview_scene: Some(SceneId::new("a")),
+            transition: None,
             client_id: agent.client_id().expect("agent"),
             request_id: Some(by_agent.id),
         },
@@ -703,15 +713,29 @@ fn scene_switch_changes_program_without_an_edit() {
     let agent = connected(&engine);
     let mut events = user.events();
     let program = |control: &dyn Control| match query(control, Query::StudioGet) {
-        Ok(QueryResult::StudioGet { program_scene }) => program_scene,
+        Ok(QueryResult::StudioGet { program_scene, .. }) => program_scene,
         other => panic!("not a studio result: {other:?}"),
     };
+    // A switch reports the preset it ran: the initial `cut`, which takes no time.
     let switched =
         |scene: &str, client: &InProcessControl, request: RequestId| Event::StudioChanged {
             program_scene: Some(SceneId::new(scene)),
+            preview_scene: Some(SceneId::new("a")),
+            transition: Some(TransitionStarted {
+                preset_id: TransitionPresetId::new("cut"),
+                duration_ms: 0,
+            }),
             client_id: client.client_id().expect("connected"),
             request_id: Some(request),
         };
+    // Batches move program and preview by themselves, with no transition.
+    let moved = |scene: &str, client: &InProcessControl, request: RequestId| Event::StudioChanged {
+        program_scene: Some(SceneId::new(scene)),
+        preview_scene: Some(SceneId::new(scene)),
+        transition: None,
+        client_id: client.client_id().expect("connected"),
+        request_id: Some(request),
+    };
     assert_eq!(program(&user), None);
     assert_eq!(
         code(&block_on(agent.call(switch_call("a"))).expect_err("no scene yet")),
@@ -722,6 +746,7 @@ fn scene_switch_changes_program_without_an_edit() {
         edits: vec![create("a"), create("b")],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     })))
     .expect("scenes");
     assert_eq!(
@@ -733,7 +758,7 @@ fn scene_switch_changes_program_without_an_edit() {
                 request_id: Some(built.id.clone()),
                 cause: None,
             },
-            switched("a", &user, built.id),
+            moved("a", &user, built.id),
         ]
     );
     assert_eq!(program(&agent), Some(SceneId::new("a")));
@@ -779,7 +804,7 @@ fn scene_switch_changes_program_without_an_edit() {
     .expect("delete");
     let seen = drain(&mut events);
     assert!(matches!(seen[0], Event::StateChanged { rev: Rev(3), .. }));
-    assert_eq!(seen[1..], [switched("a", &agent, deleted.id)]);
+    assert_eq!(seen[1..], [moved("a", &agent, deleted.id)]);
     batch(
         &agent,
         Batch::single(Edit::SceneDelete {
@@ -991,6 +1016,26 @@ fn concurrent_sessions_see_every_event_in_rev_order() {
 /// The same script of calls against the engine and against `jstream-control`'s mock
 /// gets the same answers (results, error codes and fields) and the same events, up to
 /// client IDs. The mock is the reference implementation clients were developed against.
+fn moved(item: &str, x: f32) -> Edit {
+    Edit::ItemSetTransform {
+        item_id: ItemId::new(item),
+        scene_id: None,
+        transform: jstream_protocol::ItemTransform {
+            position: jstream_protocol::Vec2::new(x, 0.0).expect("finite"),
+            ..jstream_protocol::ItemTransform::IDENTITY
+        },
+    }
+}
+
+fn live(gesture_id: &str, values: Vec<Edit>) -> Call {
+    Call::Action {
+        action: Action::LiveSet {
+            gesture_id: GestureId::new(gesture_id),
+            values,
+        },
+    }
+}
+
 #[test]
 fn the_engine_answers_like_the_mock() {
     fn normalize(event: Event) -> Event {
@@ -1003,12 +1048,34 @@ fn the_engine_answers_like_the_mock() {
                 request_id,
                 cause: None,
             },
+            Event::LiveChanged {
+                gesture_id, values, ..
+            } => Event::LiveChanged {
+                gesture_id,
+                client_id: ClientId::new("client"),
+                values,
+            },
+            Event::LiveEnded {
+                gesture_id,
+                outcome,
+                rev,
+                ..
+            } => Event::LiveEnded {
+                gesture_id,
+                client_id: ClientId::new("client"),
+                outcome,
+                rev,
+            },
             Event::StudioChanged {
                 program_scene,
+                preview_scene,
+                transition,
                 request_id,
                 ..
             } => Event::StudioChanged {
                 program_scene,
+                preview_scene,
+                transition,
                 client_id: ClientId::new("client"),
                 request_id,
             },
@@ -1016,7 +1083,21 @@ fn the_engine_answers_like_the_mock() {
         }
     }
     /// Error messages may differ between implementations; codes and fields may not.
+    /// Client IDs are named differently too.
     fn comparable(result: Result<CallResult, ControlError>) -> Result<CallResult, ProtocolError> {
+        let result = result.map(|result| match result {
+            CallResult::Query {
+                result: QueryResult::LiveList { mut gestures },
+            } => {
+                for gesture in &mut gestures {
+                    gesture.client_id = ClientId::new("client");
+                }
+                CallResult::Query {
+                    result: QueryResult::LiveList { gestures },
+                }
+            }
+            other => other,
+        });
         result.map_err(|error| match error.protocol() {
             Some(ProtocolError::InvalidArgument { field, .. }) => {
                 ProtocolError::invalid_argument(field.clone(), String::new())
@@ -1109,6 +1190,41 @@ fn the_engine_answers_like_the_mock() {
         Call::Query {
             query: Query::OutputStatus {
                 output_id: OutputId::new("yt"),
+            },
+        },
+        // Live values (ADR-0032): one `live.set` per gesture, so the engine's coalescing
+        // sends each at once, as the mock does.
+        Call::Batch(edits(vec![create("z"), add("z", "iz", "cam")])),
+        live("g1", vec![moved("iz", 5.0)]),
+        live("g1", vec![create("x")]),
+        live("g2", vec![moved("ghost", 1.0)]),
+        live("g2", vec![]),
+        Call::Query {
+            query: Query::LiveList,
+        },
+        // `ends_gesture` is checked before `expected_rev`.
+        Call::Batch(
+            Batch::single(moved("iz", 6.0))
+                .expecting(Rev(0))
+                .ending_gesture(GestureId::new("nope")),
+        ),
+        Call::Batch(Batch::single(moved("iz", 6.0)).ending_gesture(GestureId::new("g1"))),
+        Call::Batch(Batch::single(moved("iz", 7.0)).ending_gesture(GestureId::new("g1"))),
+        live("g3", vec![moved("iz", 1.0)]),
+        Call::Batch(Batch::single(Edit::ItemRemove {
+            item_id: ItemId::new("iz"),
+        })),
+        Call::Query {
+            query: Query::LiveList,
+        },
+        Call::Action {
+            action: Action::LiveCancel {
+                gesture_id: GestureId::new("g3"),
+            },
+        },
+        Call::Action {
+            action: Action::LiveCancel {
+                gesture_id: GestureId::new("g9"),
             },
         },
     ];
@@ -1804,6 +1920,7 @@ fn the_render_snapshot_follows_the_program_mix() {
         edits: vec![create("main"), display, add("main", "shown", "screen")],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     batch(&control, edits).expect("batch");
     assert_eq!(generation(), 2);
@@ -1967,6 +2084,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
             edits: vec![create("main"), webcam(), add("main", "layer", "webcam")],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect("scene");
@@ -2032,6 +2150,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect("second scene");
@@ -2081,6 +2200,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect("nested scenes");
@@ -2139,6 +2259,7 @@ fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect("scene");
@@ -2389,11 +2510,11 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+                let draw: DrawFn = Box::new(move |shot, live, size, capture, out, at| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push(shot.program().cloned());
-                    inner(shot, size, capture, out)
+                    inner(shot, live, size, capture, out, at)
                 });
                 Ok(draw)
             })
@@ -2423,6 +2544,7 @@ mod cpu_pipeline {
             edits: vec![edit],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         batch(&control, one(create("main"))).expect("scene.create");
         assert_eq!(hub.load().generation(), 2);
@@ -2654,6 +2776,172 @@ mod cpu_pipeline {
         }
     }
 
+    /// When the credential store refuses to remove the key of an output that moved to
+    /// another server (#343), the output can't start, so the opener never sends the old
+    /// key to the new server; once `output.clear_key` succeeds, it can.
+    #[test]
+    fn an_output_whose_old_key_is_not_removed_does_not_start() {
+        use super::{clear_key, rtmp_output, set_key};
+        use crate::OpenPublish;
+        use jstream_platform::fake::MemoryKeyStore;
+        use jstream_protocol::RtmpTarget;
+
+        let opens = Arc::new(AtomicU64::new(0));
+        let open: OpenPublish = {
+            let opens = Arc::clone(&opens);
+            Arc::new(move |_: &OutputId| {
+                opens.fetch_add(1, Ordering::SeqCst);
+                Err(crate::PublishError::new("no server in this test"))
+            })
+        };
+        let store = MemoryKeyStore::new();
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_key_store(Arc::new(store.clone()))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("yt"),
+                kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+            }]),
+        )
+        .expect("output.create");
+        block_on(control.call(set_key("yt", "yt-key"))).expect("set_key");
+        store.set_failing(true);
+        batch(
+            &control,
+            edits(vec![Edit::OutputSetTarget {
+                output_id: OutputId::new("yt"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://attacker.example/live2".into(),
+                },
+            }]),
+        )
+        .expect("the batch applies even when the store refuses");
+        store.set_failing(false);
+        assert_eq!(store.len(), 1, "the store kept the key");
+
+        let refused = block_on(control.call(output_call("yt", true))).expect_err("refused");
+        assert_eq!(code(&refused), Some("action_failed"));
+        assert!(
+            refused.to_string().contains("output.clear_key"),
+            "{refused}"
+        );
+        assert!(!refused.to_string().contains("yt-key"), "{refused}");
+        assert_eq!(opens.load(Ordering::SeqCst), 0, "the opener never ran");
+
+        block_on(control.call(clear_key("yt"))).expect("clear_key");
+        assert!(store.is_empty());
+        let failed = block_on(control.call(output_call("yt", true))).expect_err("no server");
+        assert!(
+            failed.to_string().contains("opening the publish target"),
+            "{failed}"
+        );
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "the start reached the opener"
+        );
+    }
+
+    /// A retarget that lands after `output.start` checked the key but before the host's
+    /// opener reads the target (#343) doesn't pair the new server with the old key:
+    /// while the start is opening, `Engine::output_kind` answers the kind the start
+    /// checked, so the opener sees the server the key was set for. The store refuses
+    /// the removal here, so the old key is still there when the opener reads it. An
+    /// `output.set_key` sent while the start is opening is refused, so the new server's
+    /// key can't be read with the old server either; once the start settles it is taken.
+    #[test]
+    fn a_retarget_during_the_opener_does_not_send_the_old_key_to_the_new_server() {
+        use super::{rtmp_output, set_key};
+        use crate::OpenPublish;
+        use jstream_platform::StreamKeyStore;
+        use jstream_platform::fake::MemoryKeyStore;
+        use jstream_protocol::{OutputKind, RtmpTarget};
+
+        const OLD: &str = "rtmp://a.rtmp.youtube.com/live2";
+        const NEW: &str = "rtmp://attacker.example/live2";
+        let store = MemoryKeyStore::new();
+        // The engine and a client for the opener to retarget with, set once both exist.
+        type Slot = Mutex<Option<(Engine, InProcessControl)>>;
+        // The kind the opener read, and the key the store held then.
+        type Seen = Mutex<Option<(Option<OutputKind>, Option<String>)>>;
+        let slot: Arc<Slot> = Arc::new(Mutex::new(None));
+        let seen: Arc<Seen> = Arc::new(Mutex::new(None));
+        let open: OpenPublish = {
+            let (slot, seen, store) = (Arc::clone(&slot), Arc::clone(&seen), store.clone());
+            Arc::new(move |output_id: &OutputId| {
+                let guard = slot.lock().expect("slot");
+                let (engine, control) = guard.as_ref().expect("engine set");
+                store.set_failing(true);
+                batch(
+                    control,
+                    edits(vec![Edit::OutputSetTarget {
+                        output_id: output_id.clone(),
+                        target: RtmpTarget::Generic { url: NEW.into() },
+                    }]),
+                )
+                .expect("the retarget applies while the output starts");
+                store.set_failing(false);
+                // A key set for the new server now would be read with the old server.
+                let refused = block_on(control.call(set_key(output_id.as_str(), "new-key")))
+                    .expect_err("set_key is refused while the output starts");
+                assert_eq!(code(&refused), Some("action_failed"), "{refused}");
+                assert!(!refused.to_string().contains("new-key"), "{refused}");
+                let kind = engine.output_kind(output_id);
+                let key = store
+                    .get(output_id.as_str())
+                    .expect("get")
+                    .map(|key| key.expose().to_owned());
+                *seen.lock().expect("seen") = Some((kind, key));
+                Err(crate::PublishError::new("no server in this test"))
+            })
+        };
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_key_store(Arc::new(store.clone()))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("yt"),
+                kind: rtmp_output(OLD),
+            }]),
+        )
+        .expect("output.create");
+        block_on(control.call(set_key("yt", "yt-key"))).expect("set_key");
+        *slot.lock().expect("slot") = Some((engine.clone(), connected(&engine)));
+
+        let failed = block_on(control.call(output_call("yt", true))).expect_err("no server");
+        assert!(!failed.to_string().contains("yt-key"), "{failed}");
+        let (kind, key) = seen.lock().expect("seen").take().expect("the opener ran");
+        assert_eq!(
+            key.as_deref(),
+            Some("yt-key"),
+            "the refused removal left the old key, and the refused set_key stored nothing"
+        );
+        assert_eq!(
+            kind,
+            Some(rtmp_output(OLD)),
+            "the opener saw the server the key was set for"
+        );
+        assert_eq!(
+            engine.output_kind(&OutputId::new("yt")),
+            Some(rtmp_output(NEW)),
+            "once the start settled, the retarget shows"
+        );
+        block_on(control.call(set_key("yt", "new-key"))).expect("set_key once settled");
+        // The opener holds the engine; drop that so the engine isn't kept alive.
+        slot.lock().expect("slot").take();
+    }
+
     // --- Item: an encoder that fails mid-stream fails the output.
 
     struct FailingVideo {
@@ -2841,9 +3129,9 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, live, size, rgba, out, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, size, rgba, out)
+                    inner(shot, live, size, rgba, out, at)
                 });
                 Ok(draw)
             })
@@ -4116,9 +4404,9 @@ mod cpu_pipeline {
             Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, live, size, rgba, out, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, size, rgba, out)
+                    inner(shot, live, size, rgba, out, at)
                 });
                 Ok(draw)
             })
@@ -4282,7 +4570,7 @@ mod cpu_pipeline {
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move |_| {
-            let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>| {
+            let draw: DrawFn = Box::new(move |_, _, size: FrameSize, _, out: &mut Vec<u8>, _| {
                 out.clear();
                 for _ in 0..size.width() as usize * size.height() as usize {
                     out.extend_from_slice(&rgba);
@@ -4584,6 +4872,7 @@ fn edits(edits: Vec<Edit>) -> Batch {
         edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     }
 }
 
@@ -4702,6 +4991,104 @@ fn output_edits_configure_the_collection() {
     assert_eq!(engine.output_kind(&OutputId::new("out_yt")), None);
     let gone = block_on(control.call(output_call("out_yt", true))).expect_err("deleted");
     assert_eq!(code(&gone), Some("not_found"));
+}
+
+/// A stream key is bound to the server it was set for (#343): `output.set_target` to a
+/// new path on the same server keeps it, a new scheme, host or port removes it from the
+/// credential store, and so does an undo or redo that moves the output to another
+/// server, or deletes it. Before the fix, the key stayed and the next `output.start`
+/// sent it to whatever server the output then named.
+#[test]
+fn a_stream_key_never_follows_its_output_to_another_server() {
+    use jstream_platform::StreamKeyStore;
+    use jstream_platform::fake::MemoryKeyStore;
+    use jstream_protocol::{HistoryCall, HistoryOp, RtmpTarget};
+
+    let store = MemoryKeyStore::new();
+    let engine = Engine::new().with_key_store(Arc::new(store.clone()));
+    let control = connected(&engine);
+    let retarget = |url: &str| {
+        edits(vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("out_yt"),
+            target: RtmpTarget::Generic { url: url.into() },
+        }])
+    };
+    let stored = || {
+        store
+            .get("out_yt")
+            .expect("store reads")
+            .map(|key| key.expose().to_owned())
+    };
+    let history = |op| {
+        block_on(control.call(Call::History(HistoryCall::new(op)))).expect("history step");
+    };
+    batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+        }]),
+    )
+    .expect("output.create");
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+
+    // The same server, written differently and with another path: the key stays.
+    batch(
+        &control,
+        retarget("RTMP://A.rtmp.youtube.com:1935/live2/backup"),
+    )
+    .expect("same server");
+    assert_eq!(stored().as_deref(), Some("yt-key"));
+
+    // Another host: the key is removed, so a start can't send it there.
+    batch(&control, retarget("rtmp://attacker.example/live2")).expect("new host");
+    assert_eq!(stored(), None);
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+    // Undo moves it back, but can't bring the secret back.
+    history(HistoryOp::Undo);
+    assert_eq!(
+        engine.output_kind(&OutputId::new("out_yt")),
+        Some(rtmp_output("RTMP://A.rtmp.youtube.com:1935/live2/backup"))
+    );
+    assert_eq!(stored(), None);
+    // A key set again is removed when a redo moves the output away once more.
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+    history(HistoryOp::Redo);
+    assert_eq!(stored(), None);
+    history(HistoryOp::Undo);
+
+    // Another scheme, or another port, is another server too.
+    for url in [
+        "rtmps://a.rtmp.youtube.com/live2",
+        "rtmps://a.rtmp.youtube.com:8443/live2",
+    ] {
+        block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+        batch(&control, retarget(url)).expect("new server");
+        assert_eq!(stored(), None, "{url}");
+    }
+
+    // Deleting the output removes its key, so an output re-created with its ID starts
+    // with none.
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+    batch(
+        &control,
+        edits(vec![Edit::OutputDelete {
+            output_id: OutputId::new("out_yt"),
+        }]),
+    )
+    .expect("output.delete");
+    assert_eq!(stored(), None);
+    batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://attacker.example/live2"),
+        }]),
+    )
+    .expect("output.create");
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+    // Another output's key is not touched.
+    assert!(store.is_empty());
 }
 
 /// `output.set_key` stores the key and `output.status` reports `key_set`; every error
@@ -5002,7 +5389,7 @@ fn batches_and_actions_are_audited() {
         .map(|e| {
             (
                 e.client_id.as_str(),
-                e.request_id.as_str(),
+                e.request_id.as_ref().map_or("", RequestId::as_str),
                 e.call,
                 e.edits.clone(),
                 e.output_id.as_ref().map(OutputId::as_str),

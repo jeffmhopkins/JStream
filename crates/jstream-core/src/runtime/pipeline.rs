@@ -57,8 +57,8 @@ use jstream_platform::{
     VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
-    EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
-    RateControl as ProfileRate,
+    EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
+    RateControl as ProfileRate, VideoCodec,
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
 use jstream_sources::AudioScopes;
@@ -76,7 +76,7 @@ use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_came
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
 };
-use crate::snapshot::{self, CaptureFrame, CaptureImage, GpuKey, Shot};
+use crate::snapshot::{self, CaptureFrame, CaptureImage, GpuKey, LiveParams, Shot};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
@@ -102,17 +102,20 @@ pub(crate) const STOP_DRAIN: Duration = Duration::from_secs(2);
 const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 
 /// Composites one frame on the render thread: the program mix of the render snapshot's
-/// [`Shot`] at `size`, with `display` sources showing the capture (or, with no program
-/// scene, the capture filling the frame, or black when there is none yet), read back as
-/// RGBA8 into `out` (replacing its contents). Returns the GPU images its cache let go
-/// of, for the collector. Created on the render thread and kept there, so it need not
-/// be `Send`.
+/// [`Shot`] at `size`, with the live values in [`LiveParams`] applied and `display`
+/// sources showing the capture (or, with no program scene, the capture filling the
+/// frame, or black when there is none yet), read back as RGBA8 into `out` (replacing its
+/// contents), as it is at the tick's time on the media clock (a running transition
+/// samples it). Returns the GPU images its cache let go of, for the collector. Created
+/// on the render thread and kept there, so it need not be `Send`.
 pub(crate) type DrawFn = Box<
     dyn FnMut(
         &Shot,
+        &LiveParams,
         FrameSize,
         Option<&CaptureFrame<'_>>,
         &mut Vec<u8>,
+        MediaTime,
     ) -> Result<Option<Reclaimed>, String>,
 >;
 
@@ -129,7 +132,12 @@ pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, Str
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|_: Option<&GpuContext>| {
         let draw: DrawFn = Box::new(
-            |_: &Shot, size: FrameSize, capture: Option<&CaptureFrame<'_>>, out: &mut Vec<u8>| {
+            |_: &Shot,
+             _: &LiveParams,
+             size: FrameSize,
+             capture: Option<&CaptureFrame<'_>>,
+             out: &mut Vec<u8>,
+             _: MediaTime| {
                 out.clear();
                 match capture.map(|capture| capture.image) {
                     Some(CaptureImage::Rgba { size: own, rgba }) if own == size => {
@@ -278,6 +286,11 @@ pub(crate) struct Pending {
     pub(crate) generation: u64,
     /// `output.stop` won this generation. The start must not settle `active`.
     pub(crate) cancel: bool,
+    /// The output's kind when the start checked its key (#343): what
+    /// [`Engine::output_kind`](crate::Engine::output_kind) answers for this output
+    /// until the start settles, so a retarget that lands while the host's opener runs
+    /// can't give it the new server's URL with the old server's key.
+    pub(crate) kind: Option<OutputKind>,
 }
 
 impl MediaHost {
@@ -819,11 +832,19 @@ pub(crate) fn gpu_draw() -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
-        let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+        let draw: DrawFn = Box::new(move |shot, live, size, capture, out, at| {
             cache.begin_frame();
-            snapshot::compose(&mut compositor, &mut cache, shot, capture, size, true)
-                .and_then(|output| copy_pixels(&output, out))
-                .map_err(|err| err.to_string())?;
+            snapshot::compose(
+                &mut compositor,
+                &mut cache,
+                (shot, at),
+                live,
+                capture,
+                size,
+                true,
+            )
+            .and_then(|output| copy_pixels(&output, out))
+            .map_err(|err| err.to_string())?;
             // A failed frame skips this: what it retired waits for the next frame's
             // fence, which also covers it, so nothing is freed on this thread.
             Ok(cache.end_frame(&compositor))
@@ -1080,7 +1101,7 @@ pub(crate) fn launch(
     let origin = program.origin()?;
     // Set once the start has succeeded; until then a recording is provisional.
     let keep = Arc::new(AtomicBool::new(false));
-    let info = stream_info(program.size, origin, &encoders.key.1);
+    let info = stream_info(program.size, origin, &encoders.key.1)?;
     let publishing = matches!(destination, Destination::Publish(_));
     let sink = Sink::open(destination, &info, Arc::clone(&keep))?;
     let stop = Arc::new(AtomicBool::new(false));
@@ -1325,6 +1346,15 @@ fn primary_target(capture: &dyn Capture) -> Result<CaptureTarget, String> {
     Ok(info.target)
 }
 
+/// The codec `profile` encodes video in. HEVC and AV1 map here once the protocol's
+/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them.
+fn video_codec(profile: &EncoderProfile) -> Result<Codec, String> {
+    match profile.video.codec {
+        VideoCodec::H264 => Ok(Codec::H264),
+        _ => Err("the encoder profile's video codec is not one this engine knows".into()),
+    }
+}
+
 /// The video encoder settings for `profile` at `size` and the base frame rate.
 fn video_config(size: FrameSize, profile: &EncoderProfile) -> Result<VideoEncoderConfig, String> {
     let period =
@@ -1341,7 +1371,7 @@ fn video_config(size: FrameSize, profile: &EncoderProfile) -> Result<VideoEncode
         _ => HardwarePreference::Prefer,
     };
     Ok(VideoEncoderConfig {
-        codec: Codec::H264,
+        codec: video_codec(profile)?,
         size,
         input_format: PixelFormat::Rgba8,
         frame_period: period,
@@ -1392,12 +1422,17 @@ fn mixer_latency(clock: &dyn MediaClock, mixer: &Mixer) -> Result<MediaTime, Str
         .map_err(|err| format!("mixer latency: {err}"))
 }
 
-fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> StreamInfo {
+fn stream_info(
+    size: FrameSize,
+    origin: MediaTime,
+    profile: &EncoderProfile,
+) -> Result<StreamInfo, String> {
     let video_kbps = match profile.video.rate_control {
         ProfileRate::Cbr { kbps } | ProfileRate::Vbr { kbps, .. } => kbps,
         _ => 0,
     };
-    StreamInfo {
+    Ok(StreamInfo {
+        codec: video_codec(profile)?,
         size,
         origin,
         frame_rate: f64::from(FRAME_DEN) / f64::from(FRAME_NUM),
@@ -1406,7 +1441,7 @@ fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> 
         sample_rate: SAMPLE_RATE,
         sps: &SPS,
         pps: &PPS,
-    }
+    })
 }
 
 struct RenderJob {
@@ -1508,13 +1543,15 @@ impl Frames {
         self.capture = capture.stats();
     }
 
-    /// Composites `shot` into `scratch` and, on success, makes that the shown frame.
-    /// Returns the GPU images the compositor let go of.
+    /// Composites `shot` as it is at `at` into `scratch` and, on success, makes that the
+    /// shown frame. Returns the GPU images the compositor let go of.
     fn draw(
         &mut self,
         draw: &mut DrawFn,
         shot: &Shot,
+        live: &LiveParams,
         size: FrameSize,
+        at: MediaTime,
     ) -> Result<Option<Reclaimed>, String> {
         if shot.shows_capture() {
             self.convert_capture();
@@ -1530,7 +1567,7 @@ impl Frames {
             version: self.source_version,
             image,
         });
-        let freed = draw(shot, size, capture.as_ref(), &mut self.scratch)?;
+        let freed = draw(shot, live, size, capture.as_ref(), &mut self.scratch, at)?;
         std::mem::swap(&mut self.scratch, &mut self.shown);
         Ok(freed)
     }
@@ -1557,9 +1594,9 @@ impl Frames {
 
 /// Composites on every base-rate tick of the media clock.
 ///
-/// Each tick first adopts the render snapshot the control side published last, which
-/// costs a pointer compare unless a new one arrived ([`RenderReader::adopt`]); the
-/// thread never takes the collection lock. Its generation is stamped as the thread
+/// Each tick first adopts the render snapshot the control side published last, then the
+/// live values on the parameter channel, which costs two pointer compares unless a new
+/// one arrived ([`RenderReader::adopt`]); the thread never takes the collection lock. Its generation is stamped as the thread
 /// starts and whenever it changes. The stopped marker is published when the loop ends,
 /// and when a fatal error stops the drawing.
 ///
@@ -1659,8 +1696,9 @@ fn render_loop(job: RenderJob) {
         if !broken {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 frames.read_capture(capture.as_mut());
-                let snapshot = reader.adopt();
-                frames.draw(&mut draw, snapshot.shot(), size)
+                reader.adopt();
+                let (snapshot, live) = reader.held();
+                frames.draw(&mut draw, snapshot.shot(), live, size, due)
             }));
             match tick {
                 Ok(Ok(freed)) => {
@@ -2280,16 +2318,18 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, Frames, catch_up, output_size, push_each, rgba_from_surface, video_config,
+        DrawFn, Frames, catch_up, output_size, push_each, rgba_from_surface, stream_info,
+        video_config,
     };
     use crate::snapshot::{CaptureImage, Shot};
     use jstream_media::{
-        ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane, Timebase,
-        VideoFrame, VideoFrameInfo,
+        Codec, ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane,
+        Timebase, VideoFrame, VideoFrameInfo,
     };
     use jstream_platform::{HardwarePreference, RateControl, VideoSurface};
     use jstream_protocol::{
         EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
+        VideoCodec,
     };
 
     /// Every target is pushed once; exactly the ones that refuse are taken out and
@@ -2351,6 +2391,15 @@ mod tests {
         assert_eq!(config.hardware, HardwarePreference::Avoid);
         profile.video.rate_control = ProfileRate::Unknown;
         assert!(video_config(size, &profile).is_err());
+
+        let mut profile = EncoderProfile::DEFAULT;
+        assert_eq!(
+            video_config(size, &profile).expect("h264").codec,
+            Codec::H264
+        );
+        profile.video.codec = VideoCodec::Unknown;
+        assert!(video_config(size, &profile).is_err());
+        assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());
     }
 
     /// #433: the program renders and encodes at the canvas, rounded down to even sizes
@@ -2471,26 +2520,42 @@ mod tests {
         let size = FrameSize::new(4, 4).expect("size");
         // Fills the output, checking the capture it is given.
         let drawing = |expected: Option<(u64, FrameSize)>| -> DrawFn {
-            Box::new(move |_, size: FrameSize, capture, out: &mut Vec<u8>| {
-                let got = capture.map(|c| match c.image {
-                    CaptureImage::Rgba { size, .. } => (c.version, size),
-                    CaptureImage::Gpu(_) => panic!("a CPU capture"),
-                });
-                assert_eq!(got, expected);
-                out.resize(size.width() as usize * size.height() as usize * 4, 0);
-                Ok(None)
-            })
+            Box::new(
+                move |_, _, size: FrameSize, capture, out: &mut Vec<u8>, _| {
+                    let got = capture.map(|c| match c.image {
+                        CaptureImage::Rgba { size, .. } => (c.version, size),
+                        CaptureImage::Gpu(_) => panic!("a CPU capture"),
+                    });
+                    assert_eq!(got, expected);
+                    out.resize(size.width() as usize * size.height() as usize * 4, 0);
+                    Ok(None)
+                },
+            )
         };
         let program = crate::snapshot::tests::one_scene_shot();
         assert!(!program.shows_capture());
         frames
-            .draw(&mut drawing(None), &program, size)
+            .draw(
+                &mut drawing(None),
+                &program,
+                &crate::snapshot::LiveParams::default(),
+                size,
+                us(0),
+            )
             .expect("draw");
         assert!(frames.pending.is_some(), "not converted");
         let empty = Shot::default();
         assert!(empty.shows_capture());
         let mut check = drawing(Some((1, FrameSize::new(8, 2).expect("size"))));
-        frames.draw(&mut check, &empty, size).expect("draw");
+        frames
+            .draw(
+                &mut check,
+                &empty,
+                &crate::snapshot::LiveParams::default(),
+                size,
+                us(0),
+            )
+            .expect("draw");
         assert!(frames.pending.is_none());
         assert_eq!(frames.source_version, 1);
         assert_eq!(frames.shown.len(), 4 * 4 * 4);

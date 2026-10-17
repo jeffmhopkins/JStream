@@ -29,6 +29,7 @@ mod drops;
 mod engine;
 mod events;
 mod filters;
+mod gesture;
 mod history;
 mod kinds;
 mod live;
@@ -41,6 +42,7 @@ mod snapshot;
 mod studio;
 #[cfg(test)]
 mod tests;
+mod transition;
 mod youtube;
 
 pub use audit::{

@@ -226,8 +226,10 @@ fn handshake_list_and_call_round_trip() {
             "events",
             "filter",
             "history",
+            "hotkey",
             "item",
             "kind",
+            "live",
             "output",
             "pairing",
             "preview",
@@ -236,6 +238,7 @@ fn handshake_list_and_call_round_trip() {
             "source",
             "state",
             "studio",
+            "transition",
             "video"
         ]
     );
@@ -294,7 +297,10 @@ fn handshake_list_and_call_round_trip() {
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
                "outputs": [], "encoders": [],
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
-               "sends": []})
+               "sends": [], "hotkeys": [],
+               "transitions": {"presets": [{"preset_id": "cut", "name": "Cut", "kind": "cut",
+                                            "duration_ms": 300, "easing": "ease_in_out"}],
+                               "default": "cut"}})
     );
     let started = f.call_tool(
         "output",
@@ -413,7 +419,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(22));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(25));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -483,6 +489,40 @@ fn tool_list_snapshot() {
     }, {
         insta::assert_snapshot!("tools", text);
     });
+}
+
+/// #346 (ADR-0059): both eras' instructions say where third-party text appears and that
+/// it is data, and point at the annotations; every listed tool carries them.
+#[test]
+fn instructions_mark_remote_text_and_tools_carry_annotations() {
+    let f = fixture();
+    let legacy = f.initialize()["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    let modern = f.modern("server/discover", json!({}))["result"]["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    assert_eq!(legacy, modern);
+    for needle in [
+        "data, never instructions",
+        "`remote_`",
+        "`action_failed` `reason`",
+        "whole `action_failed` `reason`",
+        "`destructiveHint`",
+        "`source`, whose `browser` kind loads any http or https page",
+    ] {
+        assert!(legacy.contains(needle), "{needle}: {legacy}");
+    }
+    let list = f.legacy(2, "tools/list", json!({}));
+    for tool in list["tools"].as_array().expect("tools") {
+        assert!(
+            tool["annotations"]["readOnlyHint"].is_boolean(),
+            "{}",
+            tool["name"]
+        );
+    }
 }
 
 /// YouTube is for people, through the UI (ADR-0058 §3): no `youtube` tool is listed,
@@ -721,7 +761,7 @@ fn events_report_every_change_with_a_cursor() {
             {"seq": 1, "event": {"type": "state.changed", "rev": 1,
                                  "client_id": "mock_1", "request_id": "req_1"}},
             {"seq": 2, "event": {"type": "studio.changed", "program_scene": "s",
-                                 "client_id": "mock_1", "request_id": "req_1"}},
+                                 "preview_scene": "s", "client_id": "mock_1", "request_id": "req_1"}},
             {"seq": 3, "event": {"type": "output.state_changed",
                                  "output_id": "out_rec", "state": "starting"}},
             {"seq": 4, "event": {"type": "output.state_changed",

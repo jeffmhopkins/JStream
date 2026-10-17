@@ -29,9 +29,9 @@ an output with a video chain gets its own) needs no new shape.
 
 Its only JStream dependency is `jstream-platform` (layer 1), whose `media` re-export
 supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependencies:
-`jstream-platform`'s `fake` feature, for `FakeCodecs`, and `wgpu` at the workspace pin
+`jstream-platform`'s `fake` feature, for `FakeCodecs`, `wgpu` at the workspace pin
 with jstream-render's backends, so the GPU-frame tests can make textures on a software
-adapter.
+adapter, and `criterion`, for the benchmarks.
 
 Why a crate: the crate map puts encoder sessions in their own layer-3 crate, between
 the platform traits they drive and the layer-4 outputs that consume them, and it keeps

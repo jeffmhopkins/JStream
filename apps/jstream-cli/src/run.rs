@@ -10,9 +10,9 @@ use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use crate::mcp;
 use jstream_control::protocol::{
-    Action, ActionResult, Batch, Call, CallResult, Canvas, Edit, Event, Hello, ItemGeometry,
-    ItemInfo, OutputInfo, OutputKind, PROTOCOL_VERSION, Query, QueryResult, Response, RtmpTarget,
-    SecretString, SourceId, SourceInfo, SourceKind, Welcome,
+    Action, ActionResult, Batch, Call, CallResult, Canvas, Edit, Event, Hello, HotkeyBinding,
+    ItemGeometry, ItemInfo, OutputInfo, OutputKind, PROTOCOL_VERSION, Query, QueryResult, Response,
+    RtmpTarget, SecretString, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
@@ -390,7 +390,7 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
         | Action::OutputClearKey { output_id } => {
             writeln!(out, "{} accepted for {output_id} ({id})", action.name())?;
         }
-        Action::SceneSwitch { scene_id } => {
+        Action::SceneSwitch { scene_id, .. } | Action::StudioSetPreview { scene_id } => {
             writeln!(out, "{} accepted for {scene_id} ({id})", action.name())?;
         }
         Action::DeviceRevoke { device_id } => {
@@ -428,7 +428,16 @@ fn write_response(out: &mut dyn Write, response: &Response, json: bool) -> Resul
         return line(out, response);
     }
     match &response.result {
-        CallResult::Batch { rev } => writeln!(out, "applied: rev {rev} ({})", response.id)?,
+        CallResult::Batch {
+            rev,
+            removed_hotkeys,
+        } => {
+            writeln!(out, "applied: rev {rev} ({})", response.id)?;
+            // ADR-0040 §3: a delete takes the hotkeys naming its target with it.
+            for binding in removed_hotkeys {
+                writeln!(out, "removed hotkey {}", binding.chord)?;
+            }
+        }
         CallResult::Action { result: None } => writeln!(out, "accepted ({})", response.id)?,
         CallResult::Query { result } => write_query(out, result)?,
         _ => line(out, &response.result)?,
@@ -497,10 +506,17 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 rows.collect(),
             )?;
         }
-        QueryResult::StudioGet { program_scene } => match program_scene {
-            Some(scene_id) => writeln!(out, "program: {scene_id}")?,
-            None => writeln!(out, "program: none (no scenes)")?,
-        },
+        QueryResult::StudioGet {
+            program_scene,
+            preview_scene,
+        } => {
+            for (label, scene) in [("program", program_scene), ("preview", preview_scene)] {
+                match scene {
+                    Some(scene_id) => writeln!(out, "{label}: {scene_id}")?,
+                    None => writeln!(out, "{label}: none (no scenes)")?,
+                }
+            }
+        }
         QueryResult::SourceList { rev, sources } => {
             writeln!(out, "rev {rev}")?;
             write_sources(out, "", sources)?;
@@ -530,6 +546,7 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             sources,
             scenes,
             outputs,
+            hotkeys,
             ..
         } => {
             writeln!(out, "rev {rev}")?;
@@ -545,10 +562,39 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             }
             writeln!(out, "outputs:")?;
             write_outputs(out, "  ", outputs)?;
+            if !hotkeys.is_empty() {
+                writeln!(out, "hotkeys:")?;
+                write_hotkeys(out, "  ", hotkeys)?;
+            }
         }
         other => line(out, other)?,
     }
     Ok(())
+}
+
+/// Hotkey bindings as a table, each action as its name and the IDs it names (the spelling
+/// `hotkey.set` takes, plus a `scene.switch`'s preset after its scene). An action this
+/// CLI doesn't know prints as JSON.
+fn write_hotkeys(
+    out: &mut dyn Write,
+    indent: &str,
+    hotkeys: &[HotkeyBinding],
+) -> Result<(), CliError> {
+    let rows = hotkeys.iter().map(|binding| {
+        let action = match binding.action() {
+            Some(action) => {
+                let ids: Vec<&str> = action
+                    .named_objects()
+                    .into_iter()
+                    .map(|(_, id)| id)
+                    .collect();
+                format!("{} {}", action.name(), ids.join(" "))
+            }
+            None => binding.action.to_string(),
+        };
+        vec![binding.chord.to_string(), action]
+    });
+    table(out, indent, &["CHORD", "ACTION"], rows.collect())
 }
 
 /// Sources as a table, in the `source.create` argument spelling of their kind.
@@ -699,12 +745,24 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
         }
         Event::StudioChanged {
             program_scene,
+            preview_scene,
+            transition,
             client_id,
             request_id,
         } => {
-            match program_scene {
-                Some(scene_id) => write!(out, "studio.changed program {scene_id}")?,
-                None => write!(out, "studio.changed program none")?,
+            write!(out, "studio.changed")?;
+            for (label, scene) in [("program", program_scene), ("preview", preview_scene)] {
+                match scene {
+                    Some(scene_id) => write!(out, " {label} {scene_id}")?,
+                    None => write!(out, " {label} none")?,
+                }
+            }
+            if let Some(transition) = transition {
+                write!(
+                    out,
+                    " transition {} {}ms",
+                    transition.preset_id, transition.duration_ms
+                )?;
             }
             write!(out, " by {client_id}")?;
             if let Some(request_id) = request_id {
@@ -727,6 +785,34 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
                 drops.encode_blocks,
                 drops.output_packets,
             )?;
+        }
+        Event::LiveChanged {
+            gesture_id,
+            client_id,
+            values,
+        } => {
+            let names: Vec<&str> = values.iter().map(Edit::name).collect();
+            writeln!(
+                out,
+                "live.changed {gesture_id} by {client_id}: {}",
+                names.join(", ")
+            )?;
+        }
+        Event::LiveEnded {
+            gesture_id,
+            client_id,
+            outcome,
+            rev,
+        } => {
+            write!(
+                out,
+                "live.ended {gesture_id} by {client_id} {}",
+                outcome.name()
+            )?;
+            if let Some(rev) = rev {
+                write!(out, " rev {rev}")?;
+            }
+            writeln!(out)?;
         }
         other => line(out, other)?,
     }

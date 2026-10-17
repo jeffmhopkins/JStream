@@ -178,11 +178,15 @@ pub enum EntityKind {
     /// source. Only an error answering a filter edit names it, so a client older than
     /// 0.22, which sends none, never reads it.
     Filter,
+    /// A transition preset.
+    Transition,
     /// An audio bus.
     Bus,
     /// A paired device (0.21). Only an error answering `device.revoke` names it, so a
     /// client older than 0.21, which sends none, never reads it.
     Device,
+    /// A hotkey binding, named by its chord.
+    Hotkey,
 }
 
 impl fmt::Display for EntityKind {
@@ -194,8 +198,10 @@ impl fmt::Display for EntityKind {
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
             EntityKind::Filter => "filter",
+            EntityKind::Transition => "transition",
             EntityKind::Bus => "bus",
             EntityKind::Device => "device",
+            EntityKind::Hotkey => "hotkey",
         })
     }
 }

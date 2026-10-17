@@ -206,10 +206,10 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 → NV12 → encoder with no CPU copy). The types below are built in this crate, and the
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
-**Frame lifetime** below describes. `jstream-render` composites one scene on
-that device when the engine has one, sampling capture frames there, and opens its own
-(hardware adapter first, the software one as the fallback) when it does not; it does not
-write the NV12 encode target.
+**Frame lifetime** below describes. `jstream-render` composites the program mix (a
+scene, or a transition between two) on that device when the engine has one, sampling
+capture frames there, and opens its own (hardware adapter first, the software one as the
+fallback) when it does not; it does not write the NV12 encode target.
 Windows' H.264 encoder takes encode targets on the context it reached through
 `Codecs::on_context`; the engine does not write or push them yet.
 

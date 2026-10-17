@@ -16,9 +16,10 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    BlendMode, BusId, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
-    FilterOwner, Finite32, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind,
-    ProtocolError, Rev, SceneId, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
+    Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, Edit, EncoderProfile, EncoderProfileId,
+    FilterChain, FilterId, FilterOwner, Finite32, INITIAL_PRESET, ItemGeometry, ItemId,
+    ItemTransform, ItemTransition, OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole,
+    Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -121,6 +122,37 @@ struct File {
     /// one with no audio), every channel source keeps its default master send.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sends: Option<Vec<FileSend>>,
+    /// Hotkey bindings (ADR-0024 §5), ordered by chord; omitted when there are none, so
+    /// a collection without hotkeys saves as it did before they existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hotkeys: Vec<FileHotkey>,
+    /// Transition presets and the default (ADR-0029); omitted while they are the one
+    /// `cut` preset a new collection starts with, so such a collection saves as it did
+    /// before presets existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    transitions: Option<FileTransitions>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileTransitions {
+    /// Ordered by ID.
+    presets: Vec<FilePreset>,
+    default: TransitionPresetId,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FilePreset {
+    id: TransitionPresetId,
+    name: String,
+    kind: String,
+    /// The kind descriptor's version the settings follow (ADR-0025, ADR-0037).
+    kind_version: u32,
+    duration_ms: u32,
+    easing: Easing,
+    #[serde(default, skip_serializing_if = "Settings::is_empty")]
+    settings: Settings,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -131,6 +163,11 @@ struct FileScene {
     /// `group` for a group (ADR-0024); omitted for the default, `scene`.
     #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
     role: SceneRole,
+    /// The scene's transition overrides (ADR-0029); omitted when none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    transition_in: Option<TransitionPresetId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    transition_out: Option<TransitionPresetId>,
     /// Bottom first.
     items: Vec<FileItem>,
 }
@@ -158,6 +195,9 @@ struct FileItem {
     /// come later without a migration, never written, and refused unless empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     effects: Vec<Value>,
+    /// Its transition settings (ADR-0029 §6); omitted while they are the defaults.
+    #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
+    transition: ItemTransition,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -251,6 +291,15 @@ struct FileSend {
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct FileHotkey {
+    chord: Chord,
+    /// The action request, as `hotkey.set` takes it. A stream key is never bound, so
+    /// none is saved.
+    action: Action,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FileEncoder {
     id: EncoderProfileId,
     name: String,
@@ -289,6 +338,8 @@ impl Graph {
                     id: scene.id.clone(),
                     name: scene.name.clone(),
                     role: scene.role,
+                    transition_in: scene.transition_in.clone(),
+                    transition_out: scene.transition_out.clone(),
                     items: scene
                         .items
                         .iter()
@@ -307,6 +358,7 @@ impl Graph {
                                 opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
                                 blend: (!item.blend.is_normal()).then_some(item.blend),
                                 effects: Vec::new(),
+                                transition: item.transition,
                             }
                         })
                         .collect(),
@@ -352,8 +404,35 @@ impl Graph {
                     profile: encoder.profile,
                 })
                 .collect(),
+            transitions: (state.transitions != crate::model::Transitions::default()).then(|| {
+                FileTransitions {
+                    presets: state
+                        .transitions
+                        .presets
+                        .values()
+                        .map(|preset| FilePreset {
+                            id: preset.id.clone(),
+                            name: preset.name.clone(),
+                            kind: preset.kind.clone(),
+                            kind_version: self.kinds.get(&preset.kind).map_or(1, |k| k.version),
+                            duration_ms: preset.duration_ms,
+                            easing: preset.easing,
+                            settings: preset.settings.clone(),
+                        })
+                        .collect(),
+                    default: state.transitions.default.clone(),
+                }
+            }),
             buses: file_buses(state),
             sends: file_sends(state),
+            hotkeys: state
+                .hotkeys
+                .iter()
+                .map(|(chord, action)| FileHotkey {
+                    chord: chord.clone(),
+                    action: action.clone(),
+                })
+                .collect(),
         };
         let mut json = serde_json::to_string_pretty(&file).expect(
             "invariant: the file holds only strings, finite numbers, bools, and maps with \
@@ -495,9 +574,11 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 /// scenes, empty, in display order and with their roles; then the buses with their
 /// faders, which a source's settings may refer to; then sources, each after the
 /// sources its settings refer to; then every source's filters; then items, encoder
-/// profiles, and outputs, each with its profile; then the sends (the sources made their
-/// default master sends, so when the file lists sends a source without one has it
-/// removed), and each source's audio settings.
+/// profiles, the transition presets with the default, each scene's transition
+/// overrides, and outputs, each with its profile; then the sends (the sources made
+/// their default master sends, so when the file lists sends a source without one has
+/// it removed), and each source's audio settings; and last the hotkey bindings, whose
+/// actions name scenes, outputs and presets.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -590,11 +671,20 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             }
             if !item.visible {
                 edits.push((
-                    object,
+                    object.clone(),
                     Edit::ItemSetVisible {
                         item_id: item.id.clone(),
                         scene_id: None,
                         visible: false,
+                    },
+                ));
+            }
+            if !item.transition.is_default() {
+                edits.push((
+                    object,
+                    Edit::ItemSetTransition {
+                        item_id: item.id.clone(),
+                        transition: item.transition,
                     },
                 ));
             }
@@ -609,6 +699,21 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 profile: encoder.profile,
             },
         ));
+    }
+    if let Some(transitions) = &file.transitions {
+        rebuild_transitions(graph, transitions, &mut edits)?;
+    }
+    for scene in &file.scenes {
+        if scene.transition_in.is_some() || scene.transition_out.is_some() {
+            edits.push((
+                format!("scene `{}`", scene.id),
+                Edit::SceneSetTransitions {
+                    scene_id: scene.id.clone(),
+                    transition_in: scene.transition_in.clone(),
+                    transition_out: scene.transition_out.clone(),
+                },
+            ));
+        }
     }
     for output in &file.outputs {
         let object = format!("output `{}`", output.id);
@@ -630,6 +735,15 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         }
     }
     rebuild_audio(graph, file, &mut edits);
+    for hotkey in &file.hotkeys {
+        edits.push((
+            format!("hotkey `{}`", hotkey.chord),
+            Edit::HotkeySet {
+                chord: hotkey.chord.clone(),
+                action: hotkey.action.clone(),
+            },
+        ));
+    }
     Ok(edits)
 }
 
@@ -652,6 +766,54 @@ fn check_kind_version(
             saved,
             current: descriptor.version,
         });
+    }
+    Ok(())
+}
+
+/// Pushes the edits that turn a new collection's one `cut` preset into the file's
+/// presets and default: each preset created (the `cut` one updated in place), the
+/// default set, and the initial `cut` deleted if the file doesn't have it.
+fn rebuild_transitions(
+    graph: &Graph,
+    file: &FileTransitions,
+    edits: &mut Vec<(String, Edit)>,
+) -> Result<(), LoadError> {
+    let initial = TransitionPresetId::new(INITIAL_PRESET);
+    for preset in &file.presets {
+        let object = format!("transition `{}`", preset.id);
+        check_kind_version(graph, &object, &preset.kind, Some(preset.kind_version))?;
+        let edit = if preset.id == initial {
+            Edit::TransitionUpdate {
+                preset_id: preset.id.clone(),
+                name: Some(preset.name.clone()),
+                kind: Some(preset.kind.clone()),
+                duration_ms: Some(preset.duration_ms),
+                easing: Some(preset.easing),
+                patch: preset.settings.clone(),
+            }
+        } else {
+            Edit::TransitionCreate {
+                preset_id: preset.id.clone(),
+                name: preset.name.clone(),
+                kind: preset.kind.clone(),
+                duration_ms: preset.duration_ms,
+                easing: preset.easing,
+                settings: preset.settings.clone(),
+            }
+        };
+        edits.push((object, edit));
+    }
+    edits.push((
+        "the default transition".to_owned(),
+        Edit::TransitionSetDefault {
+            preset_id: file.default.clone(),
+        },
+    ));
+    if !file.presets.iter().any(|preset| preset.id == initial) {
+        edits.push((
+            format!("transition `{initial}`"),
+            Edit::TransitionDelete { preset_id: initial },
+        ));
     }
     Ok(())
 }

@@ -23,11 +23,16 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
-use crate::{DeviceId, DeviceInfo};
+use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
+use crate::{
+    Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
+    TransitionPresetInfo, TransitionStarted, TransitionsInfo,
+};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
+use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -265,6 +270,82 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::EncoderDelete {
             profile_id: EncoderProfileId::new("enc_old"),
         },
+        Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: "Smooth move".into(),
+            kind: "move".into(),
+            duration_ms: 600,
+            easing: Easing::EaseInOut,
+            settings: [("unmatched", json!("slide"))].into_iter().collect(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: Some("Springy move".into()),
+            kind: None,
+            duration_ms: Some(800),
+            easing: Some(Easing::Spring),
+            patch: [("stagger_ms", json!(40))].into_iter().collect(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_fade"),
+            name: None,
+            kind: Some("fade".into()),
+            duration_ms: None,
+            easing: Some(Easing::EaseOut),
+            patch: Settings::new(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_fade"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::Linear),
+            patch: Settings::new(),
+        },
+        Edit::TransitionSetDefault {
+            preset_id: TransitionPresetId::new("tr_move"),
+        },
+        Edit::TransitionDelete {
+            preset_id: TransitionPresetId::new("tr_old"),
+        },
+        Edit::SceneSetTransitions {
+            scene_id: SceneId::new("scn_1"),
+            transition_in: Some(TransitionPresetId::new("tr_fade")),
+            transition_out: None,
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_1"),
+            transition: ItemTransition {
+                delay_ms: 120,
+                easing: ItemEasing::Spring,
+                glide: Glide::Never,
+                appear: TransitionEffect::Scale,
+                disappear: TransitionEffect::None,
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_2"),
+            transition: ItemTransition {
+                easing: ItemEasing::EaseOut,
+                appear: TransitionEffect::Slide,
+                disappear: TransitionEffect::Fade,
+                ..ItemTransition::default()
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_3"),
+            transition: ItemTransition {
+                easing: ItemEasing::Linear,
+                ..ItemTransition::default()
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_4"),
+            transition: ItemTransition {
+                easing: ItemEasing::EaseInOut,
+                ..ItemTransition::default()
+            },
+        },
         Edit::SourceSetAudio {
             source_id: SourceId::new("src_mic"),
             enabled: Some(true),
@@ -303,6 +384,16 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::BusDelete {
             bus_id: BusId::new("bus_old"),
+        },
+        Edit::HotkeySet {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+            },
+        },
+        Edit::HotkeyClear {
+            chord: Chord::new("Ctrl+Digit1"),
         },
     ];
     // Every blend mode, though the engine draws only `normal` so far.
@@ -401,6 +492,25 @@ fn send_infos() -> Vec<SendInfo> {
     ]
 }
 
+/// The bindings the fixtures report: a scene switch and an output start.
+fn hotkey_bindings() -> Vec<HotkeyBinding> {
+    vec![
+        HotkeyBinding::new(
+            Chord::new("Ctrl+Digit1"),
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+            },
+        ),
+        HotkeyBinding::new(
+            Chord::new("F9"),
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+    ]
+}
+
 /// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
 fn recording_profile() -> EncoderProfile {
     EncoderProfile {
@@ -482,6 +592,13 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputClearKey {
             output_id: OutputId::new("out_yt"),
         },
+        Action::LiveSet {
+            gesture_id: GestureId::new("drag_1"),
+            values: live_values(),
+        },
+        Action::LiveCancel {
+            gesture_id: GestureId::new("drag_1"),
+        },
         Action::YoutubeSignIn,
         Action::YoutubeSignOut,
         Action::YoutubeCreateBroadcast {
@@ -522,10 +639,39 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
+            preset_id: None,
+        },
+        Action::SceneSwitch {
+            scene_id: SceneId::new("scn_1"),
+            preset_id: Some(TransitionPresetId::new("tr_move")),
+        },
+        Action::StudioSetPreview {
+            scene_id: SceneId::new("scn_1"),
         },
         Action::PairingStart,
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
+        },
+    ]
+}
+
+/// A two-item drag: one item moved, the other cropped.
+fn live_values() -> Vec<Edit> {
+    vec![
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+            geometry: corner_box(),
+        },
+        Edit::ItemSetCrop {
+            item_id: ItemId::new("itm_2"),
+            scene_id: None,
+            crop: Crop {
+                left: 4,
+                top: 0,
+                right: 4,
+                bottom: 0,
+            },
         },
     ]
 }
@@ -549,6 +695,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
             status: BroadcastListStatus::All,
@@ -851,6 +998,7 @@ fn item_infos() -> Vec<ItemInfo> {
             visible: true,
             opacity: Finite32::new(0.5).expect("finite"),
             blend: BlendMode::Normal,
+            transition: ItemTransition::default(),
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -871,8 +1019,32 @@ fn item_infos() -> Vec<ItemInfo> {
             visible: false,
             opacity: Finite32::ONE,
             blend: BlendMode::Normal,
+            transition: ItemTransition {
+                delay_ms: 80,
+                glide: Glide::Never,
+                ..ItemTransition::default()
+            },
         },
     ]
+}
+
+fn transitions_info() -> TransitionsInfo {
+    TransitionsInfo {
+        presets: vec![
+            crate::initial_preset(),
+            TransitionPresetInfo {
+                preset_id: TransitionPresetId::new("tr_move"),
+                name: "Smooth move".into(),
+                kind: "move".into(),
+                duration_ms: 600,
+                easing: Easing::EaseInOut,
+                settings: [("stagger_ms", json!(0)), ("unmatched", json!("fade"))]
+                    .into_iter()
+                    .collect(),
+            },
+        ],
+        default: TransitionPresetId::new("tr_move"),
+    }
 }
 
 pub(crate) fn query_results() -> Vec<QueryResult> {
@@ -916,19 +1088,25 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
                     role: SceneRole::Scene,
+                    transition_in: Some(TransitionPresetId::new("tr_move")),
+                    transition_out: None,
                     items: item_infos(),
                 },
                 SceneInfo {
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),
                     role: SceneRole::Group,
+                    transition_in: None,
+                    transition_out: Some(TransitionPresetId::new("cut")),
                     items: vec![],
                 },
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
+            transitions: transitions_info(),
             buses: bus_infos(),
             sends: send_infos(),
+            hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -953,6 +1131,12 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     name: "Gain".into(),
                     version: 1,
                 },
+                KindSummary {
+                    kind_id: "move".into(),
+                    category: KindCategory::Transition,
+                    name: "Move".into(),
+                    version: 1,
+                },
             ],
         },
         QueryResult::KindDescribe {
@@ -965,13 +1149,22 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         },
         QueryResult::StudioGet {
             program_scene: Some(SceneId::new("scn_2")),
+            preview_scene: Some(SceneId::new("scn_1")),
         },
         QueryResult::StudioGet {
             program_scene: None,
+            preview_scene: None,
         },
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
+        },
+        QueryResult::LiveList {
+            gestures: vec![GestureInfo {
+                gesture_id: GestureId::new("drag_1"),
+                client_id: ClientId::new("cli_7"),
+                values: live_values(),
+            }],
         },
         QueryResult::YoutubeStatus {
             auth: YoutubeAuth::SignedIn,
@@ -1022,6 +1215,13 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     scene_id: SceneId::new("scn_mask"),
                 },
             ],
+            hotkeys: vec![HotkeyBinding::new(
+                Chord::new("F5"),
+                &Action::SceneSwitch {
+                    scene_id: SceneId::new("scn_mask"),
+                    preset_id: None,
+                },
+            )],
         },
         QueryResult::DeviceList {
             devices: vec![DeviceInfo {
@@ -1076,11 +1276,18 @@ pub(crate) fn events() -> Vec<Event> {
     }
     events.push(Event::StudioChanged {
         program_scene: Some(SceneId::new("scn_2")),
+        preview_scene: Some(SceneId::new("scn_1")),
+        transition: Some(TransitionStarted {
+            preset_id: TransitionPresetId::new("tr_move"),
+            duration_ms: 640,
+        }),
         client_id: ClientId::new("cli_7"),
         request_id: Some(RequestId::new("r2")),
     });
     events.push(Event::StudioChanged {
         program_scene: None,
+        preview_scene: None,
+        transition: None,
         client_id: ClientId::new("cli_8"),
         request_id: None,
     });
@@ -1096,6 +1303,25 @@ pub(crate) fn events() -> Vec<Event> {
             output_packets: 7,
         },
     });
+    events.push(Event::LiveChanged {
+        gesture_id: GestureId::new("drag_1"),
+        client_id: ClientId::new("cli_7"),
+        values: live_values(),
+    });
+    events.push(Event::LiveEnded {
+        gesture_id: GestureId::new("drag_1"),
+        client_id: ClientId::new("cli_7"),
+        outcome: LiveOutcome::Committed,
+        rev: Some(Rev(17)),
+    });
+    for outcome in [LiveOutcome::Cancelled, LiveOutcome::Expired] {
+        events.push(Event::LiveEnded {
+            gesture_id: GestureId::new("drag_2"),
+            client_id: ClientId::new("cli_8"),
+            outcome,
+            rev: None,
+        });
+    }
     for auth in [
         YoutubeAuth::Unavailable,
         YoutubeAuth::SignedOut,
@@ -1221,6 +1447,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Filter,
         EntityKind::Bus,
         EntityKind::Device,
+        EntityKind::Hotkey,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -1251,6 +1478,16 @@ pub(crate) fn client_messages() -> Vec<ClientMessage> {
             edits: edits(),
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
+        }),
+    ));
+    msgs.push(request(
+        2,
+        Call::Batch(Batch {
+            edits: live_values(),
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: Some(GestureId::new("drag_1")),
         }),
     ));
     msgs.push(request(
@@ -1293,7 +1530,17 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r0"),
-            result: CallResult::Batch { rev: Rev(13) },
+            result: CallResult::Batch {
+                rev: Rev(13),
+                removed_hotkeys: vec![],
+            },
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r1"),
+            result: CallResult::Batch {
+                rev: Rev(14),
+                removed_hotkeys: hotkey_bindings(),
+            },
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r10"),

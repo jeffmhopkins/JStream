@@ -23,12 +23,14 @@ use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_graph::{Graph, Placement as GraphPlacement, State};
-use jstream_media::{FrameSize, MediaTime, PixelFormat, VideoFrame};
+use jstream_graph::{Graph, Item as GraphItem, Placement as GraphPlacement, State};
+use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::GpuFrame;
 use jstream_protocol::{
-    Canvas, Crop as ProtocolCrop, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
+    Canvas, Crop as ProtocolCrop, Edit, ItemGeometry, ItemId, ProtocolError, QueryResult, Rev,
+    SceneId, SourceId, SourceKind,
 };
+use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
@@ -36,6 +38,7 @@ use jstream_render::{
 
 use crate::lock;
 use crate::runtime::RenderSnapshot;
+use crate::transition::{self, From, Planned, Running, Visual};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -199,7 +202,7 @@ fn rgba_len(width: u32, height: u32) -> Result<usize, SourceFrameError> {
 
 /// What one visible item shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum SourceRef {
+pub(crate) enum SourceRef {
     /// A source's latest [`Frame`], kept in [`Shot::frames`].
     Frame(SourceId),
     /// Another scene, composited first and then placed.
@@ -211,6 +214,8 @@ enum SourceRef {
 
 #[derive(Debug, PartialEq)]
 struct Placed {
+    /// The item, whose live values (ADR-0032) override `placement` and `crop`.
+    item: ItemId,
     source: SourceRef,
     placement: Placement,
     crop: Crop,
@@ -237,8 +242,19 @@ pub(crate) struct Shot {
     /// The cache key of each frame in `frames`, built once so a frame's uploads look
     /// them up without allocating.
     uploads: Vec<(GpuKey, SourceId)>,
-    /// Whether a pass places the pipeline's capture.
+    /// Whether a pass, or a transition's track, places the pipeline's capture.
     uses_capture: bool,
+    /// The transition running on program, which replaces the program pass: `passes`
+    /// then holds only the nested scenes its tracks show.
+    transition: Option<Transitioning>,
+}
+
+/// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
+/// the image it shows, sampled at the frame's time since `start`.
+#[derive(Debug, PartialEq)]
+struct Transitioning {
+    start: MediaTime,
+    tracks: Vec<(GpuKey, Track)>,
 }
 
 impl Shot {
@@ -265,6 +281,17 @@ impl Shot {
     pub(crate) fn shows_capture(&self) -> bool {
         self.uses_capture || self.passes.is_empty()
     }
+
+    /// Whether a transition is running in this shot, so what it draws changes with time.
+    pub(crate) fn transitioning(&self) -> bool {
+        self.transition.is_some()
+    }
+
+    /// How many tracks the running transition draws, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn transition_tracks(&self) -> Option<usize> {
+        self.transition.as_ref().map(|t| t.tracks.len())
+    }
 }
 
 /// Two shots are equal when they draw the same thing: the passes and keys follow from
@@ -275,6 +302,7 @@ impl PartialEq for Shot {
             && self.program == other.program
             && self.scenes == other.scenes
             && self.frames == other.frames
+            && self.transition == other.transition
     }
 }
 
@@ -287,21 +315,39 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
         .scenes()
         .first()
         .map(|scene| scene.id().clone());
-    plan_with(graph, first.as_ref(), &mut |id| {
+    plan_with(graph, first.as_ref(), None, &mut |id| {
         frames.get(id).map(|f| (f.clone(), None))
     })
-    .0
+    .shot
+}
+
+/// What [`plan_with`] returns.
+pub(crate) struct Planning {
+    pub(crate) shot: Shot,
+    /// When the shot should be planned again: the earliest time a frame it shows is
+    /// replaced, or the running transition ends.
+    pub(crate) wake: Option<MediaTime>,
+    /// Whether the running transition it was given has ended, so the shot shows the
+    /// program scene alone and the studio can let the transition go.
+    pub(crate) finished: bool,
+    /// How long the transition the shot draws lasts, in milliseconds from its start.
+    pub(crate) end_ms: Option<f32>,
 }
 
 /// Copies the program scene `program` (ADR-0030) and the scenes it nests out of
 /// `graph`, and schedules them, asking `frame` for the frame of each source an item it
-/// reaches places and when that frame is next replaced. Returns the shot and the
-/// earliest such time, when it should be planned again.
+/// reaches places and when that frame is next replaced.
+///
+/// With a `running` transition (ADR-0029) toward `program` that has not ended at `now`,
+/// the shot draws the transition instead: its tracks, planned from what it starts from
+/// and the program scene as the collection holds them now, and the nested scenes they
+/// show.
 pub(crate) fn plan_with(
     graph: &Graph,
     program: Option<&SceneId>,
+    running: Option<(&Running, MediaTime)>,
     frame: &mut FrameOf<'_>,
-) -> (Shot, Option<MediaTime>) {
+) -> Planning {
     let state = graph.state();
     let program = program.cloned();
     let mut shot = Shot {
@@ -314,7 +360,36 @@ pub(crate) fn plan_with(
         frame,
         wake: None,
     };
-    if let Some(id) = &program {
+    let mut finished = running.is_some();
+    let mut end_ms = None;
+    if let Some((running, now)) =
+        running.filter(|(running, _)| Some(&running.to) == program.as_ref())
+    {
+        let planned = planner.transition(running, &mut shot);
+        let end = end_time(running.start, planned.end_ms);
+        if end.is_some_and(|end| now < end) {
+            finished = false;
+            end_ms = Some(planned.end_ms);
+            planner.wake = earliest(planner.wake, end);
+            shot.transition = Some(Transitioning {
+                start: running.start,
+                tracks: planned
+                    .tracks
+                    .into_iter()
+                    .map(|(visual, track)| (key(&visual.image), track))
+                    .collect(),
+            });
+            shot.passes = schedule_tracks(&shot);
+        } else {
+            // Ended: plan the program scene alone, without the transition's leftovers.
+            shot.scenes.clear();
+            shot.frames.clear();
+            planner.wake = None;
+        }
+    }
+    if shot.transition.is_none()
+        && let Some(id) = &program
+    {
         let mut path = BTreeSet::new();
         planner.collect(id, &mut shot, &mut path);
         shot.passes = schedule(&shot, id);
@@ -328,8 +403,87 @@ pub(crate) fn plan_with(
         .passes
         .iter()
         .flat_map(|pass| &pass.layers)
-        .any(|layer| layer.image == GpuKey::Capture);
-    (shot, planner.wake)
+        .map(|layer| &layer.image)
+        .chain(
+            shot.transition
+                .iter()
+                .flat_map(|t| t.tracks.iter().map(|(key, _)| key)),
+        )
+        .any(|image| *image == GpuKey::Capture);
+    Planning {
+        shot,
+        wake: planner.wake,
+        finished,
+        end_ms,
+    }
+}
+
+/// What is on screen at `now` while `running` runs toward `program`, as the starting
+/// point of a switch that retargets it (ADR-0029 §7): the items its tracks still draw
+/// then, sampled with the function the render thread draws them with.
+pub(crate) fn on_screen(
+    graph: &Graph,
+    running: &Running,
+    now: MediaTime,
+    frame: &mut FrameOf<'_>,
+) -> Vec<Visual> {
+    let state = graph.state();
+    let mut shot = Shot {
+        canvas: state.canvas(),
+        ..Shot::default()
+    };
+    let mut planner = Planner {
+        state,
+        frame,
+        wake: None,
+    };
+    let planned = planner.transition(running, &mut shot);
+    planned.on_screen(running.elapsed_ms(now), canvas_size(state.canvas()))
+}
+
+fn canvas_size(canvas: Canvas) -> [f32; 2] {
+    [canvas.width as f32, canvas.height as f32]
+}
+
+/// When a transition that started at `start` and lasts `end_ms` ends, on the same clock.
+fn end_time(start: MediaTime, end_ms: f32) -> Option<MediaTime> {
+    let ms = MediaTime::new(
+        end_ms.ceil() as i64,
+        jstream_media::Timebase::new(1, 1000).ok()?,
+    );
+    let ms = ms.rescale(start.timebase(), Rounding::Up).ok()?;
+    start.checked_add(ms).ok()
+}
+
+fn earliest(wake: Option<MediaTime>, at: Option<MediaTime>) -> Option<MediaTime> {
+    match (wake, at) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
+/// The cached image a visual shows: a frame's upload, the capture's, or a nested
+/// scene's layer one level below the program.
+fn key(image: &SourceRef) -> GpuKey {
+    match image {
+        SourceRef::Frame(id) => GpuKey::Frame(id.clone()),
+        SourceRef::Capture => GpuKey::Capture,
+        SourceRef::Scene(id) => GpuKey::Layer(id.clone(), 1),
+    }
+}
+
+/// The passes a transition shot draws before its tracks: every nested scene a track
+/// shows, at depth 1, and the scenes they nest.
+fn schedule_tracks(shot: &Shot) -> Vec<Pass> {
+    let mut passes = Vec::new();
+    let mut done = BTreeSet::new();
+    let mut path = BTreeSet::new();
+    for (key, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
+        if let GpuKey::Layer(scene, depth) = key {
+            visit(shot, scene, *depth, &mut path, &mut done, &mut passes);
+        }
+    }
+    passes
 }
 
 /// What [`plan_with`] asks for each source it reaches: its frame now, and when that
@@ -344,6 +498,118 @@ struct Planner<'a, 'f> {
 }
 
 impl Planner<'_, '_> {
+    /// Plans `running`: what it starts from, paired with the program scene's items. The
+    /// frames and nested scenes either side shows go into `out`.
+    fn transition(&mut self, running: &Running, out: &mut Shot) -> Planned {
+        let flatten = running.run.pairs;
+        let from = match &running.from {
+            From::Scene(scene) => self.visuals(scene, flatten, out),
+            From::OnScreen(items) => items
+                .iter()
+                .filter(|visual| self.shows(&visual.image, out))
+                .cloned()
+                .collect(),
+        };
+        let to = self.visuals(&running.to, flatten, out);
+        transition::plan(&from, &to, &running.run)
+    }
+
+    /// Whether `image` can be drawn now, putting its frame or scene in `out`.
+    fn shows(&mut self, image: &SourceRef, out: &mut Shot) -> bool {
+        match image {
+            SourceRef::Frame(id) => self.frame_of(id, out).is_some(),
+            SourceRef::Capture => true,
+            SourceRef::Scene(id) => {
+                self.collect(id, out, &mut BTreeSet::new());
+                true
+            }
+        }
+    }
+
+    /// The visible items of scene `id`, bottom first, as transition endpoints, each at
+    /// its own opacity. With `flatten`, a nested scene placed over the whole canvas,
+    /// uncropped and opaque, is replaced by its own items (ADR-0029 §4): it then draws
+    /// exactly what its layer would, so its items can pair one by one. Nesting stops at
+    /// [`MAX_NESTING`] levels.
+    fn visuals(&mut self, id: &SceneId, flatten: bool, out: &mut Shot) -> Vec<Visual> {
+        let mut visuals = Vec::new();
+        let mut path = BTreeSet::new();
+        self.visuals_into(id, flatten, 0, &mut path, out, &mut visuals);
+        visuals
+    }
+
+    fn visuals_into(
+        &mut self,
+        id: &SceneId,
+        flatten: bool,
+        depth: usize,
+        path: &mut BTreeSet<SceneId>,
+        out: &mut Shot,
+        visuals: &mut Vec<Visual>,
+    ) {
+        let state = self.state;
+        let Some(scene) = state.scene(id) else {
+            return;
+        };
+        if !path.insert(id.clone()) {
+            return;
+        }
+        let canvas = state.canvas();
+        for item in scene.items() {
+            if !item.visible() {
+                continue;
+            }
+            let Some(source) = state.source(item.source_id()) else {
+                continue;
+            };
+            let (image, size) = match source.kind() {
+                SourceKind::Scene { scene_id } => {
+                    if flatten
+                        && depth + 1 < MAX_NESTING
+                        && covers(item, canvas)
+                        && item.opacity().get() >= OPAQUE
+                    {
+                        self.visuals_into(scene_id, flatten, depth + 1, path, out, visuals);
+                        continue;
+                    }
+                    self.collect(scene_id, out, &mut BTreeSet::new());
+                    (
+                        SourceRef::Scene(scene_id.clone()),
+                        Some([canvas.width, canvas.height]),
+                    )
+                }
+                kind => match self.frame_of(item.source_id(), out) {
+                    Some(()) => {
+                        let size = out
+                            .frames
+                            .get(item.source_id())
+                            .map(|frame| [frame.width, frame.height]);
+                        (SourceRef::Frame(item.source_id().clone()), size)
+                    }
+                    None if matches!(kind, SourceKind::Builtin { kind } if kind == DISPLAY) => {
+                        (SourceRef::Capture, None)
+                    }
+                    None => continue,
+                },
+            };
+            let Some(geometry) = endpoint_geometry(item, size, canvas) else {
+                continue;
+            };
+            visuals.push(Visual {
+                image,
+                source_id: item.source_id().clone(),
+                at: Endpoint {
+                    geometry,
+                    crop: crop(item.crop()),
+                    opacity: item.opacity().get(),
+                },
+                size,
+                settings: *item.transition(),
+            });
+        }
+        path.remove(id);
+    }
+
     fn collect(&mut self, id: &SceneId, out: &mut Shot, path: &mut BTreeSet<SceneId>) {
         if out.scenes.contains_key(id) || !path.insert(id.clone()) {
             return;
@@ -372,6 +638,7 @@ impl Planner<'_, '_> {
                     },
                 };
                 placed.push(Placed {
+                    item: item.id().clone(),
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
@@ -424,6 +691,8 @@ struct Pass {
 /// One item of a [`Pass`].
 #[derive(Debug, PartialEq)]
 struct Layer {
+    /// The item it draws, whose live values override `placement` and `crop`.
+    item: ItemId,
     /// The cached image the item shows: a frame's upload, the capture's, or the layer an
     /// earlier pass drew.
     image: GpuKey,
@@ -481,6 +750,7 @@ fn visit(
             }
         };
         layers.push(Layer {
+            item: placed.item.clone(),
             image,
             placement: placed.placement,
             crop: placed.crop,
@@ -495,6 +765,50 @@ fn visit(
         layers,
     });
     key
+}
+
+/// Whether `item`, which places a scene, shows it exactly as the scene draws on the
+/// canvas: over the whole canvas, unrotated and uncropped.
+fn covers(item: &GraphItem, canvas: Canvas) -> bool {
+    if *item.crop() != ProtocolCrop::NONE {
+        return false;
+    }
+    match item.placement() {
+        GraphPlacement::Geometry(geometry) => {
+            ItemGeometry::covering_canvas(canvas.width, canvas.height).is_ok_and(|whole| {
+                geometry.center == whole.center
+                    && geometry.size == whole.size
+                    && geometry.rotation_deg.get() == 0.0
+                    && geometry.is_neutral_3d()
+            })
+        }
+        GraphPlacement::Legacy(transform) => {
+            *transform == jstream_protocol::ItemTransform::IDENTITY
+        }
+        _ => false,
+    }
+}
+
+/// An item's box for a transition: its geometry, or the box its legacy transform draws
+/// for an image of `size` (the canvas when unknown, as for the captured display). `None`
+/// when the crop or the scale leaves nothing. A legacy negative scale's reflection is
+/// not kept while the item moves.
+fn endpoint_geometry(
+    item: &GraphItem,
+    size: Option<[u32; 2]>,
+    canvas: Canvas,
+) -> Option<ItemGeometry> {
+    match item.placement() {
+        GraphPlacement::Geometry(geometry) => Some(*geometry),
+        GraphPlacement::Legacy(transform) => {
+            let [width, height] = size.unwrap_or([canvas.width, canvas.height]);
+            ItemGeometry::from_legacy(*transform, *item.crop(), width, height)
+                .ok()
+                .flatten()
+                .map(|boxed| boxed.geometry)
+        }
+        _ => None,
+    }
 }
 
 /// The compositor's placement for an item's stored one, in the same form (ADR-0022): a
@@ -512,6 +826,73 @@ fn placement(placement: &GraphPlacement) -> Placement {
             scale: [0.0, 0.0],
             ..LegacyTransform::IDENTITY
         }),
+    }
+}
+
+/// The live values (ADR-0032) the engine publishes on the render parameter channel:
+/// each item's placement or crop as a gesture holds it now, overriding the one in the
+/// [`Shot`] until the gesture ends. The render thread and the snapshot thread apply it as
+/// they draw, so a live value needs no new snapshot. Built on the control side; the
+/// render thread only looks items up in it, which allocates nothing.
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct LiveParams {
+    items: BTreeMap<ItemId, LiveItem>,
+}
+
+/// One item's live values: either may be absent, leaving the shot's.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct LiveItem {
+    placement: Option<Placement>,
+    crop: Option<Crop>,
+}
+
+impl LiveParams {
+    /// The overrides `values` set, later ones winning. Each is an `item.set_transform`,
+    /// `item.set_geometry` or `item.set_crop`; any other edit sets nothing.
+    pub(crate) fn from_values<'a>(values: impl IntoIterator<Item = &'a Edit>) -> Self {
+        let mut items: BTreeMap<ItemId, LiveItem> = BTreeMap::new();
+        for value in values {
+            match value {
+                Edit::ItemSetTransform {
+                    item_id, transform, ..
+                } => {
+                    items.entry(item_id.clone()).or_default().placement =
+                        Some(placement(&GraphPlacement::Legacy(*transform)));
+                }
+                Edit::ItemSetGeometry {
+                    item_id, geometry, ..
+                } => {
+                    items.entry(item_id.clone()).or_default().placement =
+                        Some(placement(&GraphPlacement::Geometry(*geometry)));
+                }
+                Edit::ItemSetCrop {
+                    item_id, crop: c, ..
+                } => {
+                    items.entry(item_id.clone()).or_default().crop = Some(crop(c));
+                }
+                _ => {}
+            }
+        }
+        Self { items }
+    }
+
+    /// The live placement and crop of `item_id`, for tests.
+    #[cfg(test)]
+    pub(crate) fn item(&self, item_id: &ItemId) -> Option<(Option<Placement>, Option<Crop>)> {
+        self.items
+            .get(item_id)
+            .map(|live| (live.placement, live.crop))
+    }
+
+    /// `layer`'s placement and crop, with this item's live values applied.
+    fn apply(&self, layer: &Layer) -> (Placement, Crop) {
+        match self.items.get(&layer.item) {
+            Some(live) => (
+                live.placement.unwrap_or(layer.placement),
+                live.crop.unwrap_or(layer.crop),
+            ),
+            None => (layer.placement, layer.crop),
+        }
     }
 }
 
@@ -566,7 +947,10 @@ impl OpenBackoff {
 /// and where to send the answer.
 struct Job {
     snapshot: Arc<RenderSnapshot>,
+    live: Arc<LiveParams>,
     rev: Rev,
+    /// The moment to draw, on the media clock: where a running transition is.
+    at: MediaTime,
     reply: ReplyTx,
 }
 
@@ -578,9 +962,15 @@ pub(crate) struct SnapshotWorker {
 }
 
 impl SnapshotWorker {
-    /// Queues `snapshot`, answering with `rev`. The returned future resolves when the
-    /// thread has drawn it.
-    pub(crate) fn request(&self, snapshot: Arc<RenderSnapshot>, rev: Rev) -> SnapshotReply {
+    /// Queues `snapshot` with the live values `live` applied, as it is at `at`, answering
+    /// with `rev`. The returned future resolves when the thread has drawn it.
+    pub(crate) fn request(
+        &self,
+        snapshot: Arc<RenderSnapshot>,
+        live: Arc<LiveParams>,
+        rev: Rev,
+        at: MediaTime,
+    ) -> SnapshotReply {
         let (reply, answer) = reply_pair();
         let mut queue = lock(&self.queue);
         if queue.is_none() {
@@ -601,7 +991,9 @@ impl SnapshotWorker {
         if let Some((tx, _)) = queue.as_ref()
             && let Err(mpsc::SendError(job)) = tx.send(Job {
                 snapshot,
+                live,
                 rev,
+                at,
                 reply,
             })
         {
@@ -639,13 +1031,15 @@ fn worker(jobs: Receiver<Job>) {
     let mut backoff = OpenBackoff::default();
     for Job {
         snapshot,
+        live,
         rev,
+        at,
         reply,
     } in jobs
     {
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
             let (compositor, cache) = open(&mut gpu, &mut backoff)?;
-            draw(snapshot.shot(), rev, compositor, cache)
+            draw(snapshot.shot(), &live, rev, at, compositor, cache)
         }));
         let result = result.unwrap_or_else(|_| {
             gpu = None;
@@ -763,11 +1157,13 @@ fn reply_pair() -> (ReplyTx, SnapshotReply) {
     )
 }
 
-/// Renders `shot` at the canvas size and encodes the capped PNG. The images `cache`
-/// no longer needs are dropped here, on the snapshot thread.
+/// Renders `shot` with `live` applied at the canvas size and encodes the capped PNG.
+/// The images `cache` no longer needs are dropped here, on the snapshot thread.
 fn draw(
     shot: &Shot,
+    live: &LiveParams,
     rev: Rev,
+    at: MediaTime,
     compositor: &mut Compositor,
     cache: &mut ResourceCache<GpuKey>,
 ) -> Result<QueryResult, ProtocolError> {
@@ -775,7 +1171,8 @@ fn draw(
     let output = compose(
         compositor,
         cache,
-        shot,
+        (shot, at),
+        live,
         None,
         shot.canvas().map_err(from_render)?,
         true,
@@ -829,8 +1226,10 @@ pub(crate) enum CaptureImage<'a> {
     Gpu(&'a GpuFrame),
 }
 
-/// Draws the program mix of `shot` at `output`, over opaque black, between the caller's
-/// [`ResourceCache::begin_frame`] and [`ResourceCache::end_frame`].
+/// Draws the program mix of `shot` as it is at `at` (a running transition samples it)
+/// at `output`, over opaque black, between the caller's
+/// [`ResourceCache::begin_frame`] and [`ResourceCache::end_frame`]. An item with a live
+/// value in `live` is drawn with it instead of its placement or crop in `shot`.
 ///
 /// Every image comes from `cache`: a source frame is uploaded only when its version
 /// changed, and each nested scene is composited into the layer it had last frame
@@ -845,7 +1244,8 @@ pub(crate) enum CaptureImage<'a> {
 pub(crate) fn compose(
     compositor: &mut Compositor,
     cache: &mut ResourceCache<GpuKey>,
-    shot: &Shot,
+    (shot, at): (&Shot, MediaTime),
+    live: &LiveParams,
     capture: Option<&CaptureFrame<'_>>,
     output: FrameSize,
     readback: bool,
@@ -880,7 +1280,14 @@ pub(crate) fn compose(
         }
         _ => false,
     };
-    let Some((program, nested)) = shot.passes.split_last() else {
+    let (program, nested) = match &shot.transition {
+        Some(_) => (None, shot.passes.as_slice()),
+        None => match shot.passes.split_last() {
+            Some((program, nested)) => (Some(program), nested),
+            None => (None, &[][..]),
+        },
+    };
+    if program.is_none() && shot.transition.is_none() {
         let image = cache.get(&GpuKey::Capture).filter(|_| capture);
         // Scaled to fill the output, which follows the canvas, not the display.
         let items: Vec<Item<'_>> = image
@@ -892,7 +1299,7 @@ pub(crate) fn compose(
             })
             .collect();
         return compositor.render(&scene(output, Color::BLACK, &items), readback);
-    };
+    }
     let direct = output == canvas;
     for pass in nested {
         cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
@@ -914,13 +1321,17 @@ pub(crate) fn compose(
     };
     let mut items: Vec<Item<'_>> = Vec::new();
     for pass in nested {
-        fill_items(&mut items, cache, pass);
+        fill_items(&mut items, cache, pass, live);
         compositor.render_into(
             &scene(canvas, Color::TRANSPARENT, &items),
             image(&pass.key)?,
         )?;
     }
-    fill_items(&mut items, cache, program);
+    match (program, &shot.transition) {
+        (_, Some(transition)) => fill_tracks(&mut items, cache, transition, canvas, at),
+        (Some(program), None) => fill_items(&mut items, cache, program, live),
+        (None, None) => items.clear(),
+    }
     if direct {
         return compositor.render(&scene(output, Color::BLACK, &items), readback);
     }
@@ -932,16 +1343,46 @@ pub(crate) fn compose(
     compositor.render(&scene(output, Color::BLACK, &placed), readback)
 }
 
-/// Replaces `items` with the layers of `pass`. A layer whose image is not cached (a
-/// failed or skipped upload) draws nothing.
-fn fill_items<'a>(items: &mut Vec<Item<'a>>, cache: &'a ResourceCache<GpuKey>, pass: &Pass) {
+/// Replaces `items` with the layers of `pass`, with the live values in `live` applied. A
+/// layer whose image is not cached (a failed or skipped upload) draws nothing.
+fn fill_items<'a>(
+    items: &mut Vec<Item<'a>>,
+    cache: &'a ResourceCache<GpuKey>,
+    pass: &Pass,
+    live: &LiveParams,
+) {
     items.clear();
     items.extend(pass.layers.iter().filter_map(|layer| {
+        let (placement, crop) = live.apply(layer);
         Some(Item {
             image: cache.get(&layer.image)?,
-            placement: layer.placement,
-            crop: layer.crop,
+            placement,
+            crop,
             opacity: layer.opacity,
+            visible: true,
+        })
+    }));
+}
+
+/// Replaces `items` with `transition`'s tracks sampled at `at`, in drawing order. A
+/// track that draws nothing then, or whose image is not cached, is left out.
+fn fill_tracks<'a>(
+    items: &mut Vec<Item<'a>>,
+    cache: &'a ResourceCache<GpuKey>,
+    transition: &Transitioning,
+    canvas: FrameSize,
+    at: MediaTime,
+) {
+    let elapsed = transition::elapsed_ms(transition.start, at);
+    let size = [canvas.width() as f32, canvas.height() as f32];
+    items.clear();
+    items.extend(transition.tracks.iter().filter_map(|(key, track)| {
+        let sampled = track.sample(elapsed, size)?;
+        Some(Item {
+            image: cache.get(key)?,
+            placement: Placement::Geometry(sampled.geometry),
+            crop: sampled.crop,
+            opacity: sampled.opacity,
             visible: true,
         })
     }));
@@ -1128,12 +1569,14 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        CaptureFrame, CaptureImage, FIRST_RETRY, Frame, GpuKey, MAX_NESTING, MAX_RETRY,
+        CaptureFrame, CaptureImage, FIRST_RETRY, Frame, GpuKey, LiveParams, MAX_NESTING, MAX_RETRY,
         OpenBackoff, Placed, Shot, SourceFrameError, SourceRef, base64, compose, decode_base64,
         decode_png, draw, encode_png, fit, is_no_adapter, schedule,
     };
-    use jstream_media::FrameSize;
-    use jstream_protocol::{Canvas, ProtocolError, QueryResult, Rev, SceneId, SourceId};
+    use jstream_media::{FrameSize, MediaTime, Timebase};
+    use jstream_protocol::{
+        Canvas, Edit, ItemId, ProtocolError, QueryResult, Rev, SceneId, SourceId,
+    };
     use jstream_render::{
         Compositor, Crop, LegacyTransform, OpenOptions, Placement, ResourceCache,
     };
@@ -1158,6 +1601,7 @@ pub(crate) mod tests {
 
     fn placed(source: SourceRef, placement: Placement) -> Placed {
         Placed {
+            item: ItemId::new("itm"),
             source,
             placement,
             crop: Crop::NONE,
@@ -1330,7 +1774,15 @@ pub(crate) mod tests {
             }
         };
         let mut cache = ResourceCache::new();
-        let result = draw(shot, Rev(1), &mut compositor, &mut cache).expect("draw");
+        let result = draw(
+            shot,
+            &LiveParams::default(),
+            Rev(1),
+            zero(),
+            &mut compositor,
+            &mut cache,
+        )
+        .expect("draw");
         let QueryResult::VideoSnapshot { png, .. } = result else {
             panic!("not a snapshot: {result:?}");
         };
@@ -1465,6 +1917,10 @@ pub(crate) mod tests {
         }
     }
 
+    fn zero() -> MediaTime {
+        MediaTime::zero(Timebase::new(1, 1000).expect("valid"))
+    }
+
     /// One frame of `shot` at `size`, read back, as the render thread draws it.
     fn frame_at(
         compositor: &mut Compositor,
@@ -1473,10 +1929,75 @@ pub(crate) mod tests {
         capture: Option<&CaptureFrame<'_>>,
         size: FrameSize,
     ) -> jstream_render::Snapshot {
+        live_frame_at(
+            compositor,
+            cache,
+            shot,
+            &LiveParams::default(),
+            capture,
+            size,
+        )
+    }
+
+    /// [`frame_at`] with the live values `live` applied.
+    fn live_frame_at(
+        compositor: &mut Compositor,
+        cache: &mut ResourceCache<GpuKey>,
+        shot: &Shot,
+        live: &LiveParams,
+        capture: Option<&CaptureFrame<'_>>,
+        size: FrameSize,
+    ) -> jstream_render::Snapshot {
         cache.begin_frame();
-        let output = compose(compositor, cache, shot, capture, size, true).expect("compose");
+        let output =
+            compose(compositor, cache, (shot, zero()), live, capture, size, true).expect("compose");
         drop(cache.end_frame(compositor));
         output.pixels().expect("invariant: read back").clone()
+    }
+
+    /// A live value (ADR-0032) moves or crops its item where it is drawn, in every pass
+    /// that places it, without a new shot; other items keep their placement.
+    #[test]
+    fn live_values_override_the_shot_as_it_is_drawn() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let size = FrameSize::new(32, 18).expect("invariant: non-zero");
+        let top = Placed {
+            item: ItemId::new("top"),
+            ..fill("green")
+        };
+        let mix = shot(vec![("program", vec![fill("red"), top])]);
+        let out = frame_at(&mut compositor, &mut cache, &mix, None, size);
+        assert_eq!(out.pixel(24, 9), Some(GREEN), "the shot's placement");
+
+        // The same scale over half the width: the red item below shows on the right.
+        let half = Edit::ItemSetTransform {
+            item_id: ItemId::new("top"),
+            scene_id: None,
+            transform: jstream_protocol::ItemTransform {
+                scale: jstream_protocol::Vec2::new(60.0, 120.0).expect("finite"),
+                ..jstream_protocol::ItemTransform::IDENTITY
+            },
+        };
+        let live = LiveParams::from_values([&half]);
+        let out = live_frame_at(&mut compositor, &mut cache, &mix, &live, None, size);
+        assert_eq!(out.pixel(8, 9), Some(GREEN), "still on the left");
+        assert_eq!(out.pixel(24, 9), Some(RED), "moved by its live value");
+
+        // A live crop leaves the placement as the shot has it.
+        let cropped = Edit::ItemSetCrop {
+            item_id: ItemId::new("top"),
+            scene_id: None,
+            crop: jstream_protocol::Crop {
+                right: 8,
+                ..jstream_protocol::Crop::NONE
+            },
+        };
+        let live = LiveParams::from_values([&cropped]);
+        let out = live_frame_at(&mut compositor, &mut cache, &mix, &live, None, size);
+        assert_eq!(out.pixel(8, 9), Some(GREEN));
+        assert_eq!(out.pixel(24, 9), Some(RED), "cropped away on the right");
     }
 
     /// The render thread's output is the encoder size, not the canvas: with no program

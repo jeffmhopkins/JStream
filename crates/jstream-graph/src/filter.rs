@@ -171,7 +171,7 @@ fn add(
         ));
     }
     let descriptor = filter_kind(kinds, kind, chain, at)?;
-    let settings = complete_settings(state, kinds, descriptor, &source_id, settings, at)?;
+    let settings = complete_settings(state, kinds, descriptor, Some(&source_id), settings, at)?;
     let position = match index {
         None => len,
         Some(index) => check_index(index, len + 1, at, "positions in the chain")?,
@@ -284,7 +284,7 @@ fn set_settings(
         let value = if value.is_null() && !param.is_reference() {
             &param.default
         } else {
-            check_value(state, kinds, source_id, param, value, at, &field)?;
+            check_value(state, kinds, Some(source_id), param, value, at, &field)?;
             value
         };
         new.push((id.to_owned(), value.clone()));

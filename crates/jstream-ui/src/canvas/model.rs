@@ -104,7 +104,8 @@ async fn query(control: &dyn Control, query: Query) -> Result<QueryResult, Canva
 /// Reads the scene on program (or, if `studio.get` names none, the first scene that
 /// isn't a group) with its items.
 pub async fn load(control: &dyn Control) -> Result<Layout, CanvasError> {
-    let QueryResult::StudioGet { program_scene } = query(control, Query::StudioGet).await? else {
+    let QueryResult::StudioGet { program_scene, .. } = query(control, Query::StudioGet).await?
+    else {
         return Err(CanvasError::UnexpectedAnswer { call: "studio.get" });
     };
     let QueryResult::StateGet {
@@ -178,7 +179,7 @@ pub async fn commit(
         .await?
         .result
     {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         _ => Err(CanvasError::UnexpectedAnswer {
             call: "item.set_geometry",
         }),
@@ -319,11 +320,13 @@ mod tests {
             edits,
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         })))
         .expect("setup batch");
         now(control.call(Call::Action {
             action: Action::SceneSwitch {
                 scene_id: "s2".into(),
+                preset_id: None,
             },
         }))
         .expect("switch");
