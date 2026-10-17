@@ -2823,7 +2823,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "EncoderProfile": {
-      "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,\nand AAC at 160 kbit/s.",
+      "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
       "properties": {
         "audio": {
           "$ref": "#/$defs/AudioEncoding",
@@ -3083,7 +3083,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The scene now on preview. Omitted when the collection has no scene left, and\nby a server older than 0.27."
+              "description": "The scene now on preview. Omitted when the collection has no scene left, and\nby a server older than 0.30."
             },
             "program_scene": {
               "anyOf": [
@@ -3515,7 +3515,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "oneOf": [
         {
           "const": "prefer",
-          "description": "Hardware if there is one, else software.",
+          "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
           "type": "string"
         },
         {
@@ -3525,7 +3525,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "avoid",
-          "description": "Software only.",
+          "description": "Software only. What an omitted `hardware` field means.",
           "type": "string"
         }
       ]
@@ -5066,7 +5066,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   }
                 ]
               },
-              "description": "The transition presets and which one is the default (ADR-0029). Missing\n(from a server older than 0.27) parses as the one `cut` preset every\ncollection starts with."
+              "description": "The transition presets and which one is the default (ADR-0029). Missing\n(from a server older than 0.30) parses as the one `cut` preset every\ncollection starts with."
             },
             "type": {
               "const": "state.get",
@@ -5199,7 +5199,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The scene on preview, which `studio.set_preview` sets. Omitted only while the\ncollection has no scene, and by a server older than 0.27."
+              "description": "The scene on preview, which `studio.set_preview` sets. Omitted only while the\ncollection has no scene, and by a server older than 0.30."
             },
             "program_scene": {
               "anyOf": [
@@ -6579,5 +6579,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.27"
+  "title": "JStream protocol 0.30"
 }

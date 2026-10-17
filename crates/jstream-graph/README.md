@@ -113,8 +113,8 @@ the batch **touched**.
   set the default preset.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a source kind the graph describes (a
-  filter or transition kind is `invalid_argument` on `kind.kind`, naming its
-  category), checks each
+  filter or transition kind, such as a scanned CLAP plugin's, is `invalid_argument` on
+  `kind.kind`, naming its category), checks each
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
   with defaults filled in. `source.set_settings` checks and applies a patch (`null`
   resets a parameter to its default) and its inverse is the patch of the old values.

@@ -20,9 +20,9 @@ use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, GestureId,
-    Hello, IdempotencyKey, ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
-    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole, SourceId, SourceKind,
-    TransitionPresetId, TransitionStarted, parity,
+    Hello, IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION,
+    ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole,
+    SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -389,6 +389,126 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
             })
         ),
         Ok(Rev(2))
+    );
+}
+
+/// A CLAP scan adds each plugin as an audio-filter kind, which `kind.list` and
+/// `kind.describe` report and which can't be created as a source (ADR-0035).
+#[test]
+fn scanned_clap_plugins_are_audio_filter_kinds() {
+    use jstream_platform::plugin_host::fake::{FakePluginHosts, fake_param};
+    use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
+    use jstream_plugin_proto::control::PluginDesc;
+    use std::path::{Path, PathBuf};
+
+    struct OneDir(PathBuf, FakePluginHosts);
+    impl PluginHosts for OneDir {
+        fn search_paths(&self) -> Vec<PathBuf> {
+            vec![self.0.clone()]
+        }
+        fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
+            self.1.scan(file)
+        }
+        fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
+            self.1.start(request)
+        }
+    }
+
+    let dir = std::env::temp_dir().join(format!("jstream-engine-clap-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("gain.clap");
+    std::fs::write(&file, b"").unwrap();
+    let fake = FakePluginHosts::new();
+    fake.add_file(
+        &file,
+        vec![PluginDesc {
+            id: "org.example.gain".into(),
+            name: "Gain".into(),
+            vendor: String::new(),
+            version: String::new(),
+            description: String::new(),
+            params: vec![fake_param()],
+        }],
+    );
+    let engine = Engine::new();
+    let scan = engine.scan_clap_plugins(&OneDir(dir.clone(), fake));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(scan.kinds.len(), 1);
+    assert_eq!(scan.kinds[0].file, file);
+
+    let control = connected(&engine);
+    let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    let clap = kinds
+        .iter()
+        .find(|k| k.kind_id == "clap/org.example.gain")
+        .expect("the CLAP kind is listed");
+    assert_eq!(clap.category, KindCategory::AudioFilter);
+    assert!(kinds.iter().any(|k| k.kind_id == "color"), "built-ins stay");
+    let Ok(QueryResult::KindDescribe { kind, .. }) = query(
+        &control,
+        Query::KindDescribe {
+            kind_id: "clap/org.example.gain".into(),
+        },
+    ) else {
+        panic!("kind.describe");
+    };
+    assert_eq!(kind.name, "Gain");
+    assert!(kind.param("1").is_some());
+    let error = batch(
+        &control,
+        Batch::single(Edit::SourceCreate {
+            source_id: SourceId::new("x"),
+            name: "x".into(),
+            kind: SourceKind::Builtin {
+                kind: "clap/org.example.gain".into(),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        }),
+    )
+    .expect_err("not a source kind");
+    assert!(
+        matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.kind.kind"),
+        "{error:?}"
+    );
+    // Nothing runs a CLAP filter yet, and a collection holding one wouldn't load before
+    // the next scan, so `filter.add` refuses the kind.
+    let error = batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("mic"),
+                    name: "mic".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "tone".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::FilterAdd {
+                    owner: jstream_protocol::FilterOwner::Source {
+                        source_id: SourceId::new("mic"),
+                    },
+                    chain: jstream_protocol::FilterChain::Audio,
+                    filter_id: jstream_protocol::FilterId::new("plugin"),
+                    kind: "clap/org.example.gain".into(),
+                    settings: Default::default(),
+                    enabled: None,
+                    index: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect_err("a CLAP filter can't be added yet");
+    assert!(
+        matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.1.kind"),
+        "{error:?}"
     );
 }
 
@@ -1170,7 +1290,7 @@ fn output_start_without_a_publish_target_fails() {
 }
 
 /// `output.start` runs capture, one composite, both encodes and the FLV publish
-/// against the platform fakes. A missing software adapter skips the test, and fails
+/// against the platform fakes. A missing adapter (software in CI) skips the test, and fails
 /// it when `CI` is set.
 #[test]
 fn output_start_publishes_fake_audio_and_video() {
@@ -1864,7 +1984,7 @@ fn the_render_snapshot_follows_scene_switch() {
 /// failure to open still fails the test, just later.
 const GPU_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
-/// One software-adapter test at a time. Parallel compositors starve the pipeline
+/// One GPU test at a time, on whatever adapter opens (software in CI). Parallel compositors starve the pipeline
 /// test's media wait and crash WARP. The lock schedules tests; it is not engine state.
 pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
     static SLOT: Mutex<()> = Mutex::new(());

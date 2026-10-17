@@ -102,12 +102,13 @@ pub(crate) type PreviewDraw =
 /// Opens the hub's [`PreviewDraw`], on the hub thread.
 pub(crate) type OpenPreviewDraw = Arc<dyn Fn() -> Result<PreviewDraw, String> + Send + Sync>;
 
-/// The hub's draw: its own wgpu compositor on the headless adapter, drawing the program
-/// mix with [`snapshot::compose`] and no capture.
+/// The hub's draw: its own wgpu compositor, hardware adapter first with the software one
+/// as the fallback (`OpenOptions::hardware`), drawing the program mix with
+/// [`snapshot::compose`] and no capture.
 pub(crate) fn gpu_draw() -> OpenPreviewDraw {
     Arc::new(|| {
         let mut compositor =
-            Compositor::open(OpenOptions::headless()).map_err(|err| err.to_string())?;
+            Compositor::open(OpenOptions::hardware()).map_err(|err| err.to_string())?;
         tracing::info!(
             adapter = %compositor.adapter_description(),
             "preview compositor opened"

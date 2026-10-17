@@ -83,7 +83,8 @@ const FRAME_NUM: u32 = 1;
 const FRAME_DEN: u32 = 30;
 const SAMPLE_RATE: u32 = 48_000;
 /// How long `output.start` waits for the render thread to open the compositor, on the
-/// platform's GPU context or, without one, on the software adapter, unless the engine
+/// platform's GPU context or, without one, hardware first with the software adapter as
+/// the fallback, unless the engine
 /// was given another bound. It only keeps a stuck adapter from blocking the call
 /// forever; a slower open is not a pipeline fault.
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -120,7 +121,7 @@ pub(crate) type DrawFn = Box<
 
 /// Opens the render thread's [`DrawFn`], on that thread, on the platform's GPU context
 /// when the pipeline has one. The engine's opens the wgpu compositor on that context,
-/// or on the software adapter without one ([`gpu_draw`]). Tests inject [`cpu_draw`]
+/// or without one on a hardware adapter first ([`gpu_draw`]). Tests inject [`cpu_draw`]
 /// (or a variant) so the pipeline runs without an adapter.
 pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, String> + Send + Sync>;
 
@@ -812,7 +813,9 @@ pub(crate) fn parts_from(
 }
 
 /// The wgpu compositor, reading every frame back to the CPU: on the platform's GPU
-/// context when there is one, else on the software adapter. Its [`ResourceCache`] keeps
+/// context when there is one, else on a hardware adapter, or the software one when there
+/// is none (`OpenOptions::hardware`; WARP missed the 1/30 s budget at 720p, about 10 fps,
+/// #433). Its [`ResourceCache`] keeps
 /// the uploads, the imported capture textures and the nested-scene layers from tick to
 /// tick.
 pub(crate) fn gpu_draw() -> OpenDraw {
@@ -820,7 +823,7 @@ pub(crate) fn gpu_draw() -> OpenDraw {
         let mut compositor = match context {
             Some(context) => Compositor::on_context(context),
             None => {
-                Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?
+                Compositor::open(OpenOptions::hardware()).map_err(|err| render_open_error(&err))?
             }
         };
         tracing::info!(
@@ -1363,9 +1366,9 @@ fn video_config(size: FrameSize, profile: &EncoderProfile) -> Result<VideoEncode
         _ => return Err("the encoder profile's rate control is not one this engine knows".into()),
     };
     let hardware = match video.hardware {
-        ProfileHardware::Prefer => HardwarePreference::Prefer,
+        ProfileHardware::Avoid => HardwarePreference::Avoid,
         ProfileHardware::Require => HardwarePreference::Require,
-        _ => HardwarePreference::Avoid,
+        _ => HardwarePreference::Prefer,
     };
     Ok(VideoEncoderConfig {
         codec: video_codec(profile)?,
@@ -2360,7 +2363,7 @@ mod tests {
         let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.rate_control, RateControl::Cbr { kbps: 2500 });
         assert_eq!(config.keyframe_interval, 60);
-        assert_eq!(config.hardware, HardwarePreference::Avoid);
+        assert_eq!(config.hardware, HardwarePreference::Prefer);
 
         let mut profile = EncoderProfile::DEFAULT;
         profile.video.rate_control = ProfileRate::Vbr {
@@ -2383,6 +2386,9 @@ mod tests {
         profile.video.hardware = ProfileHardware::Prefer;
         let config = video_config(size, &profile).expect("prefer");
         assert_eq!(config.hardware, HardwarePreference::Prefer);
+        profile.video.hardware = ProfileHardware::Avoid;
+        let config = video_config(size, &profile).expect("avoid");
+        assert_eq!(config.hardware, HardwarePreference::Avoid);
         profile.video.rate_control = ProfileRate::Unknown;
         assert!(video_config(size, &profile).is_err());
 

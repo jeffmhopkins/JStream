@@ -141,7 +141,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.27 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.30 because of
   transition presets and studio mode's preview (the `transition.*` edits,
   `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
   `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
@@ -534,12 +534,13 @@ Encoder profiles (0.13) are collection state as well
 `encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
 `EncoderProfile`: H.264 video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
 a `vbr` peak at least the average and at most 200000), a keyframe interval of 1..=10 s
-and a hardware preference (`prefer`, `require` or `avoid`, the default), and AAC audio
+and a hardware preference (`prefer`, `require` or `avoid`, which an omitted field
+means), and AAC audio
 at 32..=320 kbit/s. Anything else, including a value a newer server sent as `unknown`,
 is refused with `invalid_argument` naming the field. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with
 no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe every
-2 s, software, AAC 160 kbit/s). Both apply from the output's next `output.start`.
+2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
 
@@ -591,7 +592,7 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
 
 [ADR-0029](../../docs/adr/0029-transitions.md) and
 [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
-the model (0.27). A transition preset is collection state:
+the model (0.30). A transition preset is collection state:
 `{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
 kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
 `settings` are checked against its descriptor as a source's are (`unmatched`, the
@@ -655,7 +656,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
   parses as empty), and the transition presets with the default (`transitions`;
-  missing from a pre-0.27 server, it parses as the one initial `cut`). A client reads
+  missing from a pre-0.30 server, it parses as the one initial `cut`). A client reads
   it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
@@ -681,7 +682,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview
-  (`preview_scene`, 0.27), each omitted only while the collection has no scene. Runtime
+  (`preview_scene`, 0.30), each omitted only while the collection has no scene. Runtime
   state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
@@ -890,7 +891,7 @@ After `welcome`, the server pushes every event to every client.
   transition lasts in milliseconds (`duration_ms`, 0 for a cut), so a client can show
   progress; no event marks the end. Program and preview are runtime state, so it
   carries no `rev` ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
-  Added in 0.16; `preview_scene` and `transition` in 0.27.
+  Added in 0.16; `preview_scene` and `transition` in 0.30.
 - `live.changed {gesture_id, client_id, values}` carries the newest value of each
   parameter a gesture changed since its last one. The engine coalesces it per gesture
   to at most 30 a second, so a slow client gets fewer, newer values; the values a
@@ -1038,11 +1039,11 @@ after 1.0:
   sends, but if one's bus has since been deleted by another client, the undo fails with
   `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
   answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
-  filter edits. 0.27 adds the `EntityKind` value `transition` in the same way, but also
+  filter edits. 0.30 adds the `EntityKind` value `transition` in the same way, but also
   the `KindCategory` value `transition`, which `kind.list` reports for every transition
-  kind, so a client older than 0.27 can't parse `kind.list` from a 0.27 server. From
-  0.27 `KindCategory` parses an unknown value as `Unknown`, so a later category won't
-  break a 0.27 client. The encoder enums (`VideoCodec`,
+  kind, so a client older than 0.30 can't parse `kind.list` from a 0.30 server. From
+  0.30 `KindCategory` parses an unknown value as `Unknown`, so a later category won't
+  break a 0.30 client. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
@@ -1215,7 +1216,7 @@ described above.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
-   fallbacks from 0.9 and `KindCategory` from 0.27, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
+   fallbacks from 0.9 and `KindCategory` from 0.30, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
    outputs (see Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?
