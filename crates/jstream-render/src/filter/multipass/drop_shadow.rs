@@ -9,7 +9,7 @@ use super::gauss::{self, Edge};
 use super::premultiplied;
 use crate::error::RenderError;
 use crate::filter::params::{Read, Uniforms, color, filter, float};
-use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
+use crate::filter::{Blend, ContentBox, Ctx, Draw, Pass, Shader};
 use crate::image::Image;
 
 pub(super) const KIND: &str = "drop_shadow";
@@ -122,6 +122,10 @@ impl Pass for DropShadow {
         self.0.insets().grow(width, height)
     }
 
+    fn content_box(&self, width: u32, height: u32) -> ContentBox {
+        self.0.insets().content(width, height)
+    }
+
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
@@ -157,6 +161,11 @@ mod tests {
         );
         // left 2 + 3, top 0, right 0, bottom 2 + 5.
         assert_eq!(f.output_size(10, 10), (15, 17));
+        let content = f.content_box(10, 10);
+        assert_eq!(
+            (content.x, content.y, content.width, content.height),
+            (5, 0, 10, 10)
+        );
         // The defaults: blur 8 and offset (8, 8) grow the right and bottom by 16.
         assert_eq!(
             filter("drop_shadow", json!({})).output_size(10, 10),
@@ -181,6 +190,36 @@ mod tests {
         near(&out, 10, 10, [0, 0, 255, 255], 0);
         near(&out, 10, 1, CLEAR, 0);
         near(&out, 1, 10, CLEAR, 0);
+    }
+
+    /// A shadow up and to the left grows the frame there, and the content box is where
+    /// the input landed: its corners are red, and just past them is the shadow (#369).
+    #[test]
+    fn the_content_box_is_where_the_input_lands() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        let input = solid(&opened.compositor, 8, 6, RED);
+        let mut shadow = filter(
+            "drop_shadow",
+            json!({"color": "#0000ff", "offset_x": -3.0, "offset_y": -2.0, "blur": 0.0}),
+        );
+        let content = shadow.content_box(8, 6);
+        assert_eq!(
+            (content.x, content.y, content.width, content.height),
+            (3, 2, 8, 6)
+        );
+        let out = run(&mut opened, &mut shadow, &input, 0.0);
+        assert_eq!((out.width(), out.height()), (11, 8));
+        let (x0, y0) = (content.x, content.y);
+        let (x1, y1) = (x0 + content.width - 1, y0 + content.height - 1);
+        for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
+            near(&out, x, y, RED, 0);
+        }
+        near(&out, x0 - 1, y0 - 1, [0, 0, 255, 255], 0);
+        near(&out, x1 - 3, y0 - 1, [0, 0, 255, 255], 0);
+        // The shadow ends 3 px short of the right edge and 2 above the bottom.
+        near(&out, x1, y0 - 1, CLEAR, 0);
     }
 
     #[test]

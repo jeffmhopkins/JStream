@@ -793,6 +793,13 @@ status = "done"
 prs = [315, 460, 463, 466]
 
 [[item]]
+id = "B11"
+milestone = "M2"
+title = "Folders and labels"
+status = "review"
+prs = [323]
+
+[[item]]
 id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
