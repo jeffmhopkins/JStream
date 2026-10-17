@@ -1,7 +1,42 @@
 //! VA-API, loaded at run time (ADR-0060 §6, §8).
 //!
-//! For now, [`probe_encoders`] opens each DRM render node through libva and lists the H.264
-//! encode entry points its driver offers. Encode sessions are a follow-up.
+//! [`probe_encoders`] opens each DRM render node through libva and lists the H.264
+//! encode entry points its driver offers, and `VaapiH264Encoder` is an encode session on
+//! one of them (`session`). The parameters it submits are built in `h264`, the structs
+//! libva reads are declared in `ffi`, and CPU frames are written into VA images by
+//! `upload`; those three are platform-independent and tested everywhere.
+
+#[cfg(target_os = "linux")]
+mod display;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux session; built elsewhere for its tests"
+    )
+)]
+mod ffi;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux session; built elsewhere for its tests"
+    )
+)]
+mod h264;
+#[cfg(target_os = "linux")]
+mod session;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux session; built elsewhere for its tests"
+    )
+)]
+mod upload;
+
+#[cfg(target_os = "linux")]
+pub(crate) use session::VaapiH264Encoder;
 
 /// The H.264 profiles JStream encodes, with libva's `VAProfile` values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -58,145 +93,12 @@ pub use backend::probe_encoders;
 
 #[cfg(target_os = "linux")]
 mod backend {
-    use std::ffi::{CStr, c_char, c_int, c_void};
-    use std::fs::{File, OpenOptions};
-    use std::os::fd::AsRawFd;
+    use std::ffi::c_int;
 
     use jstream_platform::PlatformError;
 
+    use super::display::{Display, Va};
     use super::{H264Profile, VaEncoder, VaEntrypoint};
-    use crate::dl::SystemLibrary;
-
-    type VaDisplay = *mut c_void;
-    type GetDisplayDrm = unsafe extern "C" fn(fd: c_int) -> VaDisplay;
-    type Initialize = unsafe extern "C" fn(VaDisplay, *mut c_int, *mut c_int) -> c_int;
-    type Terminate = unsafe extern "C" fn(VaDisplay) -> c_int;
-    type QueryVendorString = unsafe extern "C" fn(VaDisplay) -> *const c_char;
-    type MaxNumEntrypoints = unsafe extern "C" fn(VaDisplay) -> c_int;
-    type QueryConfigEntrypoints =
-        unsafe extern "C" fn(VaDisplay, c_int, *mut c_int, *mut c_int) -> c_int;
-
-    /// `VA_STATUS_SUCCESS`.
-    const VA_OK: c_int = 0;
-
-    /// The libva functions the probe calls, with the libraries that hold them.
-    struct Va {
-        get_display_drm: GetDisplayDrm,
-        initialize: Initialize,
-        terminate: Terminate,
-        query_vendor_string: QueryVendorString,
-        max_num_entrypoints: MaxNumEntrypoints,
-        query_config_entrypoints: QueryConfigEntrypoints,
-        _va: SystemLibrary,
-        _drm: SystemLibrary,
-    }
-
-    impl Va {
-        fn load() -> Result<Self, PlatformError> {
-            let remedy = "install libva (Debian and Ubuntu: libva2 and libva-drm2; Fedora: \
-                          libva) and your GPU's VA-API driver";
-            let va = SystemLibrary::open("libva", &["libva.so.2"], remedy)?;
-            let drm = SystemLibrary::open("libva-drm", &["libva-drm.so.2"], remedy)?;
-            // SAFETY: each type alias above is the C declaration in <va/va.h> or
-            // <va/va_drm.h> (`VADisplay` is `void *`; `VAStatus`, `VAProfile` and
-            // `VAEntrypoint` are `int`-sized), and both libraries stay loaded in `Va`.
-            unsafe {
-                Ok(Self {
-                    get_display_drm: drm.function("vaGetDisplayDRM")?,
-                    initialize: va.function("vaInitialize")?,
-                    terminate: va.function("vaTerminate")?,
-                    query_vendor_string: va.function("vaQueryVendorString")?,
-                    max_num_entrypoints: va.function("vaMaxNumEntrypoints")?,
-                    query_config_entrypoints: va.function("vaQueryConfigEntrypoints")?,
-                    _va: va,
-                    _drm: drm,
-                })
-            }
-        }
-    }
-
-    /// An initialised VA display on one render node. Terminated on drop, before the node
-    /// is closed.
-    struct Display<'a> {
-        va: &'a Va,
-        dpy: VaDisplay,
-        // Dropped after `drop` below has terminated the display.
-        _node: File,
-    }
-
-    impl<'a> Display<'a> {
-        /// Opens `node` and initialises a display on it; `None` when the node can't be
-        /// opened or no driver initialises on it.
-        fn open(va: &'a Va, node: &str) -> Option<Self> {
-            let file = OpenOptions::new().read(true).write(true).open(node).ok()?;
-            // SAFETY: the fd is open for the display's lifetime (`_node`); libva only
-            // stores it.
-            let dpy = unsafe { (va.get_display_drm)(file.as_raw_fd()) };
-            if dpy.is_null() {
-                return None;
-            }
-            let (mut major, mut minor) = (0, 0);
-            // SAFETY: `dpy` came from vaGetDisplayDRM; the out-pointers are valid.
-            let status = unsafe { (va.initialize)(dpy, &mut major, &mut minor) };
-            if status != VA_OK {
-                // SAFETY: vaTerminate releases a display even when initialisation failed.
-                unsafe { (va.terminate)(dpy) };
-                return None;
-            }
-            Some(Self {
-                va,
-                dpy,
-                _node: file,
-            })
-        }
-
-        fn vendor(&self) -> String {
-            // SAFETY: `dpy` is initialised; the result is a NUL-terminated string owned
-            // by the driver for the display's lifetime, or null.
-            let ptr = unsafe { (self.va.query_vendor_string)(self.dpy) };
-            if ptr.is_null() {
-                return String::new();
-            }
-            // SAFETY: non-null and NUL-terminated, and copied before the display drops.
-            unsafe { CStr::from_ptr(ptr) }
-                .to_string_lossy()
-                .into_owned()
-        }
-
-        /// The raw entry points the driver offers for `profile`.
-        fn entrypoints(&self, profile: H264Profile) -> Vec<i32> {
-            // SAFETY: `dpy` is initialised.
-            let max = unsafe { (self.va.max_num_entrypoints)(self.dpy) };
-            let Ok(cap) = usize::try_from(max) else {
-                return Vec::new();
-            };
-            let mut list = vec![0 as c_int; cap];
-            let mut count: c_int = 0;
-            // SAFETY: `list` holds `vaMaxNumEntrypoints` entries, the most libva writes;
-            // `count` is a valid out-pointer.
-            let status = unsafe {
-                (self.va.query_config_entrypoints)(
-                    self.dpy,
-                    profile as c_int,
-                    list.as_mut_ptr(),
-                    &mut count,
-                )
-            };
-            if status != VA_OK {
-                // VA_STATUS_ERROR_UNSUPPORTED_PROFILE and the like: none for this profile.
-                return Vec::new();
-            }
-            list.truncate(usize::try_from(count).unwrap_or(0).min(cap));
-            list
-        }
-    }
-
-    impl Drop for Display<'_> {
-        fn drop(&mut self) {
-            // SAFETY: `dpy` is initialised and terminated exactly once, here.
-            unsafe { (self.va.terminate)(self.dpy) };
-        }
-    }
 
     /// The H.264 encoders every DRM render node's VA-API driver offers, one per node at
     /// most. Empty when there is no render node or no driver encodes H.264 (Fedora's
@@ -222,11 +124,12 @@ mod backend {
         nodes.sort();
         let mut found = Vec::new();
         for node in nodes {
-            let Some(display) = Display::open(&va, &node) else {
+            // A node that can't be opened, or has no driver, has no encoder.
+            let Ok(display) = Display::open(va.clone(), &node) else {
                 continue;
             };
             let best = H264Profile::ALL.into_iter().find_map(|profile| {
-                VaEntrypoint::choose(&display.entrypoints(profile)).map(|e| (profile, e))
+                VaEntrypoint::choose(&display.entrypoints(profile as c_int)).map(|e| (profile, e))
             });
             if let Some((profile, entrypoint)) = best {
                 found.push(VaEncoder {
