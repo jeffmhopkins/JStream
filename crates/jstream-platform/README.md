@@ -202,6 +202,11 @@ encode target's plane views (`Nv12Converter`).
 Windows' H.264 encoder takes encode targets on the context it reached through
 `Codecs::on_context`, and the engine's render thread converts each composite into the
 next of a ring of them and pushes it to such a session.
+On Linux, `LinuxGpu` opens the device on Vulkan, and the portal capture
+(`PortalCapture::on_context`) imports PipeWire's DMA-BUF frames there and copies each
+into a ring of RGBA textures of its own on the context's queue, so its frames need no
+fence; Linux has no encode targets yet, since its encoders take CPU frames
+([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call

@@ -17,6 +17,11 @@ anyhow = "1"
 # The render snapshot (ARCH › Threads, "State to RT threads"): the control side swaps an
 # immutable snapshot that the render thread loads without a lock. No dependencies.
 arc-swap = { version = "1.9", default-features = false }
+# Vulkan types and calls for the Linux GPU interop's DMA-BUF modifier queries
+# (`jstream-platform-linux`, ADR-0004, ADR-0060 §3), next to wgpu-hal's Vulkan backend.
+# The 0.38 line wgpu-hal 30 already brings in (wgpu is pinned exactly), so it adds no
+# crate. No default features: wgpu-hal turns on the loader it uses.
+ash = { version = "0.38", default-features = false, features = ["std"] }
 # Test-only global allocator that flags allocations inside a marked scope (R-RT-001).
 # Warn mode counts violations instead of aborting, so a test can assert on them, in
 # debug and release builds alike.

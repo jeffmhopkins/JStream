@@ -1,26 +1,39 @@
-//! A PipeWire video stream on the portal's remote, copying each frame into the capture
-//! mailbox (ADR-0060 §3). Shared-memory buffers only: the DMA-BUF import into Vulkan
-//! is a follow-up.
+//! A PipeWire video stream on the portal's remote, putting each frame into the capture
+//! mailbox (ADR-0060 §3).
+//!
+//! On the CPU path the stream takes shared-memory buffers and copies each frame out.
+//! On the GPU path (a stream connected with the context's [`gpu::Shared`]) it first
+//! offers DMA-BUFs in the modifiers the device imports, then shared memory: a DMA-BUF
+//! frame is imported once per PipeWire buffer ([`dmabuf::import`]), waited on until the
+//! producer's writes are done (`poll` on the DMA-BUF), copied into a frame texture
+//! ([`blit::Ring`]), and its buffer goes back to PipeWire once the GPU has finished
+//! that copy. A frame that doesn't import or copy ends the GPU path for the stream: it
+//! offers shared memory only, and PipeWire renegotiates to the CPU path.
 //!
 //! The stream runs on a `pw_thread_loop`, PipeWire's own thread, and its callbacks
-//! (format changes, frames, state changes) run there. They catch panics
+//! (format changes, buffers, frames, state changes) run there. They catch panics
 //! (R-UNSAFE-005) and only touch the stream's [`Callbacks`] and the shared state.
 
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
-use std::os::fd::{IntoRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd, OwnedFd};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use jstream_platform::mailbox::Mailbox;
 use jstream_platform::{MediaClock, PlatformError, VideoSurface};
 
 use crate::MonotonicClock;
 use crate::dl::SystemLibrary;
+use crate::gpu::blit::{self, Ring};
+use crate::gpu::{self, dmabuf};
 use crate::spa::{
-    self, Chunk, Crop, META_HEADER, META_HEADER_SIZE, META_REGION_SIZE, META_VIDEO_CROP,
-    PARAM_FORMAT, Pod, VideoFormat,
+    self, Chunk, Crop, DATA_DMA_BUF, META_HEADER, META_HEADER_SIZE, META_REGION_SIZE,
+    META_VIDEO_CROP, PARAM_FORMAT, Pod, VideoFormat,
 };
 
 /// `struct spa_list` in <spa/utils/list.h>.
@@ -236,6 +249,9 @@ pub(crate) struct Shared {
     pub(crate) skipped: AtomicU64,
     lost: AtomicBool,
     reason: Mutex<String>,
+    /// Why the GPU path ended, once a DMA-BUF frame failed and the stream fell back to
+    /// shared memory.
+    pub(crate) gpu_fallback: Mutex<Option<String>>,
 }
 
 impl std::fmt::Debug for Shared {
@@ -243,6 +259,7 @@ impl std::fmt::Debug for Shared {
         f.debug_struct("Shared")
             .field("captured", &self.captured)
             .field("lost", &self.lost)
+            .field("gpu_fallback", &self.gpu_fallback)
             .finish_non_exhaustive()
     }
 }
@@ -255,6 +272,7 @@ impl Shared {
             skipped: AtomicU64::new(0),
             lost: AtomicBool::new(false),
             reason: Mutex::new(String::new()),
+            gpu_fallback: Mutex::new(None),
         }
     }
 
@@ -283,6 +301,20 @@ impl Shared {
     }
 }
 
+/// The GPU path's state: the context, the frame ring, and the imported DMA-BUFs, one
+/// per PipeWire buffer (keyed by its `pw_buffer` address, removed in `remove_buffer`).
+struct DmaPath {
+    shared: Arc<gpu::Shared>,
+    ring: Ring,
+    imports: HashMap<usize, wgpu::Texture>,
+}
+
+/// How long a frame waits for the producer's writes to its DMA-BUF before it is
+/// dropped.
+const PRODUCER_WAIT: Duration = Duration::from_millis(100);
+/// How long a frame waits for its GPU copy before the GPU path is given up.
+const COPY_WAIT: Duration = Duration::from_secs(1);
+
 /// The callbacks' state, owned by [`VideoStream`] and used only on PipeWire's thread
 /// (and on the creating thread under the loop lock, before the stream connects).
 struct Callbacks {
@@ -293,7 +325,71 @@ struct Callbacks {
     shared: Arc<Shared>,
     /// Kept so the pods' pointers handed to `pw_stream_update_params` stay valid.
     params: Vec<Pod>,
+    /// The `EnumFormat` offers, kept for the same reason.
+    offers: Vec<Pod>,
+    /// The context, while the stream may still take DMA-BUFs.
+    gpu: Option<Arc<gpu::Shared>>,
+    /// Set up once PipeWire settles on a DMA-BUF format.
+    dma: Option<DmaPath>,
     streaming: bool,
+}
+
+/// The header's time and the crop, from a buffer's metadata; `None` for a frame the
+/// producer marked corrupted.
+///
+/// # Safety
+/// `buf` is a dequeued buffer's `spa_buffer`, not yet queued back.
+unsafe fn metas(buf: &SpaBuffer) -> Option<(Option<i64>, Option<Crop>)> {
+    let metas: &[SpaMeta] = if buf.metas.is_null() {
+        &[]
+    } else {
+        // SAFETY: `metas` holds `n_metas` entries.
+        unsafe { std::slice::from_raw_parts(buf.metas, buf.n_metas as usize) }
+    };
+    let meta = |ty: u32, size: u32| {
+        metas
+            .iter()
+            .find(|m| m.type_ == ty && m.size >= size && !m.data.is_null())
+            .map(|m| m.data)
+    };
+    let mut header_pts = None;
+    if let Some(h) = meta(META_HEADER, META_HEADER_SIZE) {
+        // SAFETY: a header meta of at least its struct's size; read unaligned to be
+        // safe about the producer's layout.
+        let h = unsafe { h.cast::<SpaMetaHeader>().read_unaligned() };
+        if h.flags & HEADER_CORRUPTED != 0 {
+            return None;
+        }
+        header_pts = Some(h.pts);
+    }
+    let crop = meta(META_VIDEO_CROP, META_REGION_SIZE).map(|r| {
+        // SAFETY: a region meta of at least its struct's size.
+        let r = unsafe { r.cast::<SpaMetaRegion>().read_unaligned() };
+        Crop {
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.height,
+        }
+    });
+    Some((header_pts, crop))
+}
+
+/// Whether the DMA-BUF's pending writes finished within `timeout`: a DMA-BUF polls
+/// readable once its write fences have signalled, which is how a consumer honours the
+/// producer's implicit synchronisation. A `poll` error counts as ready, since the
+/// kernel then has no fences to report.
+fn writes_done(fd: BorrowedFd<'_>, timeout: Duration) -> bool {
+    let mut pfd = libc::pollfd {
+        fd: fd.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    let ms = c_int::try_from(timeout.as_millis()).unwrap_or(c_int::MAX);
+    // SAFETY: one valid pollfd for the call's duration; the descriptor stays open
+    // (borrowed).
+    let n = unsafe { libc::poll(&raw mut pfd, 1, ms) };
+    n < 0 || (n > 0 && pfd.revents & libc::POLLIN != 0)
 }
 
 impl Callbacks {
@@ -308,12 +404,32 @@ impl Callbacks {
             std::slice::from_raw_parts(param.cast::<u8>(), 8 + size)
         };
         self.format = spa::parse_format(pod);
-        if self.format.is_none() {
+        let Some(format) = self.format else {
             self.shared
                 .lose("PipeWire settled on a video format JStream didn't offer");
             return;
+        };
+        let dma = format.modifier.is_some();
+        if dma {
+            let Some(shared) = self.gpu.clone() else {
+                self.shared
+                    .lose("PipeWire settled on DMA-BUF buffers JStream didn't offer");
+                return;
+            };
+            match &mut self.dma {
+                Some(path) => path.imports.clear(),
+                None => {
+                    self.dma = Some(DmaPath {
+                        ring: Ring::new(Arc::clone(&shared)),
+                        shared,
+                        imports: HashMap::new(),
+                    });
+                }
+            }
+        } else {
+            self.dma = None;
         }
-        self.params = spa::buffer_params().into();
+        self.params = spa::buffer_params(dma).into();
         let mut ptrs: Vec<*const c_void> = self.params.iter().map(Pod::as_ptr).collect();
         // SAFETY: `pw_stream_update_params` (see `Fns`), on this callback's own stream,
         // from its thread; `ptrs` points at `params.len()` pods kept alive in `self`.
@@ -349,10 +465,23 @@ impl Callbacks {
         if b.is_null() {
             return;
         }
-        // SAFETY: a dequeued `pw_buffer` and the `spa_buffer`, metas, datas and chunk it
-        // points to stay valid until it is queued back, below; each pointer is checked
-        // for null and each count bounds the arrays it describes.
-        let frame = unsafe { self.read(&*b) };
+        let mut failed = None;
+        let frame = if self.format.is_some_and(|f| f.modifier.is_some()) {
+            // SAFETY: as below. The GPU copy is finished before the buffer goes back.
+            match unsafe { self.read_dma_buf(&*b, b as usize) } {
+                Ok(frame) => frame,
+                Err(reason) => {
+                    failed = Some(reason);
+                    None
+                }
+            }
+        } else {
+            // SAFETY: a dequeued `pw_buffer` and the `spa_buffer`, metas, datas and
+            // chunk it points to stay valid until it is queued back, below; each
+            // pointer is checked for null and each count bounds the arrays it
+            // describes.
+            unsafe { self.read(&*b) }
+        };
         // SAFETY: gives the buffer dequeued above back to its stream.
         unsafe { (self.fns.stream_queue_buffer)(self.stream, b) };
         if let Some(frame) = frame {
@@ -361,6 +490,144 @@ impl Callbacks {
                 self.shared.skipped.fetch_add(1, Ordering::Relaxed);
             }
         }
+        if let Some(reason) = failed {
+            self.fall_back(reason);
+        }
+    }
+
+    /// Ends the GPU path: offers shared memory only, so PipeWire renegotiates the
+    /// stream onto the CPU copy. Keeps the first reason.
+    fn fall_back(&mut self, reason: String) {
+        if let Ok(mut r) = self.shared.gpu_fallback.lock()
+            && r.is_none()
+        {
+            *r = Some(reason);
+        }
+        self.gpu = None;
+        self.dma = None;
+        self.offers = vec![spa::enum_format()];
+        let mut ptrs: Vec<*const c_void> = self.offers.iter().map(Pod::as_ptr).collect();
+        // SAFETY: `pw_stream_update_params` (see `Fns`), on this callback's own stream,
+        // from its thread; `ptrs` points at `offers.len()` pods kept alive in `self`.
+        unsafe {
+            (self.fns.stream_update_params)(self.stream, ptrs.as_mut_ptr(), ptrs.len() as u32);
+        }
+    }
+
+    fn remove_buffer(&mut self, b: *mut PwBuffer) {
+        if let Some(path) = &mut self.dma {
+            path.imports.remove(&(b as usize));
+        }
+    }
+
+    /// The DMA-BUF frame in `b` (whose address is `key`), copied into a frame texture.
+    /// `Ok(None)` for a frame to skip; an error ends the GPU path.
+    ///
+    /// # Safety
+    /// `b` is a dequeued buffer of this stream, not yet queued back.
+    unsafe fn read_dma_buf(
+        &mut self,
+        b: &PwBuffer,
+        key: usize,
+    ) -> Result<Option<VideoSurface>, String> {
+        let (Some(format), Some(path)) = (self.format, self.dma.as_mut()) else {
+            return Ok(None);
+        };
+        let Some(modifier) = format.modifier else {
+            return Ok(None);
+        };
+        if b.buffer.is_null() {
+            return Ok(None);
+        }
+        // SAFETY: the caller's contract; non-null.
+        let buf = unsafe { &*b.buffer };
+        if buf.n_datas == 0 || buf.datas.is_null() {
+            return Ok(None);
+        }
+        if buf.n_datas != 1 {
+            return Err(format!(
+                "a DMA-BUF frame of {} planes; only one was offered",
+                buf.n_datas
+            ));
+        }
+        // SAFETY: `datas` holds `n_datas` (one) entries.
+        let d = unsafe { &*buf.datas };
+        if d.type_ != DATA_DMA_BUF {
+            return Err(format!(
+                "a buffer of data type {} on a DMA-BUF format",
+                d.type_
+            ));
+        }
+        if d.chunk.is_null() {
+            return Ok(None);
+        }
+        // SAFETY: non-null, owned by the buffer.
+        let c = unsafe { &*d.chunk };
+        if c.flags & CHUNK_SKIP != 0 {
+            return Ok(None);
+        }
+        // SAFETY: the caller's contract.
+        let Some((header_pts, crop)) = (unsafe { metas(buf) }) else {
+            return Ok(None);
+        };
+        let raw = i32::try_from(d.fd)
+            .ok()
+            .filter(|fd| *fd >= 0)
+            .ok_or("a DMA-BUF buffer without a file descriptor")?;
+        let stride = u32::try_from(c.stride)
+            .ok()
+            .filter(|s| *s > 0)
+            .ok_or("a DMA-BUF plane without a stride")?;
+        // SAFETY: PipeWire keeps the buffer's descriptor open until the buffer is
+        // removed, which can't happen while it is dequeued; it is borrowed for this
+        // call only (the import duplicates it).
+        let fd = unsafe { BorrowedFd::borrow_raw(raw) };
+        let DmaPath {
+            shared,
+            ring,
+            imports,
+        } = path;
+        let texture = match imports.entry(key) {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(v) => v.insert(
+                dmabuf::import(
+                    &shared.device,
+                    format.format,
+                    (format.width, format.height),
+                    modifier,
+                    dmabuf::Plane {
+                        fd,
+                        offset: c.offset,
+                        stride,
+                    },
+                )
+                .map_err(|e| format!("importing a DMA-BUF: {e}"))?,
+            ),
+        };
+        if !writes_done(fd, PRODUCER_WAIT) {
+            return Ok(None);
+        }
+        let pts = spa::frame_pts(header_pts, self.clock.now(), self.clock.timebase());
+        let source = blit::Source {
+            texture,
+            visible: spa::visible(format, crop),
+            padded: format.format.padded(),
+        };
+        let Some((frame, index)) = ring
+            .copy(source, pts)
+            .map_err(|e| format!("copying a DMA-BUF frame: {e}"))?
+        else {
+            self.shared.skipped.fetch_add(1, Ordering::Relaxed);
+            return Ok(None);
+        };
+        shared
+            .device
+            .poll(wgpu::PollType::Wait {
+                submission_index: Some(index),
+                timeout: Some(COPY_WAIT),
+            })
+            .map_err(|e| format!("the GPU copy of a DMA-BUF frame didn't finish: {e}"))?;
+        Ok(Some(VideoSurface::Gpu(frame)))
     }
 
     /// The frame in `b`, copied out.
@@ -390,38 +657,8 @@ impl Callbacks {
         // SAFETY: MAP_BUFFERS mapped `maxsize` bytes at `data` for the buffer's
         // lifetime.
         let data = unsafe { std::slice::from_raw_parts(d.data.cast::<u8>(), d.maxsize as usize) };
-        let metas: &[SpaMeta] = if buf.metas.is_null() {
-            &[]
-        } else {
-            // SAFETY: `metas` holds `n_metas` entries.
-            unsafe { std::slice::from_raw_parts(buf.metas, buf.n_metas as usize) }
-        };
-        let meta = |ty: u32, size: u32| {
-            metas
-                .iter()
-                .find(|m| m.type_ == ty && m.size >= size && !m.data.is_null())
-                .map(|m| m.data)
-        };
-        let mut header_pts = None;
-        if let Some(h) = meta(META_HEADER, META_HEADER_SIZE) {
-            // SAFETY: a header meta of at least its struct's size; read unaligned to
-            // be safe about the producer's layout.
-            let h = unsafe { h.cast::<SpaMetaHeader>().read_unaligned() };
-            if h.flags & HEADER_CORRUPTED != 0 {
-                return None;
-            }
-            header_pts = Some(h.pts);
-        }
-        let crop = meta(META_VIDEO_CROP, META_REGION_SIZE).map(|r| {
-            // SAFETY: a region meta of at least its struct's size.
-            let r = unsafe { r.cast::<SpaMetaRegion>().read_unaligned() };
-            Crop {
-                x: r.x,
-                y: r.y,
-                width: r.width,
-                height: r.height,
-            }
-        });
+        // SAFETY: the caller's contract.
+        let (header_pts, crop) = unsafe { metas(buf) }?;
         let chunk = Chunk {
             offset: c.offset % d.maxsize.max(1),
             size: c.size,
@@ -469,6 +706,11 @@ unsafe extern "C" fn on_process(data: *mut c_void) {
     unsafe { with(data, Callbacks::process) };
 }
 
+unsafe extern "C" fn on_remove_buffer(data: *mut c_void, b: *mut PwBuffer) {
+    // SAFETY: registered with this `data` (see `with`).
+    unsafe { with(data, |cb| cb.remove_buffer(b)) };
+}
+
 static EVENTS: PwStreamEvents = PwStreamEvents {
     version: PW_VERSION_STREAM_EVENTS,
     destroy: None,
@@ -477,7 +719,7 @@ static EVENTS: PwStreamEvents = PwStreamEvents {
     io_changed: None,
     param_changed: Some(on_param_changed),
     add_buffer: None,
-    remove_buffer: None,
+    remove_buffer: Some(on_remove_buffer),
     process: Some(on_process),
     drained: None,
     command: None,
@@ -520,7 +762,8 @@ fn pw_failed(call: &'static str) -> PlatformError {
 
 impl VideoStream {
     /// Connects to node `node_id` on the PipeWire remote `fd` (from the portal's
-    /// `OpenPipeWireRemote`), delivering frames into `shared`.
+    /// `OpenPipeWireRemote`), delivering frames into `shared`: on `gpu`'s device when it
+    /// is given (the GPU path, falling back to CPU frames), else as CPU frames.
     ///
     /// # Errors
     /// [`PlatformError::MissingComponent`] when libpipewire lacks a function, and
@@ -530,6 +773,7 @@ impl VideoStream {
         fd: OwnedFd,
         node_id: u32,
         shared: Arc<Shared>,
+        gpu: Option<Arc<gpu::Shared>>,
     ) -> Result<Self, PlatformError> {
         let fns = Fns::load(lib)?;
         let clock = MonotonicClock::new()?;
@@ -558,6 +802,9 @@ impl VideoStream {
                 clock,
                 shared,
                 params: Vec::new(),
+                offers: spa::enum_formats(gpu.as_ref().map_or(&[], |g| &g.modifiers)),
+                gpu,
+                dma: None,
                 streaming: false,
             }),
             _lib: lib.clone(),
@@ -618,10 +865,10 @@ impl VideoStream {
                 data.cast(),
             )
         };
-        let offer = spa::enum_format();
-        let mut params = [offer.as_ptr()];
-        // SAFETY: `pw_stream_connect` with one pod that outlives the call (the stream
-        // copies its params).
+        let mut params: Vec<*const c_void> =
+            self.callbacks.offers.iter().map(Pod::as_ptr).collect();
+        // SAFETY: `pw_stream_connect` with the offers, pods that outlive the call (the
+        // stream copies its params, and `callbacks` keeps them).
         let rc = unsafe {
             (fns.stream_connect)(
                 self.stream,
@@ -629,7 +876,7 @@ impl VideoStream {
                 node_id,
                 STREAM_FLAGS,
                 params.as_mut_ptr(),
-                1,
+                params.len() as u32,
             )
         };
         if rc < 0 {
@@ -693,6 +940,25 @@ mod tests {
         assert_eq!(size_of::<SpaMetaRegion>(), 16);
         assert_eq!(offset_of!(PwStreamEvents, process), 64);
         assert_eq!(size_of::<PwStreamEvents>(), 96);
+    }
+
+    /// `writes_done` waits for the descriptor to poll readable, as a DMA-BUF does once
+    /// its writers' fences signal; a pipe stands in for one here.
+    #[test]
+    fn writes_done_waits_for_a_readable_descriptor() {
+        use std::io::Write;
+        use std::os::fd::AsFd;
+        use std::time::{Duration, Instant};
+
+        let (reader, mut writer) = std::io::pipe().expect("pipe");
+        let started = Instant::now();
+        assert!(!super::writes_done(
+            reader.as_fd(),
+            Duration::from_millis(20)
+        ));
+        assert!(started.elapsed() >= Duration::from_millis(20), "it waited");
+        writer.write_all(b"x").expect("write");
+        assert!(super::writes_done(reader.as_fd(), Duration::ZERO));
     }
 
     #[test]
