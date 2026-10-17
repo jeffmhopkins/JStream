@@ -234,6 +234,14 @@ pub fn Header(
     let targets = move || rows.with(|rows| go_live_targets(rows.iter()));
     let live = move || rows.with(|rows| live_outputs(rows.iter()));
     let record = move || rows.with(|rows| RecordButton::of(rows));
+    // Escape closes an open menu wherever focus is: WebKit doesn't focus a clicked button,
+    // so the key may not reach the header.
+    let escape = window_event_listener(leptos::ev::keydown, move |event| {
+        if event.key() == "Escape" && open.get_untracked().is_some() {
+            open.set(None);
+        }
+    });
+    on_cleanup(move || escape.remove());
     let toggle =
         move |menu: Menu| open.update(|open| *open = (*open != Some(menu)).then_some(menu));
     let menu_button = move |menu: Menu, label: &'static str| {
@@ -254,11 +262,6 @@ pub fn Header(
         <header
             class="app-header"
             data-rev=move || info.with(|i| i.rev.clone())
-            on:keydown=move |event| {
-                if event.key() == "Escape" {
-                    open.set(None);
-                }
-            }
         >
             <span class="brand"><span class="brand-mark"></span>"JStream"</span>
             {move || open.get().map(|_| view! {
