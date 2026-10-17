@@ -693,10 +693,8 @@ prs = [255]
 id = "U4p"
 milestone = "M2"
 title = "Live preview on canvas"
-status = "review"
+status = "done"
 prs = [302]
-note = "#302 merged into wave/m2-2; lands with that wave"
-needs = ["wave"]
 
 [[item]]
 id = "U1"

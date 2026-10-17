@@ -179,7 +179,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
 │                          items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
-│                              effects[] (reserved, empty in v1), transition }
+│                              effects[] (reserved, empty until built), transition }
 ├── folders        Folder { id, name }   ordered, one level; organising only
 ├── labels         Label { id, name, icon, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
@@ -283,8 +283,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   hold filters until video mixes run the video ones, and their filters can't hold a
   reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
-  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
-  stays empty in v1, so adding them later needs no collection migration.
+  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects, which
+  are in v1 ([ADR-0068](adr/0068-item-effects-in-v1.md), designed in
+  [ADR-0065](adr/0065-scene-chains-and-item-effects.md)), and stays empty until they are
+  built; the slot means the collection already has a place for them.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
