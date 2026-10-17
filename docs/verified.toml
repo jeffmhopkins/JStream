@@ -150,7 +150,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:3a3138d90da06244", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "model/mod.rs gains hotkeys: BTreeMap<Chord, Action>, accessors and the invariant that a binding's chord is valid, its action bindable and its named objects exist; the tree's 'hotkeys [{ chord, action }]' line already says this, so the section holds." }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:23a0ac1d616890eb", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): browser page imported as premultiplied sRGB before the step-5 encoder text; edited the filter sentence: apply_filter draws from any image, imports and browser pages included, into a premultiplied Rgba16Float layer; X1's effect-pack wording kept; holds" }
+stamp = { hash = "b3:3418441fd8c0a519", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: the no-interop device is hardware first with the software fallback (#437) beside C8b5's browser frames on the shared context; render README and gpu.rs match" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -171,7 +171,7 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:a7809e6b738eebda", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): browser pages imported on the stage context as premultiplied sRGB, before the step-5 encoder sentence; this PR's filter sentence (apply_filter draws from any image, imports and browser pages included) holds for V3's reference images read through aux(); render's compositor/image/pass changes are V3's references and data upload; holds" }
+stamp = { hash = "b3:85a1f595adb5128b", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: the no-interop device is hardware first with the software fallback (#437) beside C8b5's browser frames on the shared context; render README and gpu.rs match" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:84ad0a8f8034bc13", by = "agent:claude", note = "body: own device hardware first (D3D12 first on Windows) with the software fallback, next to main's context/import text. render README: device selection (headless software first; hardware: a D3D12 hardware adapter first on Windows, its device failure logged and WARP skipped, then high-performance, then software, NoAdapter; device-open fallback naming both errors; single try for a Cpu pick), engine render/snapshot/preview threads, tests and benches on hardware(), WARP 720p ~10 fps cited (#433). benches/composite.rs opens hardware(). gpu.rs: DX12 instance first taking only a non-Cpu adapter, warn on device failure, pick_adapter, or_software, Cpu skip, fallback unit test. tests.rs: Opened via hardware(). holds" }
@@ -336,7 +336,7 @@ stamp = { hash = "b3:f7c86a5ca6e42145", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:f02b79d7362a656c", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): browser page imported as premultiplied sRGB before the step-5 encoder text; edited the filter sentence: apply_filter draws from any image, imports and browser pages included, into a premultiplied Rgba16Float layer; X1's effect-pack wording kept; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:4dae56a0cc21dbf9", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: merged the wave's step-5 encoder sentence with browser pages imported on the same context as premultiplied sRGB; steps 1-6 otherwise unchanged; holds" }
+stamp = { hash = "b3:66f9b6ed394be648", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: the no-interop device is hardware first with the software fallback (#437) beside C8b5's browser frames on the shared context; render README and gpu.rs match" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:afdb8786f04dcf29", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): browser pages imported on the stage context as premultiplied sRGB, before the step-5 encoder sentence; this PR's filter sentence (apply_filter draws from any image, imports and browser pages included) holds for V3's reference images read through aux(); render's compositor/image/pass changes are V3's references and data upload; holds" }
@@ -354,7 +354,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:200ffea15e16daac", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): browser pages imported on the stage context as premultiplied sRGB, before the step-5 encoder sentence; this PR's filter sentence (apply_filter draws from any image, imports and browser pages included) holds for V3's reference images read through aux(); render's compositor/image/pass changes are V3's references and data upload; holds" }
+stamp = { hash = "b3:a4d298341deb1517", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: the no-interop device is hardware first with the software fallback (#437) beside C8b5's browser frames on the shared context; render README and gpu.rs match" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:8b27e4156f4d36d6", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: the noun list adds capture beside the wave's device, filter, pairing and preview; tools.snap has capture read-only and the mcp tests expect it. wave/m1-2 merges: tools.snap carries the output tool's DOS-device record path doc (#505, #506), which this section doesn't restate; latest merge (K1 hotkeys, I2 live values): noun list now also has hotkey and live, tools.snap regenerated with 25 tools (the wave's 24 plus capture), mcp tests expect 25; holds" }
@@ -375,7 +375,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:e5a04b8f94d4bef3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the MCP section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the tool list now has hotkey and live; the schema size line is about 484 KB (tools.snap 484,266 bytes), and says live and hotkey each carry most of the edit schemas because live.set takes edits and hotkey.set takes any action; annotations bullet holds. Holds." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:d85c8d699be58098", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: the noun list adds capture beside the wave's device, filter, pairing and preview; tools.snap has capture read-only and the mcp tests expect it. wave/m1-2 merges: tools.snap carries the output tool's DOS-device record path doc (#505, #506), which this section doesn't restate; latest merge (K1 hotkeys, I2 live values): noun list now also has hotkey and live, tools.snap regenerated with 25 tools (the wave's 24 plus capture), mcp tests expect 25; holds" }
+stamp = { hash = "b3:37c563f0f057e164", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: tools.snap carries #437's EncoderProfile descriptions and C3's tools; tool_list_snapshot passes" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -492,13 +492,13 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:e67f83cd66730a1e", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Queries bullet lists bus.list (0.19) and capture.targets (0.25 placeholder) beside the wave's bus delete.plan target (0.24); matches query.rs, the protocol README and the mock. Latest wave merge only changes the record-path text in the protocol README, mock.rs and protocol.snap, which this section doesn't restate; holds; latest merge: capture.targets is now protocol 0.27, after 0.25 hotkeys and 0.26 live values, and sits beside the wave's delete.plan hotkey text; matches version.rs and the protocol README" }
+stamp = { hash = "b3:cea8ab66a698915e", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: protocol README, protocol.snap and fixtures.rs carry #437's encoder wording and C3's 0.27 additions; the section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:0b01e0bfa54f00f1", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Queries bullet lists bus.list (0.19) and capture.targets (0.25 placeholder) beside the wave's bus delete.plan target (0.24); matches query.rs, the protocol README and the mock. Latest wave merge only changes the record-path text in the protocol README, mock.rs and protocol.snap, which this section doesn't restate; holds; latest merge: capture.targets is now protocol 0.27, after 0.25 hotkeys and 0.26 live values, and sits beside the wave's delete.plan hotkey text; matches version.rs and the protocol README" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:53934722ec8710b2", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Queries bullet lists bus.list (0.19) and capture.targets (0.25 placeholder) beside the wave's bus delete.plan target (0.24); matches query.rs, the protocol README and the mock. Latest wave merge only changes the record-path text in the protocol README, mock.rs and protocol.snap, which this section doesn't restate; holds; latest merge: capture.targets is now protocol 0.27, after 0.25 hotkeys and 0.26 live values, and sits beside the wave's delete.plan hotkey text; matches version.rs and the protocol README" }
+stamp = { hash = "b3:362e981c6f0cc35f", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: protocol README, protocol.snap and fixtures.rs carry #437's encoder wording and C3's 0.27 additions; the section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
@@ -525,7 +525,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:d5e89baf9e5b20ed", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Queries bullet lists bus.list (0.19) and capture.targets (0.25 placeholder) beside the wave's bus delete.plan target (0.24); matches query.rs, the protocol README and the mock. Latest wave merge only changes the record-path text in the protocol README, mock.rs and protocol.snap, which this section doesn't restate; holds; latest merge: capture.targets is now protocol 0.27, after 0.25 hotkeys and 0.26 live values, and sits beside the wave's delete.plan hotkey text; matches version.rs and the protocol README" }
+stamp = { hash = "b3:4d2f614c605a8512", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: protocol README, protocol.snap and fixtures.rs carry #437's encoder wording and C3's 0.27 additions; the section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -1182,13 +1182,13 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:054ef455a181ead2", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): Live sources keeps the GPU page path (use_gpu, ContextKey gate, per-frame re-plan for opens_browser kinds), now in LiveSources::look after C3's capture early return (display/window sources return Look::Capture before plan bookkeeping, as on the wave) and wrapped as Look::Frame; resolved the compose conflict: I2's live values and preview thread with this PR's browser-page import beside each capture's upload/import; holds" }
+stamp = { hash = "b3:19bbc997af61049f", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: the render thread paragraph is C3's per-capture mailboxes plus #437's hardware-adapter-first fallback; main's CLAP refusal, kinds and hardware-first snapshot and preview are unchanged; snapshot.rs and preview/mod.rs still open OpenOptions::hardware" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:c8977a32f722c92e", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Snapshots (Shot::captures, sharing by target value, a window source with no window shows nothing), Live sources (Look::Capture before frame), the capture.targets bullet (no lock, action_failed), Outputs (each capture's mailbox read and converted per capture, from runtime/captures.rs and pipeline.rs) and the per-tick allocation list (copied capture keys) match the code. wave/m1-2 merges: encoder size is the canvas (#433), wave's begin_plan/show and sound paragraph kept, YouTube bullet beside capture.targets; latest merge only touches protocol#design's record-path text (DOS device names), which this section doesn't restate; latest merge (I2 live values): compose now takes the LiveParams and the Captures lookup, so the Snapshots text says compose draws a Shot with the live values over it and uploads each capture; preview composes with NoCaptures; matches snapshot.rs and pipeline.rs" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:7394cf80f3959837", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Snapshots (Shot::captures, sharing by target value, a window source with no window shows nothing), Live sources (Look::Capture before frame), the capture.targets bullet (no lock, action_failed), Outputs (each capture's mailbox read and converted per capture, from runtime/captures.rs and pipeline.rs) and the per-tick allocation list (copied capture keys) match the code. wave/m1-2 merges: encoder size is the canvas (#433), wave's begin_plan/show and sound paragraph kept, YouTube bullet beside capture.targets; latest merge only touches protocol#design's record-path text (DOS device names), which this section doesn't restate; latest merge (I2 live values): compose now takes the LiveParams and the Captures lookup, so the Snapshots text says compose draws a Shot with the live values over it and uploads each capture; preview composes with NoCaptures; matches snapshot.rs and pipeline.rs" }
+stamp = { hash = "b3:f3151d583d12608a", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: the render thread paragraph is C3's per-capture mailboxes plus #437's hardware-adapter-first fallback; main's CLAP refusal, kinds and hardware-first snapshot and preview are unchanged; snapshot.rs and preview/mod.rs still open OpenOptions::hardware" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:c316edbc45abdaf9", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Snapshots (Shot::captures, sharing by target value, a window source with no window shows nothing), Live sources (Look::Capture before frame), the capture.targets bullet (no lock, action_failed), Outputs (each capture's mailbox read and converted per capture, from runtime/captures.rs and pipeline.rs) and the per-tick allocation list (copied capture keys) match the code. wave/m1-2 merges: encoder size is the canvas (#433), wave's begin_plan/show and sound paragraph kept, YouTube bullet beside capture.targets; latest merge only touches protocol#design's record-path text (DOS device names), which this section doesn't restate; latest merge (I2 live values): compose now takes the LiveParams and the Captures lookup, so the Snapshots text says compose draws a Shot with the live values over it and uploads each capture; preview composes with NoCaptures; matches snapshot.rs and pipeline.rs" }
@@ -1221,7 +1221,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:c38e604c16152645", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): Live sources keeps the GPU page path (use_gpu, ContextKey gate, per-frame re-plan for opens_browser kinds), now in LiveSources::look after C3's capture early return (display/window sources return Look::Capture before plan bookkeeping, as on the wave) and wrapped as Look::Frame; resolved the compose conflict: I2's live values and preview thread with this PR's browser-page import beside each capture's upload/import; holds" }
+stamp = { hash = "b3:81c6edd6ba1eb847", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: the render thread paragraph is C3's per-capture mailboxes plus #437's hardware-adapter-first fallback; main's CLAP refusal, kinds and hardware-first snapshot and preview are unchanged; snapshot.rs and preview/mod.rs still open OpenOptions::hardware" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1260,7 +1260,7 @@ stamp = { hash = "b3:58eafa4460718214", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/preview/mod.rs"]
-stamp = { hash = "b3:7a97ce198783e065", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Snapshots (Shot::captures, sharing by target value, a window source with no window shows nothing), Live sources (Look::Capture before frame), the capture.targets bullet (no lock, action_failed), Outputs (each capture's mailbox read and converted per capture, from runtime/captures.rs and pipeline.rs) and the per-tick allocation list (copied capture keys) match the code. wave/m1-2 merges: encoder size is the canvas (#433), wave's begin_plan/show and sound paragraph kept, YouTube bullet beside capture.targets; latest merge only touches protocol#design's record-path text (DOS device names), which this section doesn't restate; latest merge (I2 live values): compose now takes the LiveParams and the Captures lookup, so the Snapshots text says compose draws a Shot with the live values over it and uploads each capture; preview composes with NoCaptures; matches snapshot.rs and pipeline.rs" }
+stamp = { hash = "b3:7f5b7ae9032d7b85", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: the render thread paragraph is C3's per-capture mailboxes plus #437's hardware-adapter-first fallback; main's CLAP refusal, kinds and hardware-first snapshot and preview are unchanged; snapshot.rs and preview/mod.rs still open OpenOptions::hardware" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/captures.rs"]
 stamp = { hash = "b3:8078f1ceecf5dc1b", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Snapshots (Shot::captures, sharing by target value, a window source with no window shows nothing), Live sources (Look::Capture before frame), the capture.targets bullet (no lock, action_failed), Outputs (each capture's mailbox read and converted per capture, from runtime/captures.rs and pipeline.rs) and the per-tick allocation list (copied capture keys) match the code. wave/m1-2 merges: encoder size is the canvas (#433), wave's begin_plan/show and sound paragraph kept, YouTube bullet beside capture.targets; latest merge only touches protocol#design's record-path text (DOS device names), which this section doesn't restate; latest merge (I2 live values): compose now takes the LiveParams and the Captures lookup, so the Snapshots text says compose draws a Shot with the live values over it and uploads each capture; preview composes with NoCaptures; matches snapshot.rs and pipeline.rs" }
@@ -1269,7 +1269,7 @@ stamp = { hash = "b3:8078f1ceecf5dc1b", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:a47f2a0516ef21c3", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): Live sources keeps the GPU page path (use_gpu, ContextKey gate, per-frame re-plan for opens_browser kinds), now in LiveSources::look after C3's capture early return (display/window sources return Look::Capture before plan bookkeeping, as on the wave) and wrapped as Look::Frame; resolved the compose conflict: I2's live values and preview thread with this PR's browser-page import beside each capture's upload/import; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:14fc00bc11ef92ee", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): Live sources keeps the GPU page path (use_gpu, ContextKey gate, per-frame re-plan for opens_browser kinds), now in LiveSources::look after C3's capture early return (display/window sources return Look::Capture before plan bookkeeping, as on the wave) and wrapped as Look::Frame; resolved the compose conflict: I2's live values and preview thread with this PR's browser-page import beside each capture's upload/import; holds" }
+stamp = { hash = "b3:76de1430346832a2", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: the render thread paragraph is C3's per-capture mailboxes plus #437's hardware-adapter-first fallback; main's CLAP refusal, kinds and hardware-first snapshot and preview are unchanged; snapshot.rs and preview/mod.rs still open OpenOptions::hardware" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1287,13 +1287,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:592c3b9f41754a4c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:422295a718f6aa2f", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): Live sources keeps the GPU page path (use_gpu, ContextKey gate, per-frame re-plan for opens_browser kinds), now in LiveSources::look after C3's capture early return (display/window sources return Look::Capture before plan bookkeeping, as on the wave) and wrapped as Look::Frame; resolved the compose conflict: I2's live values and preview thread with this PR's browser-page import beside each capture's upload/import; holds" }
+stamp = { hash = "b3:4bc8e21c12e1b8c8", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: the render thread paragraph is C3's per-capture mailboxes plus #437's hardware-adapter-first fallback; main's CLAP refusal, kinds and hardware-first snapshot and preview are unchanged; snapshot.rs and preview/mod.rs still open OpenOptions::hardware" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:54b8b82d465b80df", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Snapshots (Shot::captures, sharing by target value, a window source with no window shows nothing), Live sources (Look::Capture before frame), the capture.targets bullet (no lock, action_failed), Outputs (each capture's mailbox read and converted per capture, from runtime/captures.rs and pipeline.rs) and the per-tick allocation list (copied capture keys) match the code. wave/m1-2 merges: encoder size is the canvas (#433), wave's begin_plan/show and sound paragraph kept, YouTube bullet beside capture.targets; latest merge only touches protocol#design's record-path text (DOS device names), which this section doesn't restate; latest merge (I2 live values): compose now takes the LiveParams and the Captures lookup, so the Snapshots text says compose draws a Shot with the live values over it and uploads each capture; preview composes with NoCaptures; matches snapshot.rs and pipeline.rs" }
+stamp = { hash = "b3:bdbc531fc79892ef", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: the render thread paragraph is C3's per-capture mailboxes plus #437's hardware-adapter-first fallback; main's CLAP refusal, kinds and hardware-first snapshot and preview are unchanged; snapshot.rs and preview/mod.rs still open OpenOptions::hardware" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:e0d246a939cb51a2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "Whole PR to src/tests/audio.rs: the wave/m2 merge (#466) kept #459's Audio routing source-scopes bullet (retain_sources, fed from Mixer::input_block while unmuted/on/open, else a preallocated zero block) and Live sources (audio_source else audio), beside main's browser/with_browser and its browser-page tests in src/tests/audio.rs (jstream-browser's fake feature, as Dependencies say), filters in Audio sources (a media file's input runs its source's chain too), opacity in Snapshots, Source::sound vs Source::audio. This push: the media test's verbatim-prefix fix and its new gain-filter check need no design text; Dependencies unchanged (jstream-platform fake, jstream-browser fake). Ran: that test, passing." }
@@ -1332,7 +1332,7 @@ stamp = { hash = "b3:603a3c5ae7785ba3", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:c2e8618e13419583", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): resolved the test-list conflict by keeping C3's captures tests (cpu_pipeline/captures.rs, capture.targets on WGC) and this PR's browser page composited on the stage context and given back at stop (gpu_capture.rs, which gained ends_gesture for I2's Batch field) and the own-context test in snapshot.rs; engine.rs imports GpuContext beside C3's capture targets; live.rs look() and pipeline.rs as in Design/Runtime; holds" }
+stamp = { hash = "b3:658b8f9869b0e8be", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's CLAP plugins bullet and hardware-first test wording sit beside C3's per-source captures and C8b5's browser GPU frames; engine.rs imports both sides (PluginHosts with CaptureTarget, CaptureTargetInfo and GpuContext), and the ends_gesture-then-CLAP batch order holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d7e4bb2db0e1df6d", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
@@ -1356,7 +1356,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:c38e604c16152645", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): resolved the test-list conflict by keeping C3's captures tests (cpu_pipeline/captures.rs, capture.targets on WGC) and this PR's browser page composited on the stage context and given back at stop (gpu_capture.rs, which gained ends_gesture for I2's Batch field) and the own-context test in snapshot.rs; engine.rs imports GpuContext beside C3's capture targets; live.rs look() and pipeline.rs as in Design/Runtime; holds" }
+stamp = { hash = "b3:81c6edd6ba1eb847", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's CLAP plugins bullet and hardware-first test wording sit beside C3's per-source captures and C8b5's browser GPU frames; engine.rs imports both sides (PluginHosts with CaptureTarget, CaptureTargetInfo and GpuContext), and the ends_gesture-then-CLAP batch order holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1395,7 +1395,7 @@ stamp = { hash = "b3:58eafa4460718214", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/preview/mod.rs"]
-stamp = { hash = "b3:7a97ce198783e065", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Engine::capture_targets (engine.rs), Look and Captures in snapshot.rs and live.rs (Look::Capture), RenderCaptures with its jstream-capture thread and 2 s retry (runtime/captures.rs), new tests in tests/cpu_pipeline/captures.rs, display/window cases in tests/sources.rs, the WGC capture.targets test in windows_gpu.rs; tests.rs's stop-during-start test now holds in GpuInterop::open_device. wave/m1-2 merges: runtime bullet and test list now say the output follows the canvas and captures convert at their own size incl. NV12 (#433), vcam test is main's (#457), preview/mod.rs composes with NoCaptures; pipeline.rs doc wording (N10). Purpose text holds; latest merge: DrawFn and compose carry LiveParams beside the captures, the render loop reads held() then ticks the captures; purpose holds" }
+stamp = { hash = "b3:7f5b7ae9032d7b85", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's CLAP plugins bullet and hardware-first test wording sit beside C3's per-source captures and C8b5's browser GPU frames; engine.rs imports both sides (PluginHosts with CaptureTarget, CaptureTargetInfo and GpuContext), and the ends_gesture-then-CLAP batch order holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/captures.rs"]
 stamp = { hash = "b3:8078f1ceecf5dc1b", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Engine::capture_targets (engine.rs), Look and Captures in snapshot.rs and live.rs (Look::Capture), RenderCaptures with its jstream-capture thread and 2 s retry (runtime/captures.rs), new tests in tests/cpu_pipeline/captures.rs, display/window cases in tests/sources.rs, the WGC capture.targets test in windows_gpu.rs; tests.rs's stop-during-start test now holds in GpuInterop::open_device. wave/m1-2 merges: runtime bullet and test list now say the output follows the canvas and captures convert at their own size incl. NV12 (#433), vcam test is main's (#457), preview/mod.rs composes with NoCaptures; pipeline.rs doc wording (N10). Purpose text holds; latest merge: DrawFn and compose carry LiveParams beside the captures, the render loop reads held() then ticks the captures; purpose holds" }
@@ -1404,7 +1404,7 @@ stamp = { hash = "b3:8078f1ceecf5dc1b", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:a47f2a0516ef21c3", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): resolved the test-list conflict by keeping C3's captures tests (cpu_pipeline/captures.rs, capture.targets on WGC) and this PR's browser page composited on the stage context and given back at stop (gpu_capture.rs, which gained ends_gesture for I2's Batch field) and the own-context test in snapshot.rs; engine.rs imports GpuContext beside C3's capture targets; live.rs look() and pipeline.rs as in Design/Runtime; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:14fc00bc11ef92ee", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): resolved the test-list conflict by keeping C3's captures tests (cpu_pipeline/captures.rs, capture.targets on WGC) and this PR's browser page composited on the stage context and given back at stop (gpu_capture.rs, which gained ends_gesture for I2's Batch field) and the own-context test in snapshot.rs; engine.rs imports GpuContext beside C3's capture targets; live.rs look() and pipeline.rs as in Design/Runtime; holds" }
+stamp = { hash = "b3:76de1430346832a2", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's CLAP plugins bullet and hardware-first test wording sit beside C3's per-source captures and C8b5's browser GPU frames; engine.rs imports both sides (PluginHosts with CaptureTarget, CaptureTargetInfo and GpuContext), and the ends_gesture-then-CLAP batch order holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1422,13 +1422,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:592c3b9f41754a4c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:422295a718f6aa2f", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (I2, K1, C3 merged in): resolved the test-list conflict by keeping C3's captures tests (cpu_pipeline/captures.rs, capture.targets on WGC) and this PR's browser page composited on the stage context and given back at stop (gpu_capture.rs, which gained ends_gesture for I2's Batch field) and the own-context test in snapshot.rs; engine.rs imports GpuContext beside C3's capture targets; live.rs look() and pipeline.rs as in Design/Runtime; holds" }
+stamp = { hash = "b3:4bc8e21c12e1b8c8", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's CLAP plugins bullet and hardware-first test wording sit beside C3's per-source captures and C8b5's browser GPU frames; engine.rs imports both sides (PluginHosts with CaptureTarget, CaptureTargetInfo and GpuContext), and the ends_gesture-then-CLAP batch order holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:54b8b82d465b80df", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Engine::capture_targets (engine.rs), Look and Captures in snapshot.rs and live.rs (Look::Capture), RenderCaptures with its jstream-capture thread and 2 s retry (runtime/captures.rs), new tests in tests/cpu_pipeline/captures.rs, display/window cases in tests/sources.rs, the WGC capture.targets test in windows_gpu.rs; tests.rs's stop-during-start test now holds in GpuInterop::open_device. wave/m1-2 merges: runtime bullet and test list now say the output follows the canvas and captures convert at their own size incl. NV12 (#433), vcam test is main's (#457), preview/mod.rs composes with NoCaptures; pipeline.rs doc wording (N10). Purpose text holds; latest merge: DrawFn and compose carry LiveParams beside the captures, the render loop reads held() then ticks the captures; purpose holds" }
+stamp = { hash = "b3:bdbc531fc79892ef", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's CLAP plugins bullet and hardware-first test wording sit beside C3's per-source captures and C8b5's browser GPU frames; engine.rs imports both sides (PluginHosts with CaptureTarget, CaptureTargetInfo and GpuContext), and the ends_gesture-then-CLAP batch order holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:e0d246a939cb51a2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = '''Whole PR to the body and src/tests/audio.rs: the wave/m2 merge (#466) kept #459's facts (source scopes via TapFeed::Input/Silence and drawn_sources, pipeline.rs pushing input_block or silence; tests a_source_a_source_draws_feeds_its_scope_after_its_fader in tests/audio.rs, a_drawn_source_gets_a_scope_fed_from_its_mixer_input in tests/audio_routing.rs, a_source_drawing_a_source_round_trips in tests/collection.rs) beside main's browser/youtube_chat with_browser and its two browser-page tests in tests/audio.rs, audio filters (filters.rs), item opacity (opacity_blends_items_and_nested_scenes_in_linear_light) and Source::sound for media vs Source::audio for pages; fixed a blank line splitting the Tests bullet. This push: the media-file sound test drops Windows' verbatim \\?\ prefix from its absolute setting, and now adds a -60 dB gain filter on the clip and checks its metered peak falls under 0.001 then recovers once removed; the Tests bullet now says so. Ran: that test 3 times, passing.''' }
@@ -1473,7 +1473,7 @@ stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:268f4293f65828a2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "audit.rs/engine.rs/tests.rs/scenarios.rs only carry the new removed_hotkeys field through CallResult::Batch (engine passes applied.removed_hotkeys; audit and tests use { rev, .. } or CallResult::batch). The engine's purpose is unchanged. Merges since: engine.rs/tests.rs: this PR only carries removed_hotkeys through CallResult::Batch (engine passes applied.removed_hotkeys; tests use CallResult::batch or { rev, .. }). The merge adds #491 (the engine removes a stream key on output.delete and when a target moves to another server) with its tests. The engine's purpose is unchanged by hotkeys." }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:cea760e4ba57a8a3", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (C3 merged in): resolved the Capture path conflict: C3's 'a GPU capture that does not start runs on CPU frames' and held frames/streams, plus this PR's sentence that the stage lends the context to the browser engine and takes it back first at stop or a failed open; launch_program binds GpuSources right after open_capture (now {context, backends}) and before captures::spawn, so an early return releases it; C3's Captures paragraph kept; holds" }
+stamp = { hash = "b3:461c8af00226b53d", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: no-interop fallback is hardware first with the software fallback (#437; pipeline.rs uses OpenOptions::hardware) inside C3/C8b5's text on lending the context to the browser engine and the Captures paragraph" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: pipeline.rs opens hardware first without a GPU context (#437) and reads #244's live-value channel after the snapshot; threading's CLAP paragraph doesn't touch the runtime text" }
@@ -1488,7 +1488,7 @@ stamp = { hash = "b3:8078f1ceecf5dc1b", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:a47f2a0516ef21c3", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (C3 merged in): resolved the Capture path conflict: C3's 'a GPU capture that does not start runs on CPU frames' and held frames/streams, plus this PR's sentence that the stage lends the context to the browser engine and takes it back first at stop or a failed open; launch_program binds GpuSources right after open_capture (now {context, backends}) and before captures::spawn, so an early return releases it; C3's Captures paragraph kept; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:14fc00bc11ef92ee", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (C3 merged in): resolved the Capture path conflict: C3's 'a GPU capture that does not start runs on CPU frames' and held frames/streams, plus this PR's sentence that the stage lends the context to the browser engine and takes it back first at stop or a failed open; launch_program binds GpuSources right after open_capture (now {context, backends}) and before captures::spawn, so an early return releases it; C3's Captures paragraph kept; holds" }
+stamp = { hash = "b3:76de1430346832a2", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: no-interop fallback is hardware first with the software fallback (#437; pipeline.rs uses OpenOptions::hardware) inside C3/C8b5's text on lending the context to the browser engine and the Captures paragraph" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1503,10 +1503,10 @@ stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmE
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:99d844f42a0c3899", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (#487 merged in): the Browser sources bullet (stage lends its context via Engine::use_gpu, taken back at stop, serve.rs browse's device covers paints before the first stage) still holds; the wave's crash-redaction text (crash::Redacting around key and token stores) doesn't touch it; dep core#design re-read for the merged Live sources and compose text; holds" }
+stamp = { hash = "b3:24138a5fa1169309", by = "agent:wave-owner", note = "re-read against core#design after wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync; the daemon's CLAP scan thread and YouTube text still hold" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:054ef455a181ead2", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (#487 merged in): the Browser sources bullet (stage lends its context via Engine::use_gpu, taken back at stop, serve.rs browse's device covers paints before the first stage) still holds; the wave's crash-redaction text (crash::Redacting around key and token stores) doesn't touch it; dep core#design re-read for the merged Live sources and compose text; holds" }
+stamp = { hash = "b3:19bbc997af61049f", by = "agent:wave-owner", note = "re-read against core#design after wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync; the daemon's CLAP scan thread and YouTube text still hold" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against core#design and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the daemon's live.rs (engine wiring, not live values), crash redaction and the server's TCP cap and in-flight bound don't touch gestures; sessions per connection still give each client its own gestures, which expire with the session. Holds." }
@@ -1839,7 +1839,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:5c05dc5824505820", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's filter-kind-as-source refusal beside the wave's hotkeys and #244's ends_gesture batch field; tests.rs keeps both" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:7394cf80f3959837", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: stale through protocol#design (capture.targets, added in the 0.25 placeholder) and ARCH#data-model (display/window built); latest wave merge: protocol#design's record path text adds DOS device names, which graph's own README now describes (#505); holds; latest merge: protocol#design now says capture.targets is added in 0.27; holds" }
+stamp = { hash = "b3:f3151d583d12608a", by = "agent:wave-owner", note = "re-read against protocol#design after wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync; the filter-kind-as-source refusal and hotkeys hold" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2121,13 +2121,13 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:6ba58aa42eeb9eb6", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: merged the wave's Codecs::on_context encode-target sentence with browser frames sampled on the context; ContextKey bullet matches gpu.rs; holds" }
+stamp = { hash = "b3:59d594d0cbd9fec7", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: render samples capture frames and browser pages on the shared device, and opens its own hardware adapter first with the software fallback (#437); C8b5's GpuContext::key() bullet kept" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
 stamp = { hash = "b3:f0e8cbc5a816b3b7", by = "agent:wave-owner", note = "main into wave/m1-2: re-read against ARCH crate map (CLAP rows from wave/m3) and gpu-pipeline (hardware first, #437): this section already says render opens hardware first with the software fallback, and the wave's effect-pack text doesn't touch it" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:23a0ac1d616890eb", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): browser frames sampled on the context and the Codecs::on_context encode-target sentence still match; the merge brought only X1's crate-map row, which doesn't bear on it; holds" }
+stamp = { hash = "b3:3418441fd8c0a519", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: hand-resolved: render samples capture frames and browser pages on the shared device, and opens its own hardware adapter first with the software fallback (#437); C8b5's GpuContext::key() bullet kept" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map, against wave/m3, gains main's MediaDecoders and paths in the platform row, the jstream-browser row, platform-windows without the CEF backend, the outputs row, the ADR-0058 links and the apps row's desktop, daemon and browser-helper text, beside wave/m3's CLAP rows. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. The GPU-frame types and who may use unsafe with them still hold." }
@@ -2136,7 +2136,7 @@ stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:34b5cdcccce403de", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: GpuContext::key / ContextKey described as in gpu.rs and exported from lib.rs; holds" }
+stamp = { hash = "b3:31e736b29ac2b01a", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's PluginHosts and plugin-proto text beside C3's CaptureTarget additions; lib.rs carries both" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes; OAuthTokenStore still holds the Google refresh token" }
@@ -2193,7 +2193,7 @@ stamp = { hash = "b3:8019c83df5cad30a" }
 stamp = { hash = "b3:5e9dc58061f8fffa" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/lib.rs"]
-stamp = { hash = "b3:6b92ff0efac0d7f4", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: GpuContext::key / ContextKey described as in gpu.rs and exported from lib.rs; holds" }
+stamp = { hash = "b3:8eb556b555492962", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's PluginHosts and plugin-proto text beside C3's CaptureTarget additions; lib.rs carries both" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/media_file.rs"]
 stamp = { hash = "b3:3ea7c5d5a47b138c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list carries wave/m2's MediaDecoders (media_file.rs: MediaDecoderConfig, MediaInfo, next_video/next_audio, seek, file timeline), its media field in Backends and FakeMediaDecoders, beside main's FrameSync::platform, Capture and Codecs on_context, paths::data_dir (P1) and the GPU-frame not-yet list; matches lib.rs, backends.rs, media_file.rs, fake.rs and the crate-map row (MediaDecoders and paths); holds" }
@@ -2220,7 +2220,7 @@ stamp = { hash = "b3:191ac01e6ea05888" }
 stamp = { hash = "b3:f6eb3695c90eeb37", by = "agent:wave-owner", note = "main into wave/m1-2: main's PluginBlock, ProAudioThread and WindowsPluginHosts bullet sits beside the wave's text; nothing in either contradicts the other" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:34b5cdcccce403de", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: stale via platform#purpose only; Windows backends unchanged by C8b5; holds" }
+stamp = { hash = "b3:31e736b29ac2b01a", by = "agent:wave-owner", note = "re-read against platform#purpose after wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync; the CLAP launcher and capture text hold" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:2214bbe1a9c063d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's WgcCapture through Capture::on_context, the CPU H.264 encoder taking RGBA and BGRA, the GPU H.264 path (Codecs::on_context, encode targets copied into allocator samples, fence sync), MfMediaDecoders (Source Reader, frames, audio with the gapless cut, seeking, threads), WindowsGpu's release fence, mfreadwrite delay-loaded for MfMediaDecoders, the not-yet line naming packet-level video decoders, and the GPU encode and media-file tests, beside wave/m3's CLAP PluginBlock and ProAudioThread section. Inputs: lib.rs's docs list MfMediaDecoders, and it gains the decode module and that re-export, beside the CLAP items. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. This crate implements MediaDecoders and the on_context seams. The crate-map row drops the CEF browser backend (ADR-0021) main moved to jstream-browser and keeps wave/m3's CLAP launcher and shared block. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Neither the preview thread nor the CLAP sentence contradicts this crate's text." }
@@ -2469,7 +2469,7 @@ stamp = { hash = "b3:2b8f6e8a57cc2d5a", by = "agent:claude", note = "Adds the co
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:7394cf80f3959837", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.targets entry (kind, target, name, size, primary omitted when false, no rev, action_failed, Added in 0.25 placeholder) matches query.rs and fixtures; envelope example shows minor 25; examples.snap and protocol.snap regenerated. Latest wave merge: record path text and protocol.snap's OutputKind doc add DOS device names (#505); body matches output.rs; latest merge: capture.targets entry now says Added in 0.27, envelope example shows minor 27, snapshots regenerated after the wave's hotkey and live-value types; matches" }
+stamp = { hash = "b3:f3151d583d12608a", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: encoder profiles keep #437's wording (omitted hardware means avoid, the default prefers hardware); protocol.snap carries it beside C3's 0.27 schema; the protocol snapshot test passes" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2490,7 +2490,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:0b01e0bfa54f00f1", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.targets entry (kind, target, name, size, primary omitted when false, no rev, action_failed, Added in 0.25 placeholder) matches query.rs and fixtures; envelope example shows minor 25; examples.snap and protocol.snap regenerated. Latest wave merge: record path text and protocol.snap's OutputKind doc add DOS device names (#505); body matches output.rs; latest merge: capture.targets entry now says Added in 0.27, envelope example shows minor 27, snapshots regenerated after the wave's hotkey and live-value types; matches" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:53934722ec8710b2", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.targets entry (kind, target, name, size, primary omitted when false, no rev, action_failed, Added in 0.25 placeholder) matches query.rs and fixtures; envelope example shows minor 25; examples.snap and protocol.snap regenerated. Latest wave merge: record path text and protocol.snap's OutputKind doc add DOS device names (#505); body matches output.rs; latest merge: capture.targets entry now says Added in 0.27, envelope example shows minor 27, snapshots regenerated after the wave's hotkey and live-value types; matches" }
+stamp = { hash = "b3:362e981c6f0cc35f", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: encoder profiles keep #437's wording (omitted hardware means avoid, the default prefers hardware); protocol.snap carries it beside C3's 0.27 schema; the protocol snapshot test passes" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
@@ -2517,7 +2517,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:d5e89baf9e5b20ed", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.targets entry (kind, target, name, size, primary omitted when false, no rev, action_failed, Added in 0.25 placeholder) matches query.rs and fixtures; envelope example shows minor 25; examples.snap and protocol.snap regenerated. Latest wave merge: record path text and protocol.snap's OutputKind doc add DOS device names (#505); body matches output.rs; latest merge: capture.targets entry now says Added in 0.27, envelope example shows minor 27, snapshots regenerated after the wave's hotkey and live-value types; matches" }
+stamp = { hash = "b3:4d2f614c605a8512", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: encoder profiles keep #437's wording (omitted hardware means avoid, the default prefers hardware); protocol.snap carries it beside C3's 0.27 schema; the protocol snapshot test passes" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2595,7 +2595,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:d5e89baf9e5b20ed", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Queries bullet lists device.list and capture.targets with DeviceInfo and CaptureTargetInfo; version sentence says 0.25 (placeholder, wave owner assigns the slot) for capture.targets, 0.24 bus references; matches version.rs and lib.rs; latest merge: version.rs is 0.27 (slot assigned by the wave owner), the version sentence says 0.27 capture.targets, 0.26 live values, 0.25 hotkeys; Queries bullet lists live.list and capture.targets; matches" }
+stamp = { hash = "b3:4d2f614c605a8512", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: fixtures.rs keeps main's hardware-avoid encoder fixture beside C3's capture-target fixtures" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2643,7 +2643,7 @@ stamp = { hash = "b3:00a31502bb0e5d24", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:1485046c80293f0f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:08637d18b06c936e", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): imported-texture and composite-step text match composite.wgsl mode 2 and cache.rs; the wave's staging-after-fallible-steps sentence and video-delay table row don't bear on imports; holds" }
+stamp = { hash = "b3:4d50cc379264da35", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: #437's adapter order unchanged; gpu.rs gains C8b5's context key only" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -2811,7 +2811,7 @@ stamp = { hash = "b3:f7c86a5ca6e42145", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:f02b79d7362a656c", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): imported-texture and composite-step text match composite.wgsl mode 2 and cache.rs; the wave's apply_filter lives in Filters, not here; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:4dae56a0cc21dbf9", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: imported-texture and composite-step text match composite.wgsl mode 2 and cache.rs import_as replacement; holds" }
+stamp = { hash = "b3:66f9b6ed394be648", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: #437's adapter order unchanged; gpu.rs gains C8b5's context key only" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:afdb8786f04dcf29", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): imported-texture and composite-step text match composite.wgsl mode 2 and cache.rs; the wave's staging-after-fallible-steps sentence and video-delay table row don't bear on imports; holds" }
@@ -2829,7 +2829,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:200ffea15e16daac", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): imported-texture and composite-step text match composite.wgsl mode 2 and cache.rs; the wave's staging-after-fallible-steps sentence and video-delay table row don't bear on imports; holds" }
+stamp = { hash = "b3:a4d298341deb1517", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: #437's adapter order unchanged; gpu.rs gains C8b5's context key only" }
 
 ["CRATE-jstream-render#filters"."body"]
 stamp = { hash = "b3:ec54949c8ecb2c52", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): the prelude sentence (src, texel and aux convert a premultiplied browser-page import via Frame alpha/aux_alpha 0/1/2) still holds and now also covers V3's references, which apply_lut and the masks read through aux(); the wave's Ctx::hold staging and V3 kinds text is its own; holds" }
@@ -2985,16 +2985,16 @@ stamp = { hash = "b3:f7c86a5ca6e42145", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:f02b79d7362a656c", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489, X1's harness): edited the prelude sentence: src, texel and aux now also convert a premultiplied browser-page import (Frame alpha/aux_alpha modes 0/1/2, matching composite.wgsl), as pass.rs and prelude.wgsl do; X1's cache, error-scope and external paragraphs and the V1 kinds unchanged; holds" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:53cbd59fed3b4430", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): import_premultiplied and Compositor::context match image.rs and compositor.rs; X1's 'Not in this cut' wording on effect packs kept; holds" }
+stamp = { hash = "b3:c0037644f0098168", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: Compositor::open hardware first with headless for software first (#437) beside C8b5's ContextKey on Gpu; gpu.rs and tests.rs carry both" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
-stamp = { hash = "b3:6ba58aa42eeb9eb6", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: import_premultiplied (Rgba8Unorm/Bgra8Unorm) and Compositor::context match image.rs and compositor.rs; holds" }
+stamp = { hash = "b3:59d594d0cbd9fec7", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: Compositor::open hardware first with headless for software first (#437) beside C8b5's ContextKey on Gpu; gpu.rs and tests.rs carry both" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-render"]
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:23a0ac1d616890eb", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): import_premultiplied and Compositor::context match image.rs and compositor.rs; X1's 'Not in this cut' wording on effect packs kept; holds" }
+stamp = { hash = "b3:3418441fd8c0a519", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: Compositor::open hardware first with headless for software first (#437) beside C8b5's ContextKey on Gpu; gpu.rs and tests.rs carry both" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -3165,7 +3165,7 @@ stamp = { hash = "b3:f7c86a5ca6e42145", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:f02b79d7362a656c", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): import_premultiplied and Compositor::context match image.rs and compositor.rs; X1's 'Not in this cut' wording on effect packs kept; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:4dae56a0cc21dbf9", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: import_premultiplied (Rgba8Unorm/Bgra8Unorm) and Compositor::context match image.rs and compositor.rs; holds" }
+stamp = { hash = "b3:66f9b6ed394be648", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: Compositor::open hardware first with headless for software first (#437) beside C8b5's ContextKey on Gpu; gpu.rs and tests.rs carry both" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:afdb8786f04dcf29", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): import_premultiplied and Compositor::context still match image.rs and compositor.rs; image.rs gained V3's upload_unit_f16 (Premultiplied data) and compositor.rs the reference holds, which Purpose doesn't describe; pass.rs/prelude.wgsl's alpha modes and filter/testing.rs's harness test are Filters'; tests.rs keeps unorm_texture beside the wave's pub(crate) CountSync; holds" }
@@ -3183,10 +3183,10 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:200ffea15e16daac", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (V3 merged in): import_premultiplied and Compositor::context still match image.rs and compositor.rs; image.rs gained V3's upload_unit_f16 (Premultiplied data) and compositor.rs the reference holds, which Purpose doesn't describe; pass.rs/prelude.wgsl's alpha modes and filter/testing.rs's harness test are Filters'; tests.rs keeps unorm_texture beside the wave's pub(crate) CountSync; holds" }
+stamp = { hash = "b3:a4d298341deb1517", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: Compositor::open hardware first with headless for software first (#437) beside C8b5's ContextKey on Gpu; gpu.rs and tests.rs carry both" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:e1eded9dfa6cf657", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2: the Filters paragraph keeps this PR's premultiplied-import harness test and Alpha edges keeps the premultiplied Unorm import test; the wave's readback-refusal staging test text matches tests.rs; resolved tests.rs keeping unorm_texture beside pub(crate) CountSync; holds" }
+stamp = { hash = "b3:4133929305dc3962", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: render tests still open hardware first (tests.rs) and benchmarks take the GPU when there is one; C8b5's browser-frame tests are unaffected" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -3198,7 +3198,7 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:200ffea15e16daac", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2: the Filters paragraph keeps this PR's premultiplied-import harness test and Alpha edges keeps the premultiplied Unorm import test; the wave's readback-refusal staging test text matches tests.rs; resolved tests.rs keeping unorm_texture beside pub(crate) CountSync; holds" }
+stamp = { hash = "b3:a4d298341deb1517", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: render tests still open hardware first (tests.rs) and benchmarks take the GPU when there is one; C8b5's browser-frame tests are unaffected" }
 
 ["CRATE-jstream-server#design"."body"]
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against control#design and ARCH#protocol after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the TCP cap, in-flight bound, failed-credential log limit and key echo test are the wave's; this PR's gesture-expiry sentence (a closed connection drops its session and its open gestures) still holds with the per-connection sessions. Holds." }
@@ -3759,7 +3759,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:56ca5965c32db6a2", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 on wave/m1-2: re-read the whole section against the PR's change. chat.rs: the chat bullet (liveChatMessages.list with id,snippet,authorDetails, 2000 a page, Scope::Readonly; ChatMessage fields and events; controls replaced, 1000/100 caps; ChatPoller following the page token, at least 1 s, the 60 s-30 min and 5 s-5 min ladders restarting on a class change, stopping on offlineAt or liveChatEnded/NotFound/Disabled, no thread or sleep; quota cost and the per-collection opt-in, ADR-0058 §5) matches chat.rs and chat/tests.rs with the three fixtures; lib.rs adds pub mod chat, the ChatPoller re-export and the crate doc line; live.rs opens call, non_empty and u64_or_string to pub(crate) for chat.rs; the wave's built-in client and UI-only paragraphs before Not yet are unchanged; Not yet lists sending, the engine polling with its switch and youtube.chat.feature, streamList, audience stats and quota accounting; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:34b5cdcccce403de", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: stale via platform#purpose only; wave's ADR-0058 depends_on kept; text unchanged; holds" }
+stamp = { hash = "b3:31e736b29ac2b01a", by = "agent:wave-owner", note = "re-read against platform#purpose after wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync; the OAuthTokenStore use is unchanged" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:311cefe9eebe1f9a", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
