@@ -660,7 +660,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
-  (protocol 0.28), `video.snapshot` → the program mix as a PNG in the
+  (protocol 0.28), `video.snapshot` → the program mix (not a video mix) as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the

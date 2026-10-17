@@ -689,7 +689,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   by chord (0.25; omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
-- `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
+- `video.snapshot`: the current program mix as a PNG, never a video mix (there is no
+  per-mix snapshot yet). `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
   Source pixels are runtime state and can change without a new `rev`. The query takes

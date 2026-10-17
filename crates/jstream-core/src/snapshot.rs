@@ -1622,6 +1622,82 @@ pub(crate) mod tests {
         }
     }
 
+    /// A display or window that only a `scene` mix shows is among the shot's captures,
+    /// beside the program's, so the render thread starts it for that mix.
+    #[test]
+    fn a_capture_only_a_mix_shows_is_captured() {
+        use jstream_graph::Graph;
+        use jstream_protocol::{
+            Edit, ItemId, MixInput, MixResolution, SourceKind, VideoMix, VideoMixId,
+        };
+
+        let display = |id: &str| Edit::SourceCreate {
+            source_id: SourceId::new(id),
+            name: id.into(),
+            kind: SourceKind::Builtin {
+                kind: "display".into(),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        };
+        let add = |scene: &str, source: &str| Edit::ItemAdd {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new(source),
+            source_id: SourceId::new(source),
+            transform: None,
+            geometry: None,
+            opacity: None,
+            blend: None,
+        };
+        let mut graph = Graph::new().with_kinds(crate::kinds::builtin());
+        graph
+            .apply(
+                &[
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("main"),
+                        name: "Main".into(),
+                        role: None,
+                    },
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("cam"),
+                        name: "Camera".into(),
+                        role: None,
+                    },
+                    display("primary"),
+                    display("second"),
+                    add("main", "primary"),
+                    add("cam", "second"),
+                    Edit::VideoMixCreate {
+                        mix_id: VideoMixId::new("side"),
+                        name: "Side".into(),
+                        mix: VideoMix {
+                            input: MixInput::Scene {
+                                scene_id: SceneId::new("cam"),
+                            },
+                            resolution: MixResolution {
+                                width: 640,
+                                height: 360,
+                            },
+                            fps_divisor: 1,
+                        },
+                    },
+                ],
+                None,
+            )
+            .expect("edits");
+        let second = CaptureSpec::Display(Some("monitor:2".into()));
+        let (shot, _) = super::plan_with(&graph, Some(&SceneId::new("main")), &mut |id| {
+            Some(super::Look::Capture(match id.as_str() {
+                "second" => second.clone(),
+                _ => CaptureSpec::Display(None),
+            }))
+        });
+        assert_eq!(
+            shot.captures(),
+            &BTreeSet::from([CaptureSpec::Display(None), second])
+        );
+    }
+
     /// The program scene is depth 0. A scene [`MAX_NESTING`] levels down is drawn; one
     /// level further is not.
     #[test]

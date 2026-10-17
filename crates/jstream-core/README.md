@@ -182,8 +182,9 @@ state machine. Contents:
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
   the same for a GPU capture of another size), a mix of another aspect ratio
-  letterboxed and a `scene` mix drawing its own scene, the scene each mix plans, the
-  program stage's output size following the canvas, captures converted to RGBA8 at
+  letterboxed and a `scene` mix drawing its own scene, the scene each mix plans and the
+  captures only a mix shows, the program stage's output size following the canvas,
+  captures converted to RGBA8 at
   their own size (NV12 with its matrix and range), and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
@@ -1041,7 +1042,9 @@ A running output follows its mix's `input` live: the frame is drawn from the sce
 render snapshot gives the mix on that tick, so a changed input (or a `scene.switch`,
 for a `program` mix) shows from the next frame. A mix deleted while an output still
 renders it (pointed elsewhere, then deleted, while running) draws the program until
-the output restarts.
+the output restarts. The render thread keeps every display and window that the
+program or any mix shows captured (`Shot::captures`), not only those of the mixes due
+on a tick, so a mix's captures are already running when it next draws.
 
 **YouTube.** `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client
 (JStream's built-in one, empty for now, or a developer's override; without one
@@ -1518,7 +1521,8 @@ The output pipeline (`src/runtime/`) is the part of
 (a recording output or a virtual camera needs none), starts it and emits `output.state_changed` from the
 control thread. The program is the canvas size the collection has when the stage
 opens (#433). On each 1/30 s base tick the render thread adopts the render snapshot,
-reads the capture mailboxes, and composites each video mix due on that tick (see
+reads the capture mailboxes of every display and window the program or a mix shows,
+and composites each video mix due on that tick (see
 *Video mixes* in Design) from the render snapshot (see *Snapshots* in Design) at its
 encoder's size, the program at the canvas size: the mix's scene and the scenes it
 nests, with every `display` and `window` source that has no stored frame showing its

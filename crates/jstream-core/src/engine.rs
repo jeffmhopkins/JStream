@@ -2536,8 +2536,9 @@ impl State {
     /// Re-plans the program mix and the scene each video mix shows at the current time,
     /// and publishes them if they draw something new. A source's stored frame wins over
     /// its live one. The live sources are told when the plan's next frame change is due,
-    /// to re-plan then. The program mix shows the program scene (ADR-0030). Returns the
-    /// render generation current afterwards.
+    /// to re-plan then. The program mix shows the program scene (ADR-0030). The shot lists
+    /// the displays and windows the program and every mix capture. Returns the render
+    /// generation current afterwards.
     fn publish_render(&mut self) -> u64 {
         let Self {
             graph,

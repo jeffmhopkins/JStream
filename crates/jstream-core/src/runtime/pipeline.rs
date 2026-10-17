@@ -1792,6 +1792,8 @@ fn render_loop(job: RenderJob) {
                 reader.adopt();
                 let (snapshot, live) = reader.held();
                 let shot = snapshot.shot();
+                // The shot's captures cover every mix's passes, so a display or window
+                // only a video mix shows is started too.
                 captures.tick(shot.captures(), now);
                 frames.draw(&mut draw, shot, live, &captures)
             }));

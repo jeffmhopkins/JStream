@@ -383,6 +383,7 @@ fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
             .on_context = Some(context.is_some());
         let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
             let freed = inner(shot, live, captures, frames)?;
+            // The first mix drawn this tick; with no video mixes, the program.
             let drawn = frames.iter().find(|frame| frame.due);
             if let Some(pixel) = drawn.and_then(|frame| frame.out.first_chunk::<4>()) {
                 seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(*pixel);

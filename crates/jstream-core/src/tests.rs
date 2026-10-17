@@ -4356,10 +4356,10 @@ mod cpu_pipeline {
         block_on(control.call(output_call("yt", false))).expect("yt stop");
     }
 
-    /// An output on a video mix gets an encoder session of its own, fed at the mix's
-    /// rate: the recording on a half-rate mix gets at most one frame per two base ticks,
-    /// and isn't starved while the stream on program draws. A mix an output shows can't
-    /// be deleted.
+    /// An output on a video mix gets an encoder session of its own, not shared with the
+    /// program's, fed at the mix's rate: the recording on a half-rate mix gets at most
+    /// one frame per two base ticks, and isn't starved while the stream on program draws.
+    /// A mix an output shows can't be deleted.
     #[test]
     fn an_output_on_a_mix_encodes_it_at_its_rate() {
         use jstream_protocol::{MixInput, MixResolution, VideoMix, VideoMixId};

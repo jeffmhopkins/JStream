@@ -257,7 +257,8 @@ pub(crate) enum Garbage {
     Audio(AudioInput),
     /// A frame buffer of a video mix the render thread stopped drawing.
     Pixels(Vec<u8>),
-    /// The emptied list of sessions such a mix fed.
+    /// The emptied list of encoder sessions such a mix fed, dropped here rather than
+    /// on the render thread.
     Inputs(Vec<VideoInput>),
     /// A virtual camera's tap the render thread let go of. Once its camera thread has
     /// ended, it holds the last reference to its channels and the output's stop flag.
