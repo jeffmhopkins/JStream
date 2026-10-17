@@ -3005,6 +3005,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-platform-macos"
+version = "0.0.0"
+dependencies = [
+ "jstream-platform",
+ "mach2",
+ "objc2-foundation",
+]
+
+[[package]]
 name = "jstream-platform-windows"
 version = "0.0.0"
 dependencies = [
