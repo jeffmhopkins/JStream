@@ -2982,7 +2982,7 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:ff923b70ae781b73" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:31a3fdccb7a4fe8f", by = "agent:claude-ui-features", note = "Re-read Canvas: the change only recolours the selection, guides, unselected outlines and placeholder stage to the prototype palette; geometry, snapping and keyboard behaviour described here are unchanged." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -2994,7 +2994,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:63cd27b83b8c0873", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
+stamp = { hash = "b3:fdbd11ec74a6ad7e", by = "agent:claude-ui-features", note = "Re-read Design: shell has the header bar and the prototype's dark-only palette (no light/dark scheme), fonts fall back since the CSP allows only self fonts; new Header bullet (own outputs copy, keys_changed, Record, dropped readout, Undo/Redo, menus close on Escape or outside press); Outputs bullet says Go Live/End stream are in the header; the header carries the revision." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: main's virtual camera card and registration hints (desktop_vcam), the pairing status in Connecting, and the opacity, blend and filters fields in the sources and store tests stand beside the wave's Studio store with buses, the scene, sources and properties panels with the bus picker, and the Mixer bullet whose bus delete reads delete.plan with DeleteTarget::Bus and applies the plan at its rev; holds" }
@@ -3003,10 +3003,10 @@ stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
+stamp = { hash = "b3:0bea458bc1d392d4", by = "agent:claude-ui-features", note = "Re-read Design: shell has the header bar and the prototype's dark-only palette (no light/dark scheme), fonts fall back since the CSP allows only self fonts; new Header bullet (own outputs copy, keys_changed, Record, dropped readout, Undo/Redo, menus close on Escape or outside press); Outputs bullet says Go Live/End stream are in the header; the header carries the revision." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:31a3fdccb7a4fe8f", by = "agent:claude-ui-features", note = "Re-read Design: shell has the header bar and the prototype's dark-only palette (no light/dark scheme), fonts fall back since the CSP allows only self fonts; new Header bullet (own outputs copy, keys_changed, Record, dropped readout, Undo/Redo, menus close on Escape or outside press); Outputs bullet says Go Live/End stream are in the header; the header carries the revision." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -3017,11 +3017,14 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:3e890dfae55620cc" }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
+stamp = { hash = "b3:fc650f61a2ffb12b", by = "agent:claude-ui-features", note = "Re-read Design: shell has the header bar and the prototype's dark-only palette (no light/dark scheme), fonts fall back since the CSP allows only self fonts; new Header bullet (own outputs copy, keys_changed, Record, dropped readout, Undo/Redo, menus close on Escape or outside press); Outputs bullet says Go Live/End stream are in the header; the header carries the revision." }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:2d4999d9e7086731", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "only lib.rs's Docs: line changed, adding the UI-FEATURES sections that now cover this crate; the section's text still holds" }
+stamp = { hash = "b3:98227a5b1c34bcd1", by = "agent:claude-ui-features", note = "Re-read Design: shell has the header bar and the prototype's dark-only palette (no light/dark scheme), fonts fall back since the CSP allows only self fonts; new Header bullet (own outputs copy, keys_changed, Record, dropped readout, Undo/Redo, menus close on Escape or outside press); Outputs bullet says Go Live/End stream are in the header; the header carries the revision." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -3039,7 +3042,7 @@ stamp = { hash = "b3:f585374f04eb21d5", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
+stamp = { hash = "b3:414590b3570c9b1d", by = "agent:claude-ui-features", note = "Re-read Design: shell has the header bar and the prototype's dark-only palette (no light/dark scheme), fonts fall back since the CSP allows only self fonts; new Header bullet (own outputs copy, keys_changed, Record, dropped readout, Undo/Redo, menus close on Escape or outside press); Outputs bullet says Go Live/End stream are in the header; the header carries the revision." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's properties-form text (an audio-restricted source reference offers only sources reporting audio, less scene sources; properties.rs offers(), test an_audio_reference_offers_only_sources_with_audio). Main's filters and opacity reach the UI only as protocol fields filled in fixtures (sources.rs, store.rs, canvas/model.rs), no UI feature to document. Holds, no edit." }
@@ -3054,22 +3057,22 @@ stamp = { hash = "b3:06283688e21c8598", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:54e4380a88fc2840", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: main's virtual camera card and registration hints (desktop_vcam), the pairing status in Connecting, and the opacity, blend and filters fields in the sources and store tests stand beside the wave's Studio store with buses, the scene, sources and properties panels with the bus picker, and the Mixer bullet whose bus delete reads delete.plan with DeleteTarget::Bus and applies the plan at its rev; holds" }
+stamp = { hash = "b3:5e568de5f6506ec4", by = "agent:claude-ui-features", note = "Re-read Design: shell has the header bar and the prototype's dark-only palette (no light/dark scheme), fonts fall back since the CSP allows only self fonts; new Header bullet (own outputs copy, keys_changed, Record, dropped readout, Undo/Redo, menus close on Escape or outside press); Outputs bullet says Go Live/End stream are in the header; the header carries the revision." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:a3ba61c525d96483", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
+stamp = { hash = "b3:dd401268ababcbb9", by = "agent:claude-ui-features", note = "Re-read Design: shell has the header bar and the prototype's dark-only palette (no light/dark scheme), fonts fall back since the CSP allows only self fonts; new Header bullet (own outputs copy, keys_changed, Record, dropped readout, Undo/Redo, menus close on Escape or outside press); Outputs bullet says Go Live/End stream are in the header; the header carries the revision." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:9a20394443b85faa", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
+stamp = { hash = "b3:005ea80be7a17823", by = "agent:claude-ui-features", note = "Re-read Contents: added header.rs (Header, RecordButton, Dropped), Studio::keys_changed in Store, outputs.rs no longer holds the go-live UI but its logic backs the header's Go Live; canvas colour constants changed only." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
+stamp = { hash = "b3:0bea458bc1d392d4", by = "agent:claude-ui-features", note = "Re-read Contents: added header.rs (Header, RecordButton, Dropped), Studio::keys_changed in Store, outputs.rs no longer holds the go-live UI but its logic backs the header's Go Live; canvas colour constants changed only." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:31a3fdccb7a4fe8f", by = "agent:claude-ui-features", note = "Re-read Contents: added header.rs (Header, RecordButton, Dropped), Studio::keys_changed in Store, outputs.rs no longer holds the go-live UI but its logic backs the header's Go Live; canvas colour constants changed only." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -3080,11 +3083,14 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:3e890dfae55620cc" }
 
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
+stamp = { hash = "b3:fc650f61a2ffb12b", by = "agent:claude-ui-features", note = "Re-read Contents: added header.rs (Header, RecordButton, Dropped), Studio::keys_changed in Store, outputs.rs no longer holds the go-live UI but its logic backs the header's Go Live; canvas colour constants changed only." }
+
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:2d4999d9e7086731", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "only lib.rs's Docs: line changed, adding the UI-FEATURES sections that now cover this crate; the section's text still holds" }
+stamp = { hash = "b3:98227a5b1c34bcd1", by = "agent:claude-ui-features", note = "Re-read Contents: added header.rs (Header, RecordButton, Dropped), Studio::keys_changed in Store, outputs.rs no longer holds the go-live UI but its logic backs the header's Go Live; canvas colour constants changed only." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -3102,7 +3108,7 @@ stamp = { hash = "b3:f585374f04eb21d5", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
+stamp = { hash = "b3:414590b3570c9b1d", by = "agent:claude-ui-features", note = "Re-read Contents: added header.rs (Header, RecordButton, Dropped), Studio::keys_changed in Store, outputs.rs no longer holds the go-live UI but its logic backs the header's Go Live; canvas colour constants changed only." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): properties.rs only gained #459's offers() for Media::Audio and main's filters field in a test fixture; contents list (host.rs, store.rs, panels incl. properties, outputs, mixer, confirm, canvas) still matches. Holds, no edit." }
@@ -3117,13 +3123,13 @@ stamp = { hash = "b3:06283688e21c8598", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:54e4380a88fc2840", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list covers main's host.rs desktop() and desktop_vcam() and outputs.rs (streams, recordings, the virtual camera) beside the wave's Store bullet (Collection keeps state.get's buses), the properties form's bus reference select, and the Panels bullet with confirm.rs shared with mixer.rs, whose bus delete reads delete.plan; holds" }
+stamp = { hash = "b3:5e568de5f6506ec4", by = "agent:claude-ui-features", note = "Re-read Contents: added header.rs (Header, RecordButton, Dropped), Studio::keys_changed in Store, outputs.rs no longer holds the go-live UI but its logic backs the header's Go Live; canvas colour constants changed only." }
 
 ["CRATE-jstream-ui-e2e#harness"."body"]
 stamp = { hash = "b3:984dd6f77ea95af9", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/fixtures.js"]
-stamp = { hash = "b3:9fe5903a69528bac", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
+stamp = { hash = "b3:eee1e9e50112aad0", by = "agent:claude-ui-features", note = "Re-read Harness: connect now waits for header.app-header; fixtures gained disconnect (File menu) and rev reads the header's data-rev; one daemon per test, console errors, setup and browser unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/global-setup.js"]
 stamp = { hash = "b3:cd1222001aad0cda" }
@@ -3144,10 +3150,10 @@ stamp = { hash = "b3:063a37f95f399bff" }
 stamp = { hash = "b3:e05f245bcdd1b64e" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
-stamp = { hash = "b3:efa2f5546b0a7902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: connect.spec.js change adds a CSP console-error allowance via consoleErrors.allow, consistent with the 'Console errors fail a test unless allowed' bullet; fixtures and setup unchanged." }
+stamp = { hash = "b3:10a4b3cdfca0b4e0", by = "agent:claude-ui-features", note = "Re-read Harness: connect now waits for header.app-header; fixtures gained disconnect (File menu) and rev reads the header's data-rev; one daemon per test, console errors, setup and browser unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js"]
-stamp = { hash = "b3:1891eea87aebb83a", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
+stamp = { hash = "b3:df3f0644b2ee0713", by = "agent:claude-ui-features", note = "Re-read Harness: connect now waits for header.app-header; fixtures gained disconnect (File menu) and rev reads the header's data-rev; one daemon per test, console errors, setup and browser unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scenes.spec.js"]
 stamp = { hash = "b3:11c90c48df365bd4", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
@@ -3162,16 +3168,16 @@ stamp = { hash = "b3:adf0e4e847f64861", by = "agent:deps-thread", note = "Re-rea
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:93efc6eabdbb842b", by = "agent:u3a-builder", note = "Re-read after merging main; resolved the conflict by taking main's #305 connecting text and keeping this PR's scenes bullet and the Outputs-page note; both match the specs" }
+stamp = { hash = "b3:7ab8c58879494628", by = "agent:claude-ui-features", note = "Re-read tests: Connecting checks the header's File menu (URL, protocol, Escape closes) and disconnects through it; Outputs covers Go Live/End stream in the header and the header's Record starting and stopping a recording." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:e05f245bcdd1b64e" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
-stamp = { hash = "b3:efa2f5546b0a7902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet against connect.spec.js: the policy-refused test is no longer test.fail and asserts an alert and Connect re-enabled; text matches." }
+stamp = { hash = "b3:10a4b3cdfca0b4e0", by = "agent:claude-ui-features", note = "Re-read tests: Connecting checks the header's File menu (URL, protocol, Escape closes) and disconnects through it; Outputs covers Go Live/End stream in the header and the header's Record starting and stopping a recording." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js"]
-stamp = { hash = "b3:1891eea87aebb83a", by = "agent:u3a-builder", note = "Re-read after merging main; scenes and outputs bullets match the specs, which pass locally (18, #305 failing as marked)" }
+stamp = { hash = "b3:df3f0644b2ee0713", by = "agent:claude-ui-features", note = "Re-read tests: Connecting checks the header's File menu (URL, protocol, Escape closes) and disconnects through it; Outputs covers Go Live/End stream in the header and the header's Record starting and stopping a recording." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scenes.spec.js"]
 stamp = { hash = "b3:11c90c48df365bd4", by = "agent:u3a-builder", note = "Re-read after merging main; scenes and outputs bullets match the specs, which pass locally (18, #305 failing as marked)" }
@@ -3720,10 +3726,10 @@ stamp = { hash = "b3:61d5c9e46ca8096c", by = "agent:claude@session_01YJRVBggMSER
 stamp = { hash = "b3:076299ee126c849d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
 
 ["UI-FEATURES#canvas"."body"]
-stamp = { hash = "b3:7140e275d396fd59", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:599c4d6f01f5cb74", by = "agent:claude-ui-features", note = "canvas/mod.rs recoloured to the prototype palette; CV-01 note updated (frame and area colours built, stage size and caption still differ); other rows unchanged." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:31a3fdccb7a4fe8f", by = "agent:claude-ui-features", note = "canvas/mod.rs recoloured to the prototype palette; CV-01 note updated (frame and area colours built, stage size and caption still differ); other rows unchanged." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
@@ -3744,13 +3750,16 @@ stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01YJRVBggMSER
 stamp = { hash = "b3:c7ba66a9c1583e72", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:0bea458bc1d392d4", by = "agent:claude-ui-features", note = "app.rs only swapped the status bar for the Header component; the fixed grid described here is unchanged, DK rows all still to build." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:5267ccc13b0e73bb", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:a3a8340d7111e15a", by = "agent:claude-ui-features", note = "HD-01 partial (brand, File, Edit built; View/Layout with docking), HD-04 partial (dropped built from stats.tick; fps/CPU need D39), HD-07 and HD-09 built in header.rs; other rows re-read." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:0bea458bc1d392d4", by = "agent:claude-ui-features", note = "HD-01 partial (brand, File, Edit built; View/Layout with docking), HD-04 partial (dropped built from stats.tick; fps/CPU need D39), HD-07 and HD-09 built in header.rs; other rows re-read." }
+
+["UI-FEATURES#header"."file:crates/jstream-ui/src/header.rs"]
+stamp = { hash = "b3:fc650f61a2ffb12b", by = "agent:claude-ui-features", note = "Added header.rs to covers. HD-01 partial (brand, File, Edit built; View/Layout with docking), HD-04 partial (dropped built from stats.tick; fps/CPU need D39), HD-07 and HD-09 built in header.rs; other rows re-read." }
 
 ["UI-FEATURES#inspector"."body"]
 stamp = { hash = "b3:d31ba81be56d0df5", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
@@ -3762,7 +3771,7 @@ stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01YJRVBggMSER
 stamp = { hash = "b3:872e41b35c09693f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:31a3fdccb7a4fe8f", by = "agent:claude-ui-features", note = "canvas/mod.rs change is colours only; KB rows re-read, unchanged (Undo/Redo also in the Edit menu now)." }
 
 ["UI-FEATURES#mixer"."body"]
 stamp = { hash = "b3:a707e4cfd1883767", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
@@ -3780,7 +3789,7 @@ stamp = { hash = "b3:06283688e21c8598", by = "agent:claude@session_01YJRVBggMSER
 stamp = { hash = "b3:3cbe7856eda760ab", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
 
 ["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:414590b3570c9b1d", by = "agent:claude-ui-features", note = "outputs.rs lost the go-live control (now HD-09) and bumps keys_changed; OU rows re-read, still accurate." }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:ec0d3f2d1bda83e6", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
@@ -3789,10 +3798,10 @@ stamp = { hash = "b3:ec0d3f2d1bda83e6", by = "agent:claude@session_01YJRVBggMSER
 stamp = { hash = "b3:b24a15b358dcb55b", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
 
 ["UI-FEATURES#summary"."body"]
-stamp = { hash = "b3:3b4b128c74e47618", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+stamp = { hash = "b3:cb21b57e8c017c50", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script: 130 rows, 7 built, 23 partial, 56 to build, 42 need the engine, 2 decisions." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
-stamp = { hash = "b3:7140e275d396fd59", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+stamp = { hash = "b3:599c4d6f01f5cb74", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script: 130 rows, 7 built, 23 partial, 56 to build, 42 need the engine, 2 decisions." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#dialogs"]
 stamp = { hash = "b3:b5a3b25e65d5b835", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
@@ -3804,7 +3813,7 @@ stamp = { hash = "b3:c7ba66a9c1583e72", by = "agent:claude@session_01YJRVBggMSER
 stamp = { hash = "b3:82e921f469fe720c", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:5267ccc13b0e73bb", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+stamp = { hash = "b3:a3a8340d7111e15a", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script: 130 rows, 7 built, 23 partial, 56 to build, 42 need the engine, 2 decisions." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#inspector"]
 stamp = { hash = "b3:d31ba81be56d0df5", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
@@ -3831,7 +3840,7 @@ stamp = { hash = "b3:3cbe7856eda760ab", by = "agent:claude@session_01YJRVBggMSER
 stamp = { hash = "b3:ec0d3f2d1bda83e6", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#theme"]
-stamp = { hash = "b3:cc4af357a46dd71f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+stamp = { hash = "b3:fdd5be8b231520d5", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script: 130 rows, 7 built, 23 partial, 56 to build, 42 need the engine, 2 decisions." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#transform"]
 stamp = { hash = "b3:ed0a7d035b91ffb9", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
@@ -3840,11 +3849,11 @@ stamp = { hash = "b3:ed0a7d035b91ffb9", by = "agent:claude@session_01YJRVBggMSER
 stamp = { hash = "b3:3c4c5b44803b446d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
 
 ["UI-FEATURES#theme"."body"]
-stamp = { hash = "b3:cc4af357a46dd71f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:fdd5be8b231520d5", by = "agent:claude-ui-features", note = "WS-01 and WS-03 now built (palette tokens, scrollbars, focus ring, selection in style.css); WS-08 note says the error box uses the toast colours; other rows re-read against style.css, still accurate." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/index.html"]
 stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:a3ba61c525d96483", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+stamp = { hash = "b3:dd401268ababcbb9", by = "agent:claude-ui-features", note = "WS-01 and WS-03 now built (palette tokens, scrollbars, focus ring, selection in style.css); WS-08 note says the error box uses the toast colours; other rows re-read against style.css, still accurate." }
 
