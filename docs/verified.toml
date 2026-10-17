@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:f0e8cbc5a816b3b7", by = "agent:wave-owner", note = "main into wave/m1-2: main's CLAP rows (platform PluginHosts, platform-windows launcher, plugin-clap, core supervisor, apps plugin-host) from wave/m3's landing beside the wave's effects row drawing through render's filter harness" }
+stamp = { hash = "b3:ef2ab8309e14c317", by = "agent:claude-567", note = "Added the layer-2 jstream-crash row (depends on jstream-platform and jstream-protocol, both L1; no unsafe); the apps row link list is not exhaustive and still holds | merge: The merge (wave/m1-2's landing, #545) changes ARCH only below the crate map (data model, threads, protocol, GPU and browser sections); re-read the table as merged: the jstream-crash L2 row this branch adds is intact and still matches its manifest, and the other rows are main's." }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -1551,7 +1551,7 @@ stamp = { hash = "b3:21352a9dc4ca1cb0", by = "agent:claude-567", note = "Round 1
 stamp = { hash = "b3:c6c4db08fd70381a", by = "agent:claude-567", note = "Round 1 B1/N1: install now takes notify (Notify = fn(&str)) and the hook hands it the redacted, truncated line instead of writing stderr itself, so the library never prints (R-RS-005). Re-read the whole section against lib.rs and tests.rs: the install bullet names notify, the Tests paragraph says the child's notifier writes the line to stderr (the leak checks still read it there), and the rest (modes, cut, withheld message, Redacting, cap of 10) is unchanged. ADR-0067 now records the R-RS-005 decision and no longer credits user-only folders to the desktop's copy." }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:fadc1ade8fc5506d", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
+stamp = { hash = "b3:e2f1eb663f2c7b2d", by = "agent:claude-567", note = "Round 1 B2: the Dependencies bullet no longer says jstream-crash is in the tree through core and the server; it is named separately as a workspace crate only the two apps use (ADR-0067). The Crash reports bullet now says main.rs's crash_line prints the hook's redacted line. Re-read both against main.rs and Cargo.toml. | merge: The merge moves scan_clap_plugins within serve.rs (no change in behaviour) and rewrites the browser sources bullet (the engine lends the stage's GPU context, Engine::use_gpu); the crash reports bullet and this branch's Dependencies fix are unaffected." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:90414bf561410e34", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
@@ -1587,7 +1587,7 @@ stamp = { hash = "b3:b7b79c50e790bbee", by = "agent:claude-567", note = "Round 1
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:34c8d3ddfb1f04f1", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
+stamp = { hash = "b3:9a8b6462871a6d84", by = "agent:claude-567", note = "Crash reports now come from jstream-crash with a Secrets list made in main and passed to token.rs and serve.rs; Redacting is jstream_crash::Redacting; the blake3 dep and the fake-store tests moved to the crate; logs.rs keeps only compact | merge: The merge moves scan_clap_plugins within serve.rs (no change in behaviour) and rewrites the browser sources bullet (the engine lends the stage's GPU context, Engine::use_gpu); the crash reports bullet and this branch's Dependencies fix are unaffected." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:813a816def2abc43", by = "agent:claude-crash-558", note = "Crash reports now come from jstream-crash with a Secrets list made in main and passed to token.rs and serve.rs; Redacting is jstream_crash::Redacting; the blake3 dep and the fake-store tests moved to the crate; logs.rs keeps only compact" }
@@ -1596,7 +1596,7 @@ stamp = { hash = "b3:813a816def2abc43", by = "agent:claude-crash-558", note = "C
 stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:b2c1df1a08c66049", by = "agent:wave-owner", note = "main into wave/m1-2: hand-resolved Serving bullet: the wave's live engine through live.rs plus main's CLAP plugin scan; serve.rs keeps the wave's with_youtube and main's scan_clap_plugins thread, both called from engine()" }
+stamp = { hash = "b3:1a0c1d9b34b14c4d", by = "agent:claude-567", note = "crash.rs moved to jstream-crash (ADR-0067); Contents now names the crate hook, and the Tests bullet drops the crash.rs tests and names the token and key registration tests | merge: The merge only moves scan_clap_plugins within serve.rs and rejoins one wrapped line in Contents; this branch's crash-report contents still hold." }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: the token file now names the device file beside it, live mode with the cef feature opens browser sources, the end-to-end MCP test sets the canvas to the fake display's size, and YouTube sign-in is not here because the daemon doesn't call Engine::with_youtube yet, beside wave/m3's CLAP scan. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. The daemon's own link matches its Cargo.toml (jstream-browser always, cef = jstream-browser/cef). serve.rs, against wave/m3, gains MfMediaDecoders, the CEF wiring (cef_browser, browse) and its test, and passes main.rs's device file to the server through bind's device_file parameter, beside the clap-scan thread." }
@@ -1623,7 +1623,7 @@ stamp = { hash = "b3:b7b79c50e790bbee", by = "agent:claude-567", note = "Round 1
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:34c8d3ddfb1f04f1", by = "agent:wave-owner", note = "main into wave/m1-2: hand-resolved Serving bullet: the wave's live engine through live.rs plus main's CLAP plugin scan; serve.rs keeps the wave's with_youtube and main's scan_clap_plugins thread, both called from engine()" }
+stamp = { hash = "b3:9a8b6462871a6d84", by = "agent:claude-567", note = "crash.rs moved to jstream-crash (ADR-0067); Contents now names the crate hook, and the Tests bullet drops the crash.rs tests and names the token and key registration tests | merge: The merge only moves scan_clap_plugins within serve.rs and rejoins one wrapped line in Contents; this branch's crash-report contents still hold." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:813a816def2abc43", by = "agent:claude-crash-558", note = "crash.rs moved to jstream-crash (ADR-0067); Contents now names the crate hook, and the Tests bullet drops the crash.rs tests and names the token and key registration tests" }
@@ -1653,7 +1653,7 @@ stamp = { hash = "b3:b7b79c50e790bbee", by = "agent:claude-567", note = "Round 1
 stamp = { hash = "b3:813a816def2abc43", by = "agent:claude-crash-558", note = "Re-read against main.rs and token.rs taking a Secrets: crash reports land in the log dir as before, newest 10 kept; no option or output changed" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:af4c8423f73930ba", by = "agent:wave-owner", note = "This builds wave/m1-3's main sync from T1 on wave/m1-2 plus #552. The body now holds both wave/m1-2's C8b5 Browser sources bullet (pages paint on the stage's lent context, taken back at stop) and #552's Crash reports bullet (crash.rs hook, Redacting key store, 10-report pruning). I re-read both against browser.rs, crash.rs, main.rs and host.rs. Neither bullet touches the other, and both hold." }
+stamp = { hash = "b3:61ef336672668a24", by = "agent:claude-567", note = "Round 1: the crash-report bullet now says main.rs's crash_line prints the hook's redacted line; re-read against main.rs, the rest of the section is unchanged. | merge: The merge rewrites the browser sources bullet (pages paint on the stage's GPU context while it runs); the crash-report bullet this branch changes is unaffected." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -2172,7 +2172,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:e6f240cc14ed9d3d", by = "agent:t1-studio", note = "Merged the wave's browser-page frames and hardware-first adapter wording with this branch's note that render composites one scene or a transition between two on the media device; rest of the section unchanged." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:f0e8cbc5a816b3b7", by = "agent:wave-owner", note = "main into wave/m1-2: re-read against ARCH crate map (CLAP rows from wave/m3) and gpu-pipeline (hardware first, #437): this section already says render opens hardware first with the software fallback, and the wave's effect-pack text doesn't touch it" }
+stamp = { hash = "b3:ef2ab8309e14c317", by = "agent:claude-567", note = "Only the crate map gained a jstream-crash row; nothing about GPU frames or the platform crates changed | merge: The merge rewrites GPU frames for browser pages and GpuContext::key, and the crate map only gains this branch's jstream-crash row, which this section doesn't rely on." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:4e05a3682ccc0058", by = "agent:t1-studio", note = "Merged the wave's browser-page frames and hardware-first adapter wording with this branch's note that render composites one scene or a transition between two on the media device; rest of the section unchanged." }
