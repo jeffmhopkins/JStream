@@ -591,7 +591,7 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Transport bullet's gate description unaffected by the log limit on failed credentials; no protocol change" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:cd2f0e09557c0e85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354 adds a TCP connection cap in jstream-server's listener and a 64-call in-flight cap per WebSocket connection (stops reading, no new message or error); wave/m1-2 added the TLS-listener device token wording, the /pair page and device cookie (ADR-0047) and the pairing-off unsupported answer; envelope, versioning, transport and slow-client summary still hold, no protocol version change. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
+stamp = { hash = "b3:1265d9d25e016969", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354 adds a TCP connection cap in jstream-server's listener and a 64-call in-flight cap per WebSocket connection (stops reading, no new message or error); the envelope, versioning, transport and slow-client summary here still hold, and no protocol version changes" }
@@ -990,7 +990,7 @@ stamp = { hash = "b3:5e098480ae7dcb4b", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:9d478feeb19361e6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/lib.rs"]
-stamp = { hash = "b3:816611b898722d37", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 5 B5): The seam says use_device gets the host's media-adapter device for paints before a stage, then the stage's own context while it runs (LiveSources::use_gpu), taken back to none at stop; edited the hardware-check clause (page_check runs on a media-adapter device and QPC clock, as the daemon's pages do before a stage lends its context) and use_device's doc in lib.rs to match; no other sentence describes which device pages get; holds" }
+stamp = { hash = "b3:0ef1849317d67727", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/link.rs"]
 stamp = { hash = "b3:bff1c1534bc93db8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
@@ -1500,7 +1500,7 @@ stamp = { hash = "b3:a750642233d72b2c" }
 stamp = { hash = "b3:55919ae71cf6d6c8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#353: Live on Windows and Crash reports say the key store reaches live() behind crash::Redacting. After #485 moved live() into the library (which can't see the binary's crash module), serve.rs's live_redacting does the wrapping and serve::engine calls it on Windows. The Crash reports bullet now also says with_youtube hands YouTube WindowsCredentials behind Redacting (the serve.rs change after #312 wired YouTube), and that a YouTube-bound output's ingest key and the access token go through neither store (N1, left open). crash.rs: Redacting over both traits, registered before set and after a successful get, nothing from is_set or a failed read, the plain-code module-doc mention, and its tests, matching both bullets. The publish-opener bullet keeps #485's live.rs text and adds that Redacting stays in the binary. The YouTube bullet now says the token store is behind Redacting. Dependencies (N4) adds crash.rs's MemoryKeyStore and MemoryTokenStore tests. The server design dep changed with #484 (TCP cap, in-flight cap): the daemon sets neither, so Listening holds. clippy and cargo doc -D warnings pass" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/lib.rs"]
-stamp = { hash = "b3:3452a33a8b6b712b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
+stamp = { hash = "b3:12f186b4fc1f9dbf", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/live.rs"]
 stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
@@ -1539,7 +1539,7 @@ stamp = { hash = "b3:a750642233d72b2c" }
 stamp = { hash = "b3:55919ae71cf6d6c8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#353: crash.rs gains crash::Redacting over StreamKeyStore and OAuthTokenStore. It registers a secret before set and after a successful get, and nothing from is_set, clear or a failed read. The module doc names Redacting as plain code (it is cfg(any(windows, test))), and the Redacting doc now says it wraps YouTube's token store. The Tests bullet names the crash-hook child test (key and refresh token loaded through Redacting) and serve.rs's a_failing_rtmp_publish_never_names_the_key, which now runs through serve::live_redacting with the library's rtmp() and checks registration right after the first output.set_key (N2). Merges of wave/m1-2: #485 moved live() and the opener tests into live.rs, so the Tests bullet now keeps both (opener and live engine in live.rs, the RTMP leak test in serve.rs). #312's YouTube Contents bullet holds beside it. Crash reports still describes a redacted report. cargo test -p jstream-daemon: lib 3, bin 32, daemon 9, e2e 1" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/lib.rs"]
-stamp = { hash = "b3:3452a33a8b6b712b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
+stamp = { hash = "b3:12f186b4fc1f9dbf", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/live.rs"]
 stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
@@ -2298,7 +2298,7 @@ stamp = { hash = "b3:a962082ddbf74417" }
 stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
-stamp = { hash = "b3:a83d3efc2c9e8f84", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: body adds the MfMediaDecoders bullet (opening via MFCreateSourceReaderFromURL without the verbatim prefix, hardware preference, RGB32 to RGBA/BGRA through Lock2D with the aperture crop, 100 ns pts, seeking, MfStarted threading, not yet audio or GPU frames), its delay-load DLLs, the cross-platform helper tests and the JSTREAM_TEST_MEDIA hardware tests. decode/mod.rs: MfMediaDecoders' module and its hardware tests (media_file_decodes_frames_in_order_and_seeks, media_file_errors_name_what_is_wrong). decode/reader.rs: open, create_reader, select_video, shape, aperture, frame_period, has_audio, duration, next_video, seek, frame. decode/convert.rs: row conversion, crop, sizes, times and the path prefix, with tests. lib.rs: crate doc names MfMediaDecoders, mod decode, pub use decode::MfMediaDecoders. video_device/mod.rs: source becomes pub(crate) so the reader shares MfStarted. Dep platform#purpose gains the MediaDecoders trait it implements; holds" }
+stamp = { hash = "b3:358941c968c7d7d8", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/n_edition.rs"]
 stamp = { hash = "b3:ede57dd335c2eec0" }
@@ -3135,7 +3135,7 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Logging gains the failed-credential limit (10 a minute, global, then one silencing line and a count with the next one), open question 6 narrowed to non-credential refusals; admission table and pairing text still hold" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:cd2f0e09557c0e85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: limits table adds max_tcp_connections (128, every accepted stream incl. unauthenticated, keep-alive and upgraded WebSocket ones; closed unanswered when full), listener permit held until drop with once-per-run warn log, Sessions/Slow clients say 64 calls in flight (MAX_IN_FLIGHT), MCP limits note TCP connections count. wave/m1-2 brought ServerConfig::tls and ::pairing, the GET /pair page and __Host-jstream_device cookie (ADR-0047) and pairing-off answers (ADR-0057); re-read merged README against listener.rs, session.rs, config.rs, lib.rs: the cap counts /pair and cookie-admitted streams like any other, both sides' text kept, no contradiction. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
+stamp = { hash = "b3:1265d9d25e016969", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: limits table adds max_tcp_connections (128, every accepted stream incl. unauthenticated, keep-alive and upgraded WebSocket ones; closed unanswered when full), listener paragraph explains the permit held until drop and the once-per-run warn log, Sessions/Slow clients say 64 calls in flight (MAX_IN_FLIGHT) stop reading like REPLY_BACKLOG, MCP limits note TCP connections count, Logging adds the warn line. Checked against listener.rs accept loop, session.rs select guard and the two new tests; no wire or protocol change" }
@@ -3186,7 +3186,7 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Gate entry now names the failed-credential log limit; rest of contents list unchanged by gate.rs change" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:cd2f0e09557c0e85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet names the max_tcp_connections cap, Session bullet the in-flight cap; config.rs max_tcp_connections (zero refused). wave/m1-2 added the Pairing page (pair_page.rs, pair.html), tls/pairing config fields, Admitted's pairing switch and the TLS-listener note; merged Contents list matches the modules in lib.rs. Crate scope, layer and R-ARCH-003 unchanged. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
+stamp = { hash = "b3:1265d9d25e016969", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet now names the max_tcp_connections cap (listener.rs closes a stream accepted beyond it) and Session bullet the MAX_IN_FLIGHT cap; config.rs gains max_tcp_connections (zero refused), lib.rs passes it to Limited; tests.rs adds tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped. Crate scope, layer and R-ARCH-003 unchanged" }
@@ -3573,7 +3573,7 @@ stamp = { hash = "b3:69317b1d67515848" }
 stamp = { hash = "b3:5b94524313e254bb" }
 
 ["CRATE-jstream-vcam-proto#purpose"."file:crates/jstream-vcam-proto/src/lib.rs"]
-stamp = { hash = "b3:11679c4222aa2a93" }
+stamp = { hash = "b3:3abb295520fe814e", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["CRATE-jstream-vcam-proto#purpose"."file:crates/jstream-vcam-proto/src/names.rs"]
 stamp = { hash = "b3:5506fd7891457520" }
@@ -3612,7 +3612,7 @@ stamp = { hash = "b3:febfe552adc09d5b" }
 stamp = { hash = "b3:5d86cc2aab180d79" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/lib.rs"]
-stamp = { hash = "b3:a11be4e03388f15a" }
+stamp = { hash = "b3:d58071e17b2407df", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/pace.rs"]
 stamp = { hash = "b3:ddd1a9e738e6c587" }
@@ -4056,7 +4056,7 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#assets"."body"]
-stamp = { hash = "b3:ac2d20dd201b9d41", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the paired-device-tokens row is no longer in flight; it now says the digest lives in the devices file beside the token file and the device keeps its own copy, with only the browser cookie still in flight (#288); matches devices.rs and token.rs::device_file; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:0f6bd5560e5ab860", by = "agent:threat-model-covers", note = "Paired-device row: the browser pairing page and cookie merged (#288) but are served only on a TLS listener, which the server lacks (ServerConfig::tls, pair_page.rs), so 'in flight' became 'once there is a TLS listener'. Rest re-read: no macOS/Linux store, desktop token in memory." }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -4065,13 +4065,25 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#browser"."body"]
-stamp = { hash = "b3:48f170cbe7bd4d5f", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+stamp = { hash = "b3:b6d535cdd240dc23", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
 
 ["THREAT-MODEL#browser"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
 
+["THREAT-MODEL#browser"."dep:docs/adr/0048-sandboxed-browser-helper.md"]
+stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
+
+["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/handlers.rs"]
+stamp = { hash = "b3:5e098480ae7dcb4b", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
+
+["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/mod.rs"]
+stamp = { hash = "b3:9d478feeb19361e6", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
+
+["THREAT-MODEL#browser"."file:crates/jstream-browser/src/request.rs"]
+stamp = { hash = "b3:8ac270a94f116ebd", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
+
 ["THREAT-MODEL#mcp"."body"]
-stamp = { hash = "b3:65bda3c04c05348a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343: added to the MCP controls that a retarget to another host removes the output's key rather than sending it there, and dropped the #343 gap from MCP gaps; #346 gap kept. Tests: a_stream_key_never_follows_its_output_to_another_server, an_output_whose_old_key_is_not_removed_does_not_start." }
+stamp = { hash = "b3:8888c9d64afbfd1e", by = "agent:threat-model-covers", note = "#346 fixed on wave/m1-2 (#370, #482, ADR-0059): RTMP rejection text redacted, cut to 512 chars, control chars replaced (publisher.rs remote_text); server instructions mark remote_* fields and the action_failed reason as data; tools carry readOnly/destructive/openWorld hints. Gap removed, per-tool limit moved to Accepted. Added ADR-0059 dep." }
 
 ["THREAT-MODEL#mcp"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -4079,14 +4091,32 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 ["THREAT-MODEL#mcp"."dep:docs/adr/0036-mcp-events-polling-tool.md"]
 stamp = { hash = "b3:528a4d728be121b6" }
 
+["THREAT-MODEL#mcp"."dep:docs/adr/0059-mcp-annotations-and-remote-text.md"]
+stamp = { hash = "b3:3d3001bba844d9a7", by = "agent:threat-model-covers", note = "#346 fixed on wave/m1-2 (#370, #482, ADR-0059): RTMP rejection text redacted, cut to 512 chars, control chars replaced (publisher.rs remote_text); server instructions mark remote_* fields and the action_failed reason as data; tools carry readOnly/destructive/openWorld hints. Gap removed, per-tool limit moved to Accepted. Added ADR-0059 dep." }
+
 ["THREAT-MODEL#pairing"."body"]
-stamp = { hash = "b3:33417deaedc9c769", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): codes and device tokens are now Built (loopback only, no TLS yet), and only the browser page and cookie stay In flight (#288); the controls name the cookie's as #288's; the code (40 bits, 2 min, 5 attempts) and token (256-bit digests, revocable, 30-day lapse) rules match devices.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:f195d6ffab745ebd", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
 
 ["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
 stamp = { hash = "b3:5670e6a5758601b2" }
 
 ["THREAT-MODEL#pairing"."dep:docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
 stamp = { hash = "b3:8042c8d8d5117226" }
+
+["THREAT-MODEL#pairing"."file:crates/jstream-server/src/admitted.rs"]
+stamp = { hash = "b3:5ee855226a39815e", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
+
+["THREAT-MODEL#pairing"."file:crates/jstream-server/src/devices.rs"]
+stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
+
+["THREAT-MODEL#pairing"."file:crates/jstream-server/src/gate.rs"]
+stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
+
+["THREAT-MODEL#pairing"."file:crates/jstream-server/src/pair.rs"]
+stamp = { hash = "b3:e3e01039aa2838d5", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
+
+["THREAT-MODEL#pairing"."file:crates/jstream-server/src/pair_page.rs"]
+stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
 
 ["THREAT-MODEL#plugins"."body"]
 stamp = { hash = "b3:0d4613df179815ac", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343: reworded the WASM gap: a plugin could still retarget an output but can no longer take the old key along, since the engine removes it on a new server (a_stream_key_never_follows_its_output_to_another_server). Other plugin gaps untouched." }
@@ -4098,7 +4128,7 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:56b6301e2e6a132b" }
 
 ["THREAT-MODEL#secrets"."body"]
-stamp = { hash = "b3:8e272680a60de088", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343 whole change to the body against wave/m1-2: added the control 'a key is bound to its server' (scheme, host or port change, or delete, removes it; start refused until removed; a start already past the check opens the target it checked; set_key refused while that start opens), and removed 'retargeting keeps the key (#343)' from the gaps list and the #343 row from Known gaps. Matches engine.rs (execute_and_unbind_keys, remove_stale_keys, Pending.kind via output_kind, set_key refusal) and the three jstream-core regression tests." }
+stamp = { hash = "b3:b981c63f77637fdf", by = "agent:threat-model-covers", note = "#353 items 2 and 3 fixed by #487: crash.rs Redacting registers stream keys and refresh tokens; tests stream_keys_are_never_echoed_or_logged (server WS+MCP), a_failing_rtmp_publish_never_names_the_key, a_panic_writes_a_redacted_report. Gap now only item 1, rtmp:// cleartext. #343 control text matches #491." }
 
 ["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -4107,7 +4137,7 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:4d6a2bb6c807b38b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Controls list the failed-token log limit, Accepted says why attempts are not delayed, #354 gap sentence and table row removed as the issue's last item lands" }
+stamp = { hash = "b3:60575ee8d38f9eed", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -4115,11 +4145,50 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 ["THREAT-MODEL#server"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
+["THREAT-MODEL#server"."file:apps/jstream-daemon/src/args.rs"]
+stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+
+["THREAT-MODEL#server"."file:apps/jstream-daemon/src/token.rs"]
+stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+
+["THREAT-MODEL#server"."file:crates/jstream-server/src/config.rs"]
+stamp = { hash = "b3:49da10ab71c38867", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+
+["THREAT-MODEL#server"."file:crates/jstream-server/src/gate.rs"]
+stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+
+["THREAT-MODEL#server"."file:crates/jstream-server/src/lib.rs"]
+stamp = { hash = "b3:1265d9d25e016969", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+
+["THREAT-MODEL#server"."file:crates/jstream-server/src/listener.rs"]
+stamp = { hash = "b3:3b79687f434f2902", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+
+["THREAT-MODEL#server"."file:crates/jstream-server/src/session.rs"]
+stamp = { hash = "b3:0186ca2ee548c229", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+
 ["THREAT-MODEL#vcam"."body"]
 stamp = { hash = "b3:22d241d0aeefeac2", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
+
+["THREAT-MODEL#vcam"."file:crates/jstream-platform-windows/src/vcam/shared.rs"]
+stamp = { hash = "b3:82d17cf6bf52c003", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
+
+["THREAT-MODEL#vcam"."file:crates/jstream-platform-windows/src/vcam/sink.rs"]
+stamp = { hash = "b3:2fcb7bb950608efc", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
+
+["THREAT-MODEL#vcam"."file:crates/jstream-vcam-proto/src/names.rs"]
+stamp = { hash = "b3:5506fd7891457520", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
+
+["THREAT-MODEL#vcam"."file:crates/jstream-vcam-windows/src/trust.rs"]
+stamp = { hash = "b3:052ff36d65680eb3", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
+
+["THREAT-MODEL#vcam"."file:crates/jstream-vcam-windows/src/win/frames.rs"]
+stamp = { hash = "b3:22be68cdd50e8dd9", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
+
+["THREAT-MODEL#vcam"."file:crates/jstream-vcam-windows/src/win/session.rs"]
+stamp = { hash = "b3:8bfe86421fa75457", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
 
 ["UI-FEATURES#beyond"."body"]
 stamp = { hash = "b3:5a0895755e3aae91", by = "agent:claude-ui-features", note = "session.rs: connect and open with hello and engine_url_for_page back the connect form; host.rs: desktop() hands the desktop app's engine for the automatic connection and desktop_vcam its camera; pairing.rs: start, devices and revoke back the pairing panel per ADR-0044." }
