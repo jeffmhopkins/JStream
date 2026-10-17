@@ -395,7 +395,22 @@ premultiplied linear light on the way out.
   across its seam; off, the area the picture leaves is transparent. A new speed jumps
   to where that speed puts the picture at the current time.
 
-Aspect ratio (V1a): not yet.
+Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
+Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
+`custom_width` and `custom_height` from 1 to 10000 shown only for `custom`), `mode`
+(`crop`, the default, `pad` or `stretch`), `anchor` (`center`, an edge or a corner;
+crop and pad only), `pad_color` (with alpha, default opaque black; pad only) and
+`resampling` (`bilinear`, `bicubic`, the default, or `lanczos`; stretch only). Its
+`output_size` is the rule the source's reported size follows: crop keeps one input
+dimension and shrinks the other, pad keeps one and grows the other, and stretch keeps
+the input's larger dimension as the output's larger one (1920x1080 stretched to 9:16 is
+1080x1920). A derived dimension is rounded to the nearest pixel and never 0, and the
+math saturates instead of overflowing, so a size past the adapter's limit fails as
+`TooLarge` when the layer is made. Crop and pad copy input pixels 1:1 with an offset
+(no scaling); only stretch resamples, as bilinear, Catmull-Rom bicubic (4x4 texel loads)
+or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied colour
+(an SDR assumption: values above 1 are clipped).
+The kernels are not widened for a downscale, so a large shrink along one axis can alias.
 
 The multi-pass filters (V2): not yet.
 

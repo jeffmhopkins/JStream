@@ -27,7 +27,7 @@ stamp = { hash = "b3:963d560e94ad3155", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:dbacb2dd7907964d" }
 
 ["ARCH#crate-map"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:00badea83615c29f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Layer-6 apps row: desktop links jstream-browser optionally with cef, daemon always links it; matches both Cargo.toml files" }
+stamp = { hash = "b3:daa370c4ed6a1057", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the daemon Cargo.toml only (jstream-youtube as a Windows dependency plus its fake dev-dep); the crate map's rows hold" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: #298's jstream-browser row (helper over pipes, helper feature) and apps/* row (the helper's DLL, unsafe for its one export) sit beside P1's jstream-platform paths row and main's jstream-effects and jstream-anim rows; lint-deps passes; holds" }
@@ -165,7 +165,7 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:28ee101b2eba6fc8", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): browser page imported as premultiplied sRGB before the step-5 encoder text; edited the filter sentence: apply_filter draws from any image, imports and browser pages included, into a premultiplied Rgba16Float layer; X1's effect-pack wording kept; holds" }
+stamp = { hash = "b3:3481e3fb4c094fd8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, after the V1 paragraph. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
@@ -186,7 +186,13 @@ stamp = { hash = "b3:04169eb6e7440a46", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, after the V1 paragraph. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/ratio.rs"]
+stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, after the V1 paragraph. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/ratio.wgsl"]
+stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, after the V1 paragraph. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
@@ -276,7 +282,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:b77ad66612d353db", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): browser page imported as premultiplied sRGB before the step-5 encoder text; edited the filter sentence: apply_filter draws from any image, imports and browser pages included, into a premultiplied Rgba16Float layer; X1's effect-pack wording kept; holds" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:a054a6de381d4a36", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:4988f0034f41e2bc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:340acdb9358d89b0", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
@@ -291,10 +297,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:9ce5bf1045fb545e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:4f4dc3f3b2a0055f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:1252ff1368175683", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: tools.snap now carries wave/m2's #460 bus text (bus.delete refused while a setting refers to the bus since 0.24, DeleteTarget::Bus, MAX_BUSES in bus.create, the BusId definition) beside main's tool set with its preview, pairing, device and filter tools and no youtube tool (ADR-0058 §3); it is about 223 KB, so 'about 220 KB' holds, and the noun list already names bus and delete; holds" }
+stamp = { hash = "b3:4dd7743f3ad9cf67", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -309,16 +315,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:ae9d3ba4e1a2def4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's State and Building-the-zip bullets (dist.rs, .cargo/config.toml, after-review dist job) stand beside #298's sandboxed helper (bootstrap exe renamed plus the DLL, same certificate if signed); now that the helper exists, the zip bullet says it and the CEF runtime are not in the zip yet, which matches dist.rs (it ships no helper); holds" }
@@ -489,13 +495,13 @@ stamp = { hash = "b3:1485046c80293f0f", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:7f7d94eae0af4bdc", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+stamp = { hash = "b3:7dc5a8bcecc2766d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the protocol section against the README admission and MAX_IN_FLIGHT wording changes; no wire or behaviour change, envelope, versioning and slow-client bullets still hold" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/admitted.rs"]
 stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+stamp = { hash = "b3:49da10ab71c38867", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354 adds a TCP connection cap in jstream-server's listener and a 64-call in-flight cap per WebSocket connection (stops reading, no new message or error); wave/m1-2 added the TLS-listener device token wording, the /pair page and device cookie (ADR-0047) and the pairing-off unsupported answer; envelope, versioning, transport and slow-client summary still hold, no protocol version change. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
@@ -507,10 +513,10 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+stamp = { hash = "b3:cd2f0e09557c0e85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354 adds a TCP connection cap in jstream-server's listener and a 64-call in-flight cap per WebSocket connection (stops reading, no new message or error); wave/m1-2 added the TLS-listener device token wording, the /pair page and device cookie (ADR-0047) and the pairing-off unsupported answer; envelope, versioning, transport and slow-client summary still hold, no protocol version change. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
-stamp = { hash = "b3:ca2a076f73f966ae" }
+stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354 adds a TCP connection cap in jstream-server's listener and a 64-call in-flight cap per WebSocket connection (stops reading, no new message or error); the envelope, versioning, transport and slow-client summary here still hold, and no protocol version changes" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -528,10 +534,10 @@ stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: t
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:0186ca2ee548c229", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the protocol section against the README admission and MAX_IN_FLIGHT wording changes; no wire or behaviour change, envelope, versioning and slow-client bullets still hold" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+stamp = { hash = "b3:76adf5189c309802", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354 adds a TCP connection cap in jstream-server's listener and a 64-call in-flight cap per WebSocket connection (stops reading, no new message or error); wave/m1-2 added the TLS-listener device token wording, the /pair page and device cookie (ADR-0047) and the pairing-off unsupported answer; envelope, versioning, transport and slow-client summary still hold, no protocol version change. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
@@ -543,7 +549,7 @@ stamp = { hash = "b3:a667852c45363c39", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:67e9c88a4f6bc64f", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#400 waves): main.rs's merge-main usage gains --from; P1's dist dispatch and usage entry stay; xtask line lists docs, lint-deps, governance, dist (the portable zip), gen-schema, golden; holds" }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:595a044273549e60", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: kept the wave's daemon row (opens browser sources with its cef feature) and this PR's desktop and helper rows (feature off until the runtime is packaged; the helper is the renamed bootstrap exe plus DLL driven over pipes, ADR-0048)" }
+stamp = { hash = "b3:9b8dfb560bdcf791", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -561,10 +567,10 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:fe92cdacb6278716" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:00badea83615c29f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Daemon row combines wave/m1's --ui-dir and vcam text with browser sources under cef; matches the daemon README" }
+stamp = { hash = "b3:daa370c4ed6a1057", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon row is unchanged, and main.rs only adds the device-file path; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: the desktop row now says its cef feature waits on packaging the CEF runtime, and the helper row describes the sandboxed helper (bootstrap exe plus DLL, driven over pipes, ADR-0048); P1's desktop paths dependency names no data module; both match the apps' Cargo.toml; holds" }
@@ -1365,22 +1371,22 @@ stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmE
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:e0199e0ce902424d", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's MfMediaDecoders in the Windows backends and the delay-load list (mfplat, mfreadwrite), beside wave/m1-2's note that ServerConfig::tls stays off so the pairing page and device cookie wait on TLS (/pair is 404). Both hold." }
+stamp = { hash = "b3:211f676f26ec5d84", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:ff07f7df78275725", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): stale via core#design (the merged Live sources text and the wave's Video codecs paragraph); daemon's browser-sources bullet (use_device before the first paint) still matches; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "ADR-0047: the daemon leaves ServerConfig::tls off and pairing on, so its server answers the credential calls, /pair is 404 and device tokens work on loopback only, as Design's pairing text says; matches serve.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #291's CEF browser sources and the jstream-platform data directory are beside this text and change nothing about pairing; holds" }
+stamp = { hash = "b3:40e16d21c0d2ff74", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the server design wording change (WebSocket vs TCP cap, in-flight bound); serve.rs takes both defaults and the section states neither limit, so it holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
-stamp = { hash = "b3:31adea4c41afd5dd", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
+stamp = { hash = "b3:8699127a64ebe169", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/args.rs"]
-stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
+stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/components.rs"]
 stamp = { hash = "b3:a750642233d72b2c" }
@@ -1392,25 +1398,28 @@ stamp = { hash = "b3:5c5aac8c1b12a291" }
 stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data-directory bullet now names jstream-platform's paths module (portable marker handled), Dependencies lists the data directory under jstream-platform, open question 5 says the log default uses it and the token/collection don't yet; matches logs.rs; sits beside main's #328 delay-load text without overlap" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
+stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2c25e12aa4a88f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
+stamp = { hash = "b3:8929469333b4b033", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
+["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/youtube.rs"]
+stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
+
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:3d09afaa16bc23bd", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
+stamp = { hash = "b3:3cec8174e62950f8", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/args.rs"]
-stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
+stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/components.rs"]
 stamp = { hash = "b3:a750642233d72b2c" }
@@ -1422,19 +1431,22 @@ stamp = { hash = "b3:5c5aac8c1b12a291" }
 stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: logs.rs's default dir now comes from jstream_platform::paths::data_dir (its own data_dir() removed); the Startup bullet's 'creates the log directory' still holds; main's WindowsVcam/delay-load text unaffected" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2c25e12aa4a88f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
+stamp = { hash = "b3:8929469333b4b033", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Superseded ADR-0041 mentions in serve.rs and youtube.rs dropped or moved to ADR-0058; the YouTube bullet still matches them" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
+["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/youtube.rs"]
+stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Superseded ADR-0041 mentions in serve.rs and youtube.rs dropped or moved to ADR-0058; the YouTube bullet still matches them" }
+
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/daemon.rs"]
-stamp = { hash = "b3:b998d11ccf5da7ab", by = "agent:wave-owner", note = "Tests bullet still holds: tests/daemon.rs drives the built binary and stops it with SIGINT on Unix; the pairing test now waits for the device's audit line before stopping, which the bullet doesn't describe" }
+stamp = { hash = "b3:88c9bf4093d9c3a5", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/delay_load.rs"]
 stamp = { hash = "b3:fa55ac483c3bac65" }
@@ -1443,13 +1455,13 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:16843bae45198421", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: main's --ui-dir row and P1's Log files bullet (data folder, portable marker) sit beside the wave's pairing device file; #298 moves CEF into the sandboxed helper but adds no flag; the usage rows match args.rs; holds" }
+stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "The YouTube bullet cites ADR-0058 only (0041 and 0051 are superseded); B4's signed_out then sign_in order kept" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
-stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
+stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -1563,7 +1575,7 @@ stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:3466907ce4516fb9", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B3: re-read the whole section; restored the wave's shader-path bullet (asset-path rules under the collection root, DOS device names refused, symlink out refused), which matches manifest.rs check_shader_path; the dependency and Drawing paragraphs still match pack.rs" }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:2d280e2ea9eb39e0", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): stale via render#filters' prelude sentence (browser-page imports now converted in src/texel/aux); the shader contract names no Frame field, and no pack or test uses frame.straight; holds" }
+stamp = { hash = "b3:21a6ebbf40745cdd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR changes render Filters only by adding the aspect_ratio paragraph (a built-in kind with its own output_size). Purpose relies on the harness parts of Filters: the prelude (FILTER_PRELUDE), Params at group 0 binding 4, ExternalFilter and the per-label pipeline rebuild, all unchanged in this PR; no effects code changed; holds" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -1740,10 +1752,10 @@ stamp = { hash = "b3:d5931f8e252cd9f7", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:d3586a31945acf3a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:50219b1fac367d89", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:3eb32865933a40b5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:a054a6de381d4a36", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:4988f0034f41e2bc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1770,19 +1782,19 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:ae9d3ba4e1a2def4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:18f14fc86f4276c6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:b45335dabc2bb2bd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -1800,16 +1812,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:ae9d3ba4e1a2def4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
@@ -2415,7 +2427,13 @@ stamp = { hash = "b3:04169eb6e7440a46", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (ratio.rs, ratio.wgsl, aspect/mod.rs registration): one draw per apply_filter with no new thread, I/O, cache or steady-path allocation, so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/ratio.rs"]
+stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (ratio.rs, ratio.wgsl, aspect/mod.rs registration): one draw per apply_filter with no new thread, I/O, cache or steady-path allocation, so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/ratio.wgsl"]
+stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (ratio.rs, ratio.wgsl, aspect/mod.rs registration): one draw per apply_filter with no new thread, I/O, cache or steady-path allocation, so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
@@ -2505,7 +2523,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:b77ad66612d353db", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): imported-texture and composite-step text match composite.wgsl mode 2 and cache.rs; the wave's apply_filter lives in Filters, not here; holds" }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:2d280e2ea9eb39e0", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489, X1's harness): edited the prelude sentence: src, texel and aux now also convert a premultiplied browser-page import (Frame alpha/aux_alpha modes 0/1/2, matching composite.wgsl), as pass.rs and prelude.wgsl do; X1's cache, error-scope and external paragraphs and the V1 kinds unchanged; holds" }
+stamp = { hash = "b3:21a6ebbf40745cdd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind. (V1 already dropped filter/mod.rs's unused_imports allow; this PR leaves filter/mod.rs unchanged.) Harness text above is unchanged; holds""" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
@@ -2514,7 +2532,13 @@ stamp = { hash = "b3:b655210653447199", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:10fc5503702046a4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind. (V1 already dropped filter/mod.rs's unused_imports allow; this PR leaves filter/mod.rs unchanged.) Harness text above is unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/ratio.rs"]
+stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind. (V1 already dropped filter/mod.rs's unused_imports allow; this PR leaves filter/mod.rs unchanged.) Harness text above is unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/ratio.wgsl"]
+stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind. (V1 already dropped filter/mod.rs's unused_imports allow; this PR leaves filter/mod.rs unchanged.) Harness text above is unchanged; holds""" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
@@ -2619,7 +2643,13 @@ stamp = { hash = "b3:04169eb6e7440a46", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds aspect/ratio.rs and ratio.wgsl and registers aspect_ratio in aspect/mod.rs. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/ratio.rs"]
+stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds aspect/ratio.rs and ratio.wgsl and registers aspect_ratio in aspect/mod.rs. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/ratio.wgsl"]
+stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds aspect/ratio.rs and ratio.wgsl and registers aspect_ratio in aspect/mod.rs. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
@@ -2724,7 +2754,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:b77ad66612d353db", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): Alpha edges keep the premultiplied Unorm import test; the Filters paragraph now also names the harness copying a premultiplied browser-page import unchanged (a_premultiplied_import_filters_like_it_composites, which fails without the prelude fix); unorm_texture made pub(crate) for it; holds" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+stamp = { hash = "b3:40e16d21c0d2ff74", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Listening and admission and Slow clients against listener.rs:72-85 and session.rs MAX_IN_FLIGHT: the 'checked after Host/Origin/token' sentence now names the WebSocket cap (max_connections) and says the TCP cap is checked at accept; the in-flight bound is stated as 64 requests of up to 4 MiB of text each (#484 B1, N2)" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale through ARCH#protocol (wave/m2's 0.24 bus references beside main's preview, pairing, filter and YouTube bullets) and jstream-control's design (the mock's bus.delete refusal, kind.list, and the four-method fix); the server forwards any dyn Control call, answers only the pairing calls itself and takes the version from the protocol crate, so its admission, pairing, sessions, preview frames, MCP and logging text holds" }
@@ -2745,7 +2775,7 @@ stamp = { hash = "b3:e9241efe87e7e719" }
 stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+stamp = { hash = "b3:49da10ab71c38867", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: limits table adds max_tcp_connections (128, every accepted stream incl. unauthenticated, keep-alive and upgraded WebSocket ones; closed unanswered when full), listener permit held until drop with once-per-run warn log, Sessions/Slow clients say 64 calls in flight (MAX_IN_FLIGHT), MCP limits note TCP connections count. wave/m1-2 brought ServerConfig::tls and ::pairing, the GET /pair page and __Host-jstream_device cookie (ADR-0047) and pairing-off answers (ADR-0057); re-read merged README against listener.rs, session.rs, config.rs, lib.rs: the cap counts /pair and cookie-admitted streams like any other, both sides' text kept, no contradiction. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
@@ -2757,10 +2787,10 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+stamp = { hash = "b3:cd2f0e09557c0e85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: limits table adds max_tcp_connections (128, every accepted stream incl. unauthenticated, keep-alive and upgraded WebSocket ones; closed unanswered when full), listener permit held until drop with once-per-run warn log, Sessions/Slow clients say 64 calls in flight (MAX_IN_FLIGHT), MCP limits note TCP connections count. wave/m1-2 brought ServerConfig::tls and ::pairing, the GET /pair page and __Host-jstream_device cookie (ADR-0047) and pairing-off answers (ADR-0057); re-read merged README against listener.rs, session.rs, config.rs, lib.rs: the cap counts /pair and cookie-admitted streams like any other, both sides' text kept, no contradiction. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
-stamp = { hash = "b3:ca2a076f73f966ae" }
+stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: limits table adds max_tcp_connections (128, every accepted stream incl. unauthenticated, keep-alive and upgraded WebSocket ones; closed unanswered when full), listener paragraph explains the permit held until drop and the once-per-run warn log, Sessions/Slow clients say 64 calls in flight (MAX_IN_FLIGHT) stop reading like REPLY_BACKLOG, MCP limits note TCP connections count, Logging adds the warn line. Checked against listener.rs accept loop, session.rs select guard and the two new tests; no wire or protocol change" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2778,16 +2808,16 @@ stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: t
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:0186ca2ee548c229", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Listening and admission and Slow clients against listener.rs:72-85 and session.rs MAX_IN_FLIGHT: the 'checked after Host/Origin/token' sentence now names the WebSocket cap (max_connections) and says the TCP cap is checked at accept; the in-flight bound is stated as 64 requests of up to 4 MiB of text each (#484 B1, N2)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+stamp = { hash = "b3:76adf5189c309802", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: limits table adds max_tcp_connections (128, every accepted stream incl. unauthenticated, keep-alive and upgraded WebSocket ones; closed unanswered when full), listener permit held until drop with once-per-run warn log, Sessions/Slow clients say 64 calls in flight (MAX_IN_FLIGHT), MCP limits note TCP connections count. wave/m1-2 brought ServerConfig::tls and ::pairing, the GET /pair page and __Host-jstream_device cookie (ADR-0047) and pairing-off answers (ADR-0057); re-read merged README against listener.rs, session.rs, config.rs, lib.rs: the cap counts /pair and cookie-admitted streams like any other, both sides' text kept, no contradiction. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#purpose"."body"]
-stamp = { hash = "b3:f67fa77227f07948", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+stamp = { hash = "b3:ce37d50acbc7b659", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet names the max_tcp_connections cap, Session bullet the in-flight cap; config.rs max_tcp_connections (zero refused). wave/m1-2 added the Pairing page (pair_page.rs, pair.html), tls/pairing config fields, Admitted's pairing switch and the TLS-listener note; merged Contents list matches the modules in lib.rs. Crate scope, layer and R-ARCH-003 unchanged. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-server"]
 stamp = { hash = "b3:91b837e64ac2fb2b" }
@@ -2796,7 +2826,7 @@ stamp = { hash = "b3:91b837e64ac2fb2b" }
 stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+stamp = { hash = "b3:49da10ab71c38867", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet names the max_tcp_connections cap, Session bullet the in-flight cap; config.rs max_tcp_connections (zero refused). wave/m1-2 added the Pairing page (pair_page.rs, pair.html), tls/pairing config fields, Admitted's pairing switch and the TLS-listener note; merged Contents list matches the modules in lib.rs. Crate scope, layer and R-ARCH-003 unchanged. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
@@ -2808,10 +2838,10 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+stamp = { hash = "b3:cd2f0e09557c0e85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet names the max_tcp_connections cap, Session bullet the in-flight cap; config.rs max_tcp_connections (zero refused). wave/m1-2 added the Pairing page (pair_page.rs, pair.html), tls/pairing config fields, Admitted's pairing switch and the TLS-listener note; merged Contents list matches the modules in lib.rs. Crate scope, layer and R-ARCH-003 unchanged. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
-stamp = { hash = "b3:ca2a076f73f966ae" }
+stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet now names the max_tcp_connections cap (listener.rs closes a stream accepted beyond it) and Session bullet the MAX_IN_FLIGHT cap; config.rs gains max_tcp_connections (zero refused), lib.rs passes it to Limited; tests.rs adds tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped. Crate scope, layer and R-ARCH-003 unchanged" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2829,10 +2859,10 @@ stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: C
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:0186ca2ee548c229", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Contents against the session.rs doc-comment change (MAX_IN_FLIGHT wording only); listener and session bullets still match" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+stamp = { hash = "b3:76adf5189c309802", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet names the max_tcp_connections cap, Session bullet the in-flight cap; config.rs max_tcp_connections (zero refused). wave/m1-2 added the Pairing page (pair_page.rs, pair.html), tls/pairing config fields, Admitted's pairing switch and the TLS-listener note; merged Contents list matches the modules in lib.rs. Crate scope, layer and R-ARCH-003 unchanged. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
@@ -3567,7 +3597,7 @@ stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: daemon Usage now carries main's data-directory default (P1) beside the wave's pairing device file; the prerequisites use neither and the token folder step still holds; holds" }
+stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (ADR citation only); holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -3576,7 +3606,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage (Y3's no YouTube-bound outputs; #450's capture fit) and daemon Usage (P1's data directory, the wave's device file); smoke.ps1 uses a generic RTMP output, adds no items and passes --token-file and --log-dir in its run folder; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage (Y3's no YouTube-bound outputs; #450's capture fit) and daemon Usage (P1's data directory, the wave's device file); smoke.ps1 uses a generic RTMP output, adds no items and passes --token-file and --log-dir in its run folder; holds" }
+stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (ADR citation only); holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -3588,10 +3618,10 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
+stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (ADR citation only); holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "Cascade from server Design's pairing page and cookie: the runbook runs on loopback without TLS and pairs no browser, so its steps don't change; nothing in wave/m1's server Design changed since #265; holds" }
+stamp = { hash = "b3:40e16d21c0d2ff74", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the steps against the server design wording change; they state no connection limit or admission order, so they hold" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
@@ -3693,7 +3723,7 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:9d68f95562892706", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:fcb68e74a2bb768f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Limits now list 128 open TCP connections of any kind and 64 calls in flight per connection, matching config.rs MAX_TCP_CONNECTIONS and session.rs MAX_IN_FLIGHT (tests tcp_connections_over_the_cap_are_dropped, calls_in_flight_per_connection_are_capped); the #354 gap narrows to unthrottled failed tokens, which this change leaves open, and the Known gaps row says the same" }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
