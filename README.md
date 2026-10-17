@@ -60,7 +60,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 97 of 113 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 23 items, by next step: 🔨 build 7, 🌊 its wave lands 6, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 1</summary>
+<summary><b>What's left</b>: 23 items, by next step: 🔨 build 6, 🌊 its wave lands 7, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -84,7 +84,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🌊 its wave lands, then 🔨 build | hotkeys #319 merged into wave/m1-2; organisation metadata draft #323 | #319 |
 | F6 | HEVC and AV1 encode | M3 | ❔ not set |  | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🌊 its wave lands, then 🔨 build | effect packs #368 land with wave/m1-2; full 3D transforms to build | #359, #368 |
-| Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
+| Y4 | YouTube chat, metadata, health and audience stats | M3 | 🌊 its wave lands, then 👤 maintainer | #363 merged into wave/m1-2, #375 into wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | M3 | 🔨 build |  |  |
 | MAC1 | macOS platform crate | M3 | 👤 maintainer, then 🔨 build | the maintainer decides whether it stays in M3; then the macOS ADR |  |
@@ -253,7 +253,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F6 | HEVC and AV1 encode | 🔍 in review | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 land with wave/m1-2; full 3D transforms to build | #359, #368 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
-| Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
+| Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: #363 merged into wave/m1-2, #375 into wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | ⏳ planned |  |
 | MAC1 | macOS platform crate | ⏳ planned: the maintainer decides whether it stays in M3; then the macOS ADR |  |

@@ -851,8 +851,8 @@ milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
 status = "review"
 prs = [363, 375]
-note = "draft #363; signed-in features need the OAuth client (ADR-0058)"
-needs = ["build", "maintainer"]
+note = "#363 merged into wave/m1-2, #375 into wave/m1; signed-in features need the OAuth client (ADR-0058)"
+needs = ["wave", "maintainer"]
 
 [[item]]
 id = "CL1"
