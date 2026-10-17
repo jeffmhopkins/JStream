@@ -53,11 +53,14 @@ pub enum AudioInputTarget {
     DefaultInput,
     /// One capture device.
     Input(DeviceId),
-    /// Everything the default output device plays (desktop audio).
+    /// Everything the default output device plays (desktop audio). On macOS, everything
+    /// every process except JStream plays, on any output (a Core Audio process tap).
     DefaultOutputLoopback,
-    /// Everything one output device plays.
+    /// Everything one output device plays. On macOS, except what JStream plays.
     OutputLoopback(DeviceId),
-    /// The audio of one process and its children (process loopback on Windows).
+    /// The audio of one process and its children (process loopback on Windows). On
+    /// macOS, the one process only: a Core Audio tap targets a process object, so
+    /// audio its child processes play is not included.
     ProcessLoopback {
         /// The process ID.
         pid: u32,

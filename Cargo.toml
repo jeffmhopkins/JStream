@@ -109,7 +109,8 @@ leptos = { version = "0.8", default-features = false, features = ["csr"] }
 # under wasmtime; no build script and no default features.
 mach2 = { version = "0.6", default-features = false }
 # Foundation through the objc2 framework crates (ADR-0063 §12), for the running macOS
-# version (`NSProcessInfo`), and the arrays, errors and strings ScreenCaptureKit hands back.
+# version (`NSProcessInfo`), the arrays, errors and strings ScreenCaptureKit hands back,
+# and the numbers and UUIDs of a Core Audio tap description (`NSValue`, `NSUUID`).
 # The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
 # only `std` and the classes the macOS crate calls.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString", "NSUUID", "NSValue"] }
