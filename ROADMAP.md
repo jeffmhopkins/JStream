@@ -151,8 +151,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   #102): a maintainer-tier ADR superseding ADR-0037's `state` clause adds a stable
   `too_large` error for requests over a soft limit, read below a higher hard frame
   limit, so an oversized batch fails cleanly.
-- macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
-  A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
+- macOS: the platform crate per [ADR-0063](docs/adr/0063-macos-platform-support.md)
+  (ScreenCaptureKit capture, Core Audio with process taps, VideoToolbox and AudioToolbox,
+  the Keychain), on macOS 14 and later, Apple Silicon supported and Intel best effort.
+  Signing and notarisation, and the virtual camera as a CMIO camera extension, come later,
+  the camera in its own ADR. A Syphon receiver, the macOS follow-up to Spout2, is its own
+  item when wanted.
 - Linux: the platform crate per [ADR-0060](docs/adr/0060-linux-platform-support.md)
   (portal and PipeWire capture, VA-API encode). Per
   [ADR-0061](docs/adr/0061-source-types-and-decoding-scope-v2.md), software H.264 is Cisco's

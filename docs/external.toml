@@ -325,6 +325,150 @@ status = "ok"
 checked_note = "Re-read the supported rows; Fedora 42 is end of life"
 
 [[external]]
+id = "apple-screencapturekit"
+url = "https://developer.apple.com/documentation/screencapturekit"
+relied_on = "ScreenCaptureKit is available from macOS 12.3; it lists displays, applications and windows (SCShareableContent) and delivers frames as CMSampleBuffers; capture needs the Screen Recording permission and an NSScreenCaptureUsageDescription (ADR-0063 §3)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the framework page: availability macOS 12.3, SCShareableContent, CMSampleBuffer output, NSScreenCaptureUsageDescription"
+
+[[external]]
+id = "apple-sck-sharing-picker"
+url = "https://developer.apple.com/documentation/screencapturekit/sccontentsharingpicker"
+relied_on = "SCContentSharingPicker, the system content-sharing picker, is available from macOS 14.0 (ADR-0063 question 2)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: availability macOS 14.0"
+
+[[external]]
+id = "apple-cg-request-screen-capture"
+url = "https://developer.apple.com/documentation/coregraphics/cgrequestscreencaptureaccess()"
+relied_on = "CGRequestScreenCaptureAccess (and CGPreflightScreenCaptureAccess) are available from macOS 10.15 (ADR-0063 §3)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: both available from macOS 10.15"
+
+[[external]]
+id = "tidbits-sequoia-capture-prompts"
+url = "https://tidbits.com/2024/08/19/apple-reduces-excessive-sequoia-permission-requests-shifts-to-monthly"
+relied_on = "From macOS 15, apps that capture the screen are re-prompted for the permission periodically, now monthly; the system picker may avoid it (ADR-0063 §3)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: monthly re-prompt; developers report ScreenCaptureKit apps get it too; picker may avoid it"
+
+[[external]]
+id = "apple-coreaudio-process-tap"
+url = "https://developer.apple.com/documentation/coreaudio/audiohardwarecreateprocesstap(_:_:)"
+relied_on = "AudioHardwareCreateProcessTap, Core Audio process taps, is available from macOS 14.2 (ADR-0063 §2, §4)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: availability macOS 14.2"
+
+[[external]]
+id = "apple-coreaudio-taps-sample"
+url = "https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps"
+relied_on = "A tap records one process or a group, can exclude processes, is used as an aggregate device's input, and needs NSAudioCaptureUsageDescription; the first recording prompts for system audio recording permission (ADR-0063 §4)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: tap on processes, aggregate device, NSAudioCaptureUsageDescription, system audio recording prompt"
+
+[[external]]
+id = "apple-sck-captures-audio"
+url = "https://developer.apple.com/documentation/screencapturekit/scstreamconfiguration/capturesaudio"
+relied_on = "SCStreamConfiguration.capturesAudio is available from macOS 13.0 (ADR-0063 §4, the rejected alternative)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 13.0"
+
+[[external]]
+id = "apple-vt-constant-bitrate"
+url = "https://developer.apple.com/documentation/videotoolbox/kvtcompressionpropertykey_constantbitrate"
+relied_on = "kVTCompressionPropertyKey_ConstantBitRate requires a constant-bit-rate algorithm; available from macOS 13.0 (ADR-0063 §6)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 13.0"
+
+[[external]]
+id = "apple-metal-iosurface-texture"
+url = "https://developer.apple.com/documentation/metal/mtldevice/maketexture(descriptor:iosurface:plane:)"
+relied_on = "MTLDevice newTextureWithDescriptor:iosurface:plane: creates a texture whose storage is an IOSurface plane; available from macOS 10.11 (ADR-0063 §8)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 10.11; texture uses the IOSurface as its storage"
+
+[[external]]
+id = "apple-secitemadd"
+url = "https://developer.apple.com/documentation/security/secitemadd(_:_:)"
+relied_on = "SecItemAdd adds keychain items (generic passwords among them), available from macOS 10.6; it blocks, so it is called off the UI and real-time threads (ADR-0063 §9)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 10.6; blocks the calling thread"
+
+[[external]]
+id = "apple-avcapture-external"
+url = "https://developer.apple.com/documentation/avfoundation/avcapturedevice/devicetype-swift.struct/external"
+relied_on = "AVCaptureDevice.DeviceType.external (external, such as USB, cameras) is available from macOS 14.0 (ADR-0063 §2, §10)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 14.0"
+
+[[external]]
+id = "apple-cmio-camera-extension"
+url = "https://developer.apple.com/documentation/coremediaio/creating-a-camera-extension-with-core-media-i-o"
+relied_on = "Camera extensions are system extensions from macOS 12.3, packaged in the app, needing the System Extension and App Groups capabilities, activated only from an app in /Applications with an administrator's approval (ADR-0063 question 5)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: macOS 12.3, entitlements, /Applications, admin approval"
+
+[[external]]
+id = "apple-developer-program"
+url = "https://developer.apple.com/programs/"
+relied_on = "Apple Developer Program membership costs $99 a year (ADR-0063 question 1)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: '$99 annual membership'"
+
+[[external]]
+id = "apple-sequoia-gatekeeper"
+url = "https://developer.apple.com/news/?id=saqachfa"
+relied_on = "From macOS 15, users can no longer Control-click to open software that isn't signed correctly or notarised; they allow it in System Settings > Privacy & Security (ADR-0063 question 1)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the Control-click passage"
+
+[[external]]
+id = "apple-security-releases"
+url = "https://support.apple.com/kb/HT1222"
+relied_on = "Which macOS releases currently receive security updates (fact macos-security-updated; ADR-0063 §2)"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read: 27.0.1, 26.7.1 and 15.8.1 in September 2026; Sonoma's latest 14.8.9 in August 2026"
+
+[[external]]
+id = "petapixel-tahoe-last-intel"
+url = "https://petapixel.com/2025/06/10/macos-26-tahoe-is-the-end-of-the-road-for-intel-macs/"
+relied_on = "Apple said at WWDC 2025 that macOS 26 is the last release that supports Intel Macs (ADR-0063 §2, question 3)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: macOS 26 'will be the last release that supports Intel-based Macs'"
+
+[[external]]
+id = "gh-actions-billing"
+url = "https://docs.github.com/en/billing/concepts/product-billing/github-actions"
+relied_on = "Standard GitHub-hosted runners are free in public repositories; otherwise Linux 2-core is $0.006 and macOS $0.062 a minute (ADR-0063 question 4)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: free for public repositories on standard runners; $0.006 Linux, $0.062 macOS"
+
+[[external]]
+id = "objc2"
+url = "https://github.com/madsmtm/objc2"
+relied_on = "objc2 and its framework crates, generated from Apple's SDK headers, licensed Zlib OR Apache-2.0 OR MIT (ADR-0063 §12)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: licence badge Zlib OR Apache-2.0 OR MIT; generated code in a submodule; active"
+
+[[external]]
 id = "via-la-aac"
 url = "https://www.via-la.com/licensing-programs/aac/"
 relied_on = "Via LA administers one AAC pool licence covering AAC-LC, HE-AAC, HE-AAC v2, xHE-AAC, MPEG-D DRC, AAC Scalable, AAC-LD and AAC-ELD; developers of end-user encoders and decoders need it; per-unit fees ($0.98 for the first 500,000 a year) plus a $15,000 initial fee ($1,000 for small entities), no cap listed; no fees for distributing AAC bit streams; its licensors (ADR-0062)"
