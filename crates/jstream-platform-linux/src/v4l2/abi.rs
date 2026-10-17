@@ -231,6 +231,7 @@ const WRITE: c_ulong = 1;
 
 pub(crate) const VIDIOC_QUERYCAP: c_ulong = ioc(READ, 0, size_of::<Capability>());
 pub(crate) const VIDIOC_ENUM_FMT: c_ulong = ioc(READ | WRITE, 2, size_of::<FmtDesc>());
+pub(crate) const VIDIOC_G_FMT: c_ulong = ioc(READ | WRITE, 4, size_of::<Format>());
 pub(crate) const VIDIOC_S_FMT: c_ulong = ioc(READ | WRITE, 5, size_of::<Format>());
 pub(crate) const VIDIOC_REQBUFS: c_ulong = ioc(READ | WRITE, 8, size_of::<RequestBuffers>());
 pub(crate) const VIDIOC_QUERYBUF: c_ulong = ioc(READ | WRITE, 9, size_of::<Buffer>());
@@ -336,6 +337,7 @@ mod tests {
         assert_eq!(VIDIOC_ENUM_FMT, 0xc040_5602);
         assert_eq!(VIDIOC_ENUM_FRAMESIZES, 0xc02c_564a);
         assert_eq!(VIDIOC_ENUM_FRAMEINTERVALS, 0xc034_564b);
+        assert_eq!(VIDIOC_G_FMT, 0xc0d0_5604);
         assert_eq!(VIDIOC_S_FMT, 0xc0d0_5605);
         assert_eq!(VIDIOC_G_PARM, 0xc0cc_5615);
         assert_eq!(VIDIOC_S_PARM, 0xc0cc_5616);

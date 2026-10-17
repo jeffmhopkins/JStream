@@ -95,7 +95,7 @@ It has:
   the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12), NV12 and I420 as
   they are, and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. A stepwise size range
   offers its largest size and the common sizes its steps reach, a stepwise interval its
-  shortest, and a driver that enumerates no intervals its current one. `open` sets the
+  shortest, and a driver that enumerates no sizes or no intervals its current ones. `open` sets the
   format (refused as `Unsupported` if the driver settles on another) and frame interval,
   maps four driver buffers, and starts a capture thread that waits on the node and an
   `eventfd`, converts each filled buffer with `jstream_platform::yuv` or hands it to the

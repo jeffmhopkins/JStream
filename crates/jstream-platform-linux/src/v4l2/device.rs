@@ -14,7 +14,7 @@ use super::abi::{
     BUF_TYPE_VIDEO_CAPTURE, Buffer, CAP_TIMEPERFRAME, Capability, FIELD_NONE, FMT_FLAG_EMULATED,
     FRMIVAL_TYPE_DISCRETE, FRMSIZE_TYPE_DISCRETE, FmtDesc, Format, Fract, FrmIvalEnum, FrmSizeEnum,
     MEMORY_MMAP, PixFormat, RequestBuffers, StreamParm, VIDIOC_DQBUF, VIDIOC_ENUM_FMT,
-    VIDIOC_ENUM_FRAMEINTERVALS, VIDIOC_ENUM_FRAMESIZES, VIDIOC_G_PARM, VIDIOC_QBUF,
+    VIDIOC_ENUM_FRAMEINTERVALS, VIDIOC_ENUM_FRAMESIZES, VIDIOC_G_FMT, VIDIOC_G_PARM, VIDIOC_QBUF,
     VIDIOC_QUERYBUF, VIDIOC_QUERYCAP, VIDIOC_REQBUFS, VIDIOC_S_FMT, VIDIOC_S_PARM,
     VIDIOC_STREAMOFF, VIDIOC_STREAMON,
 };
@@ -148,7 +148,9 @@ impl Device {
         out
     }
 
-    /// The sizes of `fourcc`: each discrete one, or a stepwise range's useful ones.
+    /// The sizes of `fourcc`: each discrete one, or a stepwise range's useful ones. A
+    /// driver that doesn't enumerate them gets its current size, when its current format
+    /// is `fourcc`.
     fn sizes(&self, fourcc: u32) -> Vec<(u32, u32)> {
         let mut out = Vec::new();
         for index in 0.. {
@@ -170,7 +172,25 @@ impl Device {
                 break;
             }
         }
+        if out.is_empty()
+            && let Some(current) = self.current_format()
+            && current.pixelformat == fourcc
+            && current.width > 0
+            && current.height > 0
+        {
+            out.push((current.width, current.height));
+        }
         out
+    }
+
+    /// `VIDIOC_G_FMT`'s capture format, when the driver reports one.
+    fn current_format(&self) -> Option<PixFormat> {
+        // SAFETY: all-zero is a valid `v4l2_format`.
+        let mut f: Format = unsafe { std::mem::zeroed() };
+        f.type_ = BUF_TYPE_VIDEO_CAPTURE;
+        // SAFETY: `VIDIOC_G_FMT` takes a `v4l2_format`.
+        unsafe { self.ioctl(VIDIOC_G_FMT, &mut f) }.ok()?;
+        Some(f.pix)
     }
 
     /// The frame intervals of `fourcc` at `width` x `height`: each discrete one, or a
@@ -375,7 +395,8 @@ impl Drop for Mapped {
 /// unmaps the buffers and closes the device.
 #[derive(Debug)]
 pub(crate) struct Streaming {
-    /// Dropped last: the buffers are unmapped before the descriptor closes.
+    /// Dropped first (fields drop in declaration order): the buffers are unmapped
+    /// before the descriptor closes.
     buffers: Vec<Mapped>,
     device: Device,
     on: bool,
