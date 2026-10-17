@@ -326,6 +326,38 @@ fn a_file_without_encoder_profiles_loads() {
     );
 }
 
+/// A file written before the master stage and outputs had chains (no `master`, no
+/// `outputs[].filters`) loads with those chains empty and the sources' filters intact.
+#[test]
+fn a_file_without_master_or_output_filters_loads() {
+    use jstream_protocol::FilterChain;
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("master"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("filters"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    let state = graph.state();
+    assert!(state.master().chain(FilterChain::Audio).is_empty());
+    assert!(
+        state
+            .outputs()
+            .all(|o| o.filters().chain(FilterChain::Audio).is_empty())
+    );
+    let Ok(full) = load(&edit_file(|_| {})) else {
+        panic!("the fixture did not load");
+    };
+    for source in full.state().sources() {
+        let Some(loaded) = state.source(source.id()) else {
+            panic!("a source was lost");
+        };
+        assert_eq!(loaded.filters(), source.filters());
+    }
+}
+
 /// A file written before sends existed (no `sends`, `buses` or `audio`): each audio
 /// source keeps the master send its creation gives it, at 0 dB, rather than losing it.
 #[test]
@@ -385,6 +417,41 @@ fn a_removed_master_send_round_trips() {
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
     assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// A file saved before video mixes existed has neither `video_mixes` nor any output's
+/// `video_mix`. It loads with no mixes, every output showing none.
+#[test]
+fn a_file_without_video_mixes_loads() {
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("video_mixes"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("video_mix"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    assert_eq!(graph.state().video_mixes().len(), 0);
+    assert!(graph.state().outputs().all(|o| o.video_mix().is_none()));
+}
+
+/// A mix is rebuilt with `video_mix.create`, so one showing a scene the file lacks is
+/// refused, and so is an output naming a mix the file lacks.
+#[test]
+fn mixes_and_outputs_naming_missing_objects_are_refused() {
+    let file = edit_file(|v| v["video_mixes"][1]["mix"]["input"]["scene_id"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "video mix `side`"),
+        "{:?}",
+        load(&file)
+    );
+    let file = edit_file(|v| v["outputs"][0]["video_mix"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "output `rec`"),
+        "{:?}",
+        load(&file)
+    );
 }
 
 /// #362: a source whose settings draw a bus loads: the buses are made before the

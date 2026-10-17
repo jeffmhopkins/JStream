@@ -46,6 +46,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   returns it from `audio` as a `SourceAudio`: its format, and `open(handler)`, which
   feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
   its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
+  `capture()` is `Some` for a `display` or `window` source: what the platform captures
+  for it (a `CaptureSpec`). Its frames come from the platform's capture backend on the
+  engine's render thread, so its `frame` is `SourceError::Captured`.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
@@ -56,7 +59,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
-  and its program mix asks each source for `frame` and `next_change`, and calls `show`
+  and its program mix asks each source for `capture`, else `frame` and `next_change`,
+  and calls `show`
   (see `jstream-core`'s *Live sources*).
 - `MediaAudio`: a `media` file's sound as the engine sees it. `format()` is the file's
   rate and layout, interleaved `f32`. `open(handler, clock, start)` starts a
@@ -151,6 +155,13 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
+- `display` and `window`: what the platform captures, by the `target` setting, a
+  capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
+  `hwnd:0x` and the window handle). An empty `display` target is the primary display,
+  which is what a `display` source showed before it had settings, so the kind keeps
+  version 1 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). An
+  empty `window` target captures nothing. A new target needs a new source. The engine's
+  `capture.targets` query lists the IDs a `target` can take.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), so it plays the
@@ -293,8 +304,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source's `Painter` takes the slot's lock and redraws (and so allocates) only when
   another message was featured since, and `frame` hands out the frame drawn last
   without drawing. Every setting but `font` is live.
-- `display`, `webcam` and `window` are described only, with the settings B4
-  gave them: sources of them can be created and configured, and `create` fails with
+- `webcam` is described only, with the settings B4 gave it: its sources can be
+  created and configured, and `create` fails with
   `SourceError::NotBuilt`.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.

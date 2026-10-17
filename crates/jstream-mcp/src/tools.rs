@@ -932,7 +932,15 @@ mod tests {
             .collect();
         assert_eq!(
             read_only,
-            ["delete", "describe_api", "events", "kind", "state", "video"]
+            [
+                "capture",
+                "delete",
+                "describe_api",
+                "events",
+                "kind",
+                "state",
+                "video"
+            ]
         );
         // `output` carries `output.set_target`, `output.set_key`, `output.start` and
         // `output.delete`; `batch` carries every delete and `output.set_target`; `live`

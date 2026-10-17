@@ -1,7 +1,7 @@
 //! The render thread's GPU capture path and its fallbacks (ARCH › GPU pipeline, step 6),
 //! on a software device: which path `open_capture` takes for each kind of platform, an
-//! output whose capture frames are textures composited with no CPU copy, and an output
-//! that leaves the GPU path mid-run when compositing keeps failing on it (#451).
+//! output whose capture frames are textures composited with no CPU copy, and a browser
+//! source whose page paints on the stage's device.
 //!
 //! A software adapter stands in for the platform's media adapter, and a fake capture
 //! backend delivers `GpuFrame`s on it. A machine with no adapter skips; CI, which
@@ -26,21 +26,23 @@ use jstream_platform::{
     AdapterId, Backends, Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
     FrameSync, GpuContext, GpuFrame, GpuInterop, MediaClock, PlatformError, VideoSurface,
 };
-use jstream_protocol::{OutputId, OutputState};
+use jstream_protocol::{Batch, Edit, OutputId, Settings, SourceId, SourceKind};
 use jstream_render::{Compositor, OpenOptions};
+use serde_json::json;
 
 use super::{
-    GPU_OPEN_TIMEOUT, block_on, connected, one_gpu_test_at_a_time, output_call, output_state,
+    GPU_OPEN_TIMEOUT, add, batch, block_on, connected, create, one_gpu_test_at_a_time, output_call,
+    switch_call,
 };
 use crate::audio_sources::Wanted;
-use crate::runtime::{DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from};
-use crate::snapshot::CaptureImage;
+use crate::runtime::{
+    DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from, start_capture,
+};
 use crate::{Engine, RecordingPublish};
+use jstream_sources::CaptureSpec;
 
 /// The colour every GPU capture frame is.
 const RED: [u8; 4] = [255, 0, 0, 255];
-/// What a `FakeCapture` CPU frame composites to: all-zero BGRA, alpha ignored.
-const BLACK: [u8; 4] = [0, 0, 0, 255];
 
 /// GPU interop on a software device, standing in for the platform's.
 struct SoftwareGpu;
@@ -159,6 +161,23 @@ impl Capture for GpuCapture {
 
 /// A [`RED`] `Rgba8UnormSrgb` texture of `size`, as a capture ring's slot would be.
 fn red_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: FrameSize) -> wgpu::Texture {
+    filled_texture(
+        device,
+        queue,
+        size,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        RED,
+    )
+}
+
+/// A texture of `size` and `format` with every texel `texel`.
+fn filled_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    size: FrameSize,
+    format: wgpu::TextureFormat,
+    texel: [u8; 4],
+) -> wgpu::Texture {
     let extent = wgpu::Extent3d {
         width: size.width(),
         height: size.height(),
@@ -170,11 +189,11 @@ fn red_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: FrameSize) -> w
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        format,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    let pixels: Vec<u8> = std::iter::repeat_n(RED, (size.width() * size.height()) as usize)
+    let pixels: Vec<u8> = std::iter::repeat_n(texel, (size.width() * size.height()) as usize)
         .flatten()
         .collect();
     queue.write_texture(
@@ -291,8 +310,8 @@ fn have_software_gpu() -> bool {
     }
 }
 
-/// Which path `open_capture` took: a platform context or not, and whether the first
-/// frame is on the GPU.
+/// Which path `open_capture` picked: a platform context or not, and whether the first
+/// frame of the primary display's capture is on the GPU.
 fn path(backends: &Backends) -> (bool, bool) {
     let parts = parts_from(
         backends,
@@ -302,12 +321,10 @@ fn path(backends: &Backends) -> (bool, bool) {
         Arc::new(Wanted::default()),
         (1280, 720),
     );
-    let mut opened = open_capture(&parts).expect("a capture starts on some path");
-    let frame = opened
-        .stream
-        .latest()
-        .expect("latest")
-        .expect("a first frame");
+    let opened = open_capture(&parts).expect("a capture path");
+    let mut stream = start_capture(&opened.backends, &CaptureSpec::Display(None))
+        .expect("a capture starts on some path");
+    let frame = stream.latest().expect("latest").expect("a first frame");
     (
         opened.context.is_some(),
         matches!(frame, VideoSurface::Gpu(_)),
@@ -364,9 +381,11 @@ fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
         seen.lock()
             .unwrap_or_else(PoisonError::into_inner)
             .on_context = Some(context.is_some());
-        let draw: DrawFn = Box::new(move |shot, live, size, capture, out, at| {
-            let freed = inner(shot, live, size, capture, out, at)?;
-            if let Some(pixel) = out.first_chunk::<4>() {
+        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
+            let freed = inner(shot, live, captures, frames, at)?;
+            // The first mix drawn this tick; with no video mixes, the program.
+            let drawn = frames.iter().find(|frame| frame.due);
+            if let Some(pixel) = drawn.and_then(|frame| frame.out.first_chunk::<4>()) {
                 seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(*pixel);
             }
             Ok(freed)
@@ -424,185 +443,189 @@ fn an_output_composites_gpu_capture_frames() {
     assert!(engine.output_stats().is_none());
 }
 
-/// How a [`breaking_draw`] fails, standing in for the two ways the GPU path breaks
-/// mid-run (#451).
-#[derive(Clone, Copy, Debug)]
-enum Breaks {
-    /// Every GPU capture frame fails to import, as another backend's texture would.
-    GpuFrames,
-    /// Every frame fails while on the platform's context, as on a removed device.
-    Context,
-    /// As `Context`, and the compositor cannot open on a device of its own either.
-    Everywhere,
-}
+/// A browser engine whose pages paint one colour on the device the engine gives it:
+/// half-transparent red, premultiplied sRGB code values in BGRA, as CEF paints.
+#[derive(Clone, Default)]
+struct PaintingBrowser(Arc<Painter>);
 
-/// What a [`breaking_draw`] saw: the device each open was on (`true` for the
-/// platform's context), and the first pixel of the newest frame drawn without one.
+/// What [`PaintingBrowser`]'s pages share.
 #[derive(Default)]
-struct Opens {
-    on_context: Vec<bool>,
-    own_pixel: Option<[u8; 4]>,
+struct Painter {
+    /// The device and queue pages paint on, while the engine gives one.
+    device: Mutex<Option<(wgpu::Device, wgpu::Queue)>>,
+    /// Each `use_device` call: whether it gave a device.
+    given: Mutex<Vec<bool>>,
 }
 
-/// [`gpu_draw`], failing as `breaks` says.
-fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
-    Arc::new(move |context: Option<&GpuContext>| {
-        let on_context = context.is_some();
-        opens
+/// Red at alpha 128, premultiplied in code values (128 * 255 / 255), in BGRA order.
+const PAGE_TEXEL: [u8; 4] = [0, 0, 128, 128];
+
+impl jstream_browser::BrowserBackend for PaintingBrowser {
+    fn open(
+        &self,
+        spec: &jstream_browser::PageSpec,
+    ) -> Result<Box<dyn jstream_browser::BrowserPage>, jstream_browser::BrowserError> {
+        Ok(Box::new(PaintedPage {
+            painter: Arc::clone(&self.0),
+            size: spec.size,
+            painted: Mutex::new(None),
+            audio: jstream_browser::PageAudio::new(),
+        }))
+    }
+
+    fn use_device(&self, gpu: Option<&GpuContext>) {
+        *self.0.device.lock().unwrap_or_else(PoisonError::into_inner) =
+            gpu.map(|gpu| (gpu.device().clone(), gpu.queue().clone()));
+        self.0
+            .given
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .on_context
-            .push(on_context);
-        if !on_context && matches!(breaks, Breaks::Everywhere) {
-            return Err("no device of its own in this test".to_owned());
-        }
-        let mut inner = (gpu_draw())(context)?;
-        let opens = Arc::clone(&opens);
-        let draw: DrawFn = Box::new(move |shot, live, size, capture, out, at| {
-            let gpu_frame =
-                capture.is_some_and(|frame| matches!(frame.image, CaptureImage::Gpu(_)));
-            match breaks {
-                Breaks::GpuFrames if gpu_frame => return Err("unsupported format".to_owned()),
-                Breaks::Context | Breaks::Everywhere if on_context => {
-                    return Err("device removed".to_owned());
-                }
-                _ => {}
-            }
-            let freed = inner(shot, live, size, capture, out, at)?;
-            if !on_context && let Some(pixel) = out.first_chunk::<4>() {
-                opens
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .own_pixel = Some(*pixel);
-            }
-            Ok(freed)
-        });
-        Ok(draw)
-    })
-}
-
-/// An engine on the software GPU path whose compositor breaks as `breaks` says, with
-/// its output started.
-fn breaking_engine(
-    clock: &FakeClock,
-    breaks: Breaks,
-    opens: &Arc<Mutex<Opens>>,
-) -> (Engine, crate::InProcessControl) {
-    let backends = backends(clock, Arc::new(SoftwareGpu), GpuMode::Deliver);
-    let engine = Engine::new()
-        .with_output(OutputId::new("yt"))
-        .with_backends(backends)
-        .with_open_timeout(GPU_OPEN_TIMEOUT)
-        .with_draw(breaking_draw(breaks, Arc::clone(opens)))
-        .with_publish(Box::new(RecordingPublish::new()));
-    let control = connected(&engine);
-    block_on(control.call(output_call("yt", true))).expect("output.start");
-    (engine, control)
-}
-
-/// When compositing keeps failing on the GPU path mid-run, because every GPU capture
-/// frame fails to import or because the context's device went away, the output does
-/// not fail: the render thread restarts the capture on the CPU path, reopens the
-/// compositor on a device of its own and carries on, and the fallback is counted
-/// (#451).
-#[test]
-fn an_output_falls_back_from_the_gpu_path_mid_run() {
-    let _gpu = one_gpu_test_at_a_time();
-    if !have_software_gpu() {
-        return;
-    }
-    for breaks in [Breaks::GpuFrames, Breaks::Context] {
-        let clock = FakeClock::new(Timebase::MICROS);
-        let opens = Arc::new(Mutex::new(Opens::default()));
-        let (engine, control) = breaking_engine(&clock, breaks, &opens);
-        let deadline = Instant::now() + Duration::from_secs(30);
-        let mut fell_back = None;
-        while Instant::now() < deadline {
-            clock.advance(50_000);
-            thread::sleep(Duration::from_millis(10));
-            let stats = engine.output_stats().expect("still running");
-            let pixel = opens
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .own_pixel;
-            if stats.gpu_fallbacks == 1 && pixel == Some(BLACK) {
-                fell_back = Some(stats);
-                break;
-            }
-        }
-        let stats = fell_back.unwrap_or_else(|| {
-            panic!(
-                "{breaks:?}: no fallback to the CPU path: {:?}",
-                engine.output_stats()
-            )
-        });
-        // The CPU path keeps drawing: more frames are read back.
-        let deadline = Instant::now() + Duration::from_secs(30);
-        let mut later = engine.output_stats().expect("still running");
-        while later.readbacks < stats.readbacks + 3 && Instant::now() < deadline {
-            clock.advance(50_000);
-            thread::sleep(Duration::from_millis(10));
-            later = engine.output_stats().expect("still running");
-        }
-        assert!(
-            later.readbacks >= stats.readbacks + 3,
-            "{breaks:?}: {later:?}"
-        );
-        assert_eq!(
-            later.gpu_captures, stats.gpu_captures,
-            "{breaks:?}: off the GPU path"
-        );
-        assert_eq!(later.gpu_fallbacks, 1, "{breaks:?}");
-        assert_eq!(
-            output_state(&control, "yt"),
-            OutputState::Active,
-            "{breaks:?}"
-        );
-        assert_eq!(
-            opens
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .on_context,
-            vec![true, false],
-            "{breaks:?}: opened on the context, then on its own device"
-        );
-        block_on(control.call(output_call("yt", false))).expect("output.stop");
-        assert!(engine.output_stats().is_none());
+            .push(gpu.is_some());
     }
 }
 
-/// A fallback that cannot open the compositor on a device of its own fails the output,
-/// instead of riding out more errors on the broken path.
+struct PaintedPage {
+    painter: Arc<Painter>,
+    size: FrameSize,
+    /// The frame painted on the current device, kept so a page that hasn't changed
+    /// hands out the same texture.
+    painted: Mutex<Option<GpuFrame>>,
+    audio: Arc<jstream_browser::PageAudio>,
+}
+
+impl jstream_browser::BrowserPage for PaintedPage {
+    fn frame(&self) -> Option<GpuFrame> {
+        let device = self
+            .painter
+            .device
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let (device, queue) = device.as_ref()?;
+        let mut painted = self.painted.lock().unwrap_or_else(PoisonError::into_inner);
+        if painted.is_none() {
+            let texture = filled_texture(
+                device,
+                queue,
+                self.size,
+                wgpu::TextureFormat::Bgra8Unorm,
+                PAGE_TEXEL,
+            );
+            let info = VideoFrameInfo {
+                size: self.size,
+                format: PixelFormat::Bgra8,
+                color: ColorInfo {
+                    range: ColorRange::Full,
+                    ..ColorInfo::default()
+                },
+                pts: MediaTime::zero(Timebase::MICROS),
+            };
+            let sync = Arc::new(CountSync(Arc::new(AtomicU64::new(0))));
+            *painted = Some(GpuFrame::new(texture, info, sync));
+        }
+        painted.clone()
+    }
+
+    fn set_css(&mut self, _css: &str) {}
+
+    fn audio(&self) -> &Arc<jstream_browser::PageAudio> {
+        &self.audio
+    }
+
+    fn denied_requests(&self) -> u64 {
+        0
+    }
+}
+
+/// On the GPU path a browser page paints on the program stage's device, and the render
+/// thread samples its texture there as premultiplied sRGB: half-transparent red over
+/// the black canvas reads back as linear red one half, not the darker red reading it
+/// as straight alpha would give. The stage takes the device away when it stops.
 #[test]
-fn an_output_fails_when_the_gpu_fallback_fails() {
+fn a_browser_page_is_composited_from_its_gpu_frames() {
     let _gpu = one_gpu_test_at_a_time();
     if !have_software_gpu() {
         return;
     }
     let clock = FakeClock::new(Timebase::MICROS);
-    let opens = Arc::new(Mutex::new(Opens::default()));
-    let (engine, control) = breaking_engine(&clock, Breaks::Everywhere, &opens);
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let mut failed = false;
+    let backends = backends(&clock, Arc::new(SoftwareGpu), GpuMode::None);
+    let browser = PaintingBrowser::default();
+    let seen = Arc::new(Mutex::new(Seen::default()));
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_browser(Arc::new(browser.clone()))
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(watched_draw(Arc::clone(&seen)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("main"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("page"),
+                    name: "Page".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "browser".into(),
+                    },
+                    settings: Settings(
+                        [("url".to_owned(), json!("https://example.com/"))]
+                            .into_iter()
+                            .collect(),
+                    ),
+                    duplicated_from: None,
+                },
+                add("main", "item", "page"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a scene showing the page");
+    block_on(control.call(switch_call("main"))).expect("scene.switch");
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    // Linear red 128/255, premultiplied over black, encoded back to sRGB.
+    let half = 128.0_f32 / 255.0;
+    let red = (1.055 * half.powf(1.0 / 2.4) - 0.055) * 255.0;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut pixel = None;
     while Instant::now() < deadline {
         clock.advance(50_000);
-        thread::sleep(Duration::from_millis(10));
-        if output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none() {
-            failed = true;
+        thread::sleep(Duration::from_millis(20));
+        pixel = seen.lock().unwrap_or_else(PoisonError::into_inner).pixel;
+        if pixel.is_some_and(|[r, g, b, a]| {
+            (f32::from(r) - red).abs() <= 3.0 && g == 0 && b == 0 && a == 255
+        }) {
             break;
         }
     }
+    let got = pixel.map(|[r, g, b, a]| (f32::from(r), g, b, a));
     assert!(
-        failed,
-        "the output did not fail: {:?}",
-        engine.output_stats()
+        got.is_some_and(|(r, g, b, a)| (r - red).abs() <= 3.0 && g == 0 && b == 0 && a == 255),
+        "the page was not composited as premultiplied red: {pixel:?}, expected red {red:.0}"
     );
     assert_eq!(
-        opens
+        *browser
+            .0
+            .given
             .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .on_context,
-        vec![true, false],
-        "one fallback was tried"
+            .unwrap_or_else(PoisonError::into_inner),
+        [true],
+        "the browser got the stage's device"
+    );
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
+    assert_eq!(
+        *browser
+            .0
+            .given
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner),
+        [true, false],
+        "the stage took the device away when it stopped"
     );
 }
