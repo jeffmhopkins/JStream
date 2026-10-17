@@ -165,8 +165,9 @@ a connection is accepted again. The header-read timeout is there since hyper's o
 reachable through `axum::serve`: until the upgrade handler accepts a request, every read
 and write fails once the deadline has passed. So it also drops a connection that sends
 no request, asks for another path, or stays open after a refusal.
-The cap is checked after the `Host`, `Origin` and token checks, so a refused client
-learns nothing about the server's load, and a refusal costs no session. The listener
+The WebSocket cap (`max_connections`) is checked after the `Host`, `Origin` and token
+checks, so a refused upgrade learns nothing about how many sessions are open, and a
+refusal costs no session. The TCP cap is checked at accept, before any request is read. The listener
 stays on loopback by default; these bounds are what a non-loopback bind would rely on
 against a misbehaving client on the network.
 
@@ -381,8 +382,8 @@ task speaks the envelope
   requests without reading the answers is held back by the socket. Calls the engine
   hasn't answered yet are bounded the same way: while 64 are in flight on a connection
   (`MAX_IN_FLIGHT`), the task reads nothing more until one completes, so a client that
-  never waits for its answers holds at most 64 parsed requests (256 MiB at the message
-  limit).
+  never waits for its answers holds at most 64 parsed requests, each of up to 4 MiB of
+  message text.
 - The connection ends when the client closes it, when the session's event stream ends
   (the engine went away; close code 1001), when the session reports `Disconnected`
   (close code 1011), or when the server shuts down.

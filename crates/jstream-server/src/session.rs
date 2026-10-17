@@ -91,9 +91,9 @@ const REPLY_BACKLOG: usize = 1024;
 /// How many calls may be in flight on one connection (forwarded to the session and not
 /// answered yet) before the connection stops reading, until one completes (#354).
 ///
-/// Each one holds its parsed request, up to the 4 MiB message limit, so this bounds what
-/// a client that never waits for answers can make the server hold to 256 MiB, while a UI
-/// that pipelines its calls stays far below it.
+/// Each one holds its parsed request, read from at most 4 MiB of message text, so a
+/// client that never waits for answers can make the server hold about 64 times the
+/// message limit, while a UI that pipelines its calls stays far below it.
 pub(crate) const MAX_IN_FLIGHT: usize = 64;
 
 /// The connection ended (the client went away or a send failed).
