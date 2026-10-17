@@ -37,7 +37,7 @@ use std::any::Any;
 use std::collections::BTreeMap;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -93,7 +93,7 @@ pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_DRAW_ERRORS: u32 = 30;
 /// Composite errors in a row on the GPU path after which the render thread leaves it:
 /// it restarts the capture on the CPU path and reopens the compositor on a device of its
-/// own ([`leave_gpu`]), well before [`MAX_DRAW_ERRORS`] would fail the output. A third of
+/// own ([`Switch`]), well before [`MAX_DRAW_ERRORS`] would fail the output. A third of
 /// a second at the base rate, so one bad frame does not cost the GPU path.
 const GPU_FALLBACK_ERRORS: u32 = 10;
 /// How long a stop lets the output thread send the packets still queued, counted from
@@ -111,17 +111,19 @@ const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 /// sources showing the capture (or, with no program scene, the capture filling the
 /// frame, or black when there is none yet), read back as RGBA8 into `out` (replacing its
 /// contents), as it is at the tick's time on the media clock (a running transition
-/// samples it). Returns the GPU images its cache let go of, for the collector. Created
-/// on the render thread and kept there, so it need not be `Send`.
+/// samples it). Returns the GPU images its cache let go of, for the collector. Opened on
+/// the render thread, except the one a fallback from the GPU path opens on a thread of
+/// its own so it can be given a deadline ([`Switch`]), and then used only there.
 pub(crate) type DrawFn = Box<
-    dyn FnMut(
-        &Shot,
-        &LiveParams,
-        FrameSize,
-        Option<&CaptureFrame<'_>>,
-        &mut Vec<u8>,
-        MediaTime,
-    ) -> Result<Option<Reclaimed>, String>,
+    dyn Send
+        + FnMut(
+            &Shot,
+            &LiveParams,
+            FrameSize,
+            Option<&CaptureFrame<'_>>,
+            &mut Vec<u8>,
+            MediaTime,
+        ) -> Result<Option<Reclaimed>, String>,
 >;
 
 /// Opens the render thread's [`DrawFn`], on that thread, on the platform's GPU context
@@ -993,6 +995,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             reader: RenderReader::new(Arc::clone(&parts.render), collector.clone()),
             collector,
             open: Arc::clone(&parts.draw),
+            open_timeout: parts.open_timeout,
             clock: Arc::clone(&parts.clock),
             inputs: video_inputs,
             cams: vcam_inputs,
@@ -1295,7 +1298,7 @@ pub(crate) struct OpenedCapture {
     pub(crate) fallback: Option<CpuFallback>,
 }
 
-/// What the render thread needs to leave the GPU path mid-run ([`leave_gpu`]).
+/// What the render thread needs to leave the GPU path mid-run ([`Switch`]).
 pub(crate) struct CpuFallback {
     /// The capture backend, to start on the CPU path.
     capture: Arc<dyn Capture>,
@@ -1317,7 +1320,7 @@ pub(crate) struct CpuFallback {
 /// or the GPU capture does not start, the capture delivers CPU frames and the render
 /// thread still composites on the platform's device. Each fallback is logged. With a
 /// device, the result also holds what the render thread needs to leave the GPU path
-/// later, if compositing keeps failing on it ([`leave_gpu`]).
+/// later, if compositing keeps failing on it ([`Switch`]).
 pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
     let target = primary_target(parts.capture.as_ref())?;
     let context = match parts.gpu.open_device() {
@@ -1506,6 +1509,9 @@ struct RenderJob {
     /// the last reference to it (R-RT-003).
     collector: Collector,
     open: OpenDraw,
+    /// How long a fallback from the GPU path may take to open the compositor on a device
+    /// of its own: the bound `output.start` gives the first open.
+    open_timeout: Duration,
     clock: Arc<dyn MediaClock>,
     /// The sessions to push frames into, as they are opened.
     inputs: Receiver<VideoInput>,
@@ -1656,11 +1662,13 @@ impl Frames {
 /// Recoverable: the capture mailbox failing or having no new frame repeats the last
 /// capture, and a composite error repeats the last composited frame, up to
 /// [`MAX_DRAW_ERRORS`] in a row. On the platform's context, [`GPU_FALLBACK_ERRORS`] in a
-/// row leave the GPU path once ([`leave_gpu`]) and the count starts again. Fatal,
-/// reported on the failure channel: more composite errors than [`MAX_DRAW_ERRORS`], a
-/// fallback that fails, a panic inside a tick (the compositor's state is unknown), and a
-/// frame time that overflows. After a fatal error the thread keeps pushing the last
-/// frame until the pipeline stops, so the stream does not freeze before teardown. A
+/// row leave the GPU path once ([`Switch`]): while the compositor opens on a device of
+/// its own, the thread repeats the last frame, and the count starts again after it.
+/// Fatal, reported on the failure channel: more composite errors than
+/// [`MAX_DRAW_ERRORS`], a fallback that fails, panics or does not open in time, a panic
+/// inside a tick (the compositor's state is unknown), and a frame time that overflows.
+/// After a fatal error the thread keeps pushing the last frame until the pipeline stops,
+/// so the stream does not freeze before teardown. A
 /// tick that falls a whole period or more behind the clock skips to the current tick
 /// and counts the ticks it skipped in `render_ticks` (R-RT-004), so video pts stay on
 /// the clock that stamps audio.
@@ -1677,6 +1685,7 @@ fn render_loop(job: RenderJob) {
         mut reader,
         collector,
         open,
+        open_timeout,
         clock,
         inputs,
         cams: cam_inputs,
@@ -1720,6 +1729,8 @@ fn render_loop(job: RenderJob) {
     let mut next: Option<MediaTime> = None;
     let mut skipped: u64 = 0;
     let mut draw_errors: u32 = 0;
+    // A fallback from the GPU path that is opening: no drawing until it is done.
+    let mut switch: Option<Switch> = None;
     // Set by a fatal error: stop drawing and repeat `shown` until the pipeline stops.
     let mut broken = false;
     while !stop.load(Ordering::Relaxed) {
@@ -1750,7 +1761,55 @@ fn render_loop(job: RenderJob) {
             }
         };
         skipped = skipped.saturating_add(missed);
-        if !broken {
+        if broken {
+            // Repeating `shown`, below.
+        } else if let Some(pending) = &switch {
+            // The last frame repeats while the compositor opens; snapshots are still
+            // adopted, so a gesture never waits on the fallback.
+            let adopted = panic::catch_unwind(AssertUnwindSafe(|| {
+                reader.adopt();
+            }));
+            let done = match adopted {
+                Ok(()) => pending.poll(Instant::now()),
+                Err(panic) => Some(Err(format!("panicked: {}", panic_message(&*panic)))),
+            };
+            if let Some(done) = done {
+                let (cause, errors) = (pending.cause.clone(), pending.errors);
+                switch = None;
+                let switched = done.and_then(|opened| {
+                    let stage = GpuStage {
+                        frames: &mut frames,
+                        draw: &mut draw,
+                        capture: &mut capture,
+                        context: &mut context,
+                    };
+                    panic::catch_unwind(AssertUnwindSafe(|| take_cpu_path(stage, opened)))
+                        .map_err(|panic| format!("panicked: {}", panic_message(&*panic)))
+                });
+                match switched {
+                    Ok(()) => {
+                        tracing::warn!(
+                            error = %cause,
+                            errors,
+                            "compositing kept failing on the GPU path; fell back to CPU \
+                             capture on the render thread's own device"
+                        );
+                        gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Err(fell) => {
+                        broken = true;
+                        reader.stop();
+                        report(
+                            &fail,
+                            format!(
+                                "compositing failed {errors} times in a row on the GPU path \
+                                 ({cause}), and falling back failed: {fell}"
+                            ),
+                        );
+                    }
+                }
+            }
+        } else {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 frames.read_capture(capture.as_mut());
                 reader.adopt();
@@ -1773,21 +1832,9 @@ fn render_loop(job: RenderJob) {
                     if draw_errors >= GPU_FALLBACK_ERRORS
                         && let Some(path) = fallback.take()
                     {
-                        let stage = GpuStage {
-                            frames: &mut frames,
-                            draw: &mut draw,
-                            capture: &mut capture,
-                            context: &mut context,
-                        };
-                        match leave_gpu(stage, path, &open) {
-                            Ok(()) => {
-                                tracing::warn!(
-                                    error = %err,
-                                    errors = draw_errors,
-                                    "compositing kept failing on the GPU path; fell back to \
-                                     CPU capture on the render thread's own device"
-                                );
-                                gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
+                        match Switch::start(path, &open, open_timeout, err.clone(), draw_errors) {
+                            Ok(started) => {
+                                switch = Some(started);
                                 draw_errors = 0;
                             }
                             Err(fell) => {
@@ -1863,7 +1910,7 @@ fn render_loop(job: RenderJob) {
     drop(context);
 }
 
-/// The render thread's GPU state that [`leave_gpu`] replaces.
+/// The render thread's GPU state that [`take_cpu_path`] replaces.
 struct GpuStage<'a> {
     frames: &'a mut Frames,
     draw: &'a mut DrawFn,
@@ -1871,23 +1918,74 @@ struct GpuStage<'a> {
     context: &'a mut Option<GpuContext>,
 }
 
-/// Leaves the GPU path mid-run (#451): compositing kept failing on the platform's
-/// context, because every GPU capture frame failed to import or because the context's
-/// device went away. The capture restarts on the CPU path when it delivered GPU frames,
-/// the compositor reopens on a device of its own (`open(None)`), and the context goes.
-/// The old frame, compositor and stream are dropped before the context, as its platform
-/// state requires (README › GPU frames). They are owned by this thread and never shared,
-/// so they are not the collector's to free (R-RT-003); the open blocks the thread once,
-/// like the first open, and the ticks it misses are counted as skipped.
-///
-/// On an error the stage is left on the GPU path, and the caller fails the output.
-fn leave_gpu(stage: GpuStage<'_>, path: CpuFallback, open: &OpenDraw) -> Result<(), String> {
-    let GpuStage {
-        frames,
-        draw,
-        capture,
-        context,
-    } = stage;
+/// What a [`Switch`] opens: the CPU capture, when the stream delivered GPU frames and
+/// restarts, and the compositor on a device of its own.
+type Switched = (Option<Box<dyn CaptureStream>>, DrawFn);
+
+/// A fallback from the GPU path mid-run (#451), opening: compositing kept failing on the
+/// platform's context, because every GPU capture frame failed to import or because the
+/// context's device went away. A thread of its own restarts the capture on the CPU path
+/// when it delivered GPU frames and opens the compositor without the context
+/// (`open(None)`), so the render thread keeps repeating the last frame meanwhile and can
+/// give up at a deadline: an adapter that hangs while opening fails the output instead
+/// of freezing it (#577). A panic there comes back as an error. When the deadline has
+/// passed the thread is left to finish on its own, and drops what it opened there; none
+/// of it uses the context. Starting it spawns that thread, once per program stage.
+struct Switch {
+    done: Receiver<Result<Switched, String>>,
+    by: Instant,
+    timeout: Duration,
+    /// The composite error that set it off, and how many there were in a row.
+    cause: String,
+    errors: u32,
+}
+
+impl Switch {
+    fn start(
+        path: CpuFallback,
+        open: &OpenDraw,
+        timeout: Duration,
+        cause: String,
+        errors: u32,
+    ) -> Result<Self, String> {
+        let (sent, done) = mpsc::channel();
+        let open = Arc::clone(open);
+        let by = Instant::now() + timeout;
+        spawn("jstream-gpu-fallback", move || {
+            let opened = panic::catch_unwind(AssertUnwindSafe(|| open_cpu_path(path, &open)))
+                .unwrap_or_else(|panic| Err(format!("panicked: {}", panic_message(&*panic))));
+            // Gone once the render thread gave up; what opened then drops here.
+            let _ = sent.send(opened);
+        })?;
+        Ok(Self {
+            done,
+            by,
+            timeout,
+            cause,
+            errors,
+        })
+    }
+
+    /// What the fallback opened, or why it failed, once it is done or out of time.
+    /// `None` while it is still opening.
+    fn poll(&self, now: Instant) -> Option<Result<Switched, String>> {
+        match self.done.try_recv() {
+            Ok(done) => Some(done),
+            Err(TryRecvError::Empty) if now < self.by => None,
+            Err(TryRecvError::Empty) => Some(Err(format!(
+                "the compositor did not open on a device of its own within {}s",
+                self.timeout.as_secs()
+            ))),
+            Err(TryRecvError::Disconnected) => {
+                Some(Err("the fallback thread stopped before it was done".into()))
+            }
+        }
+    }
+}
+
+/// On a [`Switch`]'s thread: the CPU capture, if the stream restarts, then the
+/// compositor on a device of its own.
+fn open_cpu_path(path: CpuFallback, open: &OpenDraw) -> Result<Switched, String> {
     let stream = if path.restart {
         Some(
             path.capture
@@ -1898,6 +1996,20 @@ fn leave_gpu(stage: GpuStage<'_>, path: CpuFallback, open: &OpenDraw) -> Result<
         None
     };
     let own = open(None)?;
+    Ok((stream, own))
+}
+
+/// Puts what a [`Switch`] opened in place of the GPU path. The old frame, compositor and
+/// stream are dropped before the context, as its platform state requires (README › GPU
+/// frames). They are owned by this thread and never shared, so they are not the
+/// collector's to free (R-RT-003).
+fn take_cpu_path(stage: GpuStage<'_>, (stream, own): Switched) {
+    let GpuStage {
+        frames,
+        draw,
+        capture,
+        context,
+    } = stage;
     frames.gpu = None;
     frames.pending = None;
     frames.on_gpu = false;
@@ -1906,7 +2018,6 @@ fn leave_gpu(stage: GpuStage<'_>, path: CpuFallback, open: &OpenDraw) -> Result<
         *capture = stream;
     }
     *context = None;
-    Ok(())
 }
 
 /// The tick to draw when the clock reads `now` and the next tick was `due`, and how
@@ -2453,19 +2564,24 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, Frames, catch_up, output_size, push_each, rgba_from_surface, stream_info,
-        video_config,
+        CpuFallback, DrawFn, Frames, OpenDraw, Switch, Switched, catch_up, lock, output_size,
+        push_each, rgba_from_surface, stream_info, video_config,
     };
     use crate::snapshot::{CaptureImage, Shot};
     use jstream_media::{
         Codec, ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane,
         Timebase, VideoFrame, VideoFrameInfo,
     };
+    use jstream_platform::fake::{FAKE_DISPLAY, FakeCapture, FakeClock};
+    use jstream_platform::{CaptureTarget, DeviceId, GpuContext};
     use jstream_platform::{HardwarePreference, RateControl, VideoSurface};
     use jstream_protocol::{
         EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
         VideoCodec,
     };
+    use std::sync::{Arc, Mutex, mpsc};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     /// Every target is pushed once; exactly the ones that refuse are taken out and
     /// retired (handed to the collector), and the rest stay.
@@ -2715,5 +2831,67 @@ mod tests {
             catch_up(us(i64::MIN), us(i64::MAX), period).is_err(),
             "overflow"
         );
+    }
+
+    /// A fallback for the fake display, restarting its stream.
+    fn fallback() -> CpuFallback {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let size = FrameSize::new(64, 36).expect("size");
+        CpuFallback {
+            capture: Arc::new(FakeCapture::new(clock, size)),
+            target: CaptureTarget::Display(DeviceId::new(FAKE_DISPLAY)),
+            restart: true,
+        }
+    }
+
+    /// Polls `switch` until it is done, or panics after `by`.
+    fn finish(switch: &Switch, by: Duration) -> Result<Switched, String> {
+        let deadline = Instant::now() + by;
+        loop {
+            if let Some(done) = switch.poll(Instant::now()) {
+                return done;
+            }
+            assert!(Instant::now() < deadline, "the switch never finished");
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    /// A fallback opens the CPU capture and the compositor without the context on a
+    /// thread of its own; a panic there, or an open past the deadline, comes back as an
+    /// error instead of unwinding or blocking the render thread (#577).
+    #[test]
+    fn a_switch_off_the_gpu_path_reports_a_panic_or_a_hang() {
+        let opens: OpenDraw = Arc::new(|context: Option<&GpuContext>| {
+            assert!(context.is_none(), "opened on the context");
+            let draw: DrawFn = Box::new(|_, _, _, _, _, _| Ok(None));
+            Ok(draw)
+        });
+        let switch = Switch::start(fallback(), &opens, Duration::from_secs(30), "x".into(), 10)
+            .expect("start");
+        let (stream, _draw) = finish(&switch, Duration::from_secs(30)).expect("opened");
+        assert!(stream.is_some(), "the CPU capture restarted");
+
+        let panics: OpenDraw = Arc::new(|_: Option<&GpuContext>| panic!("adapter lost"));
+        let switch = Switch::start(fallback(), &panics, Duration::from_secs(30), "x".into(), 10)
+            .expect("start");
+        let Err(err) = finish(&switch, Duration::from_secs(30)) else {
+            panic!("a panicking open succeeded");
+        };
+        assert!(err.contains("panicked: adapter lost"), "{err}");
+
+        let (release, hold) = mpsc::channel::<()>();
+        let hold = Mutex::new(hold);
+        let hangs: OpenDraw = Arc::new(move |_: Option<&GpuContext>| {
+            let _ = lock(&hold).recv();
+            Err("released".into())
+        });
+        let timeout = Duration::from_millis(50);
+        let switch = Switch::start(fallback(), &hangs, timeout, "x".into(), 10).expect("start");
+        assert!(switch.poll(Instant::now()).is_none(), "still opening");
+        let Err(err) = finish(&switch, Duration::from_secs(30)) else {
+            panic!("a hung open succeeded");
+        };
+        assert!(err.contains("did not open"), "{err}");
+        drop(release);
     }
 }

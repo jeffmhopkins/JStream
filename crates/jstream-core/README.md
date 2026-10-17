@@ -222,7 +222,8 @@ state machine. Contents:
   published snapshot (CPU stand-in), which capture path an output takes and each
   fallback, an output compositing GPU capture frames, and one leaving the GPU path
   mid-run when every GPU frame fails to import or the context breaks (and failing when
-  that fallback fails), on a software device that stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
+  that fallback fails, or at its deadline when it hangs, still repeating the last
+  frame meanwhile), on a software device that stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
   the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
   `hw-tests` and ignored), the
   pipeline against the platform fakes
@@ -1296,9 +1297,11 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   missing source frame, [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)); a
   composite error repeats the last composited frame, up to 30 in a row. On the
   platform's GPU context, the 10th in a row leaves the GPU path once instead, for CPU
-  capture on a device of the thread's own (see [Runtime](#runtime)).
-- **Fatal, reported:** a 31st composite error in a row, a fallback from the GPU path
-  that fails, a panic inside a tick (the
+  capture on a device of the thread's own, and the last frame repeats while that opens
+  (see [Runtime](#runtime)).
+- **Fatal, reported:** a 31st composite error in a row (counted again after a
+  fallback), a fallback from the GPU path that fails, panics or does not open in time,
+  a panic inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
   does not freeze before the teardown. A virtual camera's publish error is not
@@ -1569,11 +1572,16 @@ backend with no GPU path or one that refuses the context, and a GPU capture that
 not start. The GPU path can also break mid-run: every GPU frame fails to import (a
 format the compositor can't take), or the context's device goes away. After 10
 composite errors in a row on the context, a third of a second, the render thread leaves
-it once: it restarts the capture on the CPU path if it was delivering GPU frames, reopens
-the compositor on a device of its own and carries on. The fallback is logged as a warning
-and counted (`OutputStats::gpu_fallbacks`). If the fallback can't start the capture or
-open the compositor, the output fails at once. Errors that go on after the fallback fail
-it as they would on the CPU path. The render loop drops the held frame, the compositor and
+it once. A thread of its own restarts the capture on the CPU path if it was delivering
+GPU frames and opens the compositor on a device of its own, while the render thread keeps
+repeating the last frame and adopting snapshots; then the render thread takes them and
+carries on. The fallback is logged as a warning and counted
+(`OutputStats::gpu_fallbacks`). The output fails at once if the fallback can't start the
+capture or open the compositor, panics, or isn't done within the open bound `output.start`
+uses (10 s): a hung adapter fails the output instead of freezing it (#577). A fallback
+thread that times out is left to finish on its own and drops what it opened; none of it
+uses the context. Errors that go on after the fallback are counted again from zero and
+fail the output as they would on the CPU path. The render loop drops the held frame, the compositor and
 the capture stream before the context, at a fallback and at the end, so the platform's
 state goes first as `GpuContext` requires.
 
