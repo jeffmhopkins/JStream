@@ -198,8 +198,9 @@ roadmap item, after a patent check:
 - **Media-file source (M2)** depends on OS demux and decode APIs (Media Foundation on
   Windows), so the containers and codecs it plays are those the OS supports. It needs the
   `VideoDecoder` platform trait, looping, restart rules tied to the source lifecycle, and
-  A/V sync on the media clock. Linux has no OS demuxer, so it stays out of scope there
-  ([ADR-0060](0060-linux-platform-support.md) §9); neither addition here decodes.
+  A/V sync on the media clock. *(changed)* Linux has no OS demuxer, so it stays out of
+  scope there ([ADR-0060](0060-linux-platform-support.md) §9); neither addition here
+  decodes.
 - **Waveform and spectrum (M2)** add a new **audio → render data path**: the mixer
   publishes per-source analysis (peaks, FFT magnitudes) through a lock-free hand-off that
   the render thread reads ([R-RT-003](../RULES.md#R-RT-003)). The analysis must not
@@ -229,8 +230,8 @@ roadmap item, after a patent check:
     ARCHITECTURE's crate map (`depends_on` and the `jstream-sources` row), the ROADMAP M1
     section's `depends_on` and links, the crate READMEs and `//! Docs:` lines that cite
     it, and the ADR-0031 mentions in `deny.toml`, `Cargo.toml` comments,
-    `xtask/src/lint_deps.rs` and the codec comments in `jstream-platform` and
-    `jstream-platform-windows`.
+    `xtask/src/lint_deps.rs`, and every code comment that cites it. The list to work
+    from is `git grep -l 'ADR-0031\|0031-source'` at the acceptance push, not this one.
   - ROADMAP M3's Linux line adds the AAC-LC encoder (patent check first) and the OpenH264
     download, and `docs/progress.toml` gains an M3 item for each, then
     `cargo xtask docs generate` for the README's progress table.
