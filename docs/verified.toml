@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:ac9ec48f04dbd7ac", by = "agent:w1-builder", note = "jstream-plugin-wasm now exists at layer 3 as the row said; row now names the capability list (empty by default), fuel/memory limits and no WASI. Its only member dependency is jstream-control (L2), so layering holds" }
+stamp = { hash = "b3:2bb9701cd233b9c9", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "jstream-platform-linux row names ADR-0060 (the edit ADR-0060 lists for acceptance) and the jstream-meta summary reads 'First part of ADR-0060'; layer 2, unsafe yes still match. The wave/m3-2 merge added the jstream-plugin-wasm (WA1) row and E3d's NV12 wording, which this branch doesn't touch; holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -1908,7 +1908,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:48aac723c0fe210f", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:ac9ec48f04dbd7ac", by = "agent:w1-builder", note = "Crate-map change is only the jstream-plugin-wasm row; the jstream-platform row this section cites (wgpu types in this crate) is unchanged" }
+stamp = { hash = "b3:2bb9701cd233b9c9", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "The crate map changed only in the Linux row's ADR wording and, from the wave/m3-2 merge, the WA1 plugin-wasm row; gpu-frames says nothing about either; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:bb9d34d698b4cea6", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
