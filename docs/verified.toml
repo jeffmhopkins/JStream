@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:bb7e9052166ca391", by = "agent:mac1-keychain", note = "macOS row now names the Keychain store for stream keys and OAuth tokens; Cargo summary change adds the Keychain store and the layer and unsafe flags are unchanged" }
+stamp = { hash = "b3:e333e3b0bcfc4ad7", by = "agent:claude-e3d", note = "m1-2's crate rows merged with m3-2's: jstream-effects keeps m1-2's filter-harness drawing, and m3-2's platform crates (Linux, macOS, aac) and jstream-platform's shared helpers stay as m3-2 has them. Checked against the workspace members and each crate's dependencies after the merge (cargo metadata builds; lint-deps unchanged). | merge: Merged m3-2's #566 (the macOS row now says its Keychain store holds OAuth tokens too) with this branch's Windows row, which keeps m1-2's CLAP plugin-host launcher and shared block. Both rows match their crates." }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -2208,7 +2208,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:330f3a7f837a2654", by = "agent:claude-e3d", note = "E3d's text (the render crate has Nv12Converter; the engine's render thread converts composites into a ring of encode targets and pushes them) merged with m1-2's (browser pages paint on the device, video encoders rather than H.264 alone, GpuContext::key as a ContextKey). Edited for m1-2's video mixes: each mix has its own ring and feeds its own GPU sessions, as pipeline.rs's MixEncode/EncodeRing do. Frame lifetime and the only-clone rule are unchanged." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:bb7e9052166ca391", by = "agent:mac1-keychain", note = "Re-read: the crate-map change only reworded the macOS row's Keychain store; the gpu-frames claims (GpuInterop and GPU frame types with wgpu types here, platform crates import via wgpu-hal) still hold" }
+stamp = { hash = "b3:e333e3b0bcfc4ad7", by = "agent:claude-e3d", note = "E3d's text (the render crate has Nv12Converter; the engine's render thread converts composites into a ring of encode targets and pushes them) merged with m1-2's (browser pages paint on the device, video encoders rather than H.264 alone, GpuContext::key as a ContextKey). Edited for m1-2's video mixes: each mix has its own ring and feeds its own GPU sessions, as pipeline.rs's MixEncode/EncodeRing do. Frame lifetime and the only-clone rule are unchanged. | merge: #566 changed no GPU-frame text or code; the section is stale only through ARCH › Crate map's macOS row (Keychain OAuth tokens), which says nothing about GPU frames: the per-mix ring text holds." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:b90cc2b4c391a8d6", by = "agent:claude-e3d", note = "E3d's text (the render crate has Nv12Converter; the engine's render thread converts composites into a ring of encode targets and pushes them) merged with m1-2's (browser pages paint on the device, video encoders rather than H.264 alone, GpuContext::key as a ContextKey). Edited for m1-2's video mixes: each mix has its own ring and feeds its own GPU sessions, as pipeline.rs's MixEncode/EncodeRing do, and ARCH › GPU pipeline now says the same. Frame lifetime and the only-clone rule are unchanged." }
