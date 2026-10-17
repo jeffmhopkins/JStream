@@ -219,7 +219,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | 🔍 in review | #486 |
 | MAC1 | macOS platform crate | ⏳ planned |  |
-| LNX1 | Linux codec path and platform crate | 🔍 in review: ADR-0060 accepted (#481); crate part 1 (#490) | #481, #490 |
+| LNX1 | Linux codec path and platform crate | 🔍 in review: ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509) | #481, #490, #509 |
 | LNX2 | Linux OpenH264 download (ADR-0061) | ⏳ planned |  |
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | 🔍 in review: patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS and intensity stereo later | #508, #518 |
 
