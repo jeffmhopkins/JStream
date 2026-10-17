@@ -28,12 +28,15 @@ codes, so the engine passes them to clients unchanged.
   (`cut`, `fade`, `move`), which every graph has.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
-  keyed by ID, the `buses`, keyed by ID and always holding the master, the `sends`,
-  keyed by bus and source, the `hotkeys`: each `Chord` bound to the protocol
-  `Action` it fires
+  keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
+  holding the master, the `sends`, keyed by bus and source, the master stage's filter
+  `Chains` (`State::master`,
+  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), the
+  `hotkeys`: each `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §3), and the `transitions`: the presets, keyed by ID, and the default. A binding
   always names objects that exist. A new state holds one preset, `cut`, as its default.
+  Each `Output` has its own `Chains` too; only their audio chains hold filters so far.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -69,10 +72,13 @@ codes, so the engine passes them to clients unchanged.
   gain in dB from a source into a bus.
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
+- `VideoMix`: a video mix, an ID, a name and the protocol's `VideoMix` (an input, a
+  resolution and a divisor of the base frame rate).
 - `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL or to a YouTube
   broadcast by its ID, a recording to an MP4 file, or the virtual camera, which has
-  nothing to check) and the encoder profile it uses, if not the default (a virtual
-  camera encodes nothing, so it ignores its profile). Whether it
+  nothing to check), the encoder profile it uses, if not the default (a virtual
+  camera encodes nothing, so it ignores its profile), and the video mix it shows, if
+  not the program. Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -97,14 +103,15 @@ the batch **touched**.
   delete also names what it removed), the objects created or deleted, the objects used
   (an item's scene and source, both sources of an `item.set_source`, a `scene`
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
-  an `output.set_encoder` names, a send's source and bus, the preset a scene override
-  or `transition.set_default` names), the properties set (names, a scene's role, an
+  an `output.set_encoder` names, the mix an `output.set_video_mix` names, a `scene`
+  mix's scene, a send's source and bus, the preset a scene override or
+  `transition.set_default` names), the properties set (names, a scene's role, an
   item's placement, crop, visibility, opacity, blend, index and source, each settings
-  parameter, a filter's switch, settings parameters and index, an output's target and
-  encoder choice, a profile's encoding, each audio field a `source.set_audio` or
-  `bus.set_fader` sets, a send's gain, a preset's fields, a scene's transition
-  overrides, an item's transition settings), and whether the scenes' order, the canvas
-  size or the default preset was set. A send is an object of its own, so two sources'
+  parameter, a filter's switch, settings parameters and index, an output's target,
+  encoder and mix choices, a profile's encoding, a mix's spec, each audio field a
+  `source.set_audio` or `bus.set_fader` sets, a send's gain, a preset's fields, a
+  scene's transition overrides, an item's transition settings), and whether the
+  scenes' order, the canvas size or the default preset was set. A send is an object of its own, so two sources'
   sends into one bus don't conflict, and deleting a bus conflicts with every change to
   its sends. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
@@ -125,10 +132,11 @@ the batch **touched**.
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, `scene.delete` while a `scene`
-  source shows the scene or a setting refers to it, and `bus.delete` while a setting
-  refers to the bus (a `waveform` or `spectrum` drawing it, #362). The `invalid_argument` lists every
-  blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
-  item (`source_id`), the `scene` source (`kind.scene_id`), the setting
+  source or a video mix shows the scene or a setting refers to it, and `bus.delete`
+  while a setting refers to the bus (a `waveform` or `spectrum` drawing it, #362). The
+  `invalid_argument` lists every blocker in `blockers` (`deps::blockers`, the reverse
+  of the cycle check's edges, plus the mixes): the item (`source_id`), the `scene`
+  source (`kind.scene_id`), the mix (`mix.input.scene_id`), the setting
   (`settings.<param>`) or a filter's setting (`filters.<filter_id>.<param>`). The client removes them first, in the same batch if it likes,
   or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
   edit's effect, and its inverse, limited to the object it names.
@@ -146,16 +154,20 @@ the batch **touched**.
   accept only `normal` until the compositor draws the other modes. Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `filter.add` checks, in order, the owner source, the filter ID (non-empty, unused in
-  the source), that the source has the chain (video if its kind produces video, audio
-  if it produces audio and it is not a `scene` source), that the chain has room, that
-  the kind is a filter kind of that chain (`kind`), the settings exactly as a source's,
-  and the index; it is undone by `filter.remove`. `filter.remove` is undone by the
+  `filter.add` checks, in order, the owner (a source, an output or the master stage),
+  the filter ID (non-empty, unused on the owner), that the owner has the chain (a
+  source: video if its kind produces video, audio if it produces audio and it is not a
+  `scene` source; the master and an output that carries audio: audio only, ADR-0027),
+  that the chain has room, that the kind is a filter kind of that chain (`kind`), that
+  a master or output filter's settings hold no reference (a scene, source, bus or asset),
+  the settings
+  exactly as a source's, and the index; it is undone by `filter.remove`. `filter.remove` is undone by the
   `filter.add` that puts the filter back where it was, with its switch and settings;
   `filter.set_enabled`, `filter.set_settings` (a patch, `null` resets) and
   `filter.reorder` by the previous values. `source.duplicate` copies both chains with
-  their IDs, `source.delete`'s inverse re-adds every filter after `source.create`, and
-  `source.create` refuses a filter kind.
+  their IDs, `source.delete`'s inverse re-adds every filter after `source.create`,
+  `output.delete`'s re-adds the output's after `output.create`, and `source.create`
+  refuses a filter kind.
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
@@ -176,7 +188,7 @@ the batch **touched**.
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order. The `OutputDelete` inverse also restores the
-  output's encoder profile.
+  output's encoder profile and video mix, and then its filters.
 - **Encoder profiles** (`encoder.rs`): `encoder.create` and `encoder.update` check the
   profile with the protocol's `EncoderProfile::problem` (`invalid_argument`, field
   `profile.<field>`) and the name; `encoder.delete` is refused with `invalid_argument`
@@ -195,6 +207,14 @@ the batch **touched**.
   and `item.set_transition` (its delay checked by `ItemTransition::problem`) are undone
   by the previous value. `scene.delete`'s and `item.remove`'s inverses restore the
   overrides and settings they dropped.
+- **Video mixes** (`mix.rs`): `video_mix.create` and `video_mix.update` check the mix
+  with the protocol's `VideoMix::problem` (`invalid_argument`, field `mix.<field>`),
+  then that a `scene` input's scene exists (`not_found`), and the name;
+  `video_mix.delete` is refused with `invalid_argument` while an output shows the mix,
+  naming it. `output.set_video_mix` checks the output, then the mix (`not_found`), and
+  needs no running check: the engine reads a mix's size and rate at an output's start.
+  Each is undone by its opposite, as for encoder profiles. A mix is not a dependency
+  edge: nothing can depend on a mix, so it can't close a cycle.
 - **Audio** (`audio.rs`, ADR-0028): a new source takes its kind's audio defaults
   (`follow` `always` for a kind with audio and no video, `when_shown` for every other
   audio source, `scene` sources included), and a new source with a channel of its own
@@ -247,7 +267,7 @@ the batch **touched**.
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
 collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list`,
-`encoder.list` and `bus.list`)
+`encoder.list`, `video_mix.list` and `bus.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind), and `delete.plan` (`plan.rs`,
@@ -257,20 +277,23 @@ target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the 
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
 to `null` (one `source.set_settings` per source, and one `filter.set_settings` per
-filter), and the target's own delete comes last. The plan also lists the hotkey bindings those deletes remove. A bus's plan only clears references
-(its `bus.delete` takes its sends); the master's is `invalid_argument`. Sources come
-ordered by ID, scenes in
-display order, items bottom first, outputs, encoder profiles and buses ordered by
-ID, and sends by bus and then source. `state.get` carries the canvas, the buses, the
-sends, the hotkey bindings ordered by chord, and the transition presets (ordered by ID)
-with the default, and an audio source's info its `audio`; `kind.list` lists the
-transition kinds beside the source and filter kinds. A geometry item reads its `geometry`, and the deprecated `transform` view the
+filter), the video mixes that show a deleted scene are pointed at the program
+(`video_mix.update`), and the target's own delete comes last. The plan also lists the
+hotkey bindings those deletes remove. A bus's plan only clears references (its
+`bus.delete` takes its sends); the master's is `invalid_argument`.
+Sources come ordered by ID, scenes in
+display order, items bottom first, outputs, encoder profiles, video mixes and buses
+ordered by ID, and sends by bus and then source. `state.get` carries the canvas, the
+buses, the sends, the hotkey bindings ordered by chord, and the transition presets
+(ordered by ID) with the default, and an audio source's info its `audio`; `kind.list`
+lists the transition kinds beside the source and filter kinds. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
 `Scene::to_info`, `Item::to_info`, `Filter::to_info` and `Output::to_info` convert single
-objects; a source reports its chains in `filters`, omitted while both are empty, and an
-item its `opacity` and `blend`. Reads change nothing.
+objects; a source and an output report their chains in `filters`
+(`Chains::to_info`), omitted while both are empty, `state.get` the master's in
+`master`, and an item its `opacity` and `blend`. Reads change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
@@ -282,15 +305,17 @@ and `visible`, and its `opacity` and `blend` only when they differ from 1 and
 `builtin` source's settings follow, ADR-0025, `duplicated_from` as stored, even
 when it names a deleted source, and `filters`, omitted while both chains are empty: each
 filter with its `kind_version` and settings, and `enabled` only when false), outputs ordered by ID (each with its
-`encoder_profile`, omitted for the default), encoder profiles (`encoders`) ordered by
-ID, omitted when there are none, `buses` (omitted while the master is the only one and
-at its defaults), `sends`, written whenever there is a send or a source with a
-channel of its own (so an empty list means every master send was removed) and omitted
-otherwise, the `hotkeys` ordered by chord, omitted when there are none, and
-`transitions` (each preset with its `kind_version`, and the default), omitted while it
-is the initial `cut` alone (so no `schema_version` bump: an older file has neither). A
-scene writes `transition_in` and `transition_out` when set, and an item its
-`transition` when not the default. A source's `audio` is saved
+`encoder_profile`, omitted for the default, its `filters` as a source's, and its
+`video_mix`, omitted for the program), encoder profiles (`encoders`) ordered by ID,
+omitted when there are none, video mixes (`video_mixes`) ordered by ID, omitted when
+there are none, `buses` (omitted while the master is the only one and at its defaults)
+and `sends`, written whenever there is a send or a source with a channel of its own (so
+an empty list means every master send was removed) and omitted otherwise, the `master`
+with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, omitted
+when there are none, and `transitions` (each preset with its `kind_version`, and the
+default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
+older file has none of these). A scene writes `transition_in` and `transition_out`
+when set, and an item its `transition` when not the default. A source's `audio` is saved
 only where it differs from its kind's defaults. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
@@ -308,11 +333,12 @@ the engine's; this crate does no I/O.
   then sources (each after the sources its settings refer to), then every source's
   filters, then items in their placement form with their crop and visibility, opacity,
   blend and transition settings, then encoder profiles, then the presets and the
-  default (the initial `cut` is updated in place when the file has it, and deleted when
-  it doesn't), then each scene's overrides, then outputs with their profiles, then each
-  source's audio and the sends (with a `send.remove` of a default master send the file
-  doesn't list; a file without `sends`, such as one saved before sends existed, keeps
-  every default master send), then hotkeys (`` hotkey `F1` ``). A
+  default (the initial `cut` is updated in place when the file has it, and deleted
+  when it doesn't), then each scene's overrides, then video mixes, then outputs with
+  their profiles, mixes and filters, then the master's filters, then each source's audio and
+  the sends (with a `send.remove` of a default master send the file doesn't list; a
+  file without `sends`, such as one saved before sends existed, keeps every default
+  master send), then hotkeys (`` hotkey `F1` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -334,9 +360,12 @@ placement conversions and their inverses, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
 output, encoder edits and their inverses (a profile freed and deleted in one batch),
+video mix edits and their inverses, a mix blocking its scene's delete and the plan
+pointing it at the program,
 opacity and blend checks and inverses, the filter edits (`tests/filters.rs`: each
 check's field, exact inverses, duplicate and delete, references in filter settings as
-cycles, blockers and plans, and the collection file), audio defaults by kind, a
+cycles, blockers and plans, the collection file, and the master's and outputs' audio
+chains with their checks), audio defaults by kind, a
 duplicate's audio and a delete's restore, a bus deleted with its sends and undone
 exactly, bus references (#362: `a_bus_reference_must_name_a_bus`,
 `a_drawn_bus_is_deleted_only_with_its_references_cleared`, and in `persist/tests.rs`
@@ -351,7 +380,7 @@ rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtu
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes, source switches, addressed
-placement edits, filter edits, the audio edits and the transition edits. After each successful one, the state must hold no cycle, applying its
+placement edits, filter edits on sources, outputs and the master, the audio edits and the transition edits. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged. And
 after every batch, for each scene and source: a plain delete is refused exactly when
@@ -367,22 +396,28 @@ works out itself. The
 seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
-scene `b` made a group, a clone, a `duplicated_from` naming a missing source,
-opacities, a desktop audio source with two gain filters, one disabled, and the
-fixture's buses, sends and source audio, less the virtual camera and the hotkeys the parity collection
-gained later) plus a source whose
+two video mixes that two outputs show, scene `b` made a group, a clone, a
+`duplicated_from` naming a missing source, opacities, a desktop audio source with two
+gain filters, one disabled, a gain filter each on the master and the recording output,
+and the fixture's buses, sends and source audio, less the virtual camera and the
+hotkeys the parity collection gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
-`encoder_profile` (as saved before profiles existed) loading with none; a file
-without `sends`, `buses` or source `audio` (as saved before audio existed) keeping
-its audio sources' master sends at 0 dB; a removed master send's round trip; a profile's
-round trip; a virtual camera's round trip; transitions' round trip (with the initial
-`cut` deleted, or kept but changed) and a preset of another kind version refused;
-hotkeys' round trip, and a file whose binding names a missing scene refused; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
+`encoder_profile` (as saved before profiles existed) loading with none, and one without
+`video_mixes` or any `video_mix` likewise; a file without `sends`, `buses` or source
+`audio` (as saved before audio existed) keeping its audio sources' master sends at
+0 dB; a file without `master` or any output's `filters` (as saved before their chains
+existed) loading with those chains empty and the sources' filters intact; a removed
+master send's round trip; a profile's round trip; a virtual camera's round trip;
+transitions' round trip (with the initial `cut` deleted, or kept but changed) and a
+preset of another kind version refused; hotkeys' round trip, and a file whose binding
+names a missing scene refused; a clone's
+link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
-references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
+references (an output naming a missing profile or mix, and a mix naming a missing
+scene, among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that
 no error quotes a credential-like value placed where a number, key or tag belongs.
 

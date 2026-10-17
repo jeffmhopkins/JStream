@@ -42,6 +42,8 @@ Commands:
   studio get                       print the scenes on program and preview (query
                                    studio.get)
   studio set-preview <scene-id>    put a scene on preview (action studio.set_preview)
+  capture targets                  list the displays and windows a source can capture
+                                   (query capture.targets)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -286,6 +288,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["studio", "set-preview", id] => Command::Action(Action::StudioSetPreview {
             scene_id: SceneId::new(*id),
         }),
+        ["capture", "targets"] => Command::Query(Query::CaptureTargets),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -861,6 +864,10 @@ mod tests {
             })
         );
         assert!(err(&["device"]).starts_with("wrong arguments for `"));
+        assert_eq!(
+            ok(&["capture", "targets"]).command,
+            Command::Query(Query::CaptureTargets)
+        );
     }
 
     #[test]

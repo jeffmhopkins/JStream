@@ -83,6 +83,33 @@ pub fn engine(
     Ok(engine)
 }
 
+/// Scans the CLAP plugins on a worker thread, so they appear in `kind.list` as audio
+/// filter kinds once found (ADR-0035). Each plugin file gets its own short-lived
+/// `jstream-plugin-host.exe`; the daemon serves meanwhile.
+#[cfg(windows)]
+fn scan_clap_plugins(engine: &Arc<Engine>) {
+    let hosts = match jstream_platform_windows::WindowsPluginHosts::new() {
+        Ok(hosts) => hosts,
+        Err(e) => {
+            tracing::warn!(error = %e, "CLAP plugins are unavailable");
+            return;
+        }
+    };
+    let engine = Arc::clone(engine);
+    let spawned = std::thread::Builder::new()
+        .name("jstream-clap-scan".into())
+        .spawn(move || {
+            let scan = engine.scan_clap_plugins(&hosts);
+            for (file, error) in &scan.failed {
+                tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
+            }
+            tracing::info!(found = scan.kinds.len(), "scanned the CLAP plugins");
+        });
+    if let Err(e) = spawned {
+        tracing::warn!(error = %e, "could not start the CLAP plugin scan");
+    }
+}
+
 /// YouTube with JStream's built-in OAuth client (ADR-0058), or the developer's
 /// `client` when one is given, keeping the account's refresh token in Windows
 /// Credential Manager. While the built-in client is empty, as it is until the maintainer
@@ -133,33 +160,6 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>, secrets: &Secre
             );
         }
         engine
-    }
-}
-
-/// Scans the CLAP plugins on a worker thread, so they appear in `kind.list` as audio
-/// filter kinds once found (ADR-0035). Each plugin file gets its own short-lived
-/// `jstream-plugin-host.exe`; the daemon serves meanwhile.
-#[cfg(windows)]
-fn scan_clap_plugins(engine: &Arc<Engine>) {
-    let hosts = match jstream_platform_windows::WindowsPluginHosts::new() {
-        Ok(hosts) => hosts,
-        Err(e) => {
-            tracing::warn!(error = %e, "CLAP plugins are unavailable");
-            return;
-        }
-    };
-    let engine = Arc::clone(engine);
-    let spawned = std::thread::Builder::new()
-        .name("jstream-clap-scan".into())
-        .spawn(move || {
-            let scan = engine.scan_clap_plugins(&hosts);
-            for (file, error) in &scan.failed {
-                tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
-            }
-            tracing::info!(found = scan.kinds.len(), "scanned the CLAP plugins");
-        });
-    if let Err(e) = spawned {
-        tracing::warn!(error = %e, "could not start the CLAP plugin scan");
     }
 }
 

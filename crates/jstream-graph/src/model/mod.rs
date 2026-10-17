@@ -31,6 +31,8 @@
 //!   credential store, outside the collection.
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
+//! - Every output's video mix exists, every mix passes `VideoMix::problem`, and the
+//!   scene a `scene` mix shows exists.
 //! - Every item's opacity is in [0, 1], and its blend mode is one the compositor draws
 //!   (`normal` so far). Its `effects[]` is empty: per-placement effects are reserved
 //!   (ADR-0023 §1), and [`Effect`] has no values yet.
@@ -59,7 +61,7 @@ use jstream_protocol::{
     FilterChain, FilterId, Finite32, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform,
     ItemTransition, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole,
     Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId, TransitionPresetInfo,
-    TransitionsInfo, builtin_transition_kinds, initial_preset,
+    TransitionsInfo, VideoMix as MixSpec, VideoMixId, builtin_transition_kinds, initial_preset,
 };
 use std::collections::BTreeMap;
 
@@ -145,19 +147,22 @@ pub struct State {
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
     pub(crate) transitions: Transitions,
+    pub(crate) video_mixes: BTreeMap<VideoMixId, VideoMix>,
     /// The master bus among them.
     pub(crate) buses: BTreeMap<BusId, Bus>,
     /// Each send's gain in dB, keyed by bus, then by source: the order `bus.list`
     /// reports them in.
     pub(crate) sends: BTreeMap<(BusId, SourceId), Finite32>,
+    /// The master stage's chains (ADR-0027 §1).
+    pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
 }
 
 impl Default for State {
-    /// An empty collection: the default canvas, the master bus and the one `cut`
-    /// transition preset.
+    /// An empty collection: the default canvas, the master bus, a master stage without
+    /// filters, and the one `cut` transition preset.
     fn default() -> Self {
-        let master = Bus::new(BusId::master(), MASTER_NAME.to_owned());
+        let master_bus = Bus::new(BusId::master(), MASTER_NAME.to_owned());
         Self {
             canvas: Canvas::default(),
             sources: BTreeMap::new(),
@@ -165,8 +170,10 @@ impl Default for State {
             outputs: BTreeMap::new(),
             encoders: BTreeMap::new(),
             transitions: Transitions::default(),
-            buses: BTreeMap::from([(master.id.clone(), master)]),
+            video_mixes: BTreeMap::new(),
+            buses: BTreeMap::from([(master_bus.id.clone(), master_bus)]),
             sends: BTreeMap::new(),
+            master: Chains::default(),
             hotkeys: BTreeMap::new(),
         }
     }
@@ -189,6 +196,12 @@ impl State {
     /// The source with this ID.
     pub fn source(&self, id: &SourceId) -> Option<&Source> {
         self.sources.get(id)
+    }
+
+    /// The master stage's filter chains, which apply to everything leaving JStream
+    /// (ADR-0027 §1). Only the audio chain holds filters so far.
+    pub fn master(&self) -> &Chains {
+        &self.master
     }
 
     /// Every scene, in display order.
@@ -267,6 +280,16 @@ impl State {
             Some(id) => self.encoders.get(id)?.profile,
             None => EncoderProfile::DEFAULT,
         })
+    }
+
+    /// Every video mix, ordered by ID.
+    pub fn video_mixes(&self) -> impl ExactSizeIterator<Item = &VideoMix> {
+        self.video_mixes.values()
+    }
+
+    /// The video mix with this ID.
+    pub fn video_mix(&self, id: &VideoMixId) -> Option<&VideoMix> {
+        self.video_mixes.get(id)
     }
 
     /// Every bus, ordered by ID, the master among them.
@@ -667,6 +690,9 @@ pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
     pub(crate) encoder_profile: Option<EncoderProfileId>,
+    /// Its own chains, after the master stage (ADR-0027 §2).
+    pub(crate) filters: Chains,
+    pub(crate) video_mix: Option<VideoMixId>,
 }
 
 impl Output {
@@ -683,6 +709,26 @@ impl Output {
     /// The encoder profile it uses, or `None` for the engine's default.
     pub fn encoder_profile(&self) -> Option<&EncoderProfileId> {
         self.encoder_profile.as_ref()
+    }
+
+    /// Its own filter chains, which run after the master stage (ADR-0027 §2). Only the
+    /// audio chain holds filters so far.
+    pub fn filters(&self) -> &Chains {
+        &self.filters
+    }
+
+    /// Whether it carries audio, and so can have an audio chain: every output kind but
+    /// one that sends video only (a virtual camera).
+    pub fn has_audio(&self) -> bool {
+        matches!(
+            self.kind,
+            OutputKind::Rtmp { .. } | OutputKind::Record { .. }
+        )
+    }
+
+    /// The video mix it shows, or `None` for the program at the engine's canvas size.
+    pub fn video_mix(&self) -> Option<&VideoMixId> {
+        self.video_mix.as_ref()
     }
 }
 
@@ -749,5 +795,30 @@ impl Bus {
     /// Whether it is muted.
     pub fn muted(&self) -> bool {
         self.muted
+    }
+}
+
+/// One video mix: a named picture at a size and rate that outputs can show.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VideoMix {
+    pub(crate) id: VideoMixId,
+    pub(crate) name: String,
+    pub(crate) mix: MixSpec,
+}
+
+impl VideoMix {
+    /// Its ID.
+    pub fn id(&self) -> &VideoMixId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// What it shows, and at what size and rate.
+    pub fn mix(&self) -> &MixSpec {
+        &self.mix
     }
 }
