@@ -9,7 +9,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use super::generate::{begin, end, escape, join, outside_fences};
+use super::generate::{begin, escape, with_block};
 use super::parse::{Diag, Doc};
 
 /// The data file: milestones and roadmap items with their status and PRs.
@@ -399,24 +399,6 @@ fn left(p: &Progress, out: &mut String) {
     out.push_str("\n</details>\n");
 }
 
-/// `doc`'s text with the inside of its `progress` block replaced by `body`, and the
-/// 1-based line of the begin marker.
-fn with_block(doc: &Doc, body: &str) -> Result<(String, usize), String> {
-    let lines: Vec<&str> = doc.text.lines().collect();
-    let open = outside_fences(&lines);
-    let (b, e) = (begin(BLOCK), end(BLOCK));
-    let start = (0..lines.len())
-        .find(|&k| open[k] && lines[k].trim_end() == b)
-        .ok_or_else(|| format!("no `{b}` line to generate the progress block into"))?;
-    let stop = (start + 1..lines.len())
-        .find(|&k| lines[k].trim_end() == e)
-        .ok_or_else(|| format!("the `{BLOCK}` block is not closed by `{e}`"))?;
-    let mut out: Vec<&str> = lines[..=start].to_vec();
-    out.extend(body.lines());
-    out.extend(&lines[stop..]);
-    Ok((join(&out, &doc.text), start + 1))
-}
-
 /// Reads the data file, if there is one.
 fn read(root: &Path) -> Result<Option<String>> {
     let path = root.join(DATA);
@@ -460,7 +442,7 @@ pub(crate) fn generate(root: &Path, docs: &[Doc]) -> (Option<(String, usize, Str
             vec![problem(DATA, format!("{TARGET} is not tracked"))],
         );
     };
-    match with_block(doc, &render(&p)) {
+    match with_block(doc, BLOCK, &render(&p)) {
         Ok((new, _)) if new == doc.text => (None, Vec::new()),
         Ok((new, line)) => (Some((TARGET.to_owned(), line, new)), Vec::new()),
         Err(msg) => (None, vec![problem(TARGET, msg)]),
@@ -808,15 +790,15 @@ needs = ["soon"]
         let readme = "<!-- @doc\nid = \"README\"\ntitle = \"R\"\nkind = \"normative\"\nstatus = \"active\"\nreview_every = \"90d\"\n-->\n\n# R\n\n<!-- @generated begin progress -->\nold\n<!-- @generated end progress -->\n\nAfter.\n";
         let doc = parse_doc("README.md", readme, &mut Vec::new());
         let p = parse(DATA_OK).expect("invariant: valid");
-        let (new, line) = with_block(&doc, &render(&p)).expect("invariant: has a block");
+        let (new, line) = with_block(&doc, BLOCK, &render(&p)).expect("invariant: has a block");
         assert_eq!(line, 11);
         assert!(!new.contains("\nold\n"));
         assert!(new.ends_with("<!-- @generated end progress -->\n\nAfter.\n"));
         let again = parse_doc("README.md", &new, &mut Vec::new());
-        let (twice, _) = with_block(&again, &render(&p)).expect("invariant: has a block");
+        let (twice, _) = with_block(&again, BLOCK, &render(&p)).expect("invariant: has a block");
         assert_eq!(twice, new);
         let none = parse_doc("README.md", "# R\n", &mut Vec::new());
-        assert!(with_block(&none, "x").is_err());
+        assert!(with_block(&none, BLOCK, "x").is_err());
     }
 
     #[test]
