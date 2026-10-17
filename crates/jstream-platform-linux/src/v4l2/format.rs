@@ -10,11 +10,13 @@ use jstream_platform::media::{
 use jstream_platform::{CaptureEncoding, PlatformError, VideoDeviceFormat, yuv};
 
 use super::abi::{
-    BUF_FLAG_TIMESTAMP_MASK, BUF_FLAG_TIMESTAMP_MONOTONIC, CAP_DEVICE_CAPS, CAP_STREAMING,
-    CAP_VIDEO_CAPTURE, COLORSPACE_BT2020, COLORSPACE_JPEG, COLORSPACE_REC709, COLORSPACE_SMPTE170M,
-    COLORSPACE_SRGB, Capability, Fract, FrmSizeStepwise, PIX_FMT_JPEG, PIX_FMT_MJPEG, PIX_FMT_NV12,
-    PIX_FMT_YUV420, PIX_FMT_YUYV, PixFormat, QUANTIZATION_FULL_RANGE, QUANTIZATION_LIM_RANGE,
-    Timeval, YCBCR_ENC_601, YCBCR_ENC_709, YCBCR_ENC_BT2020,
+    BUF_FLAG_TIMESTAMP_MASK, BUF_FLAG_TIMESTAMP_MONOTONIC, BUF_TYPE_VIDEO_CAPTURE,
+    BUF_TYPE_VIDEO_CAPTURE_MPLANE, CAP_DEVICE_CAPS, CAP_STREAMING, CAP_VIDEO_CAPTURE,
+    CAP_VIDEO_CAPTURE_MPLANE, COLORSPACE_BT2020, COLORSPACE_JPEG, COLORSPACE_REC709,
+    COLORSPACE_SMPTE170M, COLORSPACE_SRGB, Capability, Fract, FrmSizeStepwise, PIX_FMT_JPEG,
+    PIX_FMT_MJPEG, PIX_FMT_NV12, PIX_FMT_NV12M, PIX_FMT_YUV420, PIX_FMT_YUV420M, PIX_FMT_YUYV,
+    PixFormat, QUANTIZATION_FULL_RANGE, QUANTIZATION_LIM_RANGE, Timeval, YCBCR_ENC_601,
+    YCBCR_ENC_709, YCBCR_ENC_BT2020,
 };
 use crate::hns_from_timespec;
 
@@ -23,15 +25,63 @@ pub(crate) const DQBUF: &str = "VIDIOC_DQBUF";
 
 /// How the backend delivers a V4L2 pixel format, or `None` for one it doesn't: packed
 /// 4:2:2 (`YUYV`) converted to NV12, NV12 and I420 (`YU12`) as they are, and MJPEG
-/// (`MJPG`, or `JPEG` as some webcams name it) to the engine's decoder.
+/// (`MJPG`, or `JPEG` as some webcams name it) to the engine's decoder. The multi-planar
+/// API's `NV12M` and `YUV420M` (each plane in its own buffer plane) are delivered as NV12
+/// and I420.
 pub(crate) fn encoding(fourcc: u32) -> Option<CaptureEncoding> {
     match fourcc {
         PIX_FMT_YUYV => Some(CaptureEncoding::Yuy2),
         PIX_FMT_MJPEG | PIX_FMT_JPEG => Some(CaptureEncoding::Mjpeg),
-        PIX_FMT_NV12 => Some(CaptureEncoding::Raw(PixelFormat::Nv12)),
-        PIX_FMT_YUV420 => Some(CaptureEncoding::Raw(PixelFormat::I420)),
+        PIX_FMT_NV12 | PIX_FMT_NV12M => Some(CaptureEncoding::Raw(PixelFormat::Nv12)),
+        PIX_FMT_YUV420 | PIX_FMT_YUV420M => Some(CaptureEncoding::Raw(PixelFormat::I420)),
         _ => None,
     }
+}
+
+/// How many buffer planes a pixel format's frames come in: one for every format but
+/// `NV12M` (two) and `YUV420M` (three).
+pub(crate) fn buffer_planes(fourcc: u32) -> usize {
+    match fourcc {
+        PIX_FMT_NV12M => 2,
+        PIX_FMT_YUV420M => 3,
+        _ => 1,
+    }
+}
+
+/// The row stride of each buffer plane of a raw frame, from the driver's `bytesperline`
+/// for each (`bytesperline.len()` is the format's [`buffer_planes`]). A plane the driver
+/// gives no stride for, or too small a one, gets the least its rows need: the first
+/// plane [`min_stride`], NV12's chroma plane the luma stride, I420's chroma planes half
+/// of it. `None` when the driver's plane count isn't the format's.
+pub(crate) fn plane_strides(
+    encoding: CaptureEncoding,
+    fourcc: u32,
+    width: u32,
+    bytesperline: &[u32],
+) -> Option<Vec<usize>> {
+    if bytesperline.len() != buffer_planes(fourcc) {
+        return None;
+    }
+    let luma = (bytesperline[0] as usize).max(min_stride(encoding, width));
+    let chroma_min = match encoding {
+        CaptureEncoding::Raw(PixelFormat::I420) => width.div_ceil(2) as usize,
+        _ => width.div_ceil(2) as usize * 2,
+    };
+    let derived = match encoding {
+        CaptureEncoding::Raw(PixelFormat::I420) => luma.div_ceil(2),
+        _ => luma,
+    };
+    Some(
+        bytesperline
+            .iter()
+            .enumerate()
+            .map(|(i, &b)| match (i, b) {
+                (0, _) => luma,
+                (_, 0) => derived,
+                (_, b) => (b as usize).max(chroma_min),
+            })
+            .collect(),
+    )
 }
 
 /// The common sizes offered from a stepwise or continuous size range, largest first.
@@ -155,24 +205,45 @@ pub(crate) fn min_stride(encoding: CaptureEncoding, width: u32) -> usize {
     }
 }
 
-/// A raw frame's bytes (rows `stride` bytes apart, as the driver's `bytesperline`) as an
-/// engine frame with `info`'s size, colour and `pts`.
+/// A raw frame's buffer planes (each plane's rows `strides[i]` bytes apart, from
+/// [`plane_strides`]) as an engine frame with `info`'s size, colour and `pts`. One buffer
+/// plane holds the whole frame, its chroma after its luma; several hold one image plane
+/// each.
 ///
 /// # Errors
-/// [`PlatformError::Os`] for a buffer shorter than the format needs, and
-/// [`PlatformError::Unsupported`] for a compressed encoding.
+/// [`PlatformError::Os`] for a buffer shorter than the format needs or without as many
+/// planes as strides, and [`PlatformError::Unsupported`] for a compressed encoding.
 pub(crate) fn raw_frame(
     encoding: CaptureEncoding,
-    bytes: &[u8],
-    stride: usize,
+    planes: &[&[u8]],
+    strides: &[usize],
     info: VideoFrameInfo,
 ) -> Result<VideoFrame, PlatformError> {
-    match encoding {
-        CaptureEncoding::Yuy2 => yuv::yuy2_to_nv12(DQBUF, bytes, stride, info),
-        CaptureEncoding::Raw(format @ (PixelFormat::Nv12 | PixelFormat::I420)) => {
-            yuv::copy_planar(DQBUF, bytes, stride, VideoFrameInfo { format, ..info })
+    if planes.len() < strides.len() || strides.is_empty() {
+        return Err(PlatformError::Os {
+            call: DQBUF,
+            code: None,
+            message: format!(
+                "a video buffer with {} planes, where its format has {}",
+                planes.len(),
+                strides.len()
+            ),
+        });
+    }
+    match (encoding, strides) {
+        (CaptureEncoding::Yuy2, [stride]) => yuv::yuy2_to_nv12(DQBUF, planes[0], *stride, info),
+        (CaptureEncoding::Raw(format @ (PixelFormat::Nv12 | PixelFormat::I420)), [stride]) => {
+            yuv::copy_planar(DQBUF, planes[0], *stride, VideoFrameInfo { format, ..info })
         }
-        other => Err(PlatformError::Unsupported {
+        (CaptureEncoding::Raw(format @ (PixelFormat::Nv12 | PixelFormat::I420)), _) => {
+            let separate: Vec<(&[u8], usize)> = planes
+                .iter()
+                .copied()
+                .zip(strides.iter().copied())
+                .collect();
+            yuv::copy_planes(DQBUF, &separate, VideoFrameInfo { format, ..info })
+        }
+        (other, _) => Err(PlatformError::Unsupported {
             what: format!("delivering {other:?} frames from V4L2 as they are"),
         }),
     }
@@ -194,16 +265,24 @@ pub(crate) fn pts(flags: u32, timestamp: Timeval, now: MediaTime) -> MediaTime {
     stamped.map_or(now, |t| MediaTime::new(t, now.timebase()))
 }
 
-/// Whether a node captures single-planar video with streaming I/O. A UVC webcam has a
-/// second node for its metadata, which doesn't; a multi-planar capture device isn't
-/// handled yet.
-pub(crate) fn is_capture(cap: &Capability) -> bool {
+/// The buffer type a node captures video through, with streaming I/O: the single-planar
+/// API's when it has it, else the multi-planar one's, else `None`. A UVC webcam has a
+/// second node for its metadata, which captures neither.
+pub(crate) fn capture_type(cap: &Capability) -> Option<u32> {
     let caps = if cap.capabilities & CAP_DEVICE_CAPS != 0 {
         cap.device_caps
     } else {
         cap.capabilities
     };
-    caps & CAP_VIDEO_CAPTURE != 0 && caps & CAP_STREAMING != 0
+    if caps & CAP_STREAMING == 0 {
+        None
+    } else if caps & CAP_VIDEO_CAPTURE != 0 {
+        Some(BUF_TYPE_VIDEO_CAPTURE)
+    } else if caps & CAP_VIDEO_CAPTURE_MPLANE != 0 {
+        Some(BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+    } else {
+        None
+    }
 }
 
 /// A NUL-terminated name from a fixed-size field, lossily as UTF-8.
@@ -237,13 +316,15 @@ mod tests {
     use jstream_platform::{CaptureEncoding, PlatformError};
 
     use super::super::abi::{
-        BUF_FLAG_TIMESTAMP_MONOTONIC, CAP_DEVICE_CAPS, CAP_STREAMING, CAP_VIDEO_CAPTURE,
-        Capability, Fract, FrmSizeStepwise, PIX_FMT_JPEG, PIX_FMT_MJPEG, PIX_FMT_NV12,
-        PIX_FMT_YUV420, PIX_FMT_YUYV, PixFormat, Timeval, fourcc,
+        BUF_FLAG_TIMESTAMP_MONOTONIC, BUF_TYPE_VIDEO_CAPTURE, BUF_TYPE_VIDEO_CAPTURE_MPLANE,
+        CAP_DEVICE_CAPS, CAP_STREAMING, CAP_VIDEO_CAPTURE, CAP_VIDEO_CAPTURE_MPLANE, Capability,
+        Fract, FrmSizeStepwise, PIX_FMT_JPEG, PIX_FMT_MJPEG, PIX_FMT_NV12, PIX_FMT_NV12M,
+        PIX_FMT_YUV420, PIX_FMT_YUV420M, PIX_FMT_YUYV, PixFormat, Timeval, fourcc,
     };
     use super::{
-        Enumerated, c_name, color, encoding, formats, fourcc_for, is_capture, is_device_path,
-        min_stride, node_number, period, pts, raw_frame, stepwise_sizes,
+        Enumerated, buffer_planes, c_name, capture_type, color, encoding, formats, fourcc_for,
+        is_device_path, min_stride, node_number, period, plane_strides, pts, raw_frame,
+        stepwise_sizes,
     };
     use crate::timebase;
 
@@ -265,6 +346,14 @@ mod tests {
         );
         assert_eq!(
             encoding(PIX_FMT_YUV420),
+            Some(CaptureEncoding::Raw(PixelFormat::I420))
+        );
+        assert_eq!(
+            encoding(PIX_FMT_NV12M),
+            Some(CaptureEncoding::Raw(PixelFormat::Nv12))
+        );
+        assert_eq!(
+            encoding(PIX_FMT_YUV420M),
             Some(CaptureEncoding::Raw(PixelFormat::I420))
         );
         assert_eq!(encoding(fourcc(b"H264")), None);
@@ -391,22 +480,84 @@ mod tests {
         };
         assert_eq!(min_stride(CaptureEncoding::Yuy2, 5), 12);
         assert_eq!(min_stride(CaptureEncoding::Raw(PixelFormat::Nv12), 5), 5);
-        let yuy2 = raw_frame(CaptureEncoding::Yuy2, &[9u8; 16], 8, info).expect("yuy2");
+        let yuy2 = raw_frame(CaptureEncoding::Yuy2, &[&[9u8; 16]], &[8], info).expect("yuy2");
         assert_eq!(yuy2.info().format, PixelFormat::Nv12);
-        let i420 =
-            raw_frame(CaptureEncoding::Raw(PixelFormat::I420), &[1u8; 12], 4, info).expect("i420");
+        let i420 = raw_frame(
+            CaptureEncoding::Raw(PixelFormat::I420),
+            &[&[1u8; 12]],
+            &[4],
+            info,
+        )
+        .expect("i420");
         assert_eq!(i420.info().format, PixelFormat::I420);
+        let nv12 = CaptureEncoding::Raw(PixelFormat::Nv12);
         assert!(matches!(
-            raw_frame(CaptureEncoding::Raw(PixelFormat::Nv12), &[0u8; 11], 4, info),
+            raw_frame(nv12, &[&[0u8; 11]], &[4], info),
             Err(PlatformError::Os {
                 call: "VIDIOC_DQBUF",
                 ..
             })
         ));
         assert!(matches!(
-            raw_frame(CaptureEncoding::Mjpeg, &[0u8; 12], 4, info),
+            raw_frame(CaptureEncoding::Mjpeg, &[&[0u8; 12]], &[4], info),
             Err(PlatformError::Unsupported { .. })
         ));
+        // NV12M: luma and chroma each in their own buffer plane.
+        let (luma, chroma) = ([7u8; 8], [3u8; 4]);
+        let nv12m = raw_frame(nv12, &[&luma, &chroma], &[4, 4], info).expect("nv12m");
+        assert_eq!(nv12m.row(1, 0), Some(&[3, 3, 3, 3][..]));
+        assert_eq!(nv12m.row(0, 1), Some(&[7, 7, 7, 7][..]));
+        // A buffer with fewer planes than its format is an error, not a panic.
+        assert!(matches!(
+            raw_frame(nv12, &[&luma], &[4, 4], info),
+            Err(PlatformError::Os {
+                call: "VIDIOC_DQBUF",
+                ..
+            })
+        ));
+        assert!(raw_frame(nv12, &[], &[], info).is_err());
+    }
+
+    #[test]
+    fn plane_strides_come_from_the_driver_or_the_least_the_rows_need() {
+        let nv12 = CaptureEncoding::Raw(PixelFormat::Nv12);
+        let i420 = CaptureEncoding::Raw(PixelFormat::I420);
+        assert_eq!(
+            (buffer_planes(PIX_FMT_NV12M), buffer_planes(PIX_FMT_YUV420M)),
+            (2, 3)
+        );
+        assert_eq!(buffer_planes(PIX_FMT_NV12), 1);
+        // One plane: its stride, or the least a row needs.
+        assert_eq!(
+            plane_strides(CaptureEncoding::Yuy2, PIX_FMT_YUYV, 5, &[0]),
+            Some(vec![12])
+        );
+        assert_eq!(
+            plane_strides(nv12, PIX_FMT_NV12, 640, &[704]),
+            Some(vec![704])
+        );
+        // NV12M: the chroma stride as given, or the luma's when missing; never less than
+        // a chroma row.
+        assert_eq!(
+            plane_strides(nv12, PIX_FMT_NV12M, 640, &[704, 768]),
+            Some(vec![704, 768])
+        );
+        assert_eq!(
+            plane_strides(nv12, PIX_FMT_NV12M, 640, &[704, 0]),
+            Some(vec![704, 704])
+        );
+        assert_eq!(
+            plane_strides(nv12, PIX_FMT_NV12M, 641, &[0, 2]),
+            Some(vec![641, 642])
+        );
+        // YUV420M: chroma at half the luma stride when missing.
+        assert_eq!(
+            plane_strides(i420, PIX_FMT_YUV420M, 640, &[704, 0, 0]),
+            Some(vec![704, 352, 352])
+        );
+        // The driver's plane count must be the format's.
+        assert_eq!(plane_strides(nv12, PIX_FMT_NV12M, 640, &[704]), None);
+        assert_eq!(plane_strides(nv12, PIX_FMT_NV12, 640, &[704, 704]), None);
     }
 
     #[test]
@@ -438,11 +589,23 @@ mod tests {
             reserved: [0; 3],
         };
         let both = CAP_VIDEO_CAPTURE | CAP_STREAMING;
-        assert!(is_capture(&cap(both, 0)));
-        assert!(is_capture(&cap(both | CAP_DEVICE_CAPS, both)));
+        let single = Some(BUF_TYPE_VIDEO_CAPTURE);
+        assert_eq!(capture_type(&cap(both, 0)), single);
+        assert_eq!(capture_type(&cap(both | CAP_DEVICE_CAPS, both)), single);
         // A UVC metadata node: the device can capture, this node can't.
-        assert!(!is_capture(&cap(both | CAP_DEVICE_CAPS, CAP_STREAMING)));
-        assert!(!is_capture(&cap(CAP_VIDEO_CAPTURE, 0)));
+        assert_eq!(
+            capture_type(&cap(both | CAP_DEVICE_CAPS, CAP_STREAMING)),
+            None
+        );
+        assert_eq!(capture_type(&cap(CAP_VIDEO_CAPTURE, 0)), None);
+        // Multi-planar only, and both (the single-planar API is preferred).
+        let mplane = CAP_VIDEO_CAPTURE_MPLANE | CAP_STREAMING;
+        assert_eq!(
+            capture_type(&cap(mplane | CAP_DEVICE_CAPS, mplane)),
+            Some(BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+        );
+        assert_eq!(capture_type(&cap(mplane | both, 0)), single);
+        assert_eq!(capture_type(&cap(CAP_VIDEO_CAPTURE_MPLANE, 0)), None);
     }
 
     #[test]
