@@ -679,7 +679,8 @@ prs = [255]
 id = "U4p"
 milestone = "M2"
 title = "Live preview on canvas"
-status = "planned"
+status = "review"
+prs = [302]
 
 [[item]]
 id = "U1"

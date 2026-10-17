@@ -49,9 +49,8 @@ Contents ([Design](#design) explains the choices):
   audio mixer along the bottom (faders, mutes, routing and buses, with meters and the
   master's loudness), also tested natively against `MockEngine`.
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
-  over a placeholder background, edits their geometry with the pointer and the
-  keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
-  hooked up yet.
+  over the live program preview, edits their geometry with the pointer and the
+  keyboard, and undoes and redoes ([Canvas](#canvas)).
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)).
@@ -226,8 +225,10 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
 handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
-scene and sends the edits. These three are pure and tested natively against
-`MockEngine`; `mod.rs` is the component.
+scene and sends the edits; `preview.rs` chooses the preview stream and decides what
+to do with each H.264 frame and when each JPEG decodes. These are pure and tested
+natively (`model.rs` against `MockEngine`). `screen.rs` decodes and draws the preview
+in the browser, and `mod.rs` is the component.
 
 - **What it shows.** The scene on program (`studio.get`, or the first non-group scene
   if none is), re-read on every `state.changed`, `studio.changed` and
@@ -236,6 +237,21 @@ scene and sends the edits. These three are pure and tested natively against
   placement is not drawn: its box depends on the source's runtime size, which the
   protocol doesn't report yet (ADR-0022's `source.sizes`), and the toolbar counts
   such items. Hidden items are drawn dashed.
+- **The preview.** Under the boxes is the program mix, live. The canvas opens the
+  session's binary channel (`Control::binary`; a session has one, so the canvas is
+  its only reader) and one `preview.subscribe` stream on channel 1, at 30 fps and as
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
+  It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
+  H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
+  (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
+  decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap` one at a
+  time, and while one decodes only the newest that arrives waits, so the last picture
+  is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
+  canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
+  again for JPEG only. If the engine refuses or ends the stream, the background says
+  why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  behind the `web_sys_unstable_apis` build flag. Without live values (below), the
+  preview shows a drag once it is committed.
 - **Selecting and dragging.** A press selects the topmost box under the pointer, or
   clears the selection on empty canvas. Dragging the box moves it. The selected box
   has eight resize handles and a rotate handle above its top edge. A corner keeps the
