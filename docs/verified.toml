@@ -528,13 +528,13 @@ stamp = { hash = "b3:ff923b70ae781b73" }
 stamp = { hash = "b3:56b6301e2e6a132b" }
 
 ["CLAUDE#docs-duty"."body"]
-stamp = { hash = "b3:590742932da12ca1", by = "agent:wave-owner", note = "merge-main bullet now asks for a per-section note that keeps the printed earlier note and adds what the merge changed, matching the new DOCS#notes bullet and the merge-main output; the rest of the duty list is unchanged" }
+stamp = { hash = "b3:fc3acf4b246526a2", by = "agent:claude", note = "merge-main step now tells builders to re-verify each stale section with docs verify --merge, written per section from the merged commits merge-main prints; matches DOCS#verification's new --merge paragraph and DOCS#notes' updated after-merge bullet; the other duty bullets are unchanged" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#notes"]
-stamp = { hash = "b3:8f1408723b2094e2", by = "agent:wave-owner", note = "merge-main bullet now asks for a per-section note that keeps the printed earlier note and adds what the merge changed, matching the new DOCS#notes bullet and the merge-main output; the rest of the duty list is unchanged" }
+stamp = { hash = "b3:300741f4cc467f14", by = "agent:claude", note = "merge-main step now tells builders to re-verify each stale section with docs verify --merge, written per section from the merged commits merge-main prints; matches DOCS#verification's new --merge paragraph and DOCS#notes' updated after-merge bullet; the other duty bullets are unchanged" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:eb6fa77b409dd104", by = "agent:wave-owner", note = "merge-main bullet now asks for a per-section note that keeps the printed earlier note and adds what the merge changed, matching the new DOCS#notes bullet and the merge-main output; the rest of the duty list is unchanged" }
+stamp = { hash = "b3:4bc8d9912a9d4f56", by = "agent:claude", note = "merge-main step now tells builders to re-verify each stale section with docs verify --merge, written per section from the merged commits merge-main prints; matches DOCS#verification's new --merge paragraph and DOCS#notes' updated after-merge bullet; the other duty bullets are unchanged" }
 
 ["CLAUDE#pr-loop"."body"]
 stamp = { hash = "b3:f50bf78c7a2c63c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: item 6 now cites ADR-0056, which restates ADR-0018's action-pin pre-approval unchanged (decision item 3); Dependabot auto-merge and CI handling still hold; rest of the loop untouched." }
@@ -3183,16 +3183,16 @@ stamp = { hash = "b3:a842476030f67423", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:b593d1da7528ba61" }
 
 ["DOCS#bootstrap"."body"]
-stamp = { hash = "b3:bd834bf854c77d39", by = "agent:wave-owner", note = "merge-main bullet now says it lists stale sections with the notes the branch wrote on each, which merge.rs branch_notes and the mod.rs output do; the other bullets are unchanged by this PR" }
+stamp = { hash = "b3:ea4f0655eb8a1018", by = "agent:claude", note = "Available now gains the conflict-marker check, matching check_conflict_markers in check.rs (<<<<<<<, ||||||| and >>>>>>> at line start, ======= only inside an open hunk so setext underlines pass), run from check() for every tracked doc; the other bullets are unchanged by this diff" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/backrefs.rs"]
 stamp = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/check.rs"]
-stamp = { hash = "b3:cecdd2bf0a8097e8", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
+stamp = { hash = "b3:062a5cd740ab358c", by = "agent:claude", note = "Available now gains the conflict-marker check, matching check_conflict_markers in check.rs (<<<<<<<, ||||||| and >>>>>>> at line start, ======= only inside an open hunk so setext underlines pass), run from check() for every tracked doc; the other bullets are unchanged by this diff" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/generate.rs"]
-stamp = { hash = "b3:f3a3a3cd043efa4d", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1/N3 on #419: merge-main bullet still accurate; resolve_generated now accepts only adr-status, adr-index and progress blocks, and mod.rs says to run docs generate when the merge stays open" }
+stamp = { hash = "b3:4f6727ac1605073c", by = "agent:claude", note = "Re-read the whole section against the new xtask/src/docs/summary.rs (ui-summary generator for docs/UI-FEATURES.md, opt-in by its begin marker), with_block moved from progress.rs to generate.rs and shared by both, the summary wired into write_generated/check_repo, and merge-main's list of generator-owned blocks gaining ui-summary. The Generated content bullet now names the UI features summary; the merge-main bullet (conflicts only inside @generated blocks) still holds since ui-summary was added to that list; the other bullets are untouched by this change." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/govern.rs"]
 stamp = { hash = "b3:34cbbe36abdc6774", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
@@ -3204,19 +3204,22 @@ stamp = { hash = "b3:8849c3355f43050d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/ledger.rs"]
-stamp = { hash = "b3:cf8e0a09cd4967b1", by = "agent:claude", note = "Whole #376 change re-read (ADR-0053): ledger.rs stores one stamp per input (body, file:, dep:) in docs/verified.toml as a header, a stamp line and a trailing blank line, canonical and sorted; restamp writes only changed or new entries and drops removed ones, never rewriting body on a removal-only or unchanged verify (B6); the fixture test merges restamp-written ledgers with git and checks merge-main's main-side resolution leaves conflicts stale; check names changed inputs; migrate replaces rehash; merge-main takes main's ledger side and migrates; log reads ledger history. The bootstrap bullets still hold" }
+stamp = { hash = "b3:4df8112d7b80826f", by = "agent:claude", note = "merge-main bullet now says it lists each stale input with the branch's earlier note and the merged commits that changed it, and that docs verify --merge keeps those notes and adds the merge text; matches stale_report/StaleInput in merge.rs and verify_merge/restamp_merge in mod.rs and ledger.rs; the rest of Available now is unchanged by this diff" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/merge.rs"]
-stamp = { hash = "b3:f83e0edf9834e8c4", by = "agent:wave-owner", note = "merge-main bullet now says it lists stale sections with the notes the branch wrote on each, which merge.rs branch_notes and the mod.rs output do; the other bullets are unchanged by this PR" }
+stamp = { hash = "b3:28f2d5ecdfa1f75f", by = "agent:claude", note = "merge-main bullet now says it lists each stale input with the branch's earlier note and the merged commits that changed it, and that docs verify --merge keeps those notes and adds the merge text; matches stale_report/StaleInput in merge.rs and verify_merge/restamp_merge in mod.rs and ledger.rs; the rest of Available now is unchanged by this diff" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/mod.rs"]
-stamp = { hash = "b3:7b5a1d8b0b60bed1", by = "agent:wave-owner", note = "merge-main bullet now says it lists stale sections with the notes the branch wrote on each, which merge.rs branch_notes and the mod.rs output do; the other bullets are unchanged by this PR" }
+stamp = { hash = "b3:a2b706530a538b2e", by = "agent:claude", note = "merge-main bullet now says it lists each stale input with the branch's earlier note and the merged commits that changed it, and that docs verify --merge keeps those notes and adds the merge text; matches stale_report/StaleInput in merge.rs and verify_merge/restamp_merge in mod.rs and ledger.rs; the rest of Available now is unchanged by this diff" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/parse.rs"]
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/progress.rs"]
-stamp = { hash = "b3:9a4f4c0318d10742", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "progress.rs gains the optional needs field, its validation, the What's left table and sweep lines for planned or review items without needs and done items still listing it; the bootstrap bullet (generate writes the README's progress block, docs progress lists stale entries) still holds, and DOCS#generated now describes needs" }
+stamp = { hash = "b3:7a5912defd13e405", by = "agent:claude", note = "Re-read the whole section against the new xtask/src/docs/summary.rs (ui-summary generator for docs/UI-FEATURES.md, opt-in by its begin marker), with_block moved from progress.rs to generate.rs and shared by both, the summary wired into write_generated/check_repo, and merge-main's list of generator-owned blocks gaining ui-summary. The Generated content bullet now names the UI features summary; the merge-main bullet (conflicts only inside @generated blocks) still holds since ui-summary was added to that list; the other bullets are untouched by this change." }
+
+["DOCS#bootstrap"."file:xtask/src/docs/summary.rs"]
+stamp = { hash = "b3:3ae490162b60c1b9", by = "agent:claude", note = "summary.rs is new in this PR; re-read the whole file against the section. It generates the ui-summary block in docs/UI-FEATURES.md and is opt-in: with no begin marker outside a fence, or no such doc (as on main), it writes and reports nothing. Areas are every other ## section whose body has a Markdown table with a Status column, in document order, titled by heading and linked by anchor; each row is counted by its Status cell (U+FE0F stripped, fenced tables skipped, escaped pipes kept in a cell) into the five statuses, then a bold Total row. It fails on a missing or empty Status cell, on a status that isn't one of the five, on a block that finds no area, and on an unclosed block, writing nothing then. It reuses with_block from generate.rs. The section's Generated content bullet names the UI features summary and its merge-main bullet still holds, so the section holds." }
 
 ["DOCS#dependency-lint"."body"]
 stamp = { hash = "b3:7a5f13cc6519cc6d", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: the unsafe bullet lists main's browser and browser-helper crates beside the platform, vcam and CLAP wrapper crates and keeps the plugin-clap reachability rule, and main's paragraph says the default-features graph leaves out cef-dll-sys (jstream-browser's helper feature), recorded by its allowlist entry. Inputs: lint_deps.rs gains main's jstream-browser and jstream-browser-helper in UNSAFE_CRATES, the cef-dll-sys native-code entry and the error text naming browser and browser-helper crates; R-UNSAFE-001 lists the same two crates." }
@@ -3375,7 +3378,7 @@ stamp = { hash = "b3:04b853b872d31424" }
 stamp = { hash = "b3:7e663fb4bee1ca49", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "DOCS#gate item 1 now names ledger stamps, inline stamps and ledger form; R-DOC-003 text updated to the per-input stamp; the other R-DOC rules don't depend on where stamps are stored" }
 
 ["RULES#documentation"."dep:docs/DOCS.md#gate"]
-stamp = { hash = "b3:d94ce0fdb0067b08", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "DOCS#gate item 1 now names ledger stamps, inline stamps and ledger form; R-DOC-003 text updated to the per-input stamp; the other R-DOC rules don't depend on where stamps are stored" }
+stamp = { hash = "b3:90e90275aabc1875", by = "agent:claude", note = "Re-read the R-DOC rules against the DOCS#gate edit, which only widened failure 5 (generated drift) with examples: a progress.toml that breaks its rules and a UI feature row with an unknown status. R-DOC-006 (derivable content is generated, generated blocks never hand-edited, enforced by ci:docs) covers the new ui-summary block as written; no rule names the list of generators, so none changes." }
 
 ["RULES#governance"."body"]
 stamp = { hash = "b3:d680c65b3862bf89", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read R-GOV-001..005: R-GOV-005 now follows ADR-0043's narrowed maintainer tier; labels, overrides, gate and proxy decisions unchanged" }
@@ -3423,7 +3426,7 @@ stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade fro
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
 
 ["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:eb6fa77b409dd104", by = "agent:wave-owner", note = "says merge-main --from resolves conflicts the same way and lists sections to re-read; still true now that it also prints each one's earlier branch notes, which DOCS#verification describes" }
+stamp = { hash = "b3:4bc8d9912a9d4f56", by = "agent:claude", note = "DOCS#verification gained the docs verify --merge paragraph and the per-input merge-main report; this section only says merge-main --from wave/<name> resolves the same conflicts and lists the sections to re-read and verify, which still holds, and the --merge flag works the same after a wave merge" }
 
 ["RUNBOOK-WAVES#landing"."body"]
 stamp = { hash = "b3:4658abf796c67b1a", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "step 5 now also drops or updates each landed row's needs; the rest of the landing steps are unchanged and match the progress.toml rules" }
