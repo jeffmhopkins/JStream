@@ -3,7 +3,9 @@
 //! The composite pass samples with a linear filter. Filtering straight-alpha texels blends
 //! the colour of fully transparent neighbours into an edge, which darkens it (a fringe), so
 //! uploaded bytes are premultiplied once, on upload, in linear light: sRGB decode, then
-//! RGB times alpha, stored as `Rgba16Float`. Imported textures are sampled as they are.
+//! RGB times alpha, stored as `Rgba16Float`. Imported textures are sampled as they are:
+//! straight sRGB (a captured frame), or premultiplied sRGB code values (a browser page),
+//! which the shader converts to premultiplied linear after the filter.
 
 use std::sync::Arc;
 
@@ -28,6 +30,11 @@ pub(crate) enum Alpha {
     /// Straight sRGB (imports). The shader premultiplies after the filter, which is exact
     /// where alpha is 1, as in a captured frame, and fringes at partly transparent edges.
     Straight,
+    /// sRGB code values already multiplied by alpha (imports of a browser page, CEF's
+    /// layout), sampled as raw `Unorm`. Filtering premultiplied texels keeps transparent
+    /// edges clean; the shader then divides by alpha, decodes sRGB and multiplies by
+    /// alpha again in linear light.
+    PremultipliedSrgb,
 }
 
 /// Which [`crate::Compositor`] made an image. The image keeps a clone, so the allocation
@@ -107,9 +114,9 @@ impl Image {
         self.sync = sync;
     }
 
-    /// Whether this is an import ([`import`]), sampled as straight alpha.
-    pub(crate) fn is_import(&self) -> bool {
-        self.alpha == Alpha::Straight
+    /// Whether this is an import ([`import`]) read with `alpha`.
+    pub(crate) fn is_import_as(&self, alpha: Alpha) -> bool {
+        alpha != Alpha::Premultiplied && self.alpha == alpha
     }
 
     /// The view a layer is drawn into; `None` unless the image is a layer.
@@ -157,6 +164,62 @@ pub(crate) fn upload(
         view_formats: &[],
     });
     write_texels(maker.gpu, &texture, width, height, rgba)?;
+    Ok(finish(
+        maker,
+        texture,
+        width,
+        height,
+        Alpha::Premultiplied,
+        None,
+    ))
+}
+
+/// Uploads `texels` (RGBA, row-major, `width * height` of them) as `Rgba16Float` exactly
+/// as given, each channel clamped to `0..=1`, and samples them as premultiplied. For data
+/// that is not colour, such as a colour lookup table (`filter::assets`).
+pub(crate) fn upload_unit_f16(
+    maker: &Maker<'_>,
+    width: u32,
+    height: u32,
+    texels: &[[f32; 4]],
+) -> Result<Image, RenderError> {
+    if width == 0 || height == 0 || texels.len() as u64 != u64::from(width) * u64::from(height) {
+        return Err(RenderError::Invalid {
+            what: "image",
+            detail: format!("{} texels for a {width}x{height} image", texels.len()),
+        });
+    }
+    check_dimension(maker.gpu, width, height)?;
+    let texture = maker.gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("jstream-render-data"),
+        size: extent(width, height),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: UPLOAD_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let bytes: Vec<u8> = texels
+        .iter()
+        .flatten()
+        .flat_map(|v| f16_bits(v.clamp(0.0, 1.0)).to_le_bytes())
+        .collect();
+    maker.gpu.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 8),
+            rows_per_image: Some(height),
+        },
+        extent(width, height),
+    );
     Ok(finish(
         maker,
         texture,
@@ -241,16 +304,24 @@ fn write_texels(
     Ok(())
 }
 
+/// An import of `texture` read with `alpha`, `Straight` or `PremultipliedSrgb`. A
+/// straight import must be `Rgba8UnormSrgb` or `Bgra8UnormSrgb`, so sampling decodes
+/// it; a premultiplied one `Rgba8Unorm` or `Bgra8Unorm`, so sampling returns the code
+/// values the shader unpremultiplies before decoding.
 pub(crate) fn import(
     maker: &Maker<'_>,
     texture: wgpu::Texture,
     sync: Option<Arc<dyn FrameSync>>,
+    alpha: Alpha,
 ) -> Result<Image, RenderError> {
+    use wgpu::TextureFormat as F;
     let format = texture.format();
-    if !matches!(
-        format,
-        wgpu::TextureFormat::Rgba8UnormSrgb | wgpu::TextureFormat::Bgra8UnormSrgb
-    ) {
+    let accepted = match alpha {
+        Alpha::Straight => matches!(format, F::Rgba8UnormSrgb | F::Bgra8UnormSrgb),
+        Alpha::PremultipliedSrgb => matches!(format, F::Rgba8Unorm | F::Bgra8Unorm),
+        Alpha::Premultiplied => false,
+    };
+    if !accepted {
         return Err(RenderError::UnsupportedFormat { format });
     }
     let width = texture.width();
@@ -272,7 +343,7 @@ pub(crate) fn import(
         });
     }
     check_dimension(maker.gpu, width, height)?;
-    Ok(finish(maker, texture, width, height, Alpha::Straight, sync))
+    Ok(finish(maker, texture, width, height, alpha, sync))
 }
 
 pub(crate) fn import_frame(maker: &Maker<'_>, frame: &GpuFrame) -> Result<Image, RenderError> {
@@ -280,6 +351,7 @@ pub(crate) fn import_frame(maker: &Maker<'_>, frame: &GpuFrame) -> Result<Image,
         maker,
         frame.texture().clone(),
         Some(Arc::clone(frame.sync())),
+        Alpha::Straight,
     )
 }
 

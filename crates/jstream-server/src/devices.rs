@@ -9,6 +9,12 @@
 //!   like the control token. The server keeps only its BLAKE3 digest, with the device's
 //!   ID, its name, when it paired and when its token was last presented. A token unused
 //!   for [`LAPSE`] lapses and its device is dropped.
+//! - **The browser cookie** (ADR-0047). A device token held as the
+//!   `__Host-jstream_device` cookie is admitted through [`Devices::admit_cookie`], which
+//!   also says when to re-set the cookie with a fresh `Max-Age`: on a use that renews
+//!   the lapse, at most once every [`COOKIE_RENEW_EVERY`]. When it was last set is kept
+//!   in memory only; a device read from the file is taken to have had it set at its last
+//!   use.
 //! - **The device file.** With `ServerConfig::device_file` the devices are kept in that
 //!   file, user-only on Unix (mode 0600; on Windows it gets its directory's ACL, like the
 //!   token file), rewritten whole through a temporary file on every change. It holds
@@ -43,6 +49,10 @@ pub(crate) const LAPSE: u64 = 30 * 24 * 3600;
 /// How stale a device's stored `last_used_at` may get before a use rewrites the file, in
 /// seconds. Recording every use would rewrite it on every request.
 const TOUCH_EVERY: u64 = 3600;
+
+/// How long after the cookie was last set a use that renews the lapse re-sets it, in
+/// seconds: once a day.
+pub(crate) const COOKIE_RENEW_EVERY: u64 = 24 * 3600;
 
 /// The longest device name accepted, in characters.
 pub(crate) const MAX_NAME_CHARS: usize = 64;
@@ -88,6 +98,9 @@ struct Device {
     digest: blake3::Hash,
     paired_at: u64,
     last_used_at: u64,
+    /// When its cookie was last set or re-set, as far as this run of the server knows.
+    /// Not stored in the file.
+    cookie_set_at: u64,
 }
 
 impl Device {
@@ -237,6 +250,7 @@ impl Devices {
                 digest: blake3::hash(token.as_bytes()),
                 paired_at: now.unix,
                 last_used_at: now.unix,
+                cookie_set_at: now.unix,
             },
         );
         if let Err(error) = self.save(&state) {
@@ -251,17 +265,44 @@ impl Devices {
     /// presented value is hashed and compared digest to digest with every device's, so
     /// the compare reveals nothing about any token.
     pub(crate) fn admit(&self, presented: &[u8], now: u64) -> Option<(DeviceId, String)> {
+        self.admit_as(presented, now, false)
+            .map(|(id, name, _)| (id, name))
+    }
+
+    /// [`admit`](Devices::admit) for a token presented as the browser cookie, and
+    /// whether to re-set the cookie: this use renewed the lapse, and the cookie was last
+    /// set at least [`COOKIE_RENEW_EVERY`] ago.
+    pub(crate) fn admit_cookie(
+        &self,
+        presented: &[u8],
+        now: u64,
+    ) -> Option<(DeviceId, String, bool)> {
+        self.admit_as(presented, now, true)
+    }
+
+    fn admit_as(
+        &self,
+        presented: &[u8],
+        now: u64,
+        cookie: bool,
+    ) -> Option<(DeviceId, String, bool)> {
         let digest = blake3::hash(presented);
         let mut state = lock(&self.state);
         let mut changed = state.drop_lapsed(now);
         let mut found = None;
         for (id, device) in &mut state.devices {
             if device.digest == digest {
+                let mut renew = false;
                 if now.saturating_sub(device.last_used_at) >= TOUCH_EVERY {
                     device.last_used_at = now;
                     changed = true;
+                    renew =
+                        cookie && now.saturating_sub(device.cookie_set_at) >= COOKIE_RENEW_EVERY;
+                    if renew {
+                        device.cookie_set_at = now;
+                    }
                 }
-                found = Some((id.clone(), device.name.clone()));
+                found = Some((id.clone(), device.name.clone(), renew));
             }
         }
         if changed && let Err(error) = self.save(&state) {
@@ -423,11 +464,13 @@ fn parse_file(text: &str) -> Result<BTreeMap<DeviceId, Device>, String> {
         let digest = text("digest")
             .and_then(|hex| blake3::Hash::from_hex(hex).ok())
             .ok_or_else(broken)?;
+        let last_used_at = number("last_used_at").ok_or_else(broken)?;
         let device = Device {
             name: text("name").ok_or_else(broken)?.to_owned(),
             digest,
             paired_at: number("paired_at").ok_or_else(broken)?,
-            last_used_at: number("last_used_at").ok_or_else(broken)?,
+            last_used_at,
+            cookie_set_at: last_used_at,
         };
         devices.insert(DeviceId::new(id), device);
     }
@@ -481,7 +524,8 @@ fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        CODE_LIFETIME, Devices, LAPSE, MAX_WRONG_ATTEMPTS, Now, PairError, check_name, normalize,
+        CODE_LIFETIME, COOKIE_RENEW_EVERY, Devices, LAPSE, MAX_WRONG_ATTEMPTS, Now, PairError,
+        TOUCH_EVERY, check_name, normalize,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -641,6 +685,37 @@ mod tests {
         assert!(devices.admit(token.as_bytes(), used).is_some());
         assert!(devices.contains(&id, t.unix + LAPSE + 10));
         assert_eq!(devices.list(t.unix + LAPSE + 10)[0].last_used_at, used);
+    }
+
+    /// ADR-0047: a cookie use re-sets the cookie only when it renews the lapse and the
+    /// cookie is a day old, so at most once a day; a header use never does.
+    #[test]
+    fn the_cookie_is_renewed_at_most_once_a_day() {
+        let devices = memory();
+        let t = now();
+        let code = devices.start_pairing(t).expect("random");
+        let (_, token) = devices.pair(&code, "Browser", t).expect("paired");
+        let renews = |at: u64| {
+            devices
+                .admit_cookie(token.as_bytes(), at)
+                .map(|(_, _, renew)| renew)
+        };
+        assert_eq!(renews(t.unix), Some(false), "just set");
+        assert_eq!(
+            renews(t.unix + TOUCH_EVERY),
+            Some(false),
+            "renewed lapse, same day"
+        );
+        let day = t.unix + COOKIE_RENEW_EVERY;
+        assert_eq!(renews(day), Some(true));
+        assert_eq!(renews(day + 1), Some(false), "lapse not renewed");
+        assert_eq!(renews(day + TOUCH_EVERY), Some(false), "once a day");
+        // A header use renews the lapse but never re-sets a cookie.
+        let next = day + COOKIE_RENEW_EVERY;
+        assert!(devices.admit(token.as_bytes(), next).is_some());
+        assert_eq!(renews(next + 1), Some(false), "lapse already renewed");
+        assert_eq!(renews(next + TOUCH_EVERY), Some(true));
+        assert_eq!(devices.admit_cookie(b"not-the-token", next), None);
     }
 
     #[test]

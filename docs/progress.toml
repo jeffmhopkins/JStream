@@ -258,9 +258,10 @@ prs = [223]
 id = "A6b"
 milestone = "M1a"
 title = "Daemon YouTube wiring"
-status = "planned"
-note = "draft #312; sign-in needs the OAuth client (ADR-0058); Windows run #337"
-needs = ["build", "maintainer", "hardware"]
+status = "hardware"
+prs = [312]
+note = "#312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337"
+needs = ["maintainer", "hardware"]
 
 # M1b
 
@@ -402,16 +403,16 @@ note = "audio hardware tests"
 id = "C3"
 milestone = "M1b"
 title = "Display and window capture sources"
-status = "planned"
-note = "draft #365; Windows run #378"
-needs = ["build", "hardware"]
+status = "hardware"
+prs = [365]
+note = "#365 landed with wave/m1-2 (#545); Windows run #378"
 
 [[item]]
 id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
-prs = [283, 289, 298]
+prs = [283, 289, 298, 326]
 note = "#341, #335, #336"
 
 [[item]]
@@ -509,9 +510,8 @@ prs = [208]
 id = "I2"
 milestone = "M1b"
 title = "Live values"
-status = "review"
+status = "done"
 prs = [244]
-needs = ["build"]
 
 # M1c
 
@@ -659,7 +659,7 @@ id = "U2b"
 milestone = "M2"
 title = "Device pairing"
 status = "done"
-prs = [265]
+prs = [265, 288]
 
 [[item]]
 id = "U3a"
@@ -752,9 +752,8 @@ needs = ["build"]
 id = "E2"
 milestone = "M2"
 title = "Video mixes"
-status = "review"
+status = "done"
 prs = [259]
-needs = ["build"]
 
 [[item]]
 id = "D8"
@@ -767,9 +766,8 @@ prs = [249]
 id = "D8p"
 milestone = "M2"
 title = "Audio chain protocol fields"
-status = "planned"
-note = "draft #303"
-needs = ["build"]
+status = "done"
+prs = [303]
 
 [[item]]
 id = "C9"
@@ -791,7 +789,8 @@ id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "planned"
-note = "drafts #319 and #323"
+prs = [319]
+note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 in review into wave/m1-3"
 needs = ["build"]
 
 [[item]]
@@ -818,13 +817,21 @@ status = "done"
 prs = [325]
 
 [[item]]
+id = "F6"
+milestone = "M3"
+title = "HEVC and AV1 encode"
+status = "hardware"
+prs = [364]
+note = "#364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b"
+
+[[item]]
 id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
-prs = [359]
-note = "effect packs #368 land with wave/m1-2; full 3D transforms to build"
-needs = ["wave", "build"]
+prs = [359, 368]
+note = "effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build"
+needs = ["build"]
 
 [[item]]
 id = "3D1"
@@ -837,10 +844,10 @@ prs = [360]
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
-status = "review"
+status = "planned"
 prs = [363, 375]
-note = "draft #363; signed-in features need the OAuth client (ADR-0058)"
-needs = ["build", "maintainer"]
+note = "#363 landed with wave/m1-2 (#545), #375 with wave/m1; signed-in features need the OAuth client (ADR-0058)"
+needs = ["maintainer"]
 
 [[item]]
 id = "CL1"
