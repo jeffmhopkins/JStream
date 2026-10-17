@@ -66,7 +66,9 @@ settings map, reading a missing or invalid value as its default. A test checks t
 layout against the offsets naga computes.
 
 **Drawing.** `Effect` implements render's `ExternalFilter` (label: the kind ID), and
-`Effect::video_filter(settings)` makes the `VideoFilter` the chain runtime keeps. The
+`Effect::video_filter(settings)` makes the `VideoFilter` a source's video chain would
+keep; `jstream-core`'s chain runtime bypasses pack kinds until it runs them (a V0
+follow-up). The
 host's prelude is `jstream_render::FILTER_PRELUDE`. A filter made from a reloaded effect
 draws the new WGSL, because the render side rebuilds a label's pipeline when its source
 changes. A test draws an effect on the test adapter, changes its settings in place, and
