@@ -64,7 +64,13 @@ export const test = base.extend({
 export async function connect(page, daemon) {
   await page.goto(daemon.url);
   await page.getByRole('button', { name: 'Connect' }).click();
-  await expect(page.getByRole('button', { name: 'Disconnect' })).toBeVisible();
+  await expect(page.locator('header.app-header')).toBeVisible();
+}
+
+/** Opens the header's File menu and disconnects. */
+export async function disconnect(page) {
+  await page.locator('header.app-header').getByRole('button', { name: 'File' }).click();
+  await page.getByRole('menuitem', { name: 'Disconnect' }).click();
 }
 
 /** Opens the inspector's page `name` (`Properties`, `Outputs`). */
@@ -72,8 +78,7 @@ export async function inspectorPage(page, name) {
   await page.getByRole('tab', { name }).click();
 }
 
-/** The status bar's revision, as a number. */
+/** The revision the header last heard of, as a number. */
 export async function rev(page) {
-  const text = await page.locator('.status-bar').getByText(/^rev \d+$/).textContent();
-  return Number(text.replace('rev ', ''));
+  return Number(await page.locator('header.app-header').getAttribute('data-rev'));
 }

@@ -213,7 +213,7 @@ state machine. Contents:
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
-  end), live values (no `rev` or collection change, a commit as one `rev` and one undo
+  end, folders and labels), live values (no `rev` or collection change, a commit as one `rev` and one undo
   step with its events in order, values held until a render reader adopts the
   commit, a failed commit, cancel and expiry with their audit entries, validation and
   limits, takeover, a deleted item, coalesced `live.changed`) and a live value drawn
@@ -479,7 +479,9 @@ The engine's answers are the mock's for the differential script: `tests.rs` runs
 script of calls against both and compares results, error codes and fields, and events.
 That script does not call `video.snapshot`. The mock has no compositor and answers it
 with `internal`, so the two are not compared. Nor does it call `capture.targets`,
-which the mock answers with a made-up display. The mock stays the reference clients
+which the mock answers with a made-up display, or send the folder, label and
+metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4), which
+the mock doesn't implement yet; `history.rs` checks the engine's undo of them. The mock stays the reference clients
 were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 
