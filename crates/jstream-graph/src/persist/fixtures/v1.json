@@ -257,7 +257,20 @@
         "path": "/home/me/Videos/show.mp4",
         "container": "mp4"
       },
-      "encoder_profile": "hq"
+      "encoder_profile": "hq",
+      "filters": {
+        "audio": [
+          {
+            "id": "o1",
+            "kind": "gain",
+            "kind_version": 1,
+            "settings": {
+              "gain_db": -6.0
+            }
+          }
+        ]
+      },
+      "video_mix": "prog"
     },
     {
       "id": "tw",
@@ -278,7 +291,8 @@
           "url": "rtmps://a.rtmps.youtube.com:443/live2"
         }
       },
-      "encoder_profile": "low"
+      "encoder_profile": "low",
+      "video_mix": "side"
     }
   ],
   "encoders": [
@@ -322,6 +336,37 @@
       }
     }
   ],
+  "video_mixes": [
+    {
+      "id": "prog",
+      "name": "Program 720p",
+      "mix": {
+        "input": {
+          "type": "program"
+        },
+        "resolution": {
+          "width": 1280,
+          "height": 720
+        },
+        "fps_divisor": 1
+      }
+    },
+    {
+      "id": "side",
+      "name": "Side",
+      "mix": {
+        "input": {
+          "type": "scene",
+          "scene_id": "b"
+        },
+        "resolution": {
+          "width": 640,
+          "height": 360
+        },
+        "fps_divisor": 2
+      }
+    }
+  ],
   "buses": [
     {
       "id": "master",
@@ -357,5 +402,19 @@
       "bus_id": "vod",
       "gain_db": -3.0
     }
-  ]
+  ],
+  "master": {
+    "filters": {
+      "audio": [
+        {
+          "id": "m1",
+          "kind": "gain",
+          "kind_version": 1,
+          "settings": {
+            "gain_db": -1.0
+          }
+        }
+      ]
+    }
+  }
 }

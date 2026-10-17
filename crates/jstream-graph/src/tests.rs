@@ -4,9 +4,10 @@ use crate::{Graph, Placement};
 use jstream_protocol::{
     AudioFollow, BlendMode, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile,
     EncoderProfileId, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
-    KindCategory, KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor,
-    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
-    SceneId, SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
+    KindCategory, KindDescriptor, Media, MixInput, MixResolution, OutputId, OutputInfo, OutputKind,
+    ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer,
+    Rev, RtmpTarget, SceneId, SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
+    VideoMix, VideoMixId,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -646,6 +647,8 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
                     target: target("rtmps://a.rtmps.youtube.com:443/live2"),
                 },
                 encoder_profile: None,
+                filters: Default::default(),
+                video_mix: None,
             }],
         }
     );
@@ -751,6 +754,8 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                     container: RecordContainer::Mp4,
                 },
                 encoder_profile: None,
+                filters: Default::default(),
+                video_mix: None,
             }],
         }
     );
@@ -1093,8 +1098,9 @@ mod property {
     use jstream_protocol::{
         Action, AudioFollow, BusId, Chord, Crop, DeleteTarget, Easing, Edit, EncoderProfile,
         EncoderProfileId, Finite32, FitMode, Glide, ItemEasing, ItemGeometry, ItemId,
-        ItemTransform, ItemTransition, OutputId, RateControl, Rev, SceneId, SceneRole, Settings,
-        Size, SourceId, SourceKind, TransitionEffect, TransitionPresetId, Vec2,
+        ItemTransform, ItemTransition, MixInput, MixResolution, OutputId, RateControl, Rev,
+        SceneId, SceneRole, Settings, Size, SourceId, SourceKind, TransitionEffect,
+        TransitionPresetId, Vec2, VideoMix, VideoMixId,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1132,14 +1138,37 @@ mod property {
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
-        let filters: Vec<(String, String)> = state
-            .sources()
-            .flat_map(|s| {
-                s.filters()
+        let mixes: Vec<String> = state.video_mixes().map(|m| m.id().to_string()).collect();
+        // Every filter with its owner: sources', outputs' and the master's.
+        let mut filters: Vec<(jstream_protocol::FilterOwner, String)> = Vec::new();
+        for source in state.sources() {
+            let owner = jstream_protocol::FilterOwner::Source {
+                source_id: source.id().clone(),
+            };
+            filters.extend(
+                source
+                    .filters()
                     .all()
-                    .map(|(_, f)| (s.id().to_string(), f.id().to_string()))
-            })
-            .collect();
+                    .map(|(_, f)| (owner.clone(), f.id().to_string())),
+            );
+        }
+        for output in state.outputs() {
+            let owner = jstream_protocol::FilterOwner::Output {
+                output_id: output.id().clone(),
+            };
+            filters.extend(
+                output
+                    .filters()
+                    .all()
+                    .map(|(_, f)| (owner.clone(), f.id().to_string())),
+            );
+        }
+        filters.extend(
+            state
+                .master()
+                .all()
+                .map(|(_, f)| (jstream_protocol::FilterOwner::Master, f.id().to_string())),
+        );
         let presets: Vec<String> = state.presets().map(|p| p.id().to_string()).collect();
         let buses: Vec<String> = state.buses().map(|b| b.id().to_string()).collect();
         let urls = [
@@ -1176,6 +1205,22 @@ mod property {
                 Easing::Linear,
                 Easing::Spring,
             ][rng.below(4)]
+        };
+        let mix_id = |rng: &mut Rng| rng.pick(&mixes).unwrap_or_else(|| pool(rng, "mix"));
+        // A scene one time in two, often one that exists; an odd width one time in eight.
+        let mix = |rng: &mut Rng| VideoMix {
+            input: match rng.below(4) {
+                0 => MixInput::Program,
+                1 => MixInput::Preview,
+                _ => MixInput::Scene {
+                    scene_id: SceneId::new(scene(rng)),
+                },
+            },
+            resolution: MixResolution {
+                width: [1279, 640, 1280, 1920, 16, 3840, 720, 1080][rng.below(8)],
+                height: 720,
+            },
+            fps_divisor: u32::try_from(rng.below(4)).expect("fits") + 1,
         };
         let bus = |rng: &mut Rng| {
             BusId::new(match rng.below(5) {
@@ -1245,7 +1290,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(50) {
+        match rng.below(55) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1477,11 +1522,10 @@ mod property {
                 index: (rng.below(2) == 0).then(|| index(rng)),
             },
             41 => {
-                let (source, filter) = rng
+                let (owner, filter) = rng
                     .pick(&filters)
-                    .unwrap_or_else(|| (source(rng), pool(rng, "f")));
+                    .unwrap_or_else(|| (owner(source(rng)), pool(rng, "f")));
                 let filter_id = jstream_protocol::FilterId::new(filter);
-                let owner = owner(source);
                 match rng.below(4) {
                     0 => Edit::FilterRemove { owner, filter_id },
                     1 => Edit::FilterSetEnabled {
@@ -1490,9 +1534,14 @@ mod property {
                         enabled: rng.below(2) == 0,
                     },
                     2 => Edit::FilterSetSettings {
+                        patch: match &owner {
+                            jstream_protocol::FilterOwner::Source { .. } => {
+                                super::settings(&[("mask", mask(rng))])
+                            }
+                            _ => super::settings(&[("gain_db", json!(-3.0))]),
+                        },
                         owner,
                         filter_id,
-                        patch: super::settings(&[("mask", mask(rng))]),
                     },
                     _ => Edit::FilterReorder {
                         owner,
@@ -1501,7 +1550,30 @@ mod property {
                     },
                 }
             }
-            42 => {
+            42 | 43 => {
+                let name = pool(rng, "name ");
+                if rng.below(2) == 0 {
+                    Edit::VideoMixCreate {
+                        mix_id: VideoMixId::new(pool(rng, "mix")),
+                        name,
+                        mix: mix(rng),
+                    }
+                } else {
+                    Edit::VideoMixUpdate {
+                        mix_id: VideoMixId::new(mix_id(rng)),
+                        name,
+                        mix: mix(rng),
+                    }
+                }
+            }
+            44 => Edit::OutputSetVideoMix {
+                output_id: OutputId::new(output(rng)),
+                mix_id: (rng.below(3) != 0).then(|| VideoMixId::new(mix_id(rng))),
+            },
+            45 => Edit::VideoMixDelete {
+                mix_id: VideoMixId::new(mix_id(rng)),
+            },
+            46 => {
                 let chord = Chord::new(["F1", "Ctrl+KeyA", "Shift+Ctrl+KeyA"][rng.below(3)]);
                 if rng.below(3) == 0 {
                     Edit::HotkeyClear { chord }
@@ -1520,7 +1592,23 @@ mod property {
                     Edit::HotkeySet { chord, action }
                 }
             }
-            43 => Edit::TransitionCreate {
+            // A gain on the master or an output's audio chain (ADR-0027), mostly in
+            // range.
+            47 => Edit::FilterAdd {
+                owner: match rng.below(3) {
+                    0 => jstream_protocol::FilterOwner::Master,
+                    _ => jstream_protocol::FilterOwner::Output {
+                        output_id: OutputId::new(output(rng)),
+                    },
+                },
+                chain: jstream_protocol::FilterChain::Audio,
+                filter_id: jstream_protocol::FilterId::new(pool(rng, "f")),
+                kind: "gain".into(),
+                settings: super::settings(&[("gain_db", json!([-6.0, 0.0, 99.0][rng.below(3)]))]),
+                enabled: (rng.below(3) == 0).then_some(false),
+                index: (rng.below(2) == 0).then(|| index(rng)),
+            },
+            48 => Edit::TransitionCreate {
                 preset_id: TransitionPresetId::new(pool(rng, "tr")),
                 name: pool(rng, "name "),
                 kind: kind(rng),
@@ -1528,7 +1616,7 @@ mod property {
                 easing: easing(rng),
                 settings: preset_settings(rng),
             },
-            44 => Edit::TransitionUpdate {
+            49 => Edit::TransitionUpdate {
                 preset_id: TransitionPresetId::new(preset(rng)),
                 name: (rng.below(2) == 0).then(|| pool(rng, "name ")),
                 kind: (rng.below(2) == 0).then(|| kind(rng)),
@@ -1536,18 +1624,18 @@ mod property {
                 easing: (rng.below(2) == 0).then(|| easing(rng)),
                 patch: preset_settings(rng),
             },
-            45 => Edit::TransitionDelete {
+            50 => Edit::TransitionDelete {
                 preset_id: TransitionPresetId::new(preset(rng)),
             },
-            46 => Edit::TransitionSetDefault {
+            51 => Edit::TransitionSetDefault {
                 preset_id: TransitionPresetId::new(preset(rng)),
             },
-            47 => Edit::SceneSetTransitions {
+            52 => Edit::SceneSetTransitions {
                 scene_id: SceneId::new(scene(rng)),
                 transition_in: (rng.below(2) == 0).then(|| TransitionPresetId::new(preset(rng))),
                 transition_out: (rng.below(2) == 0).then(|| TransitionPresetId::new(preset(rng))),
             },
-            48 => Edit::ItemSetTransition {
+            53 => Edit::ItemSetTransition {
                 item_id: ItemId::new(item(rng)),
                 transition: ItemTransition {
                     delay_ms: [0, 120, 70_000][rng.below(3)],
@@ -1650,6 +1738,10 @@ mod property {
             "encoder.create",
             "encoder.update",
             "encoder.delete",
+            "video_mix.create",
+            "video_mix.update",
+            "video_mix.delete",
+            "output.set_video_mix",
             "filter.add",
             "filter.remove",
             "filter.set_enabled",
@@ -3387,6 +3479,194 @@ fn reference_and_clone_convert_in_one_batch_each() {
     );
 }
 
+fn mix_create(id: &str, input: MixInput) -> Edit {
+    Edit::VideoMixCreate {
+        mix_id: VideoMixId::new(id),
+        name: format!("Mix {id}"),
+        mix: VideoMix {
+            input,
+            resolution: MixResolution {
+                width: 1280,
+                height: 720,
+            },
+            fps_divisor: 1,
+        },
+    }
+}
+
+fn set_mix(output: &str, mix: Option<&str>) -> Edit {
+    Edit::OutputSetVideoMix {
+        output_id: OutputId::new(output),
+        mix_id: mix.map(VideoMixId::new),
+    }
+}
+
+/// Every mix edit undoes exactly, deleting an output that shows a mix restores its
+/// choice on undo, and a mix an output shows can't be deleted.
+#[test]
+fn video_mix_edits_invert() {
+    let mut graph = graph();
+    apply_ok(
+        &mut graph,
+        vec![
+            scene_create("a"),
+            output_create("yt", "rtmp://a.rtmp.youtube.com/live2"),
+            mix_create(
+                "side",
+                MixInput::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+            ),
+        ],
+    );
+    apply_ok(&mut graph, vec![set_mix("yt", Some("side"))]);
+    assert_eq!(
+        graph
+            .state()
+            .output(&OutputId::new("yt"))
+            .and_then(|o| o.video_mix())
+            .map(VideoMixId::as_str),
+        Some("side")
+    );
+    let (field, reason) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::VideoMixDelete {
+            mix_id: VideoMixId::new("side"),
+        }],
+    ));
+    assert_eq!(field, "edits.0.mix_id");
+    assert_eq!(
+        reason,
+        "video mix `side` is used by output `yt`; point it elsewhere first"
+    );
+    let updated = apply_ok(
+        &mut graph,
+        vec![Edit::VideoMixUpdate {
+            mix_id: VideoMixId::new("side"),
+            name: "Program".into(),
+            mix: VideoMix {
+                input: MixInput::Program,
+                resolution: MixResolution {
+                    width: 640,
+                    height: 360,
+                },
+                fps_divisor: 2,
+            },
+        }],
+    );
+    assert_eq!(
+        updated.inverse.edits,
+        vec![
+            mix_create(
+                "side",
+                MixInput::Scene {
+                    scene_id: SceneId::new("a"),
+                }
+            )
+            .into_update()
+        ]
+    );
+    let deleted = apply_ok(
+        &mut graph,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        }],
+    );
+    assert_eq!(
+        deleted.inverse.edits.last(),
+        Some(&set_mix("yt", Some("side"))),
+        "{:?}",
+        deleted.inverse
+    );
+    apply_ok(
+        &mut graph,
+        vec![Edit::VideoMixDelete {
+            mix_id: VideoMixId::new("side"),
+        }],
+    );
+}
+
+trait IntoUpdate {
+    fn into_update(self) -> Edit;
+}
+
+impl IntoUpdate for Edit {
+    /// A `video_mix.create` as the `video_mix.update` that sets the same name and mix.
+    fn into_update(self) -> Edit {
+        match self {
+            Edit::VideoMixCreate { mix_id, name, mix } => {
+                Edit::VideoMixUpdate { mix_id, name, mix }
+            }
+            other => other,
+        }
+    }
+}
+
+/// A mix that shows a scene blocks the scene's delete, and `delete.plan` points the mix
+/// at the program instead, keeping its name, resolution and rate.
+#[test]
+fn a_mix_blocks_its_scenes_delete_and_the_plan_repoints_it() {
+    let mut graph = graph();
+    apply_ok(
+        &mut graph,
+        vec![
+            scene_create("a"),
+            scene_create("b"),
+            mix_create(
+                "side",
+                MixInput::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+            ),
+            mix_create(
+                "other",
+                MixInput::Scene {
+                    scene_id: SceneId::new("b"),
+                },
+            ),
+        ],
+    );
+    let error = apply_err(
+        &mut graph,
+        vec![Edit::SceneDelete {
+            scene_id: SceneId::new("a"),
+        }],
+    );
+    assert_eq!(
+        blockers(error),
+        vec![(
+            EntityKind::VideoMix,
+            "side".to_owned(),
+            "mix.input.scene_id".to_owned()
+        )]
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Scene {
+            scene_id: SceneId::new("a"),
+        },
+    );
+    assert_eq!(
+        edits,
+        vec![
+            mix_create("side", MixInput::Program).into_update(),
+            Edit::SceneDelete {
+                scene_id: SceneId::new("a"),
+            },
+        ]
+    );
+    apply_ok(&mut graph, edits);
+    assert_eq!(
+        graph
+            .state()
+            .video_mix(&VideoMixId::new("other"))
+            .and_then(|m| m.mix().scene())
+            .map(SceneId::as_str),
+        Some("b"),
+        "a mix showing another scene is untouched"
+    );
+}
+
 fn set_opacity(item: &str, opacity: f32) -> Edit {
     Edit::ItemSetOpacity {
         item_id: ItemId::new(item),
@@ -3669,6 +3949,33 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
             "the master bus can't be deleted".to_owned()
         )
     );
+}
+
+#[test]
+fn a_filter_kind_cannot_be_created_as_a_source() {
+    let mut graph = graph().with_kinds([KindDescriptor {
+        kind_id: "clap/org.example.gain".into(),
+        category: KindCategory::AudioFilter,
+        name: "Gain".into(),
+        version: 1,
+        video: false,
+        audio: true,
+        params: vec![],
+    }]);
+    let (field, reason) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::SourceCreate {
+            source_id: SourceId::new("x"),
+            name: "x".into(),
+            kind: SourceKind::Builtin {
+                kind: "clap/org.example.gain".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: None,
+        }],
+    ));
+    assert_eq!(field, "edits.0.kind.kind");
+    assert!(reason.contains("filter kind"), "{reason}");
 }
 
 mod hotkeys {
@@ -4022,31 +4329,4 @@ mod hotkeys {
         assert_eq!(chords(&graph), ["F5", "F6"]);
         assert_eq!(graph.state().hotkey(&Chord::new("F5")), Some(&with_preset));
     }
-}
-
-#[test]
-fn a_filter_kind_cannot_be_created_as_a_source() {
-    let mut graph = graph().with_kinds([KindDescriptor {
-        kind_id: "clap/org.example.gain".into(),
-        category: KindCategory::AudioFilter,
-        name: "Gain".into(),
-        version: 1,
-        video: false,
-        audio: true,
-        params: vec![],
-    }]);
-    let (field, reason) = invalid_reason(apply_err(
-        &mut graph,
-        vec![Edit::SourceCreate {
-            source_id: SourceId::new("x"),
-            name: "x".into(),
-            kind: SourceKind::Builtin {
-                kind: "clap/org.example.gain".into(),
-            },
-            settings: Settings::new(),
-            duplicated_from: None,
-        }],
-    ));
-    assert_eq!(field, "edits.0.kind.kind");
-    assert!(reason.contains("filter kind"), "{reason}");
 }

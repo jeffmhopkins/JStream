@@ -12,13 +12,14 @@
 //! [`AudioScopes`]), `browser` (a web page rendered off screen by the injected
 //! [`BrowserBackend`] from [`Context::browser`], its frames on the GPU and its audio a
 //! [`SourceAudio`]), with its `youtube_chat` preset (a live video's public popout chat
-//! page, no sign-in), and `chat_message` (the featured live chat message, ADR-0041 §2,
-//! which the host sets through the context's [`ChatFeature`]). The audio-only kinds
-//! (`audio_input`, `desktop_audio` and `app_audio`) make no frames: the engine records
-//! the [`AudioTarget`] their settings name. The other built-in kinds are described only.
-//! `jstream-core` drives sources from its `jstream-sources` thread through
-//! [`Registry::create`], [`Source::frame`], [`Source::next_change`], [`Source::show`]
-//! and [`Source::painter`].
+//! page, no sign-in), `chat_message` (the featured live chat message, ADR-0041 §2,
+//! which the host sets through the context's [`ChatFeature`]), and `display` and
+//! `window`, which say what the platform captures ([`CaptureSpec`]). The audio-only
+//! kinds (`audio_input`, `desktop_audio` and `app_audio`) make no frames: the engine
+//! records the [`AudioTarget`] their settings name. The other built-in kinds are
+//! described only. `jstream-core` drives sources from its `jstream-sources` thread
+//! through [`Registry::create`], [`Source::frame`], [`Source::next_change`],
+//! [`Source::show`], [`Source::painter`] and [`Source::capture`].
 //!
 //! [`MediaDecoders`]: jstream_platform::MediaDecoders
 //!
@@ -28,6 +29,7 @@
 
 mod audio;
 mod browser;
+mod capture;
 mod chat;
 mod color;
 mod describe;
@@ -42,6 +44,7 @@ mod youtube_chat;
 
 pub use audio::AudioTarget;
 pub use browser::opens_browser;
+pub use capture::CaptureSpec;
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use error::SourceError;
 /// The browser engine seam `browser` sources open their pages through, which the host
