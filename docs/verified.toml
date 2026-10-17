@@ -4119,7 +4119,7 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
 ["THREAT-MODEL#vcam"."body"]
-stamp = { hash = "b3:22d241d0aeefeac2", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+stamp = { hash = "b3:cc97d5c518c738e4", by = "agent:claude", note = "Re-read the vcam section: added an in-flight controls paragraph for #540 (producer refuses a pre-existing mapping with a foreign owner or loose DACL; DLL owner-checks textures and fence) and marked the #356 gap as fixed in flight; main's controls and accepted risks unchanged" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
