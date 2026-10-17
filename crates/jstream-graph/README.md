@@ -31,7 +31,8 @@ codes, so the engine passes them to clients unchanged.
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
   holding the master, the `sends`, keyed by bus and source, the master stage's filter
   `Chains` (`State::master`,
-  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), the
+  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), the `folders`
+  and `labels`, each in its own order, the
   `hotkeys`: each `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §3), and the `transitions`: the presets, keyed by ID, and the default. A binding
@@ -49,10 +50,14 @@ codes, so the engine passes them to clients unchanged.
   settings), at most `MAX_CHAIN_FILTERS` (8) each
   ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)). An audio source (its kind
   has audio, or a `scene` source) also has its `SourceAudio`
-  ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)).
+  ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)). Every source carries a set of
+  labels and a favourite flag (ADR-0024 §4).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
-  here), its `transition_in` and `transition_out` overrides, and its items in stacking
-  order, bottom first.
+  here), its `transition_in` and `transition_out` overrides, the folder it is filed in,
+  if any, its `SceneMeta` and its items in stacking order, bottom first.
+- `Folder` and `Label`: a folder has an ID, a name and an optional parent folder, and a
+  label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
+  only.
 - `Item`: the source it places, a `Placement`, a `crop`, `visible`, an `opacity` from
   0 to 1 and a `BlendMode`, its `ItemTransition`
   ([ADR-0029](../../docs/adr/0029-transitions.md)), and the reserved per-placement
@@ -243,6 +248,23 @@ the batch **touched**.
   addressing. No keyframe overrides exist yet, so no edit drops any
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §1 applies once they do).
+- **Folders, labels and metadata** (`organise.rs`,
+  [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): folders and labels are
+  ordered lists with unique, non-empty IDs and non-empty names. `folder.create` takes an
+  optional `parent` that must exist, and `folder.set_parent` refuses a parent that would
+  put the folder inside itself (`invalid_argument`, field `parent`, naming the chain).
+  `scene.set_folder` names an existing folder or none. `label.create` and
+  `label.update` check the colour (`#rrggbb`) and icon (1 to 64 bytes; ADR-0024 §4)
+  with the protocol's `check_color` and `check_icon`, and `scene.set_meta` checks the
+  same through `SceneMeta::problem`. `source.set_meta` replaces a source's labels (each
+  must exist and appear once; stored ordered by ID) and favourite flag, and
+  `source.duplicate` copies both to the copy. `folder.delete` is refused while a scene
+  (`folder`) or folder (`parent`) sits in the folder, and `label.delete` while a source
+  (`labels`) carries the label, listing them as `blockers`; their `delete.plan` moves
+  what the folder holds up to its parent, or takes the label off those sources. Every
+  edit is undone by the previous value; a delete by the create, then a reorder back
+  unless it was last. `scene.delete` and `source.delete` undo the folder and metadata
+  too. None of it is a dependency edge.
 - **Hotkeys** (`hotkey.rs`): `hotkey.set` binds a chord to an action and
   `hotkey.clear` unbinds it, checked in this order: the chord's spelling
   (`invalid_argument` on `chord`), whether it is already bound (`already_exists`) or
@@ -266,8 +288,9 @@ the batch **touched**.
   (for example scene `a` -> source `sa` -> scene `a`).
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
-collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list`,
-`encoder.list`, `video_mix.list` and `bus.list`)
+collection (`state.get`, with the folders and labels in their orders, `scene.list`,
+`source.list`, `item.list`, `output.list`, `encoder.list`, `video_mix.list` and
+`bus.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind), and `delete.plan` (`plan.rs`,
@@ -290,10 +313,11 @@ lists the transition kinds beside the source and filter kinds. A geometry item r
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
-`Scene::to_info`, `Item::to_info`, `Filter::to_info` and `Output::to_info` convert single
-objects; a source and an output report their chains in `filters`
-(`Chains::to_info`), omitted while both are empty, `state.get` the master's in
-`master`, and an item its `opacity` and `blend`. Reads change nothing.
+`Scene::to_info`, `Item::to_info`, `Filter::to_info`, `Output::to_info`,
+`Folder::to_info` and `Label::to_info` convert single objects; a source and an output
+report their chains in `filters` (`Chains::to_info`), omitted while both are empty,
+`state.get` the master's in `master`, and an item its `opacity` and `blend`. Reads
+change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
@@ -316,7 +340,13 @@ when there are none, and `transitions` (each preset with its `kind_version`, and
 default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
 older file has none of these). A scene writes `transition_in` and `transition_out`
 when set, and an item its `transition` when not the default. A source's `audio` is saved
-only where it differs from its kind's defaults. Kinds, undo history and runtime state are not in it, and
+only where it differs from its kind's defaults. `folders` and `labels` are in their
+orders, each omitted when empty. A scene's `folder`, `icon`, `color`, `favourite` and
+`show_in_multiview`, and a source's `labels` and `favourite`, are each omitted while
+they have their default, so a collection without them saves as it did before they
+existed and needs no schema bump. Loading creates the folders top level first, then
+sets each nested one's parent, so a folder may come before its parent in the file;
+labels come before the sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -328,17 +358,18 @@ the engine's; this crate does no I/O.
   reserved `effects` is accepted only empty.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
-  graph with the caller's kinds: the canvas size, scenes with their roles, then the
-  buses (the master renamed or faded as saved), which a source's settings may refer to,
-  then sources (each after the sources its settings refer to), then every source's
-  filters, then items in their placement form with their crop and visibility, opacity,
-  blend and transition settings, then encoder profiles, then the presets and the
-  default (the initial `cut` is updated in place when the file has it, and deleted
-  when it doesn't), then each scene's overrides, then video mixes, then outputs with
-  their profiles, mixes and filters, then the master's filters, then each source's audio and
-  the sends (with a `send.remove` of a default master send the file doesn't list; a
-  file without `sends`, such as one saved before sends existed, keeps every default
-  master send), then hotkeys (`` hotkey `F1` ``). A
+  graph with the caller's kinds: the canvas size, folders and labels, scenes with their
+  roles, folders and metadata, then the buses (the master renamed or faded as saved),
+  which a source's settings may refer to, then sources (each after the sources its
+  settings refer to, then its labels and favourite), then every source's filters, then
+  items in their placement form with their crop and visibility, opacity, blend and
+  transition settings, then encoder profiles, then the presets and the default (the
+  initial `cut` is updated in place when the file has it, and deleted when it doesn't),
+  then each scene's overrides, then video mixes, then outputs with their profiles, mixes
+  and filters, then the master's filters, then each source's audio and the sends (with a
+  `send.remove` of a default master send the file doesn't list; a file without `sends`,
+  such as one saved before sends existed, keeps every default master send), then
+  hotkeys (`` hotkey `F1` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -351,7 +382,7 @@ the engine's; this crate does no I/O.
   name, a fixed reason, and the line and column of a syntax error.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`, the touched sets' conflict rule in
-`touched.rs`): validation and error codes per
+`touched.rs`, folders and labels in `organise.rs`): validation and error codes per
 edit, shared sources, references and clones (`item.set_source` keeping the item, the
 `duplicated_from` link through deletes and undo, and both conversions as one batch),
 cycles (self, 2- and 3-cycles, legal diamonds, and through settings references, one
@@ -380,10 +411,12 @@ rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtu
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes, source switches, addressed
-placement edits, filter edits on sources, outputs and the master, the audio edits and the transition edits. After each successful one, the state must hold no cycle, applying its
+placement edits, filter edits on sources, outputs and the master, the audio edits, the
+transition edits, and folders, labels and metadata. After each successful one, the
+state must hold no cycle and its folders must form a tree, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged. And
-after every batch, for each scene and source: a plain delete is refused exactly when
+after every batch, for each scene, source, folder and label: a plain delete is refused exactly when
 it has blockers, the error lists them, and the `delete.plan` batch applies at the
 planned `rev`, removes the target, and undoes exactly.
 The proptest suites (`tests/properties.rs`, public API only, shrinking failures to a

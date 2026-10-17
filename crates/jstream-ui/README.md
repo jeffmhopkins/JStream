@@ -28,6 +28,10 @@ Contents ([Design](#design) explains the choices):
   session is open, then the shell with its regions, and keeps the shared state current
   from the session's events. It owns the routing: which panel sits in which region, and
   the inspector's pages. `SessionContext` gives components the open session.
+- **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
+  (the connection's details and Disconnect) and the Edit menu (Undo, Redo), the frames
+  dropped since the page connected, Record, and Go Live / End stream. `RecordButton`
+  and `Dropped` are its logic, tested natively.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
   and `desktop_vcam()`, what that global says about the virtual camera.
@@ -38,14 +42,15 @@ Contents ([Design](#design) explains the choices):
   share: the collection as `state.get` last reported it (`Collection`, with its buses
   for the bus picker), the program
   scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
-  last failed call. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
+  last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
+  is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
   (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
   they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel, an inspector
   page (creating, editing and deleting streams, recordings and the virtual camera, their
-  stream keys, start and stop, go-live and the pipeline's health), and the calls and
-  logic behind it, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
+  stream keys, start and stop, and the pipeline's health), and the calls and
+  logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer along the bottom (faders, mutes, routing and buses, with meters and the
   master's loudness), also tested natively against `MockEngine`.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the inspector's pages,
@@ -92,7 +97,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   session is `Rc`-shared: everything in the page runs on one thread, and on `wasm32`
   `Control` needs no `Send`.
 - **Events and the shared state.** One task reads the session's event stream. It keeps
-  the status bar's revision current and hands each event to `Studio`, which re-reads
+  the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
   `events.dropped`), and follows `studio.changed` for the program scene. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.
@@ -141,19 +146,34 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   once there is more than one; the pairing panel sits under them, outside the tabs,
   because it hides itself where the server pairs nothing. A failed call shows in a
   dismissable bar.
-- **The shell** is a CSS grid: a status bar on top, the scene and sources lists on the left, the
-  preview canvas in the middle, the inspector on the right and the mixer along the
-  bottom; narrow windows stack them. Each region is its own component, so the panels
-  and the canvas are built separately without touching the shell. Colours follow the
-  system's light or dark scheme.
+- **The shell** is a CSS grid: the header bar on top, the scene and sources lists on the
+  left, the preview canvas in the middle, the inspector on the right and the mixer along
+  the bottom; narrow windows stack them. Each region is its own component, so the panels
+  and the canvas are built separately without touching the shell. The look follows the
+  UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
+  prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
+  first and falls back to the system's, since the page's policy loads fonts only from
+  its own origin and Plex isn't bundled.
+- **The header** keeps its own copy of the outputs, as the outputs panel does (both
+  re-read on `state.changed` and `events.dropped` and follow `output.state_changed`),
+  plus `Studio::keys_changed`, which the panel bumps after a stream key is set or
+  cleared, since no event reports that. Go Live and End stream are described under
+  Outputs. Record starts every stopped or failed recording output and, while any runs,
+  becomes "Stop recording", which stops them; with no recording output it is disabled.
+  The dropped readout counts captured, rendered and encoded frames dropped since the
+  first `stats.tick` this page saw, starting over when the engine restarts. Undo and
+  Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
+  buttons. A failed call shows in the shell's problem bar. The menus close on Escape
+  or on a press anywhere outside them.
 - **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
-  output, and starts and stops each. "Go live" starts every stopped or failed RTMP
-  output whose stream key is set, and "End stream" stops the running ones; recordings
-  have only their own buttons. Both try every output, even after one fails, and report
+  output, and starts and stops each. The header's "Go Live" starts every stopped or
+  failed RTMP output whose stream key is set, and "End stream", which replaces it while
+  any runs, stops the running ones; recordings start from their own buttons or the
+  header's Record. Both try every output, even after one fails, and report
   each failure. An RTMP output without a key can't be started from the
   panel.
   A virtual camera output (`virtual_cam`) has no target, key or encoder profile, so its
