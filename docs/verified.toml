@@ -369,7 +369,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:4f4dc3f3b2a0055f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:4dd7743f3ad9cf67", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
+stamp = { hash = "b3:2949c98ff04a8ba3", by = "agent:wave-owner", note = "tools.snap regenerated after #500 and #505 reworded the Record output's path doc comment (UNC, device and DOS-name rules). Only that description changes, in both places it appears. tools/list stays about 220 KB (227,044 bytes), the tools and ops are unchanged, and the section's progressive-discovery and snapshot text still holds." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
