@@ -297,6 +297,28 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
     })
 }
 
+/// `docs verify <DOC#anchor> --by <who> --renote <text> [--from wave/<name>]`: replaces the
+/// `by` and `note` of the entries this branch wrote on a section that is already fresh,
+/// keeping their hashes, as when a reviewer asks for a better note. The branch's entries are
+/// those that differ from the ledger where it left `origin/main` (or the wave it targets).
+/// A stale section is refused: re-read it and verify with `--note` or `--merge`.
+fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) -> Result<()> {
+    let note = check_stamp(by, note)?;
+    let base = merge::base_ledger(root, branch)?;
+    stamp_section(root, target, &|key, old, inputs| {
+        if !ledger::diff(old, inputs).is_empty() {
+            bail!(
+                "{key} is stale: re-read it and verify with --note (or --merge after \
+                 `docs merge-main`); --renote only rewrites the note of a fresh section"
+            );
+        }
+        let old = old.context("invariant: a fresh section has a stamp")?;
+        ledger::renote(old, base.sections.get(key), by, note).with_context(|| {
+            format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
+        })
+    })
+}
+
 /// The section's new stamp from its key, current stamp and current inputs.
 type Restamp<'a> =
     dyn Fn(&str, Option<&ledger::Stamp>, &BTreeMap<String, String>) -> Result<ledger::Stamp> + 'a;
@@ -548,24 +570,35 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             let mut by = None;
             let mut note = None;
             let mut merge = None;
+            let mut renote = None;
+            let mut from = None;
             let mut it = args[1..].iter();
             while let Some(a) = it.next() {
                 match a.as_str() {
                     "--by" => by = it.next(),
                     "--note" => note = it.next(),
                     "--merge" => merge = it.next(),
+                    "--renote" => renote = it.next(),
+                    "--from" => from = it.next(),
                     t if target.is_none() => target = Some(t),
                     other => bail!("unexpected argument `{other}`"),
                 }
             }
-            match (target, by, note, merge) {
-                (Some(target), Some(by), Some(note), None) => verify(root, target, by, note)?,
-                (Some(target), Some(by), None, Some(merge)) => {
+            match (target, by, note, merge, renote, from) {
+                (Some(target), Some(by), Some(note), None, None, None) => {
+                    verify(root, target, by, note)?;
+                }
+                (Some(target), Some(by), None, Some(merge), None, None) => {
                     verify_merge(root, target, by, merge)?;
+                }
+                (Some(target), Some(by), None, None, Some(renote), from) => {
+                    let branch = from.map_or(merge::BRANCH, String::as_str);
+                    verify_renote(root, target, by, renote, branch)?;
                 }
                 _ => bail!(
                     "usage: cargo xtask docs verify <DOC#anchor> --by <human:..|agent:..> \
-                     (--note \"<what you checked>\" | --merge \"<what the merge changed>\")"
+                     (--note \"<what you checked>\" | --merge \"<what the merge changed>\" \
+                     | --renote \"<the better note>\" [--from wave/<name>])"
                 ),
             }
             Ok(true)
@@ -737,7 +770,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(true)
         }
         _ => bail!(
-            "usage: cargo xtask docs check | generate | progress | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main [--from wave/<name>] | migrate"
+            "usage: cargo xtask docs check | generate | progress | verify <DOC#anchor> --by <who> (--note | --merge | --renote) <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main [--from wave/<name>] | migrate"
         ),
     }
 }
@@ -1336,6 +1369,55 @@ mod tests {
         verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
         assert_eq!(note("file:src/a.rs"), joined(second));
         assert!(work.diags("is stale").is_empty());
+    }
+
+    /// `docs verify --renote` replaces the note on the entries this branch wrote on a fresh
+    /// section, keeping their hashes and every other entry (#521, #523); it refuses a stale
+    /// section, a section the branch never stamped, and a branch that isn't main or a wave.
+    #[test]
+    fn verify_renote_rewrites_a_fresh_note() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([("S.md", s), ("src/a.rs", "a\n"), ("src/b.rs", "b\n")]);
+        let (origin, work) = origin_and_clone("verify-renote", &files);
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        let better = "a.rs now returns early; the section's sentence on a.rs still says so";
+        let err = verify_renote(&work.0, "S#a", "agent:work", better, "main")
+            .expect_err("nothing written yet");
+        assert!(format!("{err:#}").contains("nothing to renote"), "{err:#}");
+
+        work.write("src/a.rs", "a work\n");
+        let entries = || {
+            ledger::Ledger::read(&work.0)
+                .expect("invariant: parses")
+                .sections["S#a"]
+                .clone()
+        };
+        let err = verify_renote(&work.0, "S#a", "agent:work", better, "main").expect_err("stale");
+        assert!(format!("{err:#}").contains("is stale"), "{err:#}");
+        verify(
+            &work.0,
+            "S#a",
+            "agent:work",
+            "a.rs changed and the text holds",
+        )
+        .expect("verifies");
+        let before = entries();
+        verify_renote(&work.0, "S#a", "agent:review", better, "main").expect("renotes");
+        let after = entries();
+        let a = &after["file:src/a.rs"];
+        assert_eq!(a.hash, before["file:src/a.rs"].hash);
+        assert_eq!(
+            (a.by.as_deref(), a.note.as_deref()),
+            (Some("agent:review"), Some(better))
+        );
+        assert_eq!(after["file:src/b.rs"], before["file:src/b.rs"]);
+        assert_eq!(after["body"], before["body"]);
+        assert!(work.diags("is stale").is_empty());
+        let err = verify_renote(&work.0, "S#a", "agent:work", better, "dev").expect_err("branch");
+        assert!(format!("{err:#}").contains("can only merge"), "{err:#}");
     }
 
     /// ADR-0053 transition: a branch from before the ledger re-stamped a section inline and

@@ -306,6 +306,8 @@ cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --note "…"                # re-read (or edited) and it holds: restamp it
 cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --merge "…"               # the same after merge-main: keeps the branch's notes
+cargo xtask docs verify ARCH#gpu-pipeline \
+    --by agent:claude --renote "…"              # fresh section, better note: hashes unchanged
 cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
@@ -345,6 +347,13 @@ the branch hadn't written gets `merge: ` and the text alone. Because it rewrites
 branch's entries whose input the merge changed even when they are fresh, it also repairs a
 plain re-verify after the merge that replaced the branch's notes. Use `--note` instead for
 a section you also changed after the merge: the branch's earlier note doesn't cover that.
+
+`docs verify <DOC#anchor> --by <who> --renote "<note>"` replaces the `by` and `note` of a
+section that is already fresh, as when a reviewer asks for a better note, without touching
+any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
+at the merge base of `HEAD` and `origin/main`, or of the wave named with
+`--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
+`--merge`, and a section this branch never stamped.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -445,7 +454,8 @@ holds**. The note says what was checked and why it still holds, e.g.:
   section: one stock text across every stale section, such as "rechecked after merging
   main", fails review.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
-  `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. Say in
+  `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. To
+  improve the note on a fresh section, use `docs verify --renote`, never a hand edit. Say in
   the PR what you re-read after removing a covered file.
 - The sweep is to report each section's verify-to-edit ratio from git (not built yet,
   see [Time-based review](#ttl)). A section that gets
