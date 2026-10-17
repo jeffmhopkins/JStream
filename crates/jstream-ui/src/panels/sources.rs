@@ -440,6 +440,7 @@ mod tests {
             visible,
             opacity: Finite32::ONE,
             blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
         };
         Collection {
             canvas: Canvas {
@@ -462,6 +463,8 @@ mod tests {
                 name: "Main".into(),
                 role: SceneRole::Scene,
                 items: vec![item("bottom", "cam", true), item("top", "gone", false)],
+                transition_in: None,
+                transition_out: None,
             }],
             ..Collection::default()
         }
