@@ -7,8 +7,8 @@
 
 use anyhow::{Context, bail};
 use jstream_server::Token;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::fs::{self, File};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Random bytes in a new token: 256 bits.
@@ -35,10 +35,12 @@ pub fn device_file(token_file: &Path) -> PathBuf {
 /// Reads the token in `path`, or creates the file with a new token if there is none.
 ///
 /// An existing file must hold a valid token (visible ASCII, after trimming whitespace)
-/// and, on Unix, must give group and others no permission at all. A new file is
-/// created atomically (it never replaces a file created meanwhile), user-only on Unix
-/// (mode 0600); on Windows it gets its directory's ACL. The token is registered with
-/// the crash reports' redaction.
+/// and must be user-only: on Unix it gives group and others no permission at all; on
+/// Windows its owner is the user, SYSTEM or Administrators and its DACL grants no one
+/// else real access (#344, `jstream_platform_windows::check_private_file`). A new file
+/// is created atomically (it never replaces a file created meanwhile) and user-only:
+/// mode 0600 on Unix, a protected DACL for SYSTEM and the user on Windows. The token is
+/// registered with the crash reports' redaction.
 pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
     // Drawn first, so a failing random source leaves no empty file behind.
     let token = new_token()?;
@@ -68,13 +70,19 @@ pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
     }
 }
 
-/// Opens a new file at `path`, failing with `AlreadyExists` if anything is there.
+/// Opens a new user-only file at `path`, failing with `AlreadyExists` if anything is
+/// there.
 fn create_new(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(path)
+    #[cfg(windows)]
+    return jstream_platform_windows::create_private_file(path);
+    #[cfg(not(windows))]
+    {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        options.open(path)
+    }
 }
 
 fn write_token(mut file: File, token: &str) -> io::Result<()> {
@@ -110,7 +118,17 @@ fn read_existing(path: &Path) -> anyhow::Result<Token> {
             );
         }
     }
-    let text = fs::read_to_string(path)
+    let mut file =
+        File::open(path).with_context(|| format!("could not read the token file `{shown}`"))?;
+    #[cfg(windows)]
+    if let Err(why) = jstream_platform_windows::check_private_file(&file) {
+        bail!(
+            "the token file `{shown}` may be accessible to other users: {why}; make it \
+             user-only or delete it to get a new token"
+        );
+    }
+    let mut text = String::new();
+    file.read_to_string(&mut text)
         .with_context(|| format!("could not read the token file `{shown}`"))?;
     let token = text.trim();
     if token.is_empty() {
@@ -218,6 +236,33 @@ mod tests {
         let missing_dir = dir.join("missing").join("token");
         let error = load_or_create(&missing_dir).expect_err("no parent directory");
         assert!(error.to_string().contains("could not create"), "{error}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// #344: a token file whose DACL lets everyone read it is refused, and one this
+    /// daemon created passes.
+    #[cfg(windows)]
+    #[test]
+    fn a_file_other_users_can_read_is_refused_on_windows() {
+        let dir = scratch("dacl");
+        let path = dir.join("token");
+        let (_, provenance) = load_or_create(&path).expect("created");
+        assert_eq!(provenance, Provenance::Created);
+        let (_, provenance) = load_or_create(&path).expect("its own DACL passes");
+        assert_eq!(provenance, Provenance::Existing);
+
+        // Everyone (S-1-1-0) may read it now.
+        let granted = std::process::Command::new("icacls")
+            .arg(&path)
+            .args(["/grant", "*S-1-1-0:R"])
+            .output()
+            .expect("icacls runs");
+        assert!(granted.status.success(), "{granted:?}");
+        let error = load_or_create(&path).expect_err("everyone can read it");
+        assert!(
+            error.to_string().contains("accessible to other users"),
+            "{error}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

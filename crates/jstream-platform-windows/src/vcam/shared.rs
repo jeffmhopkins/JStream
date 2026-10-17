@@ -50,13 +50,13 @@ impl Drop for Handle {
 }
 
 /// A `SECURITY_ATTRIBUTES` built from an SDDL string. Frees the descriptor on drop.
-pub(super) struct SecurityAttributes {
+pub(crate) struct SecurityAttributes {
     sd: PSECURITY_DESCRIPTOR,
     sa: SECURITY_ATTRIBUTES,
 }
 
 impl SecurityAttributes {
-    pub(super) fn from_sddl(sddl: &str) -> Result<Self, PlatformError> {
+    pub(crate) fn from_sddl(sddl: &str) -> Result<Self, PlatformError> {
         let mut sd = PSECURITY_DESCRIPTOR::default();
         // SAFETY: `sddl` is a valid wide string for the call; `sd` is a valid out-pointer,
         // freed with LocalFree on drop.
@@ -80,7 +80,7 @@ impl SecurityAttributes {
     }
 
     /// The attributes, valid while `self` lives.
-    pub(super) fn as_ptr(&self) -> *const SECURITY_ATTRIBUTES {
+    pub(crate) fn as_ptr(&self) -> *const SECURITY_ATTRIBUTES {
         &self.sa
     }
 }
@@ -173,7 +173,7 @@ impl Drop for Mapping {
 }
 
 /// This process's user SID as a string (`S-1-5-21-…`), for the contract's DACL.
-pub(super) fn user_sid() -> Result<String, PlatformError> {
+pub(crate) fn user_sid() -> Result<String, PlatformError> {
     let mut token = HANDLE::default();
     // SAFETY: `token` is a valid out-pointer; the pseudo-handle needs no closing.
     unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }
