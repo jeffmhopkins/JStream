@@ -30,8 +30,11 @@ use jstream_render::{Compositor, OpenOptions};
 
 use super::{GPU_OPEN_TIMEOUT, block_on, connected, one_gpu_test_at_a_time, output_call};
 use crate::audio_sources::Wanted;
-use crate::runtime::{DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from};
+use crate::runtime::{
+    DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from, start_capture,
+};
 use crate::{Engine, RecordingPublish};
+use jstream_sources::CaptureSpec;
 
 /// The colour every GPU capture frame is.
 const RED: [u8; 4] = [255, 0, 0, 255];
@@ -285,8 +288,8 @@ fn have_software_gpu() -> bool {
     }
 }
 
-/// Which path `open_capture` took: a platform context or not, and whether the first
-/// frame is on the GPU.
+/// Which path `open_capture` picked: a platform context or not, and whether the first
+/// frame of the primary display's capture is on the GPU.
 fn path(backends: &Backends) -> (bool, bool) {
     let parts = parts_from(
         backends,
@@ -296,12 +299,10 @@ fn path(backends: &Backends) -> (bool, bool) {
         Arc::new(Wanted::default()),
         (1280, 720),
     );
-    let mut opened = open_capture(&parts).expect("a capture starts on some path");
-    let frame = opened
-        .stream
-        .latest()
-        .expect("latest")
-        .expect("a first frame");
+    let opened = open_capture(&parts).expect("a capture path");
+    let mut stream = start_capture(&opened.backends, &CaptureSpec::Display(None))
+        .expect("a capture starts on some path");
+    let frame = stream.latest().expect("latest").expect("a first frame");
     (
         opened.context.is_some(),
         matches!(frame, VideoSurface::Gpu(_)),

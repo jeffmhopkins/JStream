@@ -114,8 +114,15 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
         let mut cache = ResourceCache::<GpuKey>::new();
         let draw: PreviewDraw = Box::new(move |shot, live, size, out| {
             cache.begin_frame();
-            let output =
-                snapshot::compose(&mut compositor, &mut cache, shot, live, None, size, true);
+            let output = snapshot::compose(
+                &mut compositor,
+                &mut cache,
+                shot,
+                live,
+                &snapshot::NoCaptures,
+                size,
+                true,
+            );
             drop(cache.end_frame(&compositor));
             let output = output.map_err(|err| err.to_string())?;
             let pixels = output

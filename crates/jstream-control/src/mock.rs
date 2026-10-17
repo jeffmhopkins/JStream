@@ -8,6 +8,7 @@
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
 //! stream-key actions, `scene.switch` and the program scene it sets (`studio.get`),
+//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`]),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -28,15 +29,15 @@ use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::KindDescriptor;
 use jstream_protocol::{
-    Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, Chord, ClientId, Crop, Edit,
-    EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32,
-    GeometryError, GestureId, GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding,
-    IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, LiveOutcome,
-    MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference,
-    RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
-    SecretString, Settings, SourceAudio, SourceId, SourceInfo, SourceKind, Welcome,
-    is_live_adjustable,
+    Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
+    CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
+    EncoderProfileInfo, EntityKind, Event, Finite32, GeometryError, GestureId, GestureInfo, Hello,
+    HistoryCall, HistoryDirection, HotkeyBinding, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
+    ItemTransform, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo,
+    OutputKind, OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo,
+    SourceKind, Welcome, is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -289,6 +290,10 @@ fn param_of(value: &Edit) -> Option<Param> {
         _ => None,
     }
 }
+
+/// The capture target ID of the one display the mock's `capture.targets` lists, a
+/// 1920×1080 primary display.
+pub const MOCK_DISPLAY: &str = "mock:display";
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
 /// says otherwise, as in the engine.
@@ -938,6 +943,18 @@ impl State {
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
                 encoders: self.collection.encoder_infos(),
+            },
+            Query::CaptureTargets => QueryResult::CaptureTargets {
+                targets: vec![CaptureTargetInfo {
+                    kind: CaptureTargetKind::Display,
+                    target: MOCK_DISPLAY.into(),
+                    name: "Mock display".into(),
+                    size: Some(PixelSize {
+                        width: 1920,
+                        height: 1080,
+                    }),
+                    primary: true,
+                }],
             },
             Query::LiveList => QueryResult::LiveList {
                 gestures: self
@@ -2733,6 +2750,19 @@ mod tests {
             source_id: SourceId::new("webcam_2"),
         });
         assert_eq!(batch(&*control, unplaced), Ok(Rev(2)));
+    }
+
+    #[test]
+    fn capture_targets_lists_one_primary_display() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let Ok(QueryResult::CaptureTargets { targets }) = query(&*control, Query::CaptureTargets)
+        else {
+            panic!("a capture.targets result");
+        };
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].target, super::MOCK_DISPLAY);
+        assert!(targets[0].primary);
     }
 
     fn query(control: &dyn Control, query: Query) -> Result<QueryResult, ControlError> {

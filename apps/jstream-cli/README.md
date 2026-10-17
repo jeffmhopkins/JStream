@@ -84,6 +84,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene list` | query `scene.list` |
 | `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
 | `studio get` | query `studio.get` (the scene on program) |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |

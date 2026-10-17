@@ -132,6 +132,13 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
+    /// Lists the displays and windows the engine can capture now: what a `display` or
+    /// `window` source's `target` setting can name. They are runtime state, not
+    /// collection state, so the result carries no `rev`, and a window closed since may
+    /// still be named by a source. Fails with `action_failed` when the engine has no
+    /// capture backend, or the OS refuses to list them.
+    #[serde(rename = "capture.targets")]
+    CaptureTargets,
     /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
     /// paired and was last used, never its token. Answered by the server that admits
     /// clients, not the engine: a `Control` with no server in front fails with
@@ -183,6 +190,7 @@ impl Query {
             Query::YoutubeListStreams { .. } => "youtube.list_streams",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::CaptureTargets => "capture.targets",
             Query::DeviceList => "device.list",
         }
     }
@@ -388,6 +396,12 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         hotkeys: Vec<HotkeyBinding>,
     },
+    /// The result of `capture.targets`.
+    #[serde(rename = "capture.targets")]
+    CaptureTargets {
+        /// The displays, then the windows, in the order the OS lists them.
+        targets: Vec<CaptureTargetInfo>,
+    },
     /// The result of `device.list`. Devices are not collection state, so it carries no
     /// `rev`.
     #[serde(rename = "device.list")]
@@ -418,6 +432,7 @@ impl QueryResult {
             QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::DeviceList { .. } => "device.list",
         }
     }
@@ -436,6 +451,44 @@ pub struct DeviceInfo {
     /// When its token was last presented, in seconds since the Unix epoch (UTC), to the
     /// hour. A token unused for 30 days lapses and the device is dropped.
     pub last_used_at: u64,
+}
+
+/// One display or window in a `capture.targets` result.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CaptureTargetInfo {
+    /// Whether it is a display or a window: the kind of source that captures it.
+    pub kind: CaptureTargetKind,
+    /// Its capture target ID, the value of that source's `target` setting.
+    pub target: String,
+    /// A name to show: the display's name or the window's title.
+    pub name: String,
+    /// Its size in pixels now, when the OS reports it without capturing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PixelSize>,
+    /// Whether it is the primary display, which a `display` source with an empty
+    /// `target` captures. Omitted when `false`, and always `false` for a window.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub primary: bool,
+}
+
+/// What a capture target is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum CaptureTargetKind {
+    /// A whole display, captured by a `display` source.
+    Display,
+    /// One top-level window, captured by a `window` source.
+    Window,
+}
+
+/// A size in whole pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PixelSize {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
 }
 
 /// One scene in a `scene.list` result.
