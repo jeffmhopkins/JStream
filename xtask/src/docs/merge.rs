@@ -104,9 +104,7 @@ fn git_ok(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
 /// conflicts, and commits the merge when nothing else conflicts. `branch` is `main`, or a
 /// `wave/*` branch for a PR into a wave.
 pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
-    if branch != BRANCH && !branch.strip_prefix("wave/").is_some_and(|w| !w.is_empty()) {
-        bail!("can only merge `{BRANCH}` or a `wave/<name>` branch, not `{branch}`");
-    }
+    check_branch(branch)?;
     if git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
         .status
         .success()
@@ -302,6 +300,24 @@ pub(crate) fn changed_after(
         }
     }
     Ok(out)
+}
+
+/// The ledger at the merge base of `HEAD` and `origin/<branch>` (`main`, or the `wave/*`
+/// branch a PR targets): the entries this branch didn't write are the ones equal to it.
+pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
+    check_branch(branch)?;
+    let upstream = format!("{REMOTE}/{branch}");
+    let base = git_ok(root, &["merge-base", "HEAD", &upstream])
+        .with_context(|| format!("finding where this branch left `{upstream}`"))?;
+    ledger_at(root, String::from_utf8_lossy(&base).trim())
+}
+
+/// Refuses any branch but `main` and `wave/<name>`.
+fn check_branch(branch: &str) -> Result<()> {
+    if branch != BRANCH && !branch.strip_prefix("wave/").is_some_and(|w| !w.is_empty()) {
+        bail!("can only merge `{BRANCH}` or a `wave/<name>` branch, not `{branch}`");
+    }
+    Ok(())
 }
 
 /// The ledger entries this branch had written itself before `point`'s merge: those of
