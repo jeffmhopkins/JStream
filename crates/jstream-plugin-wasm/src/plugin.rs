@@ -158,6 +158,8 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
         |mut caller: Caller<'_, HostState>, ptr: i32, len: i32| -> wasmtime::Result<i32> {
             let memory = memory(&mut caller)?;
             let len = offset(len);
+            // Charged before the size check, so an oversized call costs its length too.
+            charge(&mut caller, len)?;
             if len > abi::MAX_CALL_BYTES as usize {
                 let message = format!("a call is at most {} bytes", abi::MAX_CALL_BYTES);
                 caller.data_mut().result = message.into_bytes();
@@ -182,6 +184,8 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
         "result_read",
         |mut caller: Caller<'_, HostState>, ptr: i32| -> wasmtime::Result<()> {
             let memory = memory(&mut caller)?;
+            let bytes = caller.data().result.len();
+            charge(&mut caller, bytes)?;
             let (memory_data, state) = memory.data_and_store_mut(&mut caller);
             write(memory_data, offset(ptr), &state.result)
         },
@@ -198,6 +202,8 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
         "input_read",
         |mut caller: Caller<'_, HostState>, ptr: i32| -> wasmtime::Result<()> {
             let memory = memory(&mut caller)?;
+            let bytes = caller.data().input.len();
+            charge(&mut caller, bytes)?;
             let (memory_data, state) = memory.data_and_store_mut(&mut caller);
             write(memory_data, offset(ptr), &state.input)
         },
@@ -228,6 +234,23 @@ fn call(state: &HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
         }
     };
     encoded.unwrap_or_else(|e| (abi::STATUS_FAILED, e.to_string().into_bytes()))
+}
+
+/// The fuel a host call costs before its bytes, so a loop of empty calls still drains fuel.
+pub(crate) const HOST_CALL_FUEL: u64 = 1_000;
+
+/// Takes the fuel for host work on `bytes` bytes (copying them, and parsing a call) from
+/// the plugin's budget before doing it: [`HOST_CALL_FUEL`] plus one unit per byte. With
+/// too little left, the plugin stops with an out-of-fuel trap, so host work stays inside
+/// the plugin's budget like its own instructions.
+fn charge(caller: &mut Caller<'_, HostState>, bytes: usize) -> wasmtime::Result<()> {
+    let cost = HOST_CALL_FUEL.saturating_add(u64::try_from(bytes).unwrap_or(u64::MAX));
+    let left = caller.get_fuel()?;
+    if left < cost {
+        caller.set_fuel(0)?;
+        return Err(wasmtime::Trap::OutOfFuel.into());
+    }
+    caller.set_fuel(left - cost)
 }
 
 /// The plugin's exported memory.

@@ -37,7 +37,9 @@ wasn't granted:
 - **Limits** (`Limits`). Each invocation, and the module's `start` function at load, runs
   on a fuel budget, by default 10,000,000 units (one per WASM instruction, roughly);
   running out stops the plugin with `Error::OutOfFuel`, and the next invocation gets a
-  fresh budget. Linear memory is capped at 16 MiB and tables at 10,000 elements by
+  fresh budget. Host calls are charged to the same budget before the host does their
+  work: 1,000 units each plus one per byte the host copies or parses, so a plugin can't
+  spend host time its fuel doesn't cover. Linear memory is capped at 16 MiB and tables at 10,000 elements by
   default; `memory.grow` past the cap answers −1, and a module whose memory starts above
   it is refused. One instance, one memory and one table per plugin. The WASM stack is
   capped at 512 KiB for every plugin. A plugin's configuration can lower each limit,
@@ -80,7 +82,9 @@ Version 0, and **unstable**: no compatibility is promised for it until a later d
 fixes the ABI plugins are written against. `src/abi.rs` holds its constants.
 
 A plugin exports its linear memory as `memory`. Pointers and lengths are `i32`s read as
-unsigned offsets into it; a pointer or length outside it traps the plugin. It may import
+unsigned offsets into it; a pointer or length outside it traps the plugin. `call`,
+`result_read` and `input_read` take fuel for the bytes they handle before handling them
+(see Limits above); with too little left, the plugin stops out of fuel. It may import
 only these functions, from the module `jstream`:
 
 | Import | Type | Does |

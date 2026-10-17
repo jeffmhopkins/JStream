@@ -165,6 +165,36 @@ fn a_plugin_that_runs_out_of_fuel_is_stopped() {
 }
 
 #[test]
+fn host_calls_are_charged_by_size() {
+    // A plugin with no grants loops on a 1 MiB call that is all whitespace: malformed,
+    // so no grant is consulted, but each one makes the host copy and parse 1 MiB. The
+    // host charges those bytes to the plugin's fuel, so a small budget ends it after a
+    // few calls instead of letting it run on host time.
+    let wat = format!(
+        r#"(module
+            (import "jstream" "call" (func $call (param i32 i32) (result i32)))
+            (memory (export "memory") 17)
+            (data (i32.const 0) "{spaces}")
+            (func (export "flood")
+                (loop $again
+                    (drop (call $call (i32.const 0) (i32.const {len})))
+                    (br $again))))"#,
+        spaces = " ".repeat(abi::MAX_CALL_BYTES as usize),
+        len = abi::MAX_CALL_BYTES,
+    );
+    let config = PluginConfig {
+        limits: Limits::default().with_fuel(5 * u64::from(abi::MAX_CALL_BYTES)),
+        ..PluginConfig::default()
+    };
+    let (plugin, fake) = load(&wat, config);
+    let mut plugin = plugin.expect("the plugin loads");
+    let started = std::time::Instant::now();
+    assert!(matches!(plugin.invoke("flood", &[]), Err(Error::OutOfFuel)));
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert!(fake.calls().is_empty());
+}
+
+#[test]
 fn the_default_fuel_stops_an_endless_loop() {
     let wat = r#"(module
         (memory (export "memory") 1)
