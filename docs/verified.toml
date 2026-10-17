@@ -1671,7 +1671,7 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:79c52e0bc8185aad", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): edited the Browser sources bullet: pages paint on the app's media-adapter device until a program stage runs, then on the stage's context the engine lends (Engine::use_gpu), so the mix draws them, taken back at stop; browser.rs comment matches; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/crash.rs"]
-stamp = { hash = "b3:31d099f8bb6966b0", by = "agent:claude-ui-features", note = "crash.rs: ported #588's one-word doc fix, so the module doc names Redacting as plain code since the struct is cfg(any(windows, test)) and the link broke the Linux doc build; the crash report behaviour this section describes is unchanged" }
+stamp = { hash = "b3:31d099f8bb6966b0", by = "agent:wave-owner", note = "crash.rs: only the module doc's link to Redacting became plain code (Redacting is cfg(any(windows, test)), so the intra-doc link broke cargo doc on Linux); the Crash reports bullet (redacting store, digests, newest reports kept) still matches the code" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:d50eefc191f0f160", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
@@ -1713,7 +1713,7 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:79c52e0bc8185aad", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): browser.rs changed only in its comment on the device it opens (now: covers paints before a program stage, the stage lends its own context); Purpose's browser-sources bullet says only which backend is used; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/crash.rs"]
-stamp = { hash = "b3:31d099f8bb6966b0", by = "agent:claude-ui-features", note = "crash.rs: ported #588's one-word doc fix, so the module doc names Redacting as plain code since the struct is cfg(any(windows, test)) and the link broke the Linux doc build; the crash report behaviour this section describes is unchanged" }
+stamp = { hash = "b3:31d099f8bb6966b0", by = "agent:wave-owner", note = "crash.rs: only the module doc's link to Redacting became plain code, because Redacting is cfg(any(windows, test)) and the link broke cargo doc on Linux; no code change, the purpose's crash-report text holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:d50eefc191f0f160", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
@@ -4425,7 +4425,7 @@ stamp = { hash = "b3:02ea30ce2c05572c", by = "agent:claude@session_011UbbWjsiKSN
 stamp = { hash = "b3:86aeb141ef21d07c", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "panels/scenes.rs: rows with a Program badge and a hover Program button, up/down reorder buttons, double-click rename, delete and the New scene name field (SC-02, SC-04, SC-05 partial; SC-10 cut button); folders, labels and keyframes are B11 #323 and K1 as noted. | merge: Merge of wave/m1-3 (T1 transitions, video mixes, master stage at 0.30) into B11; SC-04/06/08/09 notes name the organisation edits and ADR-0064; SC-10 keeps the wave's studio-mode note; holds" }
 
 ["UI-FEATURES#summary"."body"]
-stamp = { hash = "b3:099f92860f39bd0c", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script: 130 rows, 17 built, 25 partial, 45 to build, 42 need the engine, 1 decision." }
+stamp = { hash = "b3:29533814af8556a7", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script: 130 rows, 17 built, 25 partial, 45 to build, 42 need the engine, 1 decision. | merge: #495's wave/m1-3 merge brings #323 (B11), which moves SC-06, SC-08 and SC-09 from engine-blocked to to-build; recounted every area by script: 130 rows, 17 built, 25 partial, 48 to build, 39 need the engine, 1 decision" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
 stamp = { hash = "b3:d53760a9084615ed", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script: 130 rows, 7 built, 23 partial, 56 to build, 43 need the engine, 1 decision." }
