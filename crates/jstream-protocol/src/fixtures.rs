@@ -562,7 +562,14 @@ fn encoder_infos() -> Vec<EncoderProfileInfo> {
         EncoderProfileInfo {
             profile_id: EncoderProfileId::new("enc_stream"),
             name: "Stream".into(),
-            profile: EncoderProfile::DEFAULT,
+            // The default on the software encoder, so a fixture uses `avoid`.
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    hardware: HardwarePreference::Avoid,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
         },
     ]
 }

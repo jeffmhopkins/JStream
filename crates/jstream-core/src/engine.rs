@@ -18,6 +18,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
@@ -32,7 +33,7 @@ use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
 use jstream_platform::{
-    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, Secret, StreamKeyStore,
+    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, Secret, StreamKeyStore,
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
@@ -187,6 +188,20 @@ impl Engine {
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
         self
+    }
+
+    /// Scans the CLAP search directories with `hosts` (ADR-0035) and adds each audio
+    /// effect found to `kind.list` and `kind.describe` as an audio-filter kind,
+    /// `clap/<plugin id>`, with the plugin's parameters as its settings. A kind an
+    /// earlier scan found stays. Each plugin file is scanned in its own host process, so
+    /// this can take seconds: call it from a worker thread. The engine's locks are held
+    /// only to add the kinds, after the scan.
+    pub fn scan_clap_plugins(&self, hosts: &dyn PluginHosts) -> ClapScan {
+        let scan = clap_kinds::scan(hosts);
+        let mut state = lock(&self.shared.state);
+        state.graph = std::mem::take(&mut state.graph)
+            .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+        scan
     }
 
     /// Gives the engine YouTube (ADR-0058): a Google OAuth client, the HTTPS transport
@@ -2263,7 +2278,9 @@ impl State {
     ///
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
-    /// comes first, so a retry succeeds even after `rev` moved on.
+    /// comes first, so a retry succeeds even after `rev` moved on. An `ends_gesture` the
+    /// client has no open gesture for is refused next, as the mock does, and then a
+    /// `filter.add` of a scanned CLAP kind, since nothing runs CLAP filters yet.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -2286,6 +2303,7 @@ impl State {
                 format!("the client has no open gesture `{gesture_id}`"),
             ));
         }
+        clap_kinds::refuse_filters(&batch.edits)?;
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,

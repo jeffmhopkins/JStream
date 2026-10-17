@@ -33,7 +33,8 @@ state machine. Contents:
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`;
+  `youtube_chat` preset open pages in) and `with_collection_file`; `scan_clap_plugins`
+  adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -75,6 +76,37 @@ state machine. Contents:
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
   `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
   master's or an output tap's filters in line with its owner's audio chain.
+- **CLAP plugins** (`plugins/`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)):
+  - `Engine::scan_clap_plugins(&dyn PluginHosts)` scans the CLAP search directories
+    (recursively, for `.clap` entries, each scanned in its own host process) and adds
+    every audio effect found to the graph's kinds as an audio-filter kind,
+    `clap/<plugin id>` (`CLAP_KIND_PREFIX`), so `kind.list` and `kind.describe` report
+    it. Its settings are the plugin's parameters, by CLAP id in decimal, all live: a
+    stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
+    read-only and bypass parameters and ones without a finite range are left out. When
+    two files offer one plugin id, the first found wins. The scan returns a `ClapScan`
+    with each kind's file and plugin id, and the files that failed. Kinds stay until
+    the engine ends. It is slow, so a host calls it on a worker thread; the engine's
+    lock is held only to add the kinds.
+  - `HostSupervisor` keeps one CLAP filter instance's host process running, on a
+    control thread, driven by `tick(now)`, which returns `HostEvent`s. A host is
+    `Ready` (with its block and latency) once its block says so. One that exits, isn't
+    ready within `start_timeout` (it may load the plugin without beating until then),
+    or, once ready, stops its heartbeat for `LIVENESS_MS` has `Crashed`: it is killed and restarted after a wait that doubles from `first_retry`
+    up to `max_retry`. After `max_crashes` crashes with no stable run (`stable_after`)
+    between them, or at once when the host marks a failure a restart can't fix (load,
+    not an effect, activate, configuration), it is `Disabled` until `enable`. The
+    supervisor asks for the plugin's state whenever the plugin marks it changed, keeps
+    the latest (`saved_state`, `StateSaved`) and restarts with it. A run of
+    `degraded_after` consecutive late blocks in the mixer is `Degraded`, and its end
+    `Recovered`. `stop` asks the host to stop and kills it after `STOP_GRACE`.
+  - **Not yet:** running a CLAP filter. The engine refuses a `filter.add` of a `clap/`
+    kind (`invalid_argument` on its `kind`), since nothing would run it: the mixer's
+    filter chain skips every kind that isn't a built-in audio filter. A collection
+    holding one also wouldn't load at the next start, because the file is read before
+    the scan describes the kind. So nothing hosts a CLAP filter, keeps its saved state,
+    runs a supervisor or reports its events. Also not yet: the plugin's editor, and
+    rescanning.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -181,7 +213,7 @@ state machine. Contents:
   limits, takeover, a deleted item, coalesced `live.changed`) and a live value drawn
   over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
-  `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
+  `video.snapshot` on whatever adapter opens (the software one in CI), nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
@@ -205,7 +237,7 @@ state machine. Contents:
   display and a window that each start a WGC capture (`src/tests/windows_gpu.rs`,
   behind `hw-tests` and ignored), the
   pipeline against the platform fakes
-  (on the software adapter, and again on a CPU stand-in for the compositor so the
+  (on whatever adapter opens, the software one in CI, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss, stalled-stop and
   blocked-send stop tests, and the final tick's count of what a blocked send leaves
   queued, run without one),
@@ -348,10 +380,11 @@ the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its d
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
-descriptors and the sources that draw them), `jstream-youtube` (Google sign-in and the
+descriptors and the sources that draw them), `jstream-plugin-proto` (the CLAP host
+supervisor's block and control messages), `jstream-youtube` (Google sign-in and the
 Live API client behind the YouTube commands and `youtube` outputs), `serde_json` (settings
-values: the audio filter kinds' defaults and what the mixer kernels read from a filter's
-settings), `png`
+values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
+settings, and the CLAP kinds' parameter defaults), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
@@ -361,10 +394,10 @@ and `tracing` (see *Logging*). No async runtime: `output.start` blocks the call 
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`), `jstream-youtube`'s `fake` feature (`src/tests/youtube.rs`),
-`jstream-browser`'s `fake` feature (the browser pages in `src/tests/audio.rs`),
-`zune-jpeg` (decoding the preview's JPEG pictures in tests), `jstream-mcp`
-(`tests/mcp.rs`) and, on Windows,
+`tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
+(`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
+`src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
+`jstream-mcp` (`tests/mcp.rs`) and, on Windows,
 `jstream-platform-windows` (the GPU capture hardware test, `src/tests/windows_gpu.rs`,
 compiled only with this crate's `hw-tests` feature); the tests also use `serde_json`
 for settings values and saved collection files. All of them
@@ -391,8 +424,10 @@ dropped any threads it opened, then settles `stopped`. The start answers
 `action_failed` and does not settle `active`. Once the pipeline is `active`, stop
 takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
 
-- **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule:
-  `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
+- **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule
+  (except, until CLAP filters run, the engine's own refusal of a `clap/` `filter.add`,
+  `invalid_argument` on its `kind`, checked before the graph and so before
+  `expected_rev`): `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
   edits in order on a working copy, the first failure aborting with `not_found`,
   `already_exists` or `invalid_argument` (`edits.<n>.<field>`) and nothing applied; on
   success `rev` goes up by exactly one, and the batch result lists the hotkey bindings
@@ -408,7 +443,7 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   same `Graph::apply_with_running` (see *Undo and redo*).
 - **Queries** that read the collection, and the kind queries, go to `Graph::query`,
   `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
-  kinds the engine gave it (`kinds.rs`). `output.status` reads the outputs' runtime state
+  kinds the engine gave it (`kinds.rs`), and the CLAP filter kinds a scan added. `output.status` reads the outputs' runtime state
   (`not_found` for an unknown one) and fills `key_set` from the key store after the
   collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
@@ -793,8 +828,8 @@ or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
 snapshot. It owns the compositor, serves requests in order, and stops when the
-engine goes away. The compositor opens on the first snapshot, software adapter first
-(`OpenOptions::headless`: lavapipe or WARP). No adapter is `internal`, and the reason
+engine goes away. The compositor opens on the first snapshot, hardware adapter first,
+with lavapipe or WARP as the fallback (`OpenOptions::hardware`). No adapter is `internal`, and the reason
 starts with `no wgpu adapter`. A failed open is cached: until its retry time,
 snapshots answer that error at once instead of probing adapters again. The first
 retry is 5 s after the failure, and each failure in a row doubles the wait, up to
@@ -821,8 +856,9 @@ number the client chose, and they end with `preview.unsubscribe` or the session.
 The codec is picked when the client subscribes: the first of its `codecs` the engine
 can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
 JPEG always. One `jstream-preview` thread per engine, started by the first stream and
-gone once none is left, serves them all. It owns a compositor (`Compositor::open`
-headless, or the CPU stand-in under `with_cpu_compositor`) and keeps each stream's
+gone once none is left, serves them all. It owns a compositor (`Compositor::open`,
+hardware adapter first with the software one as the fallback, or the CPU stand-in
+under `with_cpu_compositor`) and keeps each stream's
 encoder and pacing to itself, so the stream its session holds is only flags. On each
 pass it loads the published render snapshot and `rev` and the live values on the
 render parameter channel (a brief collection lock, never held while drawing), and for
@@ -1135,7 +1171,8 @@ takes the publish target, records an in-flight generation, emits `starting`, and
 drops the collection lock before it opens devices or joins anything. When no other
 output is running it opens the program stage and waits,
 up to 10 s, for the render thread to open its compositor (on the platform's GPU
-context, or on the software adapter without one; see [Runtime](#runtime)); that bound only
+context, or without one on a hardware adapter first and the software adapter as the
+fallback; see [Runtime](#runtime)); that bound only
 keeps a stuck adapter from blocking the call, and the GPU tests raise it because
 lavapipe can open slower than that on a loaded CI runner. When others are running it shares
 theirs. It then gets the encoder session for its key (opening one if no running
@@ -1248,7 +1285,10 @@ The render thread reads the capture mailbox of each capture the render snapshot 
 (see [Runtime](#runtime)), composites the program mix of the render snapshot (see
 *Snapshots*) at 30 frames per second, repeats a capture's last frame when its mailbox
 is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. It draws at the canvas size the collection has when the
+cut has no GPU encode target. Without the platform's GPU context it opens its
+compositor on a hardware adapter when the machine has one, and on the software adapter
+otherwise (`OpenOptions::hardware`): on WARP a 720p program ran at about 10 fps
+(#433). It draws at the canvas size the collection has when the
 program stage opens, rounded down to even sizes for NV12 (`output_size`), so every
 output encodes at the canvas, not the display (#433); a canvas change while outputs
 run takes effect when the stage next opens. Each capture keeps its own size, and the
@@ -1558,8 +1598,8 @@ platform's `GpuInterop` for its device. With one, the render thread's compositor
 the render thread samples where they are, with no CPU copy, and counts
 (`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
-opens its own device, software adapter first), a backend with no GPU path or one that
-refuses the context, and a GPU capture that does not start (that capture then runs on
+opens its own device, hardware adapter first with the software one as the fallback), a
+backend with no GPU path or one that refuses the context, and a GPU capture that does not start (that capture then runs on
 CPU frames). With a context, the stage also lends it to the browser engine, so
 `browser` pages paint on it and the render thread samples them there too (*Live
 sources* in Design); the stage takes it back first when it stops, and on a failed
