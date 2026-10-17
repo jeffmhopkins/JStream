@@ -750,9 +750,18 @@ pub(crate) fn auth_external(uid: u32) -> Vec<u8> {
     line
 }
 
-/// The match rule for signal `interface.member`.
-pub(crate) fn match_rule(interface: &str, member: &str) -> String {
-    format!("type='signal',interface='{interface}',member='{member}'")
+/// The match rule for signal `interface.member` from `sender` (a well-known name,
+/// which the bus resolves to its owner, or a unique name).
+pub(crate) fn match_rule(sender: &str, interface: &str, member: &str) -> String {
+    format!("type='signal',sender='{sender}',interface='{interface}',member='{member}'")
+}
+
+/// Whether `msg` is the reply to call `serial`, from `sender` when one is expected.
+/// A reply from anyone else is not the callee's.
+pub(crate) fn is_reply(msg: &Message, serial: u32, sender: Option<&str>) -> bool {
+    matches!(msg.kind, Kind::Return | Kind::Error)
+        && msg.reply_serial == Some(serial)
+        && sender.is_none_or(|s| msg.sender.as_deref() == Some(s))
 }
 
 /// The bus's `AddMatch` call for `rule`, so matching signals are delivered.
@@ -811,7 +820,7 @@ fn unescape(s: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Kind, Message, SocketAddr, Value, add_match, auth_external, lookup, match_rule,
+        Kind, Message, SocketAddr, Value, add_match, auth_external, is_reply, lookup, match_rule,
         parse_address, split_type,
     };
 
@@ -977,13 +986,45 @@ mod tests {
     fn auth_and_match_lines() {
         assert_eq!(auth_external(1000), b"\0AUTH EXTERNAL 31303030\r\n");
         assert_eq!(
-            match_rule("org.freedesktop.portal.Request", "Response"),
-            "type='signal',interface='org.freedesktop.portal.Request',member='Response'"
+            match_rule(
+                "org.freedesktop.portal.Desktop",
+                "org.freedesktop.portal.Request",
+                "Response"
+            ),
+            "type='signal',sender='org.freedesktop.portal.Desktop',\
+             interface='org.freedesktop.portal.Request',member='Response'"
         );
         let add = add_match("type='signal'");
         assert_eq!(add.destination.as_deref(), Some("org.freedesktop.DBus"));
         assert_eq!(add.member.as_deref(), Some("AddMatch"));
         assert_eq!(add.body, vec![Value::Str("type='signal'".into())]);
+    }
+
+    #[test]
+    fn replies_match_serial_kind_and_sender() {
+        let reply = Message {
+            kind: Kind::Return,
+            reply_serial: Some(4),
+            sender: Some(":1.3".into()),
+            ..Message::call("d", "/p", "i.f", "m", vec![])
+        };
+        assert!(is_reply(&reply, 4, Some(":1.3")));
+        assert!(is_reply(&reply, 4, None));
+        assert!(!is_reply(&reply, 5, Some(":1.3")), "another call's reply");
+        assert!(
+            !is_reply(&reply, 4, Some(":1.9")),
+            "a reply from someone else"
+        );
+        let error = Message {
+            kind: Kind::Error,
+            ..reply.clone()
+        };
+        assert!(is_reply(&error, 4, Some(":1.3")));
+        let signal = Message {
+            kind: Kind::Signal,
+            ..reply
+        };
+        assert!(!is_reply(&signal, 4, None), "a signal is never a reply");
     }
 
     #[test]

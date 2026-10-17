@@ -14,7 +14,12 @@ use std::time::{Duration, Instant};
 
 use jstream_platform::PlatformError;
 
-use super::{Kind, MAX_MESSAGE, Message, SocketAddr, Value, auth_external, parse_address};
+use super::{
+    Kind, MAX_MESSAGE, Message, SocketAddr, Value, auth_external, is_reply, parse_address,
+};
+
+/// The bus daemon's own name, the sender of its replies and signals.
+pub(crate) const BUS: &str = "org.freedesktop.DBus";
 
 /// File descriptors accepted per `recvmsg`. The portal sends one.
 const MAX_FDS: usize = 8;
@@ -100,6 +105,7 @@ impl Bus {
                 "Hello",
                 Vec::new(),
             ),
+            Some(BUS),
             "org.freedesktop.DBus.Hello",
             Duration::from_secs(5),
         )?;
@@ -195,14 +201,17 @@ impl Bus {
         Ok(self.serial)
     }
 
-    /// Calls a method and waits up to `timeout` for its reply. An error reply is an
-    /// error named `what`; a missing service is a missing component.
+    /// Calls a method and waits up to `timeout` for its reply, which must come from
+    /// `from` (the callee's unique name, or `org.freedesktop.DBus` for the bus itself)
+    /// when it is given: a reply from any other connection is dropped. An error reply
+    /// is an error named `what`; a missing service is a missing component.
     ///
     /// # Errors
     /// As described, and [`PlatformError::Os`] on a timeout or a broken connection.
     pub(crate) fn call(
         &mut self,
         msg: Message,
+        from: Option<&str>,
         what: &'static str,
         timeout: Duration,
     ) -> Result<Received, PlatformError> {
@@ -212,12 +221,18 @@ impl Bus {
             if let Some(i) = self
                 .queue
                 .iter()
-                .position(|r| r.msg.reply_serial == Some(serial))
+                .position(|r| is_reply(&r.msg, serial, from))
             {
                 let reply = self.queue.remove(i).ok_or_else(|| timed_out(what))?;
                 return check_reply(reply, what);
             }
             let got = self.receive(deadline)?.ok_or_else(|| timed_out(what))?;
+            if got.msg.reply_serial == Some(serial) && !is_reply(&got.msg, serial, from) {
+                continue; // Claims to answer this call, but not from the callee.
+            }
+            if self.queue.len() >= 64 {
+                self.queue.pop_front();
+            }
             self.queue.push_back(got);
         }
     }
@@ -331,6 +346,7 @@ fn check_reply(reply: Received, what: &'static str) -> Result<Received, Platform
         .and_then(Value::as_str)
         .unwrap_or_default();
     if name == "org.freedesktop.DBus.Error.ServiceUnknown"
+        || name == "org.freedesktop.DBus.Error.NameHasNoOwner"
         || name == "org.freedesktop.DBus.Error.UnknownMethod"
     {
         return Err(PlatformError::MissingComponent {
@@ -475,7 +491,7 @@ mod tests {
 mod hw_tests {
     use std::time::Duration;
 
-    use super::Bus;
+    use super::{BUS, Bus};
     use crate::dbus::{Message, Value, add_match, match_rule};
 
     fn bus_call(member: &str) -> Message {
@@ -494,18 +510,28 @@ mod hw_tests {
         let mut bus = Bus::session().expect("a session bus");
         assert!(bus.unique_name().starts_with(':'), "{}", bus.unique_name());
         let t = Duration::from_secs(5);
-        let id = bus.call(bus_call("GetId"), "GetId", t).expect("an ID");
+        let id = bus
+            .call(bus_call("GetId"), Some(BUS), "GetId", t)
+            .expect("an ID");
         assert!(matches!(id.msg.body.as_slice(), [Value::Str(s)] if s.len() == 32));
         let names = bus
-            .call(bus_call("ListNames"), "ListNames", t)
+            .call(bus_call("ListNames"), Some(BUS), "ListNames", t)
             .expect("names");
         let [Value::Array(elem, names)] = names.msg.body.as_slice() else {
             panic!("expected as, got {:?}", names.msg.body);
         };
         assert_eq!(elem, "s");
         assert!(names.contains(&Value::Str(bus.unique_name().to_owned())));
-        let rule = match_rule("org.freedesktop.portal.Request", "Response");
-        bus.call(add_match(&rule), "AddMatch", t).expect("a match");
+        let rule = match_rule(BUS, "org.freedesktop.portal.Request", "Response");
+        bus.call(add_match(&rule), Some(BUS), "AddMatch", t)
+            .expect("a match");
+        // A reply must come from the callee: the bus's reply to GetId isn't from a
+        // made-up unique name, so the call times out rather than taking it.
+        let quick = Duration::from_millis(300);
+        assert!(
+            bus.call(bus_call("GetId"), Some(":1.9999"), "GetId", quick)
+                .is_err()
+        );
         let missing = Message::call(
             "org.jstream.NoSuchService",
             "/",
@@ -514,7 +540,7 @@ mod hw_tests {
             Vec::new(),
         );
         assert!(
-            bus.call(missing, "Y", t).is_err(),
+            bus.call(missing, None, "Y", t).is_err(),
             "an error reply is an error"
         );
     }

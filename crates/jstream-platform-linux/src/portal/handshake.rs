@@ -156,6 +156,8 @@ pub(crate) struct Handshake {
     pick: PortalPick,
     info: PortalInfo,
     unique_name: String,
+    /// The portal's unique bus name, the only sender whose signals count.
+    portal: String,
     restore_token: Option<String>,
     /// Counts handle tokens, so each request's is fresh.
     tokens: u64,
@@ -177,8 +179,10 @@ fn bad_reply(what: &'static str, why: &str) -> PlatformError {
 }
 
 impl Handshake {
-    /// A handshake for `pick`, on the connection named `unique_name`, reusing
-    /// `restore_token` when the portal supports tokens.
+    /// A handshake for `pick`, on the connection named `unique_name`, with the portal
+    /// whose unique bus name is `portal` (the owner of [`DESTINATION`]), reusing
+    /// `restore_token` when the portal supports tokens. Only signals that `portal` sent
+    /// are accepted: any other connection on the session bus could send a `Response`.
     ///
     /// # Errors
     /// [`PlatformError::Unsupported`] when the portal can't capture that kind of source.
@@ -186,6 +190,7 @@ impl Handshake {
         pick: PortalPick,
         info: PortalInfo,
         unique_name: &str,
+        portal: &str,
         restore_token: Option<String>,
     ) -> Result<Self, PlatformError> {
         if !info.source_types.contains(pick.source_types()) {
@@ -201,6 +206,7 @@ impl Handshake {
             pick,
             info,
             unique_name: unique_name.to_owned(),
+            portal: portal.to_owned(),
             restore_token: restore_token.filter(|_| info.version >= PERSIST_VERSION),
             tokens: 0,
             expected: Vec::new(),
@@ -323,10 +329,17 @@ impl Handshake {
         }
     }
 
-    /// Whether `msg` is the `Response` to the current step's request.
+    /// Whether `msg` is the `Response` to the current step's request, sent by the
+    /// portal.
     pub(crate) fn is_response(&self, msg: &Message) -> bool {
         msg.is_signal(REQUEST, "Response")
+            && msg.sender.as_deref() == Some(self.portal.as_str())
             && msg.path.as_ref().is_some_and(|p| self.expected.contains(p))
+    }
+
+    /// The portal's unique bus name.
+    pub(crate) fn portal(&self) -> &str {
+        &self.portal
     }
 
     /// Takes the current step's `Response` signal and moves on.
@@ -428,10 +441,23 @@ pub(crate) fn close_session(session: &str) -> Message {
     msg
 }
 
-/// Whether `msg` is the portal closing `session` (the user stopped sharing, or the
-/// grant was revoked).
-pub(crate) fn is_session_closed(msg: &Message, session: &str) -> bool {
-    msg.is_signal(SESSION, "Closed") && msg.path.as_deref() == Some(session)
+/// Whether `msg` is the portal (unique bus name `portal`) closing `session`: the user
+/// stopped sharing, or the grant was revoked. Another sender's `Closed` is ignored.
+pub(crate) fn is_session_closed(msg: &Message, session: &str, portal: &str) -> bool {
+    msg.is_signal(SESSION, "Closed")
+        && msg.sender.as_deref() == Some(portal)
+        && msg.path.as_deref() == Some(session)
+}
+
+/// The `GetNameOwner` call that finds the portal's unique bus name.
+pub(crate) fn portal_owner_query() -> Message {
+    Message::call(
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        "org.freedesktop.DBus",
+        "GetNameOwner",
+        vec![Value::Str(DESTINATION.into())],
+    )
 }
 
 /// Parses `Start`'s `streams`: `a(ua{sv})`.
@@ -473,12 +499,14 @@ fn parse_streams(v: &Value) -> Result<Vec<PortalStream>, PlatformError> {
 mod tests {
     use super::{
         Granted, Handshake, Next, PICKER, PortalInfo, PortalStream, QUICK, close_session,
-        cursor_mode_for_cpu_frames, is_session_closed,
+        cursor_mode_for_cpu_frames, is_session_closed, portal_owner_query,
     };
     use crate::dbus::{Kind, Message, Value, lookup};
     use crate::portal::{CursorModes, PortalPick, SourceTypes};
 
     const ME: &str = ":1.42";
+    /// The portal's unique name, the sender of its signals.
+    const PORTAL: &str = ":1.3";
 
     fn info(version: u32) -> PortalInfo {
         PortalInfo {
@@ -499,7 +527,7 @@ mod tests {
             error_name: None,
             reply_serial: None,
             destination: Some(ME.into()),
-            sender: Some(":1.3".into()),
+            sender: Some(PORTAL.into()),
             unix_fds: 0,
             body: vec![Value::U32(code), Value::dict(results)],
         }
@@ -533,8 +561,8 @@ mod tests {
 
     #[test]
     fn the_whole_flow_with_a_restore_token() {
-        let mut h =
-            Handshake::new(PortalPick::Display, info(5), ME, Some("old".into())).expect("new");
+        let mut h = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, Some("old".into()))
+            .expect("new");
 
         let (create, timeout) = request(&mut h);
         assert_eq!(create.member.as_deref(), Some("CreateSession"));
@@ -548,6 +576,13 @@ mod tests {
         let path1 = "/org/freedesktop/portal/desktop/request/1_42/jstream_1";
         assert!(h.is_response(&signal(path1, 0, vec![])));
         assert!(!h.is_response(&signal("/elsewhere", 0, vec![])));
+        // The same Response from another connection on the bus is not the portal's.
+        let forged = Message {
+            sender: Some(":1.99".into()),
+            ..signal(path1, 0, vec![])
+        };
+        assert!(!h.is_response(&forged), "a forged sender is refused");
+        assert_eq!(h.portal(), PORTAL);
         h.on_response(&signal(
             path1,
             0,
@@ -630,8 +665,8 @@ mod tests {
 
     #[test]
     fn older_portals_get_only_the_options_they_know() {
-        let mut h =
-            Handshake::new(PortalPick::Window, info(1), ME, Some("old".into())).expect("new");
+        let mut h = Handshake::new(PortalPick::Window, info(1), ME, PORTAL, Some("old".into()))
+            .expect("new");
         let (_, _) = request(&mut h);
         h.on_response(&signal(
             "/org/freedesktop/portal/desktop/request/1_42/jstream_1",
@@ -649,7 +684,7 @@ mod tests {
     #[test]
     fn cancelling_and_failures_are_errors() {
         let path1 = "/org/freedesktop/portal/desktop/request/1_42/jstream_1";
-        let mut h = Handshake::new(PortalPick::Display, info(5), ME, None).expect("new");
+        let mut h = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None).expect("new");
         let _ = request(&mut h);
         let err = h
             .on_response(&signal(path1, 1, vec![]))
@@ -659,11 +694,11 @@ mod tests {
             jstream_platform::PlatformError::Os { code: Some(1), .. }
         ));
 
-        let mut h = Handshake::new(PortalPick::Display, info(5), ME, None).expect("new");
+        let mut h = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None).expect("new");
         let _ = request(&mut h);
         assert!(h.on_response(&signal(path1, 2, vec![])).is_err());
 
-        let mut h = Handshake::new(PortalPick::Display, info(5), ME, None).expect("new");
+        let mut h = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None).expect("new");
         let _ = request(&mut h);
         assert!(
             h.on_response(&signal(path1, 0, vec![])).is_err(),
@@ -675,15 +710,16 @@ mod tests {
             source_types: SourceTypes::MONITOR,
             ..info(5)
         };
-        assert!(Handshake::new(PortalPick::Window, monitors, ME, None).is_err());
+        assert!(Handshake::new(PortalPick::Window, monitors, ME, PORTAL, None).is_err());
         // An unusable unique name fails at the first token.
-        let mut h = Handshake::new(PortalPick::Display, info(5), "bogus", None).expect("new");
+        let mut h =
+            Handshake::new(PortalPick::Display, info(5), "bogus", PORTAL, None).expect("new");
         assert!(h.next().is_err());
     }
 
     #[test]
     fn a_start_without_streams_is_an_error() {
-        let mut h = Handshake::new(PortalPick::Display, info(5), ME, None).expect("new");
+        let mut h = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None).expect("new");
         let _ = request(&mut h);
         h.on_response(&signal(
             "/org/freedesktop/portal/desktop/request/1_42/jstream_1",
@@ -747,10 +783,29 @@ mod tests {
             kind: Kind::Signal,
             interface: Some("org.freedesktop.portal.Session".into()),
             member: Some("Closed".into()),
+            sender: Some(PORTAL.into()),
             ..Message::call("x", SESSION, "i", "m", vec![Value::dict(vec![])])
         };
-        assert!(is_session_closed(&closed, SESSION));
-        assert!(!is_session_closed(&closed, "/other"));
+        assert!(is_session_closed(&closed, SESSION, PORTAL));
+        assert!(!is_session_closed(&closed, "/other", PORTAL));
+        // Another connection on the bus can't end the capture.
+        let forged = Message {
+            sender: Some(":1.99".into()),
+            ..closed.clone()
+        };
+        assert!(!is_session_closed(&forged, SESSION, PORTAL));
+        let unsent = Message {
+            sender: None,
+            ..closed
+        };
+        assert!(!is_session_closed(&unsent, SESSION, PORTAL));
+
+        let owner = portal_owner_query();
+        assert_eq!(owner.member.as_deref(), Some("GetNameOwner"));
+        assert_eq!(
+            owner.body,
+            vec![Value::Str("org.freedesktop.portal.Desktop".into())]
+        );
         let _ = lookup;
     }
 }
