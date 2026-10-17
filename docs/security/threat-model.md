@@ -187,7 +187,8 @@ makes Windows contact a remote host.
 - Image formats are sniffed from their bytes; each decoder has a memory limit; files are
   capped at 256 MiB, 16384 pixels a side and 1 GiB decoded. The image and font
   decoders are memory-safe Rust.
-- Recordings must be absolute paths without `..`, are written to a `.part` file created
+- Recordings must be absolute paths without `..`, not UNC, device or NT object paths,
+  and with no `:` but a drive letter's. They are written to a `.part` file created
   new, and never replace an existing file.
 - Fuzz targets cover the protocol, source and output kind settings, collection loading,
   AMF0, H.264, HEVC, AV1, AAC and the muxers (`fuzz/`).

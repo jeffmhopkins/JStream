@@ -3531,7 +3531,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The file format."
             },
             "path": {
-              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one with control\ncharacters or a `..` segment, and one that ends in a separator or names no\nfile. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
+              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one that starts\nwith two separators (a Windows UNC or device path, `\\\\host\\share\\…`,\n`\\\\.\\…` or `\\\\?\\…`), one with `:` other than a drive letter's, `?`, `*`,\ncontrol characters or a `..` segment, and one that ends in a separator or\nnames no file. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
               "type": "string"
             },
             "type": {

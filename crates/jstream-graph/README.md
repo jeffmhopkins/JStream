@@ -148,8 +148,9 @@ the batch **touched**.
   `kind.target.broadcast_id`, or `target.broadcast_id` in `output.set_target`) when it is empty, over 128 bytes, or has anything but ASCII
   letters, digits, `-` and `_`. A recording's `path` is rejected (field `kind.path`) when it is empty,
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
-  `\…`, `C:\…` or `C:/…`, the same on every platform), or
-  doesn't end in a file name; whether it is absolute on the engine's own machine, and
+  `\…`, `C:\…` or `C:/…`, the same on every platform), starts with two separators (a
+  Windows UNC or device path), has `:` other than a drive letter's, `?` or `*` (`\??\…`
+  is an NT object path), or doesn't end in a file name; whether it is absolute on the engine's own machine, and
   whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
