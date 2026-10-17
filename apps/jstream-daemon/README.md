@@ -49,7 +49,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   (MSVC), so that check can run at all. On macOS it embeds `Info.plist`, the camera,
   microphone and system audio recording usage strings, in the binary's
   `__TEXT,__info_plist` section (ADR-0063 §11), so macOS can show those permission
-  prompts without an app bundle. A daemon started from a terminal is attributed to the
+  prompts without an app bundle. Its bundle identifier is
+  io.github.jeffmhopkins.jstream.daemon<!--fact:macos-daemon-bundle-id-->, under the
+  app ID io.github.jeffmhopkins.jstream<!--fact:macos-app-id-->. A daemon started from a terminal is attributed to the
   terminal app, which then needs the grant.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
@@ -71,7 +73,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
   `tests/info_plist.rs`, which checks on every OS that `Info.plist` has each usage
-  string, and on macOS that the built binary carries it).
+  string and the bundle identifier `docs/facts.toml` names, and on macOS that the built
+  binary carries it).
 
 Not here yet: YouTube sign-in (the daemon doesn't call `Engine::with_youtube` yet), a default collection file, a
 default port and a default token file

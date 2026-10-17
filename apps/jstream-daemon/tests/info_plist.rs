@@ -13,6 +13,39 @@ const USAGE_KEYS: [&str; 3] = [
 /// The plist as checked in.
 const PLIST: &str = include_str!("../Info.plist");
 
+/// The pinned facts, which name the daemon's bundle identifier.
+const FACTS: &str = include_str!("../../../docs/facts.toml");
+
+/// The string value right after `<key>{key}</key>`, if there is one.
+fn string_after(key: &str) -> Option<&'static str> {
+    let tag = format!("<key>{key}</key>");
+    let at = PLIST.find(&tag)?;
+    PLIST[at + tag.len()..]
+        .trim_start()
+        .strip_prefix("<string>")
+        .and_then(|r| r.split_once("</string>"))
+        .map(|(v, _)| v.trim())
+}
+
+/// A fact's value from `docs/facts.toml`.
+fn fact(id: &str) -> Option<&'static str> {
+    let at = FACTS.find(&format!("id = \"{id}\""))?;
+    let rest = &FACTS[at..];
+    let value = rest.find("value = \"")? + "value = \"".len();
+    rest[value..].split('"').next()
+}
+
+#[test]
+fn the_bundle_identifier_is_the_pinned_one_under_the_app_id() {
+    let pinned = fact("macos-daemon-bundle-id").expect("the fact");
+    assert_eq!(string_after("CFBundleIdentifier"), Some(pinned));
+    let app = fact("macos-app-id").expect("the fact");
+    assert!(
+        pinned.starts_with(&format!("{app}.")),
+        "{pinned} is not under {app}"
+    );
+}
+
 #[test]
 fn the_plist_has_every_usage_string() {
     assert!(PLIST.starts_with("<?xml"), "not an XML plist");
