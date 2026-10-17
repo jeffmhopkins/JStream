@@ -8,10 +8,14 @@ use crate::filter::FilterChains;
 use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::hotkey::HotkeyBinding;
-use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId, TransitionPresetId};
+use crate::id::{
+    BusId, DeviceId, FolderId, ItemId, LabelId, OutputId, Rev, SceneId, SourceId,
+    TransitionPresetId,
+};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
 use crate::mix::VideoMixInfo;
+use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
 use crate::transition::{ItemTransition, TransitionsInfo};
@@ -49,7 +53,7 @@ pub enum Query {
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
     /// items, every output, every encoder profile, every video mix, the buses and sends,
-    /// and every hotkey binding) at one revision: what a client
+    /// every hotkey binding, and the folders and labels) at one revision: what a client
     /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
     /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
@@ -123,13 +127,16 @@ pub enum Query {
     /// Lists the collection's audio buses, ordered by ID, and every send into them.
     #[serde(rename = "bus.list")]
     BusList,
-    /// The batch that deletes a scene, source or bus together with everything that
-    /// refers to it, which `scene.delete`, `source.delete` and `bus.delete` alone refuse
-    /// (their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,
-    /// deletes the `scene` sources that show a deleted scene (and their items), and sets
-    /// settings references to the target to `null`, keeping the sources that hold them.
-    /// It also lists the hotkey bindings the delete removes with what they name
-    /// (ADR-0040 §3), which need no edit of their own. The client shows it, then sends its `edits` as an ordinary batch with
+    /// The batch that deletes a scene, source, bus, folder or label together with
+    /// everything that refers to it, which `scene.delete`, `source.delete`, `bus.delete`,
+    /// `folder.delete` and `label.delete` alone refuse (their `invalid_argument` lists
+    /// those `blockers`). The plan removes the items that place a deleted source, deletes
+    /// the `scene` sources that show a deleted scene (and their items), and sets settings
+    /// references to the target to `null`, keeping the sources that hold them. For a
+    /// folder it moves what sits in it up to the folder's parent; for a label it takes
+    /// the label off the sources carrying it. It also lists the hotkey bindings the
+    /// delete removes with what they name (ADR-0040 §3), which need no edit of their own.
+    /// The client shows it, then sends its `edits` as an ordinary batch with
     /// `expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with
     /// `not_found` if the target doesn't exist.
     #[serde(rename = "delete.plan")]
@@ -152,7 +159,8 @@ pub enum Query {
     DeviceList,
 }
 
-/// What a `delete.plan` deletes: a scene, a source or (since 0.24) a bus.
+/// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
+/// label.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -171,6 +179,17 @@ pub enum DeleteTarget {
     Bus {
         /// The bus to delete.
         bus_id: BusId,
+    },
+    /// A folder. The plan moves the scenes and folders in it up to its parent (to the
+    /// top level for a top-level folder), then deletes it.
+    Folder {
+        /// The folder to delete.
+        folder_id: FolderId,
+    },
+    /// A label. The plan takes it off every source that carries it, then deletes it.
+    Label {
+        /// The label to delete.
+        label_id: LabelId,
     },
 }
 
@@ -296,7 +315,7 @@ pub enum QueryResult {
         /// The master stage. Omitted while it has no filters, so missing (also from a
         /// server older than 0.29) parses as empty.
         #[serde(default, skip_serializing_if = "MasterInfo::is_empty")]
-        master: MasterInfo,
+        master: Box<MasterInfo>,
         /// Every hotkey binding, ordered by chord. Missing (from a server older than
         /// 0.25) parses as empty.
         #[serde(default)]
@@ -305,7 +324,15 @@ pub enum QueryResult {
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
         #[serde(default)]
-        transitions: TransitionsInfo,
+        transitions: Box<TransitionsInfo>,
+        /// Every folder of the scene list, in folder order (ADR-0024 §3). Omitted when
+        /// there are none; missing (from an older server) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        folders: Vec<FolderInfo>,
+        /// Every label, in label order (ADR-0024 §4). Omitted when there are none;
+        /// missing (from an older server) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        labels: Vec<LabelInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -536,6 +563,12 @@ pub struct SceneSummary {
     pub role: SceneRole,
     /// How many items it has.
     pub item_count: u32,
+    /// The folder it is filed in (ADR-0024 §3). Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<FolderId>,
+    /// Its organisation metadata, each field omitted while it has its default.
+    #[serde(flatten)]
+    pub meta: SceneMeta,
 }
 
 /// The master stage, as `state.get` reports it: what applies to everything leaving
@@ -580,6 +613,10 @@ pub struct SourceInfo {
     /// `scene` source. Omitted for every other source, and by a server older than 0.19.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<SourceAudio>,
+    /// Its labels and favourite flag (ADR-0024 §4), each omitted while it has its
+    /// default.
+    #[serde(flatten)]
+    pub meta: SourceMeta,
 }
 
 /// One scene with its items, as `state.get` reports it.
@@ -601,6 +638,12 @@ pub struct SceneInfo {
     /// names one. Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transition_out: Option<TransitionPresetId>,
+    /// The folder it is filed in (ADR-0024 §3). Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<FolderId>,
+    /// Its organisation metadata, each field omitted while it has its default.
+    #[serde(flatten)]
+    pub meta: SceneMeta,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<ItemInfo>,
 }
