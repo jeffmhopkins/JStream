@@ -157,8 +157,18 @@ mod tests {
         dir
     }
 
-    /// Writes `text` to a user-only file, as a user would prepare one.
+    /// Writes `text` to a new user-only file, as a user would prepare one: mode 0600 on
+    /// Unix, and on Windows a protected DACL, since the scratch folder's inherited
+    /// entries may let other users read it (CI's runner grants `BUILTIN\Users` read), and
+    /// such a file is refused before its contents are looked at.
     fn write_private(path: &Path, text: &str) {
+        #[cfg(windows)]
+        {
+            use std::io::Write;
+            let mut file = jstream_platform_windows::create_private_file(path).expect("created");
+            file.write_all(text.as_bytes()).expect("written");
+        }
+        #[cfg(not(windows))]
         fs::write(path, text).expect("written");
         #[cfg(unix)]
         {
