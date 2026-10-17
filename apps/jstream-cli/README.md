@@ -84,6 +84,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene list` | query `scene.list` |
 | `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
 | `studio get` | query `studio.get` (the scene on program) |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -105,13 +106,14 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name> [role:scene|role:group]`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings, encoder profiles, `source.create`'s
-  `duplicated_from` and the filter edits. `source.set_settings`,
+  protocol is supported except settings, encoder profiles, video mixes,
+  `source.create`'s `duplicated_from` and the filter edits. `source.set_settings`,
   `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`,
-  `output.set_encoder` and the `filter.*` edits need a JSON argument form the CLI
+  `output.set_encoder`, `video_mix.create`, `video_mix.update`, `video_mix.delete`,
+  `output.set_video_mix` and the `filter.*` edits need a JSON argument form the CLI
   doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
-  default encoder (MCP and the WebSocket API take them). `item.add` of a
+  default encoder and the program (MCP and the WebSocket API take them). `item.add` of a
   `display`, `window` or `webcam` source sends a `geometry` covering the canvas with
   `fit`, so the whole capture is in frame; the canvas is the batch's latest
   `canvas.set_size`, else `state.get`'s, which the CLI also reads for the kind of a
@@ -133,7 +135,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine accepts only `normal` until it draws the
-  others. Several edits on one line go as **one atomic batch**: one new
+  others.
+  `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
+  `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
+  output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
+  Applying a batch prints `removed hotkey <chord>` for each binding its deletes
+  removed. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -148,6 +155,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   command is a new client, so a one-shot `undo` would always find nothing to undo.
   `mcp` is one client for its whole run: its `history` tool undoes and redoes the
   agent's own edits.
+- **No live-value command.** A gesture belongs to its client and expires when the
+  session ends ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so a one-shot
+  `live.set` would be undone as the command exits. `mcp`'s `live` tool keeps one open
+  for the agent's run. `events` shows other clients' gestures: human output prints
+  `live.changed <gesture> by <client>: <setters>` and `live.ended <gesture> by
+  <client> <outcome> [rev N]`.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
@@ -179,8 +192,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   server URL, as `output.create` takes it; for any other output, its kind as JSON).
   `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs; only `--json` shows the sources' audio, the
-  buses and the sends. `output status` prints
+  (<name>):` by its role, then the outputs, then a `hotkeys:` table (`CHORD`,
+  `ACTION`) when any are bound; only `--json` shows the sources' audio, the buses and
+  the sends. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.

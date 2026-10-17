@@ -99,7 +99,8 @@ maintainer, and at least one PR has merged into it. Then:
    the wave were reviewed already. Every check runs, then the after-review Windows, macOS
    and end-to-end jobs.
 5. Once it merges, open a PR on `main` that moves the wave's rows in `docs/progress.toml`
-   from `review` to `done` (or `hardware`, naming the pending run in `note`), since the cut
+   from `review` to `done` (or `hardware`, naming the pending run in `note`), and drops or
+   updates each row's `needs`, since the cut
    wave takes no more commits. A row keeps `review` while one of its PRs is still open.
 6. GitHub deletes the wave branch when it merges. Every PR into it is already merged or
    moved; one still open would be moved to `main` without a CI run.

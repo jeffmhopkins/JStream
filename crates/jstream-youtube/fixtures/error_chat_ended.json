@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": 403,
+    "message": "The live chat is no longer live.",
+    "errors": [
+      { "message": "The live chat is no longer live.", "domain": "youtube.liveChat", "reason": "liveChatEnded" }
+    ]
+  }
+}
