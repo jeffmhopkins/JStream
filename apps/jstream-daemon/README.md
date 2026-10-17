@@ -31,6 +31,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   the tokio runtime,
   prints where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
+- **YouTube** (`youtube.rs`): gives the engine YouTube with JStream's built-in OAuth
+  client ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or with a developer's client from `--youtube-client` or the
+  environment ([Design](#design)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token, and names the device file beside it
   ([Design](#design)).
@@ -71,7 +74,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
-Not here yet: YouTube sign-in (the daemon doesn't call `Engine::with_youtube` yet), a default collection file, a
+Not here yet: YouTube sign-in for users (it waits on JStream's own OAuth client,
+[ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), YouTube outside Windows (it needs an OS credential store the daemon has
+only there), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -102,6 +107,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
+| `--youtube-client <path>` | Windows, for developers: a Google OAuth client to use for YouTube sign-in instead of JStream's built-in one, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables, else the built-in client. |
 | `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
@@ -158,6 +164,23 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. Without `--collection` the
   engine's state is lost.
+- **YouTube (Windows).** Streaming to YouTube needs no sign-in: use **Going live**
+  below with YouTube Studio's RTMPS URL and stream key. Signing in, for the
+  `youtube.*` calls, uses JStream's own OAuth client
+  ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). This build's built-in client is still
+  empty, so `youtube.status` answers `unavailable` and the startup log says so. With a
+  client (the built-in one, or a developer's below), `youtube.status` answers
+  `signed_out` and `youtube.sign_in` returns Google's consent URL; once approved, the
+  account's refresh token is kept in Credential Manager, so a restart stays signed in. The `youtube.*` calls
+  are a person's tools, over the WebSocket API: MCP has no `youtube` tool ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
+  A developer can test with their own Google Cloud OAuth client of type "Desktop
+  app", with the YouTube Data API v3 enabled: pass its downloaded JSON with
+  `--youtube-client`, or set `JSTREAM_YOUTUBE_CLIENT_ID` (and
+  `JSTREAM_YOUTUBE_CLIENT_SECRET`, if it has one). Never commit it. Off Windows,
+  YouTube is `unavailable`. A client file that can't be read or holds no `client_id`,
+  or a secret set without an ID, is a startup failure (exit 1); the message names the
+  file but never its contents or the secret
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Going live (Windows).** `output.create` with an RTMP(S) server URL, then
   `output.set_key` (stored in Windows Credential Manager), then `output.start`
   connects and streams. A start fails with `action_failed` and a reason that says what
@@ -203,7 +226,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -282,6 +305,20 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   already names this DLL is left alone, so repeating the command never prompts. The
   startup check (`log_status`) only logs: the daemon serves without the camera, and
   `WindowsVcam::start` refuses to start an unregistered camera on its own.
+- **YouTube** (`youtube.rs`, `serve.rs`). `youtube::client` reads a developer's OAuth
+  client from `--youtube-client`'s file (Google's `{"installed": {…}}` download, or the two
+  fields at the top level), else from the environment, holding the secret as a
+  `Secret` so it never prints. A JSON error reports only its line and column, because
+  serde_json's messages can quote a value. `main` reads it after the audit log opens
+  and before the token is touched. `serve.rs` then calls `Engine::with_youtube` with
+  that client, else with `YoutubeSetup::built_in` (JStream's client, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), `None`
+  while it is empty), over `jstream_youtube::HttpsTransport` (the OS's root store) with
+  `WindowsCredentials` as the token store, before the engine goes live; core keeps the
+  token under its fixed account ID. Off Windows there is no OAuth token store, so a
+  developer's client is dropped with a warning. Neither an empty built-in client nor a
+  transport that can't be built stops the daemon: YouTube is optional (ADR-0058).
+  `youtube::set_up` is the developer's-client call over any transport and store, which
+  is how the test runs it on `jstream-youtube`'s fake.
 - **Collection file and audit log** (`serve.rs`, `main.rs`). The daemon only passes
   them to the engine: `Engine::with_collection_file` loads and saves the collection,
   and `with_audit` takes a `jstream_core::AuditFile`, whose writer thread appends
@@ -324,7 +361,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   an agent's edits form their own undo history
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is
   no option to turn it off: it is behind the same token as the WebSocket API, which
-  already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)).
+  already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)),
+  except YouTube's account features, which MCP leaves out ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
 - **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port, MCP and the UI directory changed):
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
@@ -410,8 +448,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
   (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
-  check), `anyhow`, `tracing` (the startup line) and `blake3`
-  (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
+  check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
+  OAuth client file), `anyhow`, `tracing` (the startup line) and `blake3` (the crash
+  reports' secret digests), all already in the tree through core and the server, tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
   only `sharded-slab` and `thread_local`), and `getrandom`
@@ -421,7 +460,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
   `jstream-platform` (feature `fake`), for the live engine and opener tests;
-  `jstream-browser` (feature `fake`), for the browser wiring's test.
+  `jstream-browser` (feature `fake`), for the browser wiring's test;
+  `jstream-youtube` (feature `fake`), for the YouTube setup's test.
 
 <a id="open-questions"></a>
 ### Open questions
