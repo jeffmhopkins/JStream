@@ -2696,6 +2696,7 @@ name = "jstream-desktop"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "blake3",
  "getrandom 0.4.3",
  "jstream-browser",
  "jstream-control",
