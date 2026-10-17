@@ -4465,3 +4465,4 @@ stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude-ui-features", note = 
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:cd2645dc0e9d990b", by = "agent:claude-ui-features", note = "style.css: the additions are the workspace and dock styles and the .dock-strip class; the WS palette, scrollbars, focus and selection rules are unchanged, so every WS status holds." }
+
