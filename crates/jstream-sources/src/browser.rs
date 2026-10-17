@@ -88,6 +88,22 @@ impl BrowserKind {
                         json!(DEFAULT_CSS),
                     )
                 },
+                ParamDescriptor {
+                    description: Some(
+                        "Let a page from the internet make requests to this computer and \
+                         the local network (localhost, 192.168.x.x and the like), for \
+                         widgets that talk to an app running here. Off, those requests are \
+                         refused. A local file or a page on the local network may always."
+                            .into(),
+                    ),
+                    advanced: true,
+                    ..param(
+                        "local_network",
+                        "Allow local network",
+                        ParamType::Bool,
+                        json!(false),
+                    )
+                },
             ],
             ..kind(BROWSER, "Browser", true, true)
         })
@@ -141,11 +157,17 @@ pub(crate) fn open(
         ],
         MediaTime::zero(Timebase::MILLIS),
     )?);
+    // A kind built on `browser` without the setting (`youtube_chat`) never opts in.
+    let local_network = settings
+        .get("local_network")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let page = backend.open(&PageSpec {
         location,
         size,
         fps,
         css,
+        local_network,
     })?;
     let audio: Arc<dyn SourceAudio> = Arc::new(PageAudioOf(Arc::clone(page.audio())));
     Ok(Box::new(BrowserSource {
