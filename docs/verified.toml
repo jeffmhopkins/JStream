@@ -3791,17 +3791,23 @@ stamp = { hash = "b3:e67dd72e603695c3", by = "agent:claude@session_0113X373pgdBk
 ["DOCS#ttl"."file:.github/workflows/sweep.yml"]
 stamp = { hash = "b3:397125d6e5564cee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
 
+["FUZZ#ci"."body"]
+stamp = { hash = "b3:6e88d20781e5a224", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "New section for the new fuzz.yml: daily cron plus workflow_dispatch, no PR trigger; pinned nightly-2026-10-15 and cargo-fuzz 0.13.2; build, seed.sh, each target from cargo fuzz list for 180 s with -timeout=30 and -rss_limit_mb=2048; crash inputs uploaded as fuzz-artifacts and an issue 'Fuzz crash: <target>' opened or commented; findings don't fail the job, a non-zero exit with no saved input does. Checked line by line against the workflow." }
+
+["FUZZ#ci"."file:.github/workflows/fuzz.yml"]
+stamp = { hash = "b3:5076a5210cb42948", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "New section for the new fuzz.yml: daily cron plus workflow_dispatch, no PR trigger; pinned nightly-2026-10-15 and cargo-fuzz 0.13.2; build, seed.sh, each target from cargo fuzz list for 180 s with -timeout=30 and -rss_limit_mb=2048; crash inputs uploaded as fuzz-artifacts and an issue 'Fuzz crash: <target>' opened or commented; findings don't fail the job, a non-zero exit with no saved input does. Checked line by line against the workflow." }
+
 ["FUZZ#running"."body"]
-stamp = { hash = "b3:9aadff45c171e39f", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3: Cargo.toml now also forbids unsafe_code and denies undocumented_unsafe_blocks (B1); commands, seeds and layout unchanged" }
+stamp = { hash = "b3:6676087d5516add9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Cargo.toml gains the image_decode and font_load bins and its header comment now names the nightly fuzz workflow; seed.sh seeds image_decode from jstream-sources tests/data JPEG, WebP and text golden PNGs plus a 1x1 GIF it writes, and font_load from the bundled Roboto subset. The prose lists exactly those seeds; run, replay and tmin commands unchanged and were run with cargo-fuzz 0.13.2." }
 
 ["FUZZ#running"."file:fuzz/Cargo.toml"]
-stamp = { hash = "b3:a1b798424bdb4684" }
+stamp = { hash = "b3:297c3602ae15e3a0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Cargo.toml gains the image_decode and font_load bins and its header comment now names the nightly fuzz workflow; seed.sh seeds image_decode from jstream-sources tests/data JPEG, WebP and text golden PNGs plus a 1x1 GIF it writes, and font_load from the bundled Roboto subset. The prose lists exactly those seeds; run, replay and tmin commands unchanged and were run with cargo-fuzz 0.13.2." }
 
 ["FUZZ#running"."file:fuzz/seed.sh"]
-stamp = { hash = "b3:9c5ca3f268d45f94" }
+stamp = { hash = "b3:8e9bac0f26049d3f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Cargo.toml gains the image_decode and font_load bins and its header comment now names the nightly fuzz workflow; seed.sh seeds image_decode from jstream-sources tests/data JPEG, WebP and text golden PNGs plus a 1x1 GIF it writes, and font_load from the bundled Roboto subset. The prose lists exactly those seeds; run, replay and tmin commands unchanged and were run with cargo-fuzz 0.13.2." }
 
 ["FUZZ#targets"."body"]
-stamp = { hash = "b3:489806575d8fb9ac", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3: amf0 header reworded (N2) to the property it asserts; README row unchanged and still accurate" }
+stamp = { hash = "b3:5ab895e22061333a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Added image_decode and font_load rows: both write the input to a temp collection folder and go through Registry::create for the image and text kinds (sniffed PNG/JPEG/WebP/GIF decoders; skrifa parse plus ab_glyph draw), with the lower limits (4096 px, 256 MiB) the targets set and the properties they assert (frames draw, next_change is later; font redraws on a live update). kind_settings row now points to them for asset files. Other rows unchanged against their targets." }
 
 ["FUZZ#targets"."file:fuzz/fuzz_targets/aac.rs"]
 stamp = { hash = "b3:cc2f13ad15f910af" }
@@ -3815,11 +3821,17 @@ stamp = { hash = "b3:2f3fc59c1f8bf703" }
 ["FUZZ#targets"."file:fuzz/fuzz_targets/collection_load.rs"]
 stamp = { hash = "b3:963074756596382b" }
 
+["FUZZ#targets"."file:fuzz/fuzz_targets/font_load.rs"]
+stamp = { hash = "b3:5f642642a1da415d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Added image_decode and font_load rows: both write the input to a temp collection folder and go through Registry::create for the image and text kinds (sniffed PNG/JPEG/WebP/GIF decoders; skrifa parse plus ab_glyph draw), with the lower limits (4096 px, 256 MiB) the targets set and the properties they assert (frames draw, next_change is later; font redraws on a live update). kind_settings row now points to them for asset files. Other rows unchanged against their targets." }
+
 ["FUZZ#targets"."file:fuzz/fuzz_targets/h264.rs"]
 stamp = { hash = "b3:13ee3bb5abc5560e" }
 
 ["FUZZ#targets"."file:fuzz/fuzz_targets/hevc.rs"]
 stamp = { hash = "b3:a9be1820a8584bfd" }
+
+["FUZZ#targets"."file:fuzz/fuzz_targets/image_decode.rs"]
+stamp = { hash = "b3:d806b357aacd2ec0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Added image_decode and font_load rows: both write the input to a temp collection folder and go through Registry::create for the image and text kinds (sniffed PNG/JPEG/WebP/GIF decoders; skrifa parse plus ab_glyph draw), with the lower limits (4096 px, 256 MiB) the targets set and the properties they assert (frames draw, next_change is later; font redraws on a live update). kind_settings row now points to them for asset files. Other rows unchanged against their targets." }
 
 ["FUZZ#targets"."file:fuzz/fuzz_targets/kind_settings.rs"]
 stamp = { hash = "b3:9d11f72a855604c1" }
