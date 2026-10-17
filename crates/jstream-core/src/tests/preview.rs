@@ -3,8 +3,8 @@
 //! an encoder and JPEG otherwise; a reader that falls behind loses frames up to a
 //! keyframe, and the streams end with `preview.unsubscribe` or the session.
 
-use super::{add, batch, block_on, code, connected, create, edits, webcam};
-use crate::preview::BINARY_BUFFER;
+use super::{add, batch, block_on, code, connected, create, edits, live, moved, webcam};
+use crate::preview::{BINARY_BUFFER, KEYFRAME_EVERY};
 use crate::{Engine, InProcessControl};
 use jstream_control::{BinaryStream, Control, ControlError};
 use jstream_platform::fake::{self, FakeClock};
@@ -294,5 +294,27 @@ fn a_slow_reader_holds_a_bounded_queue_and_resumes() {
             .windows(2)
             .all(|pair| pair[0].header.pts_us < pair[1].header.pts_us),
         "frames out of order"
+    );
+}
+
+/// A live value (ADR-0032) is drawn into the preview as it is into the program, with no
+/// new rev: a `live.set` makes the stream due at once, not at its next keyframe.
+#[test]
+fn a_live_value_is_sent_without_waiting_for_a_keyframe() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("subscribed");
+    let rev = placed_webcam(&control);
+    let placed = frame_at(&mut frames, rev);
+    act(&control, live("drag", vec![moved("itm", 100.0)])).expect("live.set");
+    let dragged = frame(&mut frames);
+    assert_eq!(dragged.header.rev, rev);
+    let after = Duration::from_micros(
+        u64::try_from(dragged.header.pts_us - placed.header.pts_us).expect("later"),
+    );
+    assert!(
+        after < KEYFRAME_EVERY,
+        "drawn only for a keyframe: {after:?}"
     );
 }

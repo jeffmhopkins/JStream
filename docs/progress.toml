@@ -258,9 +258,10 @@ prs = [223]
 id = "A6b"
 milestone = "M1a"
 title = "Daemon YouTube wiring"
-status = "planned"
-note = "draft #312; sign-in needs the OAuth client (ADR-0058); Windows run #337"
-needs = ["build", "maintainer", "hardware"]
+status = "review"
+prs = [312]
+note = "#312 merged into wave/m1-2; sign-in needs the OAuth client (ADR-0058); Windows run #337"
+needs = ["wave", "maintainer", "hardware"]
 
 # M1b
 
@@ -402,16 +403,17 @@ note = "audio hardware tests"
 id = "C3"
 milestone = "M1b"
 title = "Display and window capture sources"
-status = "planned"
-note = "draft #365; Windows run #378"
-needs = ["build", "hardware"]
+status = "review"
+prs = [365]
+note = "#365 merged into wave/m1-2; Windows run #378"
+needs = ["wave", "hardware"]
 
 [[item]]
 id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
-prs = [283, 289, 298]
+prs = [283, 289, 298, 326]
 note = "#341, #335, #336"
 
 [[item]]
@@ -511,7 +513,8 @@ milestone = "M1b"
 title = "Live values"
 status = "review"
 prs = [244]
-needs = ["build"]
+note = "#244 merged into wave/m1-2"
+needs = ["wave"]
 
 # M1c
 
@@ -659,7 +662,7 @@ id = "U2b"
 milestone = "M2"
 title = "Device pairing"
 status = "done"
-prs = [265]
+prs = [265, 288]
 
 [[item]]
 id = "U3a"
@@ -755,7 +758,8 @@ milestone = "M2"
 title = "Video mixes"
 status = "review"
 prs = [259]
-needs = ["build"]
+note = "#259 merged into wave/m1-2"
+needs = ["wave"]
 
 [[item]]
 id = "D8"
@@ -768,9 +772,10 @@ prs = [249]
 id = "D8p"
 milestone = "M2"
 title = "Audio chain protocol fields"
-status = "planned"
-note = "draft #303"
-needs = ["build"]
+status = "review"
+prs = [303]
+note = "#303 merged into wave/m1-2"
+needs = ["wave"]
 
 [[item]]
 id = "C9"
@@ -792,8 +797,9 @@ id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "planned"
-note = "drafts #319 and #323"
-needs = ["build"]
+prs = [319]
+note = "hotkeys #319 merged into wave/m1-2; organisation metadata draft #323"
+needs = ["wave", "build"]
 
 [[item]]
 id = "K2"
@@ -819,11 +825,18 @@ status = "done"
 prs = [325]
 
 [[item]]
+id = "F6"
+milestone = "M3"
+title = "HEVC and AV1 encode"
+status = "review"
+prs = [364]
+
+[[item]]
 id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
-prs = [359]
+prs = [359, 368]
 note = "effect packs #368 land with wave/m1-2; full 3D transforms to build"
 needs = ["wave", "build"]
 
@@ -840,8 +853,8 @@ milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
 status = "review"
 prs = [363, 375]
-note = "draft #363; signed-in features need the OAuth client (ADR-0058)"
-needs = ["build", "maintainer"]
+note = "#363 merged into wave/m1-2, #375 into wave/m1; signed-in features need the OAuth client (ADR-0058)"
+needs = ["wave", "maintainer"]
 
 [[item]]
 id = "CL1"
