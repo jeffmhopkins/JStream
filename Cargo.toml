@@ -109,10 +109,11 @@ leptos = { version = "0.8", default-features = false, features = ["csr"] }
 # under wasmtime; no build script and no default features.
 mach2 = { version = "0.6", default-features = false }
 # Foundation through the objc2 framework crates (ADR-0063 §12), for the running macOS
-# version (`NSProcessInfo`), and the arrays, errors and strings ScreenCaptureKit hands back.
+# version (`NSProcessInfo`), the arrays, errors and strings ScreenCaptureKit hands back,
+# and the numbers and UUIDs of a Core Audio tap description (`NSValue`, `NSUUID`).
 # The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
 # only `std` and the classes the macOS crate calls.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString", "NSUUID", "NSValue"] }
 # Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
 # crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
 # and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
@@ -132,9 +133,11 @@ objc2-audio-toolbox = { version = "0.3", default-features = false, features = ["
 objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
 # The Core Audio HAL through the objc2 framework crates (ADR-0063 §4, §12), for audio
 # devices and input: the device list and defaults, device and stream properties and
-# their listeners, and the IOProc that records a device. The 0.3 line, as above, already
-# in the tree; plain C APIs (no `objc2`, blocks or dispatch features) and no build script.
-objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2-core-audio-types"] }
+# their listeners, the IOProc that records a device, and process taps with their private
+# aggregate devices. The 0.3 line, as above, already in the tree; no build script. The
+# `objc2` and `objc2-foundation` features are only for `CATapDescription`, an
+# Objective-C class (no blocks or dispatch features).
+objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2", "objc2-core-audio-types", "objc2-foundation"] }
 # AVFoundation through the objc2 framework crates (ADR-0063 §4, §11, §12), for the
 # Microphone permission: `AVCaptureDevice`'s authorization status and request for the
 # audio media type. The 0.3 line, as above; no build script. Only those headers, and
