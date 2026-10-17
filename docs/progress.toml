@@ -403,9 +403,10 @@ note = "audio hardware tests"
 id = "C3"
 milestone = "M1b"
 title = "Display and window capture sources"
-status = "planned"
-note = "draft #365; Windows run #378"
-needs = ["build", "hardware"]
+status = "review"
+prs = [365]
+note = "#365 merged into wave/m1-2; Windows run #378"
+needs = ["wave", "hardware"]
 
 [[item]]
 id = "C8"
@@ -413,7 +414,7 @@ milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
 prs = [283, 289, 298, 326]
-note = "#341"
+note = "#341, #335, #336"
 
 [[item]]
 id = "D1"
@@ -512,7 +513,8 @@ milestone = "M1b"
 title = "Live values"
 status = "review"
 prs = [244]
-needs = ["build"]
+note = "#244 merged into wave/m1-2"
+needs = ["wave"]
 
 # M1c
 
@@ -755,7 +757,8 @@ milestone = "M2"
 title = "Video mixes"
 status = "review"
 prs = [259]
-needs = ["build"]
+note = "#259 merged into wave/m1-2"
+needs = ["wave"]
 
 [[item]]
 id = "D8"

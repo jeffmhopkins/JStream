@@ -51,7 +51,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 94% | 17 | 1 | 0 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 94% | 33 | 1 | 1 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 94% | 33 | 2 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 2 | 4 |
@@ -60,7 +60,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 97 of 113 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 23 items, by next step: 🔨 build 10, 🌊 its wave lands 3, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 1</summary>
+<summary><b>What's left</b>: 23 items, by next step: 🔨 build 7, 🌊 its wave lands 6, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -70,15 +70,15 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A4 | Go-live runbook and smoke | M1a | 🧪 Windows run | smoke script run | #234 |
 | A6b | Daemon YouTube wiring | M1a | 🌊 its wave lands, then 👤 maintainer, then 🧪 Windows run | #312 merged into wave/m1-2; sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
 | C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
-| C3 | Display and window capture sources | M1b | 🔨 build, then 🧪 Windows run | draft #365; Windows run #378 |  |
-| C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341 | #283, #289, #298, #326 |
-| I2 | Live values | M1b | 🔨 build |  | #244 |
+| C3 | Display and window capture sources | M1b | 🌊 its wave lands, then 🧪 Windows run | #365 merged into wave/m1-2; Windows run #378 | #365 |
+| C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
+| I2 | Live values | M1b | 🌊 its wave lands | #244 merged into wave/m1-2 | #244 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
 | U4p | Live preview on canvas | M2 | 🔨 build | draft #302 |  |
 | T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
 | T1u | Studio-mode UI | M2 | 🔨 build | draft #304, on T1 |  |
-| E2 | Video mixes | M2 | 🔨 build |  | #259 |
+| E2 | Video mixes | M2 | 🌊 its wave lands | #259 merged into wave/m1-2 | #259 |
 | D8p | Audio chain protocol fields | M2 | 🔨 build | draft #303 |  |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🌊 its wave lands, then 🔨 build | hotkeys #319 merged into wave/m1-2; organisation metadata draft #323 | #319 |
@@ -161,8 +161,8 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C1b | Sources render live | ✅ merged | #222 |
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
-| C3 | Display and window capture sources | ⏳ planned: draft #365; Windows run #378 |  |
-| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341 | #283, #289, #298, #326 |
+| C3 | Display and window capture sources | 🔍 in review: #365 merged into wave/m1-2; Windows run #378 | #365 |
+| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341, #335, #336 | #283, #289, #298, #326 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |
@@ -176,7 +176,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F2a | Recording file sink | ✅ merged | #156 |
 | F2b | Record output kind | ✅ merged | #170 |
 | F3 | Encoder profiles and sharing | ✅ merged | #208 |
-| I2 | Live values | 🔍 in review | #244 |
+| I2 | Live values | 🔍 in review: #244 merged into wave/m1-2 | #244 |
 
 </details>
 
@@ -233,7 +233,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | Q5 | Threat model | ✅ merged | #358 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
 | T1u | Studio-mode UI | ⏳ planned: draft #304, on T1 |  |
-| E2 | Video mixes | 🔍 in review | #259 |
+| E2 | Video mixes | 🔍 in review: #259 merged into wave/m1-2 | #259 |
 | D8 | Master and output audio chains | ✅ merged | #249 |
 | D8p | Audio chain protocol fields | ⏳ planned: draft #303 |  |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
