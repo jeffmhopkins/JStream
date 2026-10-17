@@ -1,7 +1,7 @@
 [package]
 name = "jstream-platform-macos"
 version = "0.0.0"
-description = "macOS platform backends: the mach_absolute_time media clock, ScreenCaptureKit capture, Core Audio and VideoToolbox/AudioToolbox codecs (ADR-0063). First part."
+description = "macOS platform backends: the mach_absolute_time media clock, ScreenCaptureKit capture, Core Audio and VideoToolbox/AudioToolbox codecs (ADR-0063). Built in parts."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 2
-summary = "First part of ADR-0063: mach_absolute_time media clock, macOS version and support-tier detection, four-character codes and OSStatus errors, VideoToolbox and AudioToolbox configuration checks; capture, audio and codec sessions report Unsupported"
+summary = "First part of ADR-0063: mach_absolute_time media clock, macOS version and support-tier detection, four-character codes and OSStatus errors, VideoToolbox and AudioToolbox configuration checks, the VideoToolbox H.264 and HEVC encoder on CPU frames with Annex B output; capture, audio, AAC and decode report Unsupported"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
@@ -27,7 +27,8 @@ undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [features]
 # Platform tests against a real Mac (docs/RULES.md#testing): the Screen Recording, Camera,
-# Microphone and system audio recording permissions, and the hardware encoders. Additive,
+# Microphone and system audio recording permissions, and the hardware encoders (the
+# software-encoder tests run without it). Additive,
 # off by default, and the tests are also `#[ignore]`d. Run them on such a Mac with
 # `cargo test -p jstream-platform-macos --features hw-tests -- --ignored`.
 hw-tests = []
@@ -37,4 +38,8 @@ jstream-platform.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mach2.workspace = true
+objc2-core-foundation.workspace = true
+objc2-core-media.workspace = true
+objc2-core-video.workspace = true
 objc2-foundation.workspace = true
+objc2-video-toolbox.workspace = true
