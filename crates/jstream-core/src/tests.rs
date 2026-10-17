@@ -4083,8 +4083,9 @@ mod cpu_pipeline {
     }
 
     /// An output on a video mix gets an encoder session of its own, fed at the mix's
-    /// rate: the recording on a half-rate mix gets about half the frames the stream on
-    /// program does. A mix an output shows can't be deleted.
+    /// rate: the recording on a half-rate mix gets at most one frame per two base ticks,
+    /// and isn't starved while the stream on program draws. A mix an output shows can't
+    /// be deleted.
     #[test]
     fn an_output_on_a_mix_encodes_it_at_its_rate() {
         use jstream_protocol::{MixInput, MixResolution, VideoMix, VideoMixId};
@@ -4134,9 +4135,16 @@ mod cpu_pipeline {
             "the stream never got its frames"
         );
         let (full, half) = (video_tags(&publish) as u64, recorded(&engine));
+        // The pump moves the clock faster than a debug render thread draws, so most
+        // base ticks are skipped and both mixes are drawn on nearly every tick that is:
+        // the half-rate mix is held to at most one frame per two base ticks, never more
+        // than the program, and an overrun doesn't starve it. Its rate on ticks that
+        // aren't skipped is checked by `frames_draw_each_feed_once_on_its_ticks`.
+        let micros = jstream_platform::MediaClock::now(&fakes.clock).ticks();
+        let base = u64::try_from(micros / 33_333).expect("clock after zero");
         assert!(
-            half >= full / 4 && half <= full / 2 + 4,
-            "{half} recorded frames against {full} streamed"
+            half >= full / 4 && half <= full + 2 && half <= base / 2 + 2,
+            "{half} recorded frames against {full} streamed over {base} base ticks"
         );
 
         let refused = batch(

@@ -126,6 +126,8 @@ pub(crate) struct MixFrame {
     pub(crate) divisor: u32,
     /// Whether this tick draws it.
     pub(crate) due: bool,
+    /// The first base tick it is due on again.
+    pub(crate) next: u64,
     /// Where it is drawn: RGBA8 at `size` once a draw succeeds.
     pub(crate) out: Vec<u8>,
 }
@@ -1629,6 +1631,7 @@ impl Frames {
                     size: feed.size,
                     divisor: feed.divisor,
                     due: false,
+                    next: 0,
                     out: Vec::new(),
                 });
                 self.shown.push(Vec::new());
@@ -1664,6 +1667,7 @@ impl Frames {
                 size,
                 divisor: 1,
                 due: false,
+                next: 0,
                 out: Vec::new(),
             });
             self.shown.push(Vec::new());
@@ -1676,11 +1680,17 @@ impl Frames {
         self.mixes.iter().position(|frame| is_program(frame, size))
     }
 
-    /// Marks the mixes due on base tick `index`, and returns how many are.
+    /// Marks the mixes due on base tick `index` and returns how many are. A mix is due
+    /// once `index` reaches its `next` tick, which is then `divisor` ticks on, so an
+    /// overrun that skips its tick delays it rather than starving it, and it never gets
+    /// frames closer together than its divisor.
     fn schedule(&mut self, index: u64) -> u64 {
         let mut due = 0;
         for frame in &mut self.mixes {
-            frame.due = index.is_multiple_of(u64::from(frame.divisor.max(1)));
+            frame.due = index >= frame.next;
+            if frame.due {
+                frame.next = index.saturating_add(u64::from(frame.divisor.max(1)));
+            }
             due += u64::from(frame.due);
         }
         due
@@ -1809,7 +1819,7 @@ fn render_loop(job: RenderJob) {
     };
     let mut next: Option<MediaTime> = None;
     // Base ticks since the thread started, skipped ones included: the mixes with a
-    // divisor draw on the multiples of it.
+    // divisor draw on every `divisor`th, or later when an overrun skips one.
     let mut index: u64 = 0;
     let mut skipped: u64 = 0;
     let mut draw_errors: u32 = 0;
@@ -2789,7 +2799,12 @@ mod tests {
         assert_eq!(frames.schedule(0), 2);
         assert_eq!(frames.schedule(1), 1);
         assert!(frames.mixes[0].due && !frames.mixes[1].due);
-        assert_eq!(frames.schedule(4), 2);
+        // An overrun that skips tick 2 and lands on 3 still draws the half-rate mix,
+        // so a steady overrun landing on odd ticks can't starve it (review N5), and
+        // the tick after that is too soon for it.
+        assert_eq!(frames.schedule(3), 2);
+        assert_eq!(frames.schedule(4), 1);
+        assert_eq!(frames.schedule(5), 2);
         frames.targets[0].clear();
         let mut freed = 0;
         frames.prune(|_| freed += 1);
