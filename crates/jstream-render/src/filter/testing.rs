@@ -90,7 +90,7 @@ mod tests {
     use crate::error::RenderError;
     use crate::filter::{Blend, Ctx, Draw, FilterClock, Pass, Shader, VideoFilter};
     use crate::image::Image;
-    use crate::tests::{near, open};
+    use crate::tests::{near, open, unorm_texture};
     use jstream_protocol::Settings;
 
     /// Copies its input through one scratch image, so the harness's two-draw path and the
@@ -151,6 +151,32 @@ mod tests {
         near(&snapshot, 1, 1, R, 1);
     }
 
+    /// A browser page's import (sRGB code values already multiplied by alpha) reaches
+    /// filter code as premultiplied linear, so copying it through a filter changes nothing.
+    #[test]
+    fn a_premultiplied_import_filters_like_it_composites() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        // Straight sRGB red 128 at alpha 128, premultiplied in code values. Read as
+        // premultiplied linear instead, it would come back as red 188.
+        let texture = unorm_texture(&opened.compositor, 2, 2, [64, 0, 0, 128]);
+        let input = opened
+            .compositor
+            .import_premultiplied(texture, None)
+            .expect("a Unorm texture imports premultiplied");
+        let mut filter = VideoFilter {
+            kind: "test-copy".into(),
+            pass: Box::new(Copy),
+        };
+        let output = opened
+            .compositor
+            .apply_filter(&mut filter, &input, FilterClock::default())
+            .expect("apply_filter");
+        let snapshot = read(&mut opened, &output);
+        near(&snapshot, 1, 1, [128, 0, 0, 128], 2);
+    }
+
     /// `apply_filter_into` redraws a caller's layer frame after frame, and refuses an
     /// output of the wrong size, the input itself, or an image that isn't a layer.
     #[test]
@@ -178,7 +204,10 @@ mod tests {
         let input = image(&opened, 2, &[R, R]);
         let wrong = opened.compositor.layer(3, 1).expect("layer");
         let refused = |result: Result<(), RenderError>| {
-            assert!(matches!(result, Err(RenderError::Invalid { .. })), "{result:?}");
+            assert!(
+                matches!(result, Err(RenderError::Invalid { .. })),
+                "{result:?}"
+            );
         };
         let clock = FilterClock::default();
         refused(

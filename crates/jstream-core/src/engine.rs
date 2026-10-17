@@ -21,24 +21,28 @@ use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
-    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
-    Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
-    parts_from,
+    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, VcamOut,
+    launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
-use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
 use crate::studio::{self, Studio};
 use crate::transition;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
+use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
 use jstream_media::{FrameSize, MediaTime};
-use jstream_platform::{Backends, PluginHosts, Secret, StreamKeyStore};
+use jstream_platform::{
+    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, Secret, StreamKeyStore,
+};
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
-    EncoderSessionInfo, EntityKind, Event, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PreviewSettings, ProtocolError,
-    Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString,
-    SourceId, TransitionPresetId, TransitionStarted, YoutubeAuth,
+    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
+    EncoderProfile, EncoderSessionInfo, EntityKind, Event, FilterChain, GestureId, HistoryCall,
+    HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
+    PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    RtmpTarget, SceneId, SecretString, SourceId, TransitionPresetId, TransitionStarted,
+    YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -387,8 +391,9 @@ impl Engine {
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
     /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
     /// that no backend is set; giving one builds the ones already there again.
-    /// The host also hands the backend a GPU device (`use_device`): for now one it opens
-    /// on the media adapter itself, since the engine doesn't hand out its own yet.
+    /// The host also hands the backend a GPU device (`use_device`), one it opens on the
+    /// media adapter itself, for paints before a program stage; while a stage runs the
+    /// engine lends the backend the stage's own context instead (`use_gpu`).
     #[must_use]
     pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
         {
@@ -519,6 +524,36 @@ impl Engine {
         Box::new(move || lock(&shared.state).routing.detach(generation))
     }
 
+    /// Adds an output tap for `output_id` to the program's mixer, running the output's
+    /// audio chain, and returns its id and the closure that removes it once the output
+    /// has stopped. The closure holds the collection, not the [`MediaHost`].
+    ///
+    /// # Errors
+    /// When no program mixer runs, or the mixer refuses the tap.
+    pub(crate) fn add_output_tap(
+        &self,
+        output_id: &OutputId,
+    ) -> Result<(OutputTapId, Release), String> {
+        let tap = {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state
+                .routing
+                .add_output_tap(output_id, state.graph.state())?
+        };
+        let id = tap.id();
+        let shared = Arc::clone(&self.shared);
+        let output_id = output_id.clone();
+        Ok((
+            id,
+            Box::new(move || {
+                lock(&shared.state)
+                    .routing
+                    .remove_output_tap(&output_id, id);
+            }),
+        ))
+    }
+
     /// Adds kinds the built-in registry doesn't have: the parity fixture's `mic`, an
     /// audio kind with no parameters.
     #[cfg(test)]
@@ -548,6 +583,15 @@ impl Engine {
         let mut state = lock(&self.shared.state);
         state.audio.insert_input(source_id, input);
         state.route_audio();
+    }
+
+    /// Lets live sources that paint on the GPU (`browser`) paint on `context`, the
+    /// program stage's platform GPU context, and re-plans the program mix. The returned
+    /// call takes the context away again; the stage makes it before it stops.
+    pub(crate) fn use_gpu(&self, context: &GpuContext) -> Box<dyn FnOnce() + Send + Sync> {
+        set_gpu(&self.shared, Some(context));
+        let shared = Arc::clone(&self.shared);
+        Box::new(move || set_gpu(&shared, None))
     }
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
@@ -765,6 +809,13 @@ impl Engine {
         } = call
         {
             self.key_action(action)
+        } else if matches!(
+            call,
+            Call::Query {
+                query: Query::CaptureTargets
+            }
+        ) {
+            self.capture_targets()
         } else if let Call::Action {
             action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
         } = call
@@ -827,7 +878,7 @@ impl Engine {
         if let Some((sink, pending)) = audit {
             sink.record(pending.finish(client_id, request_id, &result));
         }
-        Executed::Ready(result)
+        Executed::Ready(Box::new(result))
     }
 
     /// The YouTube actions and queries, or `None` for any other call. They run with no
@@ -1126,6 +1177,33 @@ impl Engine {
         Arc::clone(host)
     }
 
+    /// `capture.targets`: what the platform's capture backend can capture now, listed
+    /// with no engine lock held, since listing windows calls the OS.
+    fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
+        let capture = self.media.as_ref().and_then(|host| {
+            lock(&host.backends)
+                .as_ref()
+                .map(|backends| Arc::clone(&backends.capture))
+        });
+        let Some(capture) = capture else {
+            return Err(ProtocolError::ActionFailed {
+                reason: "the engine has no capture backend".into(),
+            });
+        };
+        let mut targets: Vec<_> = capture
+            .targets()
+            .map_err(|err| ProtocolError::ActionFailed {
+                reason: format!("listing capture targets: {err}"),
+            })?
+            .into_iter()
+            .filter_map(capture_target_info)
+            .collect();
+        targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
+        Ok(CallResult::Query {
+            result: QueryResult::CaptureTargets { targets },
+        })
+    }
+
     fn backends_ready(&self) -> bool {
         self.media
             .as_ref()
@@ -1174,7 +1252,7 @@ impl Engine {
             None => None,
         };
         let mut wake = Vec::new();
-        let (parts, publish, generation, program, key) = loop {
+        let (parts, publish, generation, program, key, own_audio) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
             // wait that out before opening devices, and do not hold the collection
             // lock across the wait.
@@ -1212,6 +1290,7 @@ impl Engine {
                 });
             }
             let key = encode_key(&state.graph, &output_id);
+            let own_audio = has_audio_chain(&state.graph, &output_id);
             let publish = match (
                 own_target(&state.graph, &output_id),
                 youtube_broadcast(&state.graph, &output_id),
@@ -1293,7 +1372,7 @@ impl Engine {
             // until this start has its own hold, or gives up. Taken last, so no early
             // return drops it under the locks.
             let program = gate.program();
-            break (parts, publish, generation, program, key);
+            break (parts, publish, generation, program, key, own_audio);
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -1319,7 +1398,7 @@ impl Engine {
                 Opened::Muxed(destination) => launch(
                     self,
                     program,
-                    key,
+                    OutputEncode { key, own_audio },
                     destination,
                     output_id.clone(),
                     generation,
@@ -1636,8 +1715,8 @@ impl Engine {
         state.live.set_media(media, state.graph.state());
     }
 
-    /// Re-plans the program mix now, as the live sources' thread does when a frame is
-    /// due, for tests that move time by hand.
+    /// Re-plans the program mix and each video mix's scene now, as the live sources'
+    /// thread does when a frame is due, for tests that move time by hand.
     #[cfg(test)]
     pub(crate) fn replan(&self) {
         lock(&self.shared.state).publish_render();
@@ -1646,7 +1725,8 @@ impl Engine {
 
 /// What [`Engine::execute`] produced: an answer, or a snapshot still being drawn.
 pub(crate) enum Executed {
-    Ready(Result<CallResult, ProtocolError>),
+    /// Boxed: a `state.get` result is large, and the snapshot case is small.
+    Ready(Box<Result<CallResult, ProtocolError>>),
     /// `video.snapshot`, answered by the snapshot thread, and the call's `command` span.
     Pending(SnapshotReply, tracing::Span),
 }
@@ -1664,18 +1744,42 @@ impl Drop for SettleOnDrop<'_> {
     }
 }
 
-/// Which encoder sessions `output_id` shares: its profile and that profile's encoding
-/// now, or the engine's default for an output with none or one the host declared.
+/// Which encoder sessions `output_id` shares: the video mix it shows with that mix's
+/// size and rate now, and its profile with that profile's encoding now. An output with
+/// no mix, or one the host declared, gets the program at the program stage's size and base
+/// rate; one with no profile the engine's default.
 fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     let state = graph.state();
-    let profile_id = state
-        .output(output_id)
-        .and_then(|output| output.encoder_profile())
-        .cloned();
+    let output = state.output(output_id);
+    let profile_id = output.and_then(|output| output.encoder_profile()).cloned();
     let profile = state
         .encoding_of(output_id)
         .unwrap_or(EncoderProfile::DEFAULT);
-    (profile_id, profile)
+    let mix = output
+        .and_then(|output| output.video_mix())
+        .and_then(|id| state.video_mix(id))
+        .map_or(MixKey::PROGRAM, |mix| {
+            let spec = mix.mix();
+            MixKey {
+                mix: Some(mix.id().clone()),
+                // The graph keeps every resolution in range, so this is never `None`.
+                size: jstream_media::FrameSize::new(spec.resolution.width, spec.resolution.height)
+                    .ok(),
+                divisor: spec.fps_divisor,
+            }
+        });
+    (mix, profile_id, profile)
+}
+
+/// Whether `output_id` starts with its own audio encode: it has an audio chain
+/// (ADR-0027), even one whose filters are all off, so switching one on later changes
+/// nothing but the chain. A chain added to a running output takes effect at its next
+/// start.
+fn has_audio_chain(graph: &Graph, output_id: &OutputId) -> bool {
+    graph
+        .state()
+        .output(output_id)
+        .is_some_and(|output| !output.filters().chain(FilterChain::Audio).is_empty())
 }
 
 /// Where an output the engine sends to itself goes, rather than to a publish target
@@ -2001,6 +2105,13 @@ fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake:
     );
 }
 
+/// [`Engine::use_gpu`] and its undo.
+fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
+    let mut state = lock(&shared.state);
+    state.live.use_gpu(context);
+    state.publish_render();
+}
+
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     let sampled = drops::lock_ledger(ledger).sample();
     let mut wake = Vec::new();
@@ -2170,8 +2281,9 @@ impl State {
     ///
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
-    /// comes first, so a retry succeeds even after `rev` moved on. A `filter.add` of a
-    /// scanned CLAP kind is refused next, since nothing runs CLAP filters yet.
+    /// comes first, so a retry succeeds even after `rev` moved on. An `ends_gesture` the
+    /// client has no open gesture for is refused next, as the mock does, and then a
+    /// `filter.add` of a scanned CLAP kind, since nothing runs CLAP filters yet.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -2514,8 +2626,8 @@ impl State {
                                 snapshot::on_screen(graph, running, now, &mut |id| match frames
                                     .get(id)
                                 {
-                                    Some(frame) => Some((frame.clone(), None)),
-                                    None => live.frame(id, now, frame_versions),
+                                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                                    None => live.look(id, now, frame_versions),
                                 });
                             transition::From::OnScreen(visuals.into())
                         }
@@ -2566,11 +2678,13 @@ impl State {
         );
     }
 
-    /// Re-plans the program mix at the current time and publishes it if it draws
-    /// something new. A source's stored frame wins over its live one. The live sources
-    /// are told when the plan's next frame change is due, to re-plan then. The mix shows
-    /// the program scene (ADR-0030), or the transition running toward it (ADR-0029),
-    /// whose length in milliseconds it returns; a transition that has ended is let go.
+    /// Re-plans the program mix and the scene each video mix shows at the current time,
+    /// and publishes them if they draw something new. A source's stored frame wins over
+    /// its live one. The live sources are told when the plan's next frame change is due,
+    /// to re-plan then. The program mix shows the program scene (ADR-0030), or the
+    /// transition running toward it (ADR-0029), whose length in milliseconds it returns;
+    /// a transition that has ended is let go. The shot lists the displays and windows the
+    /// program and every mix capture.
     fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
@@ -2589,8 +2703,8 @@ impl State {
             studio.program(),
             studio.running().map(|running| (running, now)),
             &mut |id| match frames.get(id) {
-                Some(frame) => Some((frame.clone(), None)),
-                None => live.frame(id, now, frame_versions),
+                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                None => live.look(id, now, frame_versions),
             },
         );
         live.end_plan();
@@ -2876,6 +2990,26 @@ fn no_key_store() -> ProtocolError {
     ProtocolError::ActionFailed {
         reason: "this engine has no credential store for stream keys".into(),
     }
+}
+
+/// A platform capture target as `capture.targets` reports it, or `None` for a kind of
+/// target no source kind captures.
+fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::CaptureTargetInfo> {
+    let (kind, target) = match info.target {
+        CaptureTarget::Display(id) => (CaptureTargetKind::Display, id),
+        CaptureTarget::Window(id) => (CaptureTargetKind::Window, id),
+        _ => return None,
+    };
+    Some(jstream_protocol::CaptureTargetInfo {
+        kind,
+        target: target.as_str().to_owned(),
+        name: info.name,
+        size: info.size.map(|size| PixelSize {
+            width: size.width(),
+            height: size.height(),
+        }),
+        primary: info.primary,
+    })
 }
 
 /// A protocol variant added after this engine was written.

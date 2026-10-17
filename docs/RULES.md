@@ -611,6 +611,10 @@ applies_to = [".github/workflows/**"]
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
 On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
+A skipped job reports a `skipped` check, which a required check accepts, but a skipped matrix
+job reports under its bare name (`clippy`, `test`), so the required `clippy (…)` and `test (…)`
+contexts never report on a draft head. That is what keeps auto-merge from firing on a draft
+whose checks were all skipped.
 `ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist` and `macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to

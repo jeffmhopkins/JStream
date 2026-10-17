@@ -108,6 +108,12 @@ pub(crate) struct Chains {
     failed: BTreeSet<SourceId>,
     /// Filters no shot runs any more, on their way to the cache.
     retired: Vec<VideoFilter>,
+    /// The frame of the cache the chains last ran in. Every mix a tick draws shares one
+    /// frame, and the chains run once in it, so a stateful filter sees each tick once.
+    ran: Option<u64>,
+    /// How many frames the chains ran in, for tests.
+    #[cfg(test)]
+    runs: usize,
 }
 
 impl Chains {
@@ -122,6 +128,15 @@ impl Chains {
         chains: &BTreeMap<SourceId, Chain>,
         at: MediaTime,
     ) {
+        let frame = cache.frame();
+        if self.ran == Some(frame) {
+            return;
+        }
+        self.ran = Some(frame);
+        #[cfg(test)]
+        {
+            self.runs += 1;
+        }
         self.failed.clear();
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
@@ -212,6 +227,28 @@ impl Chains {
         }
     }
 
+    /// Marks the layers the chains drew into last time as used in the cache's current
+    /// frame, without drawing, unless they already ran in it: a mix not due on a tick
+    /// keeps what its chains drew, and their layers aren't retired and reallocated.
+    pub(crate) fn claim(&self, compositor: &Compositor, cache: &mut ResourceCache<GpuKey>) {
+        if self.ran == Some(cache.frame()) {
+            return;
+        }
+        for (source, running) in &self.running {
+            let last = running.len().saturating_sub(1);
+            for at in 0..running.len() {
+                let key = output_key(source, at, last);
+                let Some(size) = cache.get(&key).map(|image| (image.width(), image.height()))
+                else {
+                    continue;
+                };
+                // It is the same size, so this reuses it and can't fail; if it ever
+                // does, the next run makes it again.
+                let _ = cache.layer(compositor, &key, size.0, size.1);
+            }
+        }
+    }
+
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.
     pub(crate) fn failed(&self, key: &GpuKey) -> bool {
         matches!(key, GpuKey::Filtered(source) if self.failed.contains(source))
@@ -219,7 +256,7 @@ impl Chains {
 
     /// How many filters run, for tests.
     #[cfg(test)]
-    pub(crate) fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.running.values().map(Vec::len).sum()
     }
 }
@@ -282,4 +319,179 @@ fn sync(running: &mut Vec<Running>, filters: &[ChainFilter], retired: &mut Vec<V
         running.push(entry);
     }
     retired.extend(old.into_iter().map(|r| r.filter));
+}
+
+#[cfg(test)]
+mod tests {
+    use jstream_graph::Graph;
+    use jstream_media::{MediaTime, Timebase};
+    use jstream_protocol::{
+        Edit, FilterChain, FilterId, FilterOwner, ItemId, SceneId, SourceId, SourceKind,
+    };
+    use jstream_render::{Compositor, ResourceCache};
+
+    use super::Chains;
+    use crate::snapshot::tests::gpu;
+    use crate::snapshot::{self, Frame, GpuKey, LiveParams, Look, NoCaptures, Shot};
+
+    const WHITE: [u8; 4] = [255, 255, 255, 255];
+    const RED: [u8; 4] = [255, 0, 0, 255];
+
+    /// Scene `main` placing the sources `logo` and then `cam` at the canvas's top left,
+    /// with one `color_correction` filter multiplying by red for each `(source,
+    /// enabled)` in `filters`.
+    fn graph(filters: &[(&str, bool)]) -> Graph {
+        let mut edits = vec![Edit::SceneCreate {
+            scene_id: SceneId::new("main"),
+            name: "Main".into(),
+            role: None,
+        }];
+        for id in ["logo", "cam"] {
+            edits.push(Edit::SourceCreate {
+                source_id: SourceId::new(id),
+                name: id.into(),
+                kind: SourceKind::Builtin {
+                    kind: "display".into(),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
+            });
+            edits.push(Edit::ItemAdd {
+                scene_id: SceneId::new("main"),
+                item_id: ItemId::new(id),
+                source_id: SourceId::new(id),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            });
+        }
+        for (at, (source, enabled)) in filters.iter().enumerate() {
+            edits.push(Edit::FilterAdd {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new(*source),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new(format!("f{at}")),
+                kind: "color_correction".into(),
+                settings: [("multiply", serde_json::json!("#ff0000"))]
+                    .into_iter()
+                    .collect(),
+                enabled: Some(*enabled),
+                index: None,
+            });
+        }
+        let mut graph = Graph::new().with_kinds(crate::kinds::builtin());
+        graph.apply(&edits, None).expect("edits");
+        graph
+    }
+
+    /// `graph`'s program shot, every source showing a white 16x9 frame.
+    fn shot(graph: &Graph) -> Shot {
+        let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
+        let frame = Frame::new(16, 9, &white, 1).expect("invariant: 16x9 RGBA8");
+        snapshot::plan_with(graph, Some(&SceneId::new("main")), None, &mut |_| {
+            Some(Look::Frame(frame.clone(), None))
+        })
+        .shot
+    }
+
+    /// Only a source with an enabled video filter gets a chain, and a shot with one
+    /// changes with time.
+    #[test]
+    fn a_chain_is_planned_for_each_source_whose_filter_runs() {
+        let plain = shot(&graph(&[]));
+        assert_eq!(plain.chain_count(), 0);
+        assert!(!plain.changes_with_time());
+
+        let filtered = shot(&graph(&[("cam", true), ("logo", false)]));
+        assert_eq!(filtered.chain_count(), 1, "the disabled filter is bypassed");
+        assert!(filtered.changes_with_time());
+        assert_ne!(plain, filtered);
+    }
+
+    /// Draws `shot`'s program at the canvas size `mixes` times in one cache frame, as
+    /// the render thread draws a tick's mixes, and reads back the top-left pixel.
+    fn draw(
+        compositor: &mut Compositor,
+        (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+        shot: &Shot,
+        mixes: usize,
+    ) -> [u8; 4] {
+        cache.begin_frame();
+        let canvas = shot.canvas().expect("canvas");
+        let at = MediaTime::zero(Timebase::MILLIS);
+        let mut pixel = None;
+        for _ in 0..mixes {
+            let output = snapshot::compose(
+                compositor,
+                (&mut *cache, &mut *chains),
+                (shot, at),
+                None,
+                &LiveParams::default(),
+                &NoCaptures,
+                canvas,
+            )
+            .expect("compose");
+            pixel = output.pixels().expect("read back").pixel(1, 1);
+        }
+        drop(cache.end_frame(compositor));
+        pixel.expect("a pixel")
+    }
+
+    /// The filter draws over the source's frame before it is placed; two mixes drawn
+    /// in one cache frame run the chain once, and a shot without the chain retires its
+    /// filter.
+    #[test]
+    fn a_chain_runs_once_per_frame_and_its_output_is_placed() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let filtered = shot(&graph(&[("cam", true)]));
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &filtered, 2);
+        assert_eq!(pixel, RED, "white multiplied by red");
+        assert_eq!((chains.runs, chains.len()), (1, 1));
+
+        let plain = shot(&graph(&[]));
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &plain, 1);
+        assert_eq!(pixel, WHITE);
+        assert_eq!((chains.runs, chains.len()), (2, 0), "the filter is retired");
+    }
+
+    /// A frame that only claims layers (a mix not due on that tick) keeps the chain's
+    /// output layer, so the next frame that draws reuses it instead of reallocating.
+    #[test]
+    fn a_frame_that_only_claims_layers_keeps_the_chain_output() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let filtered = shot(&graph(&[("cam", true)]));
+        let key = GpuKey::Filtered(SourceId::new("cam"));
+        draw(&mut compositor, (&mut cache, &mut chains), &filtered, 1);
+        let output = cache
+            .get(&key)
+            .expect("the chain's output")
+            .texture()
+            .clone();
+        let canvas = filtered.canvas().expect("canvas");
+        for _ in 0..3 {
+            cache.begin_frame();
+            snapshot::claim_layers(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                &filtered,
+                None,
+                canvas,
+            )
+            .expect("claim");
+            drop(cache.end_frame(&compositor));
+            assert_eq!(cache.pending(), 0, "nothing retired");
+            assert!(cache.get(&key).expect("kept").texture() == &output);
+        }
+        draw(&mut compositor, (&mut cache, &mut chains), &filtered, 1);
+        assert!(cache.get(&key).expect("kept").texture() == &output);
+        assert_eq!(chains.runs, 2, "claiming runs nothing");
+    }
 }
