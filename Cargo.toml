@@ -112,6 +112,15 @@ mach2 = { version = "0.6", default-features = false }
 # version (`NSProcessInfo`). The 0.3 line wgpu's Metal backend already uses; no build
 # script. No default features: only `std` and the classes the macOS crate calls.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSProcessInfo"] }
+# Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
+# crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
+# and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
+# `CVPixelBuffer` for its input. The 0.3 line, as `objc2-foundation`; plain C APIs, so
+# no `objc2` feature and no build script. Only the headers the macOS crate calls.
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFDictionary", "CFNumber", "CFString"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
+objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
 # Property tests with shrinking (`jstream-graph`'s `tests/`), test-only. Held at 1.11:
 # 1.12 moves to `rand` 0.10, a second `rand` beside the 0.9 already in the tree
 # (R-DEP-005). No default features: no `fork`/`timeout` (`rusty-fork`, `tempfile`) and

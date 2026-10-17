@@ -841,8 +841,8 @@ id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
 status = "review"
-prs = [511, 513]
-note = "ADR-0063 accepted (#511); crate part 1 (#513)"
+prs = [511, 513, 533]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533)"
 
 [[item]]
 id = "LNX1"

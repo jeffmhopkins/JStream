@@ -1,10 +1,11 @@
 //! macOS platform backends: the implementations of the `jstream-platform` traits on macOS,
-//! as ADR-0063 lays them out. The first part: it has the `mach_absolute_time`
+//! as ADR-0063 lays them out, built in parts. It has the `mach_absolute_time`
 //! media clock (`MachClock`), the running release and its support tier (`MacosVersion`,
-//! `support_tier`), four-character codes and `OSStatus` errors, and the VideoToolbox and
-//! AudioToolbox settings for an encoder configuration. Capture (`ScreenCaptureKitCapture`),
-//! audio (`CoreAudioIo`) and codec sessions (`VideoToolboxCodecs`) report `Unsupported`
-//! until their follow-ups land. Layer 2, and one of the crates allowed `unsafe`
+//! `support_tier`), four-character codes and `OSStatus` errors, the VideoToolbox and
+//! AudioToolbox settings for an encoder configuration, and the VideoToolbox H.264 and HEVC
+//! encoder on CPU frames (`VideoToolboxCodecs`, with Annex B output from
+//! `annexb_access_unit`). Capture (`ScreenCaptureKitCapture`), audio (`CoreAudioIo`), the
+//! AAC converter and decoding report `Unsupported` until their follow-ups land. Layer 2, and one of the crates allowed `unsafe`
 //! (R-UNSAFE-001): every system call is wrapped here behind safe APIs.
 //!
 //! Apple's frameworks are called through the objc2 crates and Mach time through `mach2`
@@ -14,13 +15,17 @@
 //!
 //! Docs: crates/jstream-platform-macos/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0063-macos-platform-support.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md
 
+mod annexb;
 mod audio;
 mod capture;
 mod clock;
 mod codec;
 mod fourcc;
 mod version;
+#[cfg(target_os = "macos")]
+mod videotoolbox;
 
+pub use annexb::{annexb_access_unit, cm_time_parts, copy_rows, media_time_from_cm};
 #[cfg(target_os = "macos")]
 pub use audio::CoreAudioIo;
 pub use audio::{check_input, feature_for_input};
