@@ -889,8 +889,11 @@ the store refuses, both fail with `action_failed`. A key is bound to its server 
 under the collection lock, an applied batch, undo or redo marks every output it deleted
 or whose `OutputKind::key_server` it changed in `State::stale_keys`; once the lock is
 released the engine removes those keys from the store and unmarks each one removed.
-`output.start` refuses a marked output with `action_failed`, so the opener never reads
-the old key for the new server, even for a start racing the batch. A store that refuses
+`output.start` refuses a marked output with `action_failed`, so a start that begins
+after the batch never reads the old key for the new server. A start that checked the
+key just before the batch is covered by `Engine::output_kind`: until the start settles
+it answers the kind the start checked (kept in its `Pending`), so a host's opener reads
+the server the key was set for, never the new one with the old key. A store that refuses
 leaves the output marked (the batch still succeeds, and a warning is logged) until an
 `output.set_key` or `output.clear_key` succeeds. The key is write-only
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): every reason is fixed text, nothing logs

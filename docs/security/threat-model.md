@@ -266,7 +266,9 @@ intercepted connection.
   turns verification off. An RTMP server's text has the key replaced before it is kept.
 - A key is bound to its server: pointing an output at another scheme, host or port,
   or deleting it, removes its key, and the output can't start until that removal has
-  happened, so a retarget never sends the old key to the new host (#343).
+  happened. A start already past that check when the retarget lands opens the target
+  it checked, not the new one, so a retarget never sends the old key to the new host
+  (#343).
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
 

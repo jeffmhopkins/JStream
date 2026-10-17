@@ -2607,6 +2607,85 @@ mod cpu_pipeline {
         );
     }
 
+    /// A retarget that lands after `output.start` checked the key but before the host's
+    /// opener reads the target (#343) doesn't pair the new server with the old key:
+    /// while the start is opening, `Engine::output_kind` answers the kind the start
+    /// checked, so the opener sees the server the key was set for. The store refuses
+    /// the removal here, so the old key is still there when the opener reads it.
+    #[test]
+    fn a_retarget_during_the_opener_does_not_send_the_old_key_to_the_new_server() {
+        use super::{rtmp_output, set_key};
+        use crate::OpenPublish;
+        use jstream_platform::StreamKeyStore;
+        use jstream_platform::fake::MemoryKeyStore;
+        use jstream_protocol::{OutputKind, RtmpTarget};
+
+        const OLD: &str = "rtmp://a.rtmp.youtube.com/live2";
+        const NEW: &str = "rtmp://attacker.example/live2";
+        let store = MemoryKeyStore::new();
+        // The engine and a client for the opener to retarget with, set once both exist.
+        type Slot = Mutex<Option<(Engine, InProcessControl)>>;
+        // The kind the opener read, and whether the store still had a key then.
+        type Seen = Mutex<Option<(Option<OutputKind>, bool)>>;
+        let slot: Arc<Slot> = Arc::new(Mutex::new(None));
+        let seen: Arc<Seen> = Arc::new(Mutex::new(None));
+        let open: OpenPublish = {
+            let (slot, seen, store) = (Arc::clone(&slot), Arc::clone(&seen), store.clone());
+            Arc::new(move |output_id: &OutputId| {
+                let guard = slot.lock().expect("slot");
+                let (engine, control) = guard.as_ref().expect("engine set");
+                store.set_failing(true);
+                batch(
+                    control,
+                    edits(vec![Edit::OutputSetTarget {
+                        output_id: output_id.clone(),
+                        target: RtmpTarget::Generic { url: NEW.into() },
+                    }]),
+                )
+                .expect("the retarget applies while the output starts");
+                store.set_failing(false);
+                let kind = engine.output_kind(output_id);
+                let key = store.get(output_id.as_str()).expect("get").is_some();
+                *seen.lock().expect("seen") = Some((kind, key));
+                Err(crate::PublishError::new("no server in this test"))
+            })
+        };
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_key_store(Arc::new(store.clone()))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("yt"),
+                kind: rtmp_output(OLD),
+            }]),
+        )
+        .expect("output.create");
+        block_on(control.call(set_key("yt", "yt-key"))).expect("set_key");
+        *slot.lock().expect("slot") = Some((engine.clone(), connected(&engine)));
+
+        let failed = block_on(control.call(output_call("yt", true))).expect_err("no server");
+        assert!(!failed.to_string().contains("yt-key"), "{failed}");
+        let (kind, key) = seen.lock().expect("seen").take().expect("the opener ran");
+        assert!(key, "the refused removal left the old key in the store");
+        assert_eq!(
+            kind,
+            Some(rtmp_output(OLD)),
+            "the opener saw the server the key was set for"
+        );
+        assert_eq!(
+            engine.output_kind(&OutputId::new("yt")),
+            Some(rtmp_output(NEW)),
+            "once the start settled, the retarget shows"
+        );
+        // The opener holds the engine; drop that so the engine isn't kept alive.
+        slot.lock().expect("slot").take();
+    }
+
     // --- Item: an encoder that fails mid-stream fails the output.
 
     struct FailingVideo {

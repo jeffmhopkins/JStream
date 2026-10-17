@@ -305,7 +305,21 @@ impl Engine {
     /// recording output (`OutputKind::Record`) needs no publish target: the engine
     /// opens its file itself. Nor does the virtual camera (`OutputKind::VirtualCam`),
     /// which publishes to the backends' [`VcamSink`](jstream_platform::VcamSink).
+    ///
+    /// While an `output.start` of this output is opening, it answers the kind the start
+    /// saw when it checked the output's key, not the collection's current one (#343). A
+    /// retarget that lands during the opener then can't pair the new server's URL with
+    /// the old server's key: the opener connects to the server the start was checked
+    /// for, and the next start sees the new target.
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
+        if let Some(host) = &self.media {
+            let gate = lock(&host.gate);
+            if let Some(pending) = gate.pending.as_ref()
+                && pending.output_id == *output_id
+            {
+                return pending.kind.clone();
+            }
+        }
         lock(&self.shared.state)
             .graph
             .state()
@@ -1166,6 +1180,11 @@ impl Engine {
                 output_id: output_id.clone(),
                 generation,
                 cancel: false,
+                kind: state
+                    .graph
+                    .state()
+                    .output(&output_id)
+                    .map(|output| output.kind().clone()),
             });
             match state.outputs.begin(&output_id, true) {
                 Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),

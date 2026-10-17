@@ -192,8 +192,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   characters; `output.clear_key` always succeeds.
   The keys live in memory, outside the collection: no `rev`, no event. As in the
   engine, an applied batch, undo or redo that deletes an output or changes its
-  `OutputKind::key_server` (another scheme, host or port) removes its key (#343). `output.status` reports `key_set` from them, and
-  `MockEngine::stream_key` lets a client test check what was stored. Unlike an
+  `OutputKind::key_server` (another scheme, host or port) removes its key (#343).
+  `output.status` reports `key_set` from them, and `MockEngine::stream_key` lets a
+  client test check what was stored. Unlike an
   `Engine` built without `with_key_store`, which answers `action_failed`, the mock
   always has a store, so clients can test the whole flow;
 - `audio.reset_loudness`, which succeeds and does nothing: the mock has no mixer, so it
