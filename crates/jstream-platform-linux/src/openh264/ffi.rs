@@ -28,8 +28,8 @@ pub(super) const FRAME_TYPE_INVALID: c_int = 0;
 pub(super) const OPTION_IDR_INTERVAL: c_int = 1;
 /// `ENCODER_OPTION_MAX_BITRATE` (an `SBitrateInfo`, [`BitrateInfo`]).
 pub(super) const OPTION_MAX_BITRATE: c_int = 6;
-/// `LAYER_NUM::SPATIAL_LAYER_ALL`: a setting for every spatial layer.
-pub(super) const SPATIAL_LAYER_ALL: c_int = 4;
+/// `LAYER_NUM::SPATIAL_LAYER_0`: the first spatial layer, the only one this encoder has.
+pub(super) const SPATIAL_LAYER_0: c_int = 0;
 /// `ENCODER_OPTION_RC_FRAME_SKIP` (a `bool`).
 pub(super) const OPTION_RC_FRAME_SKIP: c_int = 9;
 /// `ENCODER_OPTION_TRACE_LEVEL` (a `uint32_t`; the levels fit in `c_int`, the same size).
@@ -44,7 +44,7 @@ pub(super) const MAX_LAYERS: usize = 128;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct BitrateInfo {
-    /// A `LAYER_NUM`, here [`SPATIAL_LAYER_ALL`].
+    /// A `LAYER_NUM`, here [`SPATIAL_LAYER_0`].
     pub layer: c_int,
     /// Bits per second.
     pub bitrate: c_int,

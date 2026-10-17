@@ -19,7 +19,7 @@ use jstream_platform::{
 use super::ffi::{
     Api, BitrateInfo, CAMERA_VIDEO_REAL_TIME, EncParamBase, Encoder, FRAME_TYPE_IDR,
     FRAME_TYPE_INVALID, FRAME_TYPE_SKIP, FrameBsInfo, OPTION_IDR_INTERVAL, OPTION_MAX_BITRATE,
-    OPTION_RC_FRAME_SKIP, OPTION_TRACE_LEVEL, RC_BITRATE_MODE, SPATIAL_LAYER_ALL, SourcePicture,
+    OPTION_RC_FRAME_SKIP, OPTION_TRACE_LEVEL, RC_BITRATE_MODE, SPATIAL_LAYER_0, SourcePicture,
     VIDEO_FORMAT_I420, WELS_LOG_QUIET,
 };
 
@@ -94,8 +94,8 @@ fn bps(kbps: u32) -> Result<c_int, PlatformError> {
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for a codec other than H.264, an input format other
-/// than NV12 or I420, an odd frame size, a keyframe interval of 0, or a bit rate that
-/// doesn't fit.
+/// than NV12 or I420, an odd frame size, a keyframe interval of 0, a bit rate that
+/// doesn't fit, or a VBR peak below its target.
 pub(super) fn params(config: &VideoEncoderConfig) -> Result<EncParamBase, PlatformError> {
     if config.codec != Codec::H264 {
         return Err(PlatformError::Unsupported {
@@ -125,6 +125,14 @@ pub(super) fn params(config: &VideoEncoderConfig) -> Result<EncParamBase, Platfo
         RateControl::Cbr { kbps } => bps(kbps)?,
         RateControl::Vbr { kbps, max_kbps } => {
             bps(max_kbps)?;
+            // OpenH264 refuses a layer peak below its target.
+            if max_kbps < kbps {
+                return Err(PlatformError::Unsupported {
+                    what: format!(
+                        "a VBR peak of {max_kbps} kbps below its {kbps} kbps target for OpenH264"
+                    ),
+                });
+            }
             bps(kbps)?
         }
         _ => {
@@ -195,9 +203,12 @@ impl OpenH264Encoder {
         // dropping frames.
         let mut skip = false;
         this.set_option(OPTION_RC_FRAME_SKIP, (&raw mut skip).cast())?;
+        // VBR's peak goes on the one spatial layer. OpenH264 enforces a layer's peak only
+        // by skipping frames, which is off above, so a VBR session encodes at its target
+        // rate, as a CBR one does.
         if let RateControl::Vbr { max_kbps, .. } = config.rate_control {
             let mut max = BitrateInfo {
-                layer: SPATIAL_LAYER_ALL,
+                layer: SPATIAL_LAYER_0,
                 bitrate: bps(max_kbps)?,
             };
             this.set_option(OPTION_MAX_BITRATE, (&raw mut max).cast())?;

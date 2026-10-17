@@ -16,7 +16,7 @@ use jstream_platform::{
 use super::super::ffi::{
     Api, BitrateInfo, EncParamBase, Encoder, EncoderVtbl, FRAME_TYPE_IDR, FrameBsInfo,
     OPTION_IDR_INTERVAL, OPTION_MAX_BITRATE, OPTION_RC_FRAME_SKIP, OPTION_TRACE_LEVEL,
-    SPATIAL_LAYER_ALL, SourcePicture, VIDEO_FORMAT_I420,
+    SPATIAL_LAYER_0, SourcePicture, VIDEO_FORMAT_I420,
 };
 use super::OpenH264Encoder;
 
@@ -138,9 +138,9 @@ unsafe extern "C" fn set_option(_: *mut Encoder, option: c_int, value: *mut c_vo
         if option == OPTION_RC_FRAME_SKIP {
             i64::from(*value.cast::<bool>())
         } else if option == OPTION_MAX_BITRATE {
-            // `SBitrateInfo`, for every spatial layer.
+            // `SBitrateInfo`, for the one spatial layer.
             let info = *value.cast::<BitrateInfo>();
-            assert_eq!(info.layer, SPATIAL_LAYER_ALL);
+            assert_eq!(info.layer, SPATIAL_LAYER_0);
             i64::from(info.bitrate)
         } else {
             i64::from(*value.cast::<c_int>())
@@ -304,6 +304,13 @@ fn refuses_what_it_cant_encode() {
             RateControl::Vbr {
                 kbps: 2500,
                 max_kbps: u32::MAX,
+            },
+        ),
+        config(
+            PixelFormat::Nv12,
+            RateControl::Vbr {
+                kbps: 2500,
+                max_kbps: 2000,
             },
         ),
         VideoEncoderConfig {

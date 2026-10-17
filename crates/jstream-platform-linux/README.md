@@ -125,9 +125,10 @@ It has:
   else is never loaded. The pin's two SHA-256 values are not recorded yet, so for now
   `install` refuses before any request is made. **`HttpsFetch`** is the real `Fetch`:
   one `GET` over rustls with the OS trust store, no redirects. **`OpenH264Encoder`**
-  (`VideoEncoder`) takes CPU NV12 or I420 frames of even size, CBR or VBR (the peak
-  set for every layer) and a keyframe interval of at least one frame, and encodes each
-  frame synchronously (camera real-time mode, no frame skipping, the configured
+  (`VideoEncoder`) takes CPU NV12 or I420 frames of even size, CBR or VBR (a peak at
+  least the target, set on its one spatial layer; OpenH264 enforces it only by skipping
+  frames, which is off, so VBR encodes at the target rate) and a keyframe interval of at
+  least one frame, and encodes each frame synchronously (camera real-time mode, no frame skipping, the configured
   IDR interval) into one Annex B packet whose `dts` is its `pts`; `request_keyframe`
   forces an IDR on the next frame. The library's own logging is turned off.
 - **`RustAacEncoder`** (`AudioEncoder`): AAC encoding, which `VaapiCodecs` lists and
