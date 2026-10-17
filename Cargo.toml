@@ -130,6 +130,16 @@ objc2-video-toolbox = { version = "0.3", default-features = false, features = ["
 # headers the macOS crate calls (no AudioUnit, AudioQueue, blocks or Core MIDI).
 objc2-audio-toolbox = { version = "0.3", default-features = false, features = ["std", "AudioCodec", "AudioConverter", "objc2-core-audio-types"] }
 objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
+# The Core Audio HAL through the objc2 framework crates (ADR-0063 §4, §12), for audio
+# devices and input: the device list and defaults, device and stream properties and
+# their listeners, and the IOProc that records a device. The 0.3 line, as above, already
+# in the tree; plain C APIs (no `objc2`, blocks or dispatch features) and no build script.
+objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2-core-audio-types"] }
+# AVFoundation through the objc2 framework crates (ADR-0063 §4, §11, §12), for the
+# Microphone permission: `AVCaptureDevice`'s authorization status and request for the
+# audio media type. The 0.3 line, as above; no build script. Only those headers, and
+# `block2` for the request's completion handler.
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
 # ScreenCaptureKit through the objc2 framework crates (ADR-0063 §3, §12), for display and
 # window capture: `SCShareableContent` lists targets, `SCStream` captures them, and
 # `SCError` has the codes for a refused permission or a stopped stream. The 0.3 line, as
