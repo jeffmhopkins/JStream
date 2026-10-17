@@ -86,8 +86,10 @@ pub trait Capture: Send + Sync {
     }
 
     /// Forgets what the backend keeps for `source`, such as its restore token, once the
-    /// source is deleted. The default keeps nothing, so has nothing to forget. Best
-    /// effort: a grant that can't be removed is never used again.
+    /// source is deleted, including what a capture of it that is still starting would
+    /// keep. The default keeps nothing, so has nothing to forget. Best effort: a grant
+    /// whose file can't be removed stays, and a new source given the same ID would
+    /// reopen it, so call it once the source's captures have stopped.
     fn forget_source(&self, source: &str) {
         let _ = source;
     }
