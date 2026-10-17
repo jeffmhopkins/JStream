@@ -569,8 +569,9 @@ It also generates one block from data rather than from docs:
   deliver it, and `docs check` fails when it doesn't parse or breaks those rules. A PR
   that delivers or advances an item updates its entry, so the README changes with the
   work. `cargo xtask docs progress` compares the file with the merged history (the
-  `(#N)` of each squash commit, and item IDs that PR titles name in parentheses) and
-  prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
+  `(#N)` of each squash commit, the `(#N)` of each `* …` line in a wave's landing squash,
+  which lists the PRs the wave carried, and item IDs that PR titles name in parentheses)
+  and prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.
 
 <a id="governance"></a>
@@ -670,8 +671,11 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
 - **Clients** ([R-ARCH-003](RULES.md#R-ARCH-003)): `jstream-ui`, `jstream-mcp`,
   `jstream-server` and `jstream-cli` never reach `jstream-core`, directly or through other
   members. The finding shows the path.
-- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam, browser and
-  browser-helper crates on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
+- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam, CLAP
+  wrapper, browser and browser-helper crates on the `unsafe` allowlist and `*-sys` crates
+  may declare `unsafe_allowed = true`. No member but `jstream-plugin-host` reaches
+  `jstream-plugin-clap`, directly or through other members
+  ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); the finding shows the path. For a
   member that declares `false`, every library and binary crate root must carry
   `#![forbid(unsafe_code)]` (alone or among other lints, possibly wrapped over several
   lines) among its leading inner attributes: only whitespace, comments and other inner

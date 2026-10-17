@@ -34,7 +34,8 @@ Contents:
   publishes it with `MAGIC` and `VERSION`. `Shared::config` (host): the configuration
   only when both match and every field is in range. `Shared::publish_ready` (host) and
   `Shared::ready_latency` (engine): the plugin's latency, then the ready state; the
-  engine refuses a latency over `MAX_PLUGIN_LATENCY`.
+  engine refuses a latency over `MAX_PLUGIN_LATENCY`. `Shared` is `AsRef<Shared>`, so
+  a heap block and a mapped one go through the same `AsRef` bound.
 - `BlockRing`, one each way: `SLOTS` (8) slots of up to `MAX_BLOCK_FRAMES` (2048)
   interleaved stereo frames, block `n` in slot `n % SLOTS`. A slot's sequence word is
   cleared before it is rewritten and set to `n + 1` after, and `read` re-checks it after
@@ -50,6 +51,23 @@ Contents:
   filter's settings) and from the plugin (its own editor). Counts further apart than
   the ring's size read as empty and full, since the other process wrote them.
 - `LIVENESS_MS`: how long a heartbeat may stand still before the host counts as hung.
+- `control`: the control channel, framed messages over the host's stdin and stdout
+  for what is rare and variable-sized. The engine sends `Start` (with a saved state to
+  restore, or none), `SaveState` and `Stop`. The host sends `Params` (the plugin's
+  parameter list, after it starts and after a restart), `State` (answering
+  `SaveState`), `StateDirty`, `ParamChanged`, `Plugins` (a scan's answer: each audio
+  effect's id, name, vendor, version, description and parameters) and `Error`. A frame
+  is a little-endian `u32` length and a payload of at most `MAX_FRAME` (4 MiB, room for
+  a 2 MiB state): a tag byte, then the fields, strings and byte strings
+  length-prefixed. `read_frame` reads one, and `decode` refuses an unknown tag, a field
+  past the end, a list over `MAX_LIST`, a string that isn't UTF-8 and trailing bytes,
+  since each side treats the other's frames as untrusted.
+
+**One filter per block at a time.** The mixer's side numbers its blocks on from the
+input ring's head and fixes its latency from the host's ready latency when it is built.
+When the engine rebuilds a chain, a new filter can go on a block whose filter was
+removed, and the host carries on. A restarted host gets a new block and the filter is
+built again, since its plugin latency may differ.
 
 **Trust.** Each side treats what the other wrote as untrusted: a slot's frame count
 must match the reader's buffer exactly, a corrupt parameter ring is empty, the
@@ -59,11 +77,13 @@ turns non-finite samples into silence (`jstream-audio`).
 **Tests:** ring round trips, rejected block numbers and lengths, overwritten slots,
 and a two-thread test that no torn block is ever accepted; parameter rings in order,
 full, wrapped, corrupt and across threads; `init` publishing, refusing bad
-configurations and clearing what a previous host left; the ready latency's checks; and
-a host thread halving blocks against a mixer loop that never waits, every block it gets
-back being the one `depth` blocks earlier.
+configurations and clearing what a previous host left; the ready latency's checks; a
+host thread halving blocks against a mixer loop that never waits, every block it gets
+back being the one `depth` blocks earlier; and every control message round-tripping
+through a stream, malformed payloads and every truncation refused, and streams ending
+cleanly or inside a frame.
 
-**Not here:** the plugin's saved state (up to 2 MiB) crossing processes, mapping and
-naming the block and starting and watching the host process (the engine side, in
-`jstream-platform-windows`), and the host itself (`jstream-plugin-host`, with
-`jstream-plugin-clap`). Each comes in a later CL1 PR.
+**Not here:** mapping and naming the block (`jstream-platform-windows`'s
+`PluginBlock`), starting the host process (its `WindowsPluginHosts`), watching and
+restarting it (`jstream-core`'s `HostSupervisor`), and the host itself
+(`jstream-plugin-host`, with `jstream-plugin-clap`).

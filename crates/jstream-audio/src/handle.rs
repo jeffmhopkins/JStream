@@ -198,6 +198,13 @@ impl InputControl {
     /// parameters travel through the block's parameter ring, not
     /// [`FilterControl::set`].
     ///
+    /// One filter per block at a time. The filter numbers its blocks on from the
+    /// block's input ring, so a block whose filter was removed can be given a new one
+    /// (a chain rebuilt around it) without restarting the host. It fixes its latency from
+    /// the host's ready latency when it is built: a host reporting a new latency needs
+    /// the filter removed and added again. The block must be initialised for
+    /// [`Self::mixer_rate`] and [`Self::mixer_block_frames`].
+    ///
     /// # Errors
     /// As [`Self::add_filter`], and [`AudioError::InvalidConfig`] for a block that isn't
     /// initialised for this mixer or whose host isn't ready.
@@ -207,6 +214,16 @@ impl InputControl {
         memory: HostMemory,
     ) -> Result<FilterControl, AudioError> {
         insert_host_filter(&self.plane, ChainTarget::Input(self.id.0), index, memory)
+    }
+
+    /// The mixer's sample rate, which a CLAP filter's block is initialised for.
+    pub fn mixer_rate(&self) -> u32 {
+        self.plane.sample_rate()
+    }
+
+    /// Frames per mixer block, which a CLAP filter's block is initialised for.
+    pub fn mixer_block_frames(&self) -> usize {
+        self.plane.block_frames()
     }
 
     /// Removes this input. The mixer drops it on its next block and the ring is freed

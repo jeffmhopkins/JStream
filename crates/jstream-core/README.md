@@ -33,7 +33,8 @@ state machine. Contents:
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`;
+  `youtube_chat` preset open pages in) and `with_collection_file`; `scan_clap_plugins`
+  adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -72,6 +73,42 @@ state machine. Contents:
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
   `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's filters in
   line with its source's audio chain.
+- **CLAP plugins** (`plugins/`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)):
+  - `Engine::scan_clap_plugins(Arc<dyn PluginHosts>)` scans the CLAP search directories
+    (recursively, for `.clap` entries, each scanned in its own host process) and adds
+    every audio effect found to the graph's kinds as an audio-filter kind,
+    `clap/<plugin id>` (`CLAP_KIND_PREFIX`), so `kind.list` and `kind.describe` report
+    it. Its settings are the plugin's parameters, by CLAP id in decimal, all live: a
+    stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
+    read-only and bypass parameters and ones without a finite range are left out. When
+    two files offer one plugin id, the first found wins. A plugin's names reach clients
+    through `plugin_text` (#351): control characters become spaces, trimmed, at most 128
+    characters. The scan returns a `ClapScan`
+    with each kind's file and plugin id, and the files that failed. Kinds stay until
+    the engine ends. It is slow, so a host calls it on a worker thread; the engine's
+    lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
+    hosts, and each kind's file and plugin id, added to earlier scans').
+  - `HostSupervisor` keeps one CLAP filter instance's host process running, on a
+    control thread, driven by `tick(now)`, which returns `HostEvent`s. A host is
+    `Ready` (with its block and latency) once its block says so. One that exits, isn't
+    ready within `start_timeout` (it may load the plugin without beating until then),
+    or, once ready, stops its heartbeat for `LIVENESS_MS` has `Crashed`: it is killed and restarted after a wait that doubles from `first_retry`
+    up to `max_retry`. After `max_crashes` crashes with no stable run (`stable_after`)
+    between them, or at once when the host marks a failure a restart can't fix (load,
+    not an effect, activate, configuration), it is `Disabled` until `enable`. The
+    supervisor asks for the plugin's state whenever the plugin marks it changed, keeps
+    the latest (`saved_state`, `StateSaved`) and restarts with it. A run of
+    `degraded_after` consecutive late blocks in the mixer is `Degraded`, and its end
+    `Recovered`. `stop` asks the host to stop and kills it after `STOP_GRACE`.
+  - A CLAP filter in a source's audio chain runs as `plugins::filter::ClapFilter`,
+    one per filter, owned by the input's `filters::Chain` (see *Audio sources*). A
+    collection holding one loads before the scan describes its kind (the graph keeps
+    such a filter verbatim), and the filter is bypassed until then.
+  - **Not yet:** writing the plugin's own parameter changes and saved state back to the
+    filter's settings (the supervisor keeps the state for its restarts only, so a new
+    host after an engine restart starts from the plugin's defaults and the filter's
+    settings); a new mixer filter when a restarted plugin reports a new latency; the
+    plugin's editor; and rescanning.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -210,7 +247,10 @@ state machine. Contents:
   (`a_source_a_source_draws_feeds_its_scope_after_its_fader`)), the audio filter kinds
   and their kernels (`filters.rs`: defaults, range edges, and a chain updated in place
   or rebuilt on a real mixer, and new settings a full command queue refuses kept off
-  the record and tried again), item opacity in linear light through a nested scene
+  the record and tried again; a CLAP filter bypassed until its fake host is ready, kept
+  on the same host when the chain is rebuilt, a missing plugin reported once, and the
+  host stopped with the filter; `plugins/filter.rs`: settings sent to a ready host's
+  parameter ring once each, and only CLAP ids with finite values), item opacity in linear light through a nested scene
   (`snapshot.rs`), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
@@ -317,10 +357,11 @@ the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its d
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
-descriptors and the sources that draw them), `jstream-youtube` (Google sign-in and the
+descriptors and the sources that draw them), `jstream-plugin-proto` (the CLAP host
+supervisor's block and control messages), `jstream-youtube` (Google sign-in and the
 Live API client behind the YouTube commands and `youtube` outputs), `serde_json` (settings
-values: the audio filter kinds' defaults and what the mixer kernels read from a filter's
-settings), `png`
+values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
+settings, and the CLAP kinds' parameter defaults), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
@@ -330,10 +371,10 @@ and `tracing` (see *Logging*). No async runtime: `output.start` blocks the call 
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`), `jstream-youtube`'s `fake` feature (`src/tests/youtube.rs`),
-`jstream-browser`'s `fake` feature (the browser pages in `src/tests/audio.rs`),
-`zune-jpeg` (decoding the preview's JPEG pictures in tests), `jstream-mcp`
-(`tests/mcp.rs`) and, on Windows,
+`tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
+(`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
+`src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
+`jstream-mcp` (`tests/mcp.rs`) and, on Windows,
 `jstream-platform-windows` (the GPU capture hardware test, `src/tests/windows_gpu.rs`,
 compiled only with this crate's `hw-tests` feature); the tests also use `serde_json`
 for settings values and saved collection files. All of them
@@ -376,7 +417,7 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   same `Graph::apply_with_running` (see *Undo and redo*).
 - **Queries** that read the collection, and the kind queries, go to `Graph::query`,
   `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
-  kinds the engine gave it (`kinds.rs`). `output.status` reads the outputs' runtime state
+  kinds the engine gave it (`kinds.rs`), and the CLAP filter kinds a scan added. `output.status` reads the outputs' runtime state
   (`not_found` for an unknown one) and fills `key_set` from the key store after the
   collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
@@ -581,16 +622,35 @@ stage starts, its `AudioInputs` opens one mixer input per audio source that is o
 sets it up as the collection says; the default microphone and desktop inputs send to
 the master bus at unity, as every new input does. Each source's input runs the
 source's audio filter chain ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-`sync` also records each source's enabled filters of a built-in kind, in order
-(`filters::chain_of`; a disabled filter or a pack kind is left out, so bypassed), and
-on every pass the thread brings the input's filters in line (`filters::Chain::apply`).
+`sync` also records each source's enabled filters of a built-in or `clap/` kind, in
+order (`filters::chain_of`; a disabled filter or a pack kind is left out, so
+bypassed), and on every pass the thread brings the input's filters in line
+(`filters::Chain::apply`).
 The filters run before the fader and sends the routing sets, which leave them alone.
 When only settings changed, each changed filter is updated in place
 (`FilterControl::set`), so a gate's envelope or a delay line carries on; a new kind, a
 reorder, or a limiter's look-ahead (its latency) rebuilds the chain. A filter the mixer
 refuses to add is bypassed, and new settings it refuses (a full command queue) leave
 the filter on its old ones until the next pass tries again; each refusal is logged at
-`warn`, never an edit failure, and a reopened input gets its chain again. Each input is opened by asking the platform
+`warn`, never an edit failure, and a reopened input gets its chain again.
+
+A CLAP filter ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) gets a
+`ClapFilter` from the `ClapCatalog` the scan gave (`AudioSources::add_clap_plugins`):
+a `HostSupervisor` whose host runs on a block at the mixer's rate and block size
+(`InputControl::mixer_rate`, `mixer_block_frames`) and `DEFAULT_DEPTH`. Every pass
+ticks it. It is bypassed until its host is `Ready`, then the chain is rebuilt with the
+mixer's CLAP filter on the host's block (`insert_host_filter`); while the host is down
+the mixer filter passes the dry signal itself, and a restarted host's new block, or a
+disabled filter, rebuilds the chain again. A chain rebuilt around it (a filter added,
+removed or moved) puts a new mixer filter on the same block, so the host keeps
+running; no new filter goes on a block until its old one's removal is queued. Its
+settings go to the plugin as parameter changes on the block's ring, never through a
+rebuild: each setting whose ID is a CLAP parameter id with a finite number, when it
+differs from what the host was sent, all of them when a new host is ready. A CLAP
+filter with no plugin for its kind (no scan yet, or the plugin is gone) is logged once
+and bypassed; one removed from the chain, or on a closed input, stops its host. Host
+crashes, a disabled filter, host errors (as `plugin_text`) and a degraded or recovered
+host are logged at `warn` like refusals. Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`

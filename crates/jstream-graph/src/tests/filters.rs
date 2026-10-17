@@ -458,3 +458,77 @@ fn filters_round_trip_through_the_collection_file() {
         "{refused:?}"
     );
 }
+
+/// A filter whose kind the graph doesn't describe (a CLAP plugin before the scan, say)
+/// still loads, with its settings and kind version kept verbatim and saved back, and
+/// the rest of its chain in order. `filter.add` of such a kind is still refused, and an
+/// unchecked reference must still name something that exists.
+#[test]
+fn a_filter_of_a_missing_kind_loads_and_saves_as_it_was() {
+    let mut g = graph();
+    apply_ok(
+        &mut g,
+        vec![tone("mic"), gain("mic", "a"), gain("mic", "c")],
+    );
+    let mut file: Value = serde_json::from_str(&g.to_collection_json()).expect("valid JSON");
+    let audio = file["sources"]
+        .as_array_mut()
+        .and_then(|s| s.iter_mut().find(|s| s["id"] == "mic"))
+        .and_then(|s| s["filters"]["audio"].as_array_mut())
+        .expect("mic's audio chain is saved");
+    audio.insert(
+        1,
+        json!({
+            "id": "b",
+            "kind": "clap/com.example.verb",
+            "kind_version": 3,
+            "enabled": false,
+            "settings": {"7": 0.25, "anything": "kept"},
+        }),
+    );
+    let json = file.to_string();
+
+    let loaded = Graph::new().with_kinds(kinds()).with_collection_json(&json);
+    let loaded = loaded.expect("a missing kind doesn't stop the load");
+    let chain: Vec<_> = loaded
+        .state()
+        .source(&SourceId::new("mic"))
+        .map(|s| s.filters().audio.iter().map(|f| f.id().as_str()).collect())
+        .unwrap_or_default();
+    assert_eq!(chain, ["a", "b", "c"]);
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("valid JSON");
+    let reloaded: Value = serde_json::from_str(&json).expect("valid JSON");
+    assert_eq!(saved["sources"], reloaded["sources"]);
+
+    let mut edited = loaded.clone();
+    assert_eq!(
+        invalid_reason(apply_err(
+            &mut edited,
+            vec![filter_add(
+                "mic",
+                FilterChain::Audio,
+                "d",
+                "clap/com.example.verb"
+            )]
+        )),
+        (
+            "edits.0.kind".into(),
+            "there is no kind `clap/com.example.verb`; `kind.list` names them".into()
+        )
+    );
+
+    let mut dangling: Value = serde_json::from_str(&json).expect("valid JSON");
+    dangling["sources"]
+        .as_array_mut()
+        .and_then(|s| s.iter_mut().find(|s| s["id"] == "mic"))
+        .expect("mic is saved")["filters"]["audio"][1]["settings"]["side"] =
+        json!({"type": "source", "source_id": "gone"});
+    let refused = Graph::new()
+        .with_kinds(kinds())
+        .with_collection_json(&dangling.to_string());
+    assert!(
+        matches!(&refused, Err(crate::LoadError::Invalid { object, .. })
+            if object == "filter `b` of source `mic`"),
+        "{refused:?}"
+    );
+}
