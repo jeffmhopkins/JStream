@@ -30,7 +30,7 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:daa370c4ed6a1057", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the daemon Cargo.toml only (jstream-youtube as a Windows dependency plus its fake dev-dep); the crate map's rows hold" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: #298's jstream-browser row (helper over pipes, helper feature) and apps/* row (the helper's DLL, unsafe for its one export) sit beside P1's jstream-platform paths row and main's jstream-effects and jstream-anim rows; lint-deps passes; holds" }
+stamp = { hash = "b3:6cac3568cd2ba0a3", by = "agent:desktop-panic-hook", note = "Re-read the apps/* row against jstream-desktop's manifest: it now links jstream-protocol (layer 1) on every platform rather than on Windows only, and blake3 (external); both are strictly lower layers and the row's summary (core, server, the OS platform crate, sources, browser with cef) still holds." }
 
 ["ARCH#crate-map"."file:apps/jstream-plugin-host/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "Rows changed: jstream-platform adds PluginHosts, jstream-platform-windows the plugin block and launcher, jstream-core CLAP kinds and the supervisor, apps/* jstream-plugin-host's links; each matches the crate's Cargo.toml metadata; lint-deps passes" }
@@ -660,10 +660,10 @@ stamp = { hash = "b3:daa370c4ed6a1057", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: the desktop row now says its cef feature waits on packaging the CEF runtime, and the helper row describes the sandboxed helper (bootstrap exe plus DLL, driven over pipes, ADR-0048); P1's desktop paths dependency names no data module; both match the apps' Cargo.toml; holds" }
+stamp = { hash = "b3:6cac3568cd2ba0a3", by = "agent:desktop-panic-hook", note = "Re-read the jstream-desktop row against main.rs installing the crash hook and Cargo.toml's new dependencies (blake3, jstream-protocol on every platform): the row describes the shell, the in-process engine and the token, which hold; crash reports are detailed in the app's README." }
 
 ["ARCH#shape"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: desktop main.rs now gets its data folder from jstream_platform::paths and its Cargo.toml adds jstream-platform as a common dependency; Shape's app rows name no data module and still match; holds" }
+stamp = { hash = "b3:56c10ca01f4636ae", by = "agent:desktop-panic-hook", note = "Re-read the jstream-desktop row against main.rs installing the crash hook and Cargo.toml's new dependencies (blake3, jstream-protocol on every platform): the row describes the shell, the in-process engine and the token, which hold; crash reports are detailed in the app's README." }
 
 ["ARCH#shape"."file:apps/jstream-plugin-host/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "Adds the jstream-plugin-host row (not an engine host; one process per CLAP filter instance, shared block and control channel only, no protocol connection), matching apps/jstream-plugin-host's Cargo metadata and main.rs" }
@@ -1614,7 +1614,7 @@ stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:42693e57e0ab79dd", by = "agent:claude", note = "ADR-0047: Design says the desktop turns pairing off, so its server answers no credential call (they reach the session as unsupported), the UI's pairing panel stays hidden, and there is no /pair page or device cookie; matches host.rs:57 and the server's pairing switch. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's vcam text and #291's browser wiring sit beside it without touching the server config; holds" }
+stamp = { hash = "b3:f369e98032d10b11", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1643,17 +1643,20 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/browser.rs"]
 stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the browser bullet no longer says a cef build links libcef.dll at load time; with ADR-0048 CEF runs only in the helper, which starts on the first page, so a missing helper or CEF files fail that source, as browser.rs's doc now says; the device and clock text holds" }
 
+["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/crash.rs"]
+stamp = { hash = "b3:4b066e60073231fd", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
+
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:ab73046e3af60ffe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: only host.rs's doc comment changed, naming the daemon's live::live in live.rs instead of serve::live. wave/m1-2 rewrote 'The engine behind the API' to say the server pairs no device (ServerConfig::pairing off, unsupported answers, no pairing page or cookie), matching host.rs; 'the same wiring as the daemon (OS backends, keys in Credential Manager, an RTMP(S) publish opener)' still holds. tests: cargo test -p jstream-daemon (lib 3, bin 26, tests/daemon.rs 9, tests/e2e.rs 1, all passed), clippy -D warnings, cargo doc -D warnings; jstream-desktop not built here" }
+stamp = { hash = "b3:d50eefc191f0f160", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's paths-based data folder and #298's browser bullet (CEF only in the sandboxed helper, a missing helper fails the source, not the app) match lib.rs and browser.rs; Design names no data module; holds" }
+stamp = { hash = "b3:31883e742359be7a", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: inputs changed are data.rs removal, lib.rs and main.rs moving to jstream_platform::paths::data_dir_for; Design names no data module and its ADR-0020 portable/state text matches paths; holds" }
+stamp = { hash = "b3:56c10ca01f4636ae", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/shell.rs"]
 stamp = { hash = "b3:ee281b0fbf540f66" }
@@ -1668,7 +1671,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:2115a85b23caf8dc", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1 removes data.rs (lib.rs keeps the wave's cef-gated browser module, drops data); the contents list and tests (delay-load test kept, data-folder test gone) match; #298's not-yet line keeps browser sources off by default; holds" }
+stamp = { hash = "b3:36f856b5137a45f7", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. The desktop's purpose says it links core and server, still true, and its contents already list browser sources (browser.rs, cef feature), matching main's sources and jstream-browser links." }
@@ -1682,17 +1685,20 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/browser.rs"]
 stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the apps/* row still says the desktop links sources and jstream-browser with cef; browser.rs now drives the sandboxed helper (its doc names ADR-0048 and says the app doesn't link CEF), and the Browser sources bullet still describes it; holds" }
 
+["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/crash.rs"]
+stamp = { hash = "b3:4b066e60073231fd", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
+
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:ab73046e3af60ffe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: only host.rs's doc comment changed, pointing the daemon wiring it mirrors at apps/jstream-daemon/src/live.rs (moved from serve.rs). wave/m1-2 set config.pairing = false in host.rs (ADR-0047); the Engine host bullet ('wired as the daemon's is') still holds since that concerns backends, key store and opener, not pairing. tests: cargo test -p jstream-daemon (lib 3, bin 26, tests/daemon.rs 9, tests/e2e.rs 1, all passed), clippy -D warnings, cargo doc -D warnings; jstream-desktop not built here (Windows-only window, not in this branch's crate list)" }
+stamp = { hash = "b3:d50eefc191f0f160", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1 removes data.rs (lib.rs keeps the wave's cef-gated browser module, drops data); the contents list and tests (delay-load test kept, data-folder test gone) match; #298's not-yet line keeps browser sources off by default; holds" }
+stamp = { hash = "b3:31883e742359be7a", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs deleted and lib.rs drops its module; contents list says logs.rs in the data folder from jstream-platform's paths, Tests drop the data folder; main.rs calls paths::data_dir_for; release build of the portable folder is now cargo xtask dist (ARCH Packaging)" }
+stamp = { hash = "b3:56c10ca01f4636ae", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/shell.rs"]
 stamp = { hash = "b3:ee281b0fbf540f66" }
@@ -1704,10 +1710,10 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #327: covers now includes tests/**, and the Tests bullet names the new integration test tests/delay_load.rs (media_foundation_is_delay_loaded, Windows MSVC only), which reads the built jstream.exe's PE headers and requires each DLL in build.rs's delay-load list in the delay-import table and none in the import table; the unit-test list and the rest of the contents are unchanged" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:d3ce322b950f6555", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data folder through jstream-platform paths (now a common dependency) and #298's cef feature text (the sandboxed helper exe, its DLL and CEF's runtime beside jstream.exe; the app doesn't link CEF, so it starts without them) both match Cargo.toml's merged dependencies and feature comment; holds" }
+stamp = { hash = "b3:cc23c34fcf6ae592", by = "agent:desktop-panic-hook", note = "Re-read against main.rs installing crash::install into the data folder's logs folder before the log file, and Cargo.toml's new blake3, jstream-protocol (now on every platform) and the fake platform dev-dependency; the new Crash reports bullet gives the file name, the cap of 10 and R-SEC-004. The options table and other bullets are unchanged." }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:d54c5b373e86c4d2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data folder through jstream-platform paths (now a common dependency) and #298's cef feature text (the sandboxed helper exe, its DLL and CEF's runtime beside jstream.exe; the app doesn't link CEF, so it starts without them) both match Cargo.toml's merged dependencies and feature comment; holds" }
+stamp = { hash = "b3:bb0a5383be276737", by = "agent:desktop-panic-hook", note = "Re-read against main.rs installing crash::install into the data folder's logs folder before the log file, and Cargo.toml's new blake3, jstream-protocol (now on every platform) and the fake platform dev-dependency; the new Crash reports bullet gives the file name, the cap of 10 and R-SEC-004. The options table and other bullets are unchanged." }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after 741cfc28: a rustfmt-only line wrap of the engine call in app.rs; nothing the section says changed; holds" }
@@ -1716,7 +1722,7 @@ stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
+stamp = { hash = "b3:56c10ca01f4636ae", by = "agent:desktop-panic-hook", note = "Re-read against main.rs installing crash::install into the data folder's logs folder before the log file, and Cargo.toml's new blake3, jstream-protocol (now on every platform) and the fake platform dev-dependency; the new Crash reports bullet gives the file name, the cap of 10 and R-SEC-004. The options table and other bullets are unchanged." }
 
 ["CRATE-jstream-effects#purpose"."body"]
 stamp = { hash = "b3:3466907ce4516fb9", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B3: re-read the whole section; restored the wave's shader-path bullet (asset-path rules under the collection root, DOS device names refused, symlink out refused), which matches manifest.rs check_shader_path; the dependency and Drawing paragraphs still match pack.rs" }
@@ -4221,7 +4227,7 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:56b6301e2e6a132b" }
 
 ["THREAT-MODEL#secrets"."body"]
-stamp = { hash = "b3:8e272680a60de088", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343 whole change to the body against wave/m1-2: added the control 'a key is bound to its server' (scheme, host or port change, or delete, removes it; start refused until removed; a start already past the check opens the target it checked; set_key refused while that start opens), and removed 'retargeting keeps the key (#343)' from the gaps list and the #343 row from Known gaps. Matches engine.rs (execute_and_unbind_keys, remove_stale_keys, Pending.kind via output_kind, set_key refusal) and the three jstream-core regression tests." }
+stamp = { hash = "b3:f9817529142555a3", by = "agent:desktop-panic-hook", note = "Re-read Gaps against the daemon's crash.rs (Redacting for keys and refresh tokens, already in the base) and the desktop's new crash.rs (token and keys through Redacting): crash-report redaction and test scope are no longer gaps; what is left is the rtmp:// warning and the YouTube-bound key and access token, as the daemon README's design says." }
 
 ["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
