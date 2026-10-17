@@ -292,3 +292,56 @@ fn unplace_finds_nothing_edge_on_or_behind_the_near_plane() {
             .is_err()
     );
 }
+
+#[test]
+fn a_drawn_vertex_of_a_local_point_matches_the_polygon() {
+    for (tilt, turn, rotation, depth, p) in CASES {
+        let geometry = geometry(tilt, turn, rotation, depth, p);
+        let content = geometry
+            .content(400, 300, Crop::default())
+            .expect("content")
+            .expect("pixels");
+        let drawn = geometry
+            .drawn_polygon(&content)
+            .expect("ok")
+            .expect("drawn");
+        for vertex in drawn.vertices() {
+            let again = geometry
+                .drawn_vertex(&content, vertex.local)
+                .expect("ok")
+                .expect("in front");
+            near(again.canvas, vertex.canvas, 1e-3);
+            assert!((again.w - vertex.w).abs() < 1e-6, "{again:?} vs {vertex:?}");
+            assert!((again.uv[0] - vertex.uv[0]).abs() < 1e-6);
+            assert!((again.uv[1] - vertex.uv[1]).abs() < 1e-6);
+        }
+        // Outside the box too: a point a pixel past a corner still maps.
+        let past = geometry
+            .drawn_vertex(&content, LocalPoint { x: 201.0, y: 151.0 })
+            .expect("ok")
+            .expect("in front");
+        near(past.canvas, placed(geometry, 201.0, 151.0), 1e-2);
+        assert!(past.uv[0] > 1.0 && past.uv[1] > 1.0);
+    }
+    let toward = geometry(-70.0, 0.0, 0.0, 250.0, Some(300.0));
+    let content = toward
+        .content(400, 300, Crop::default())
+        .expect("content")
+        .expect("pixels");
+    // The top of a box tilted toward the viewer is past the near plane.
+    assert_eq!(
+        toward.drawn_vertex(&content, LocalPoint { x: 0.0, y: -150.0 }),
+        Ok(None)
+    );
+    assert!(
+        toward
+            .drawn_vertex(
+                &content,
+                LocalPoint {
+                    x: f32::NAN,
+                    y: 0.0
+                }
+            )
+            .is_err()
+    );
+}

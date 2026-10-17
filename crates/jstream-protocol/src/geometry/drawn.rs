@@ -160,12 +160,6 @@ impl ItemGeometry {
                 return Ok(None);
             }
         }
-        let uv = |x: f32, y: f32| {
-            [
-                content.u0 + (x - content.left) / content.width * (content.u1 - content.u0),
-                content.v0 + (y - content.top) / content.height * (content.v1 - content.v0),
-            ]
-        };
         let unused = DrawnVertex {
             canvas: CanvasPoint { x: 0.0, y: 0.0 },
             local: LocalPoint::default(),
@@ -178,21 +172,7 @@ impl ItemGeometry {
         };
         for (vertex, &[x, y]) in polygon.vertices.iter_mut().zip(local.points()) {
             // The clip leaves w ≥ NEAR_W up to rounding; the floor keeps it there.
-            let w = plane.w(x, y).max(NEAR_W);
-            let canvas = plane.canvas(x, y, w);
-            let uv = uv(x, y);
-            if ![canvas.x, canvas.y, uv[0], uv[1]]
-                .iter()
-                .all(|value| value.is_finite())
-            {
-                return Err(GeometryError::NotFinite);
-            }
-            *vertex = DrawnVertex {
-                canvas,
-                local: LocalPoint { x, y },
-                uv,
-                w,
-            };
+            *vertex = drawn_vertex(&plane, content, x, y, plane.w(x, y).max(NEAR_W))?;
         }
         Ok((signed_area(polygon.vertices()).abs() > MIN_AREA).then_some(polygon))
     }
@@ -244,6 +224,60 @@ impl ItemGeometry {
         }
         Ok((plane.w(x, y) >= NEAR_W).then_some(LocalPoint { x, y }))
     }
+
+    /// The [`DrawnVertex`] of one local point for `content`: its canvas point, texture
+    /// coordinate and `w`, as [`Self::drawn_polygon`] gives its own vertices. A
+    /// compositor uses it for a point [`Self::unplace`] found, such as a vertex of the
+    /// polygon pushed out for edge coverage. `Ok(None)` when the point is behind the
+    /// near plane. The point is not checked against the box or the content.
+    ///
+    /// # Errors
+    /// The same as [`Self::validate`], or [`GeometryError::NotFinite`] when the point or
+    /// the vertex is not finite.
+    pub fn drawn_vertex(
+        self,
+        content: &ContentRect,
+        local: LocalPoint,
+    ) -> Result<Option<DrawnVertex>, GeometryError> {
+        self.validate()?;
+        if !local.x.is_finite() || !local.y.is_finite() {
+            return Err(GeometryError::NotFinite);
+        }
+        let plane = Plane::of(self);
+        let w = plane.w(local.x, local.y);
+        if w < NEAR_W {
+            return Ok(None);
+        }
+        drawn_vertex(&plane, content, local.x, local.y, w).map(Some)
+    }
+}
+
+/// The vertex at local `(x, y)`, with `w` already found (and floored, for the polygon's
+/// own vertices).
+fn drawn_vertex(
+    plane: &Plane,
+    content: &ContentRect,
+    x: f32,
+    y: f32,
+    w: f32,
+) -> Result<DrawnVertex, GeometryError> {
+    let canvas = plane.canvas(x, y, w);
+    let uv = [
+        content.u0 + (x - content.left) / content.width * (content.u1 - content.u0),
+        content.v0 + (y - content.top) / content.height * (content.v1 - content.v0),
+    ];
+    if ![canvas.x, canvas.y, uv[0], uv[1]]
+        .iter()
+        .all(|value| value.is_finite())
+    {
+        return Err(GeometryError::NotFinite);
+    }
+    Ok(DrawnVertex {
+        canvas,
+        local: LocalPoint { x, y },
+        uv,
+        w,
+    })
 }
 
 /// Up to [`MAX_VERTICES`] local points, clipped in place without allocating.
