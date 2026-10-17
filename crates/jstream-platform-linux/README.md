@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose"]
 -->
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -89,9 +89,21 @@ It has:
   refuses other codecs and a software-only request (no software encoder until Cisco's
   OpenH264 download lands, [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), and reports a machine with no H.264
   encode driver as a missing component with the distributions' packages (ADR-0060 §6).
-  Opening the session reports `Unsupported` for now. Audio encoding reports
-  `Unsupported` until the Rust AAC-LC encoder exists (ADR-0061), and decoding
-  is out of the ADR's scope.
+  Opening the session reports `Unsupported` for now. Decoding is out of the ADR's scope.
+- **`RustAacEncoder`** (`AudioEncoder`): AAC encoding, which `VaapiCodecs` lists and
+  opens. It wraps JStream's own AAC-LC encoder,
+  [`jstream-aac`](../jstream-aac/README.md#purpose)
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md), within
+  [ADR-0062](../../docs/adr/0062-aac-lc-encoder-patent-check.md)'s limits), for 44.1 or
+  48 kHz, mono or stereo, interleaved or planar `f32`, at 16 to 256 kbps per channel
+  (`aac_config` says why it refuses anything else). As with the Media Foundation encoder,
+  each packet is one raw access unit of 1024 frames without ADTS, a keyframe, and timed
+  from the first buffer's `pts` plus the frames before it. The muxers write the matching
+  `AudioSpecificConfig` from the format. The decoder's output lags by the usual AAC
+  priming of 1024 frames. It is built with the `aac-encoder` feature, which is on by
+  default. ADR-0062's re-check switches the encoder off in a release by taking that
+  feature out of the defaults. Without it, `jstream-aac` leaves the build, the list has
+  no AAC encoder, and opening one reports `Unsupported`.
 
 Not here yet, in roughly the order they follow:
 - DMA-BUF frames imported into the engine's Vulkan device (`Capture::on_context`), in
