@@ -149,7 +149,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling. No GPU device | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, feature `cef`), which drives the sandboxed browser helper over pipes and copies its shared-texture frames onto the engine's device; and the CEF code the helper runs (feature `helper`) | **yes** |
-| 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
+| 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default); fuel and memory limits; no WASI | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
@@ -822,15 +822,21 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
-composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
 on D3D11 into a texture of their own, fence-synchronized both ways, and
 `jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
 ([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
-Nothing writes the encode targets yet. Still outside this crate: the render
-thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
-the output path below.
+Step 4's NV12 pass is built too: it reads the sRGB output and writes the Y and CbCr
+planes, either plane views of a native NV12 texture or an `R8Unorm` and an `Rg8Unorm`
+texture where planar render targets are missing, in BT.709 limited or full range with
+left-sited chroma. The render thread (in `jstream-core`) runs it: a video session
+opened on the context gets each composite converted into the next of a ring of the
+platform's encode targets, which it is pushed as a GPU frame, in its own submit that
+stages the target's fence and hands it back in `PRESENT`. Sessions on the CPU path and
+the virtual cameras still get the composite read back, and a tick with none of them
+skips the readback. Still outside this crate: P010, 3D, effect packs, and the output
+path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and

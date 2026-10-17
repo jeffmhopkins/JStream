@@ -135,6 +135,26 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
          jiff for embedded targets, listed through serde_with under tauri-utils; compiles nothing \
          and is never built here",
     ),
+    // wasmtime (jstream-plugin-wasm, ADR-0035). No media code.
+    (
+        "wasmtime",
+        None,
+        "its `runtime` feature build-depends on `cc` for `helpers.c`: on Unix one function that \
+         asks whether libunwind is linked; on Windows, without `debug-builtins` (off), nothing \
+         is compiled. Used by jstream-plugin-wasm",
+    ),
+    (
+        "wasmtime-internal-fiber",
+        None,
+        "build-depends on `cc` for `windows.c` (fiber switching on Windows); only wasmtime's \
+         `async` feature reaches it, which is off, so it is listed in the resolve but never built",
+    ),
+    (
+        "wasmtime-internal-jit-debug",
+        None,
+        "build-depends on `cc` for `gdbjit.c`, compiled only with its `gdb_jit_int` feature \
+         (wasmtime's `debug-builtins`, off); its build script compiles nothing otherwise",
+    ),
 ];
 
 /// One rule violation, reported as `<where>: <rule>: <what>`.
