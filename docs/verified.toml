@@ -1689,7 +1689,7 @@ stamp = { hash = "b3:99e633ebddadb039" }
 stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
 
 ["CRATE-jstream-effects#purpose"."body"]
-stamp = { hash = "b3:3466907ce4516fb9", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B3: re-read the whole section; restored the wave's shader-path bullet (asset-path rules under the collection root, DOS device names refused, symlink out refused), which matches manifest.rs check_shader_path; the dependency and Drawing paragraphs still match pack.rs" }
+stamp = { hash = "b3:9e1adb47fba4c8fd", by = "agent:claude", note = "Shader contract paragraph now states the MAX_VALUE_BYTES cap (any one value, private globals together, each function's locals together) that shader.rs check_memory enforces and tests.rs covers; rest unchanged" }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
 stamp = { hash = "b3:ec54949c8ecb2c52", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2: stale via render#filters (this PR's prelude sentence, and the wave's V3 assets text); the shader contract names no Frame field and no pack or effects test reads frame.straight/alpha; holds" }
@@ -1710,7 +1710,7 @@ stamp = { hash = "b3:b5397b5d6407b040" }
 stamp = { hash = "b3:86e5ac6016021cc2" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/lib.rs"]
-stamp = { hash = "b3:d8bdadac3cc97bf5" }
+stamp = { hash = "b3:29660ac66048dbd3", by = "agent:claude", note = "Shader contract paragraph now states the MAX_VALUE_BYTES cap (any one value, private globals together, each function's locals together) that shader.rs check_memory enforces and tests.rs covers; rest unchanged" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/manifest.rs"]
 stamp = { hash = "b3:b65c103b271db580" }
@@ -1719,10 +1719,10 @@ stamp = { hash = "b3:b65c103b271db580" }
 stamp = { hash = "b3:1c71d7ffba81c34d", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/shader.rs"]
-stamp = { hash = "b3:3ae83479a3f82d0e" }
+stamp = { hash = "b3:113187068029058a", by = "agent:claude", note = "Shader contract paragraph now states the MAX_VALUE_BYTES cap (any one value, private globals together, each function's locals together) that shader.rs check_memory enforces and tests.rs covers; rest unchanged" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/tests.rs"]
-stamp = { hash = "b3:e6d9d1baef424463", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
+stamp = { hash = "b3:89e42ff811778dcf", by = "agent:claude", note = "Shader contract paragraph now states the MAX_VALUE_BYTES cap (any one value, private globals together, each function's locals together) that shader.rs check_memory enforces and tests.rs covers; rest unchanged" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/watch.rs"]
 stamp = { hash = "b3:c605dc3799e8d4cc" }
