@@ -87,10 +87,9 @@ It has:
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
   is terminated before its node is closed. **`VaapiCodecs`** (`Codecs`) lists those as
   hardware H.264 encoders and picks one for a configuration with `choose_encoder`. That
-  refuses other codecs and a software-only request (no software encoder until Cisco's
-  OpenH264 download lands, [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), and reports a machine with no H.264
-  encode driver as a missing component with the distributions' packages (ADR-0060 §6).
-  Decoding is out of the ADR's scope.
+  refuses other codecs and a software-only request (software H.264 is OpenH264's, below),
+  and reports a machine with no H.264 encode driver as a missing component with the
+  distributions' packages (ADR-0060 §6). Decoding is out of the ADR's scope.
 - **The VA-API H.264 session** (`VideoEncoder`) opens its own display on the chosen
   node: a config with the rate-control mode (CBR or VBR, refused if the driver lacks it),
   a context, four input surfaces with a coded buffer each, and three reconstructed
@@ -107,6 +106,31 @@ It has:
   to four frames are in flight, and a fifth is refused as busy. The libva structs are
   hand-written and checked against libva 2.20.0's headers, with their sizes and offsets
   asserted at compile time.
+- **Cisco's OpenH264** is the software H.264 encoder
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), last in line:
+  `VaapiCodecs` opens it for `HardwarePreference::Avoid`, and for `Prefer` when there is
+  no VA-API encoder (`wants_software`), and lists it once it is downloaded. JStream
+  never ships or builds it. **`OpenH264Store`** keeps it in the data folder
+  (`<data>/codecs/openh264`, a 0700 folder holding a 0600 file). `install`, which only a
+  host acting on the user's explicit request calls, after showing `OPENH264_NOTICE` and
+  a link to `OPENH264_LICENSE_URL`, fetches the one pinned release (`OPENH264_PIN`) from
+  Cisco's server through a `Fetch`, checks the file's SHA-256, unpacks it with the
+  crate's own bzip2 decoder (`openh264/bzip2.rs`; the `bzip2` crate's backend has a
+  licence `deny.toml` allows only at build time), checks the library's SHA-256, and
+  writes it through a temporary file and a rename. A download that doesn't match is
+  discarded and reported, never written. `remove` deletes it. Each time an encoder
+  opens, the stored file's SHA-256 is checked again before `dlopen`, and the library
+  must report the pinned version, since the hand-written declarations (`ffi.rs`, only
+  the encoder calls JStream makes) follow that release's headers. A copy from anywhere
+  else is never loaded. The pin's two SHA-256 values are not recorded yet, so for now
+  `install` refuses before any request is made. **`HttpsFetch`** is the real `Fetch`:
+  one `GET` over rustls with the OS trust store, no redirects. **`OpenH264Encoder`**
+  (`VideoEncoder`) takes CPU NV12 or I420 frames of even size, CBR or VBR (a peak at
+  least the target, set on its one spatial layer; OpenH264 enforces it only by skipping
+  frames, which is off, so VBR encodes at the target rate) and a keyframe interval of at
+  least one frame, and encodes each frame synchronously (camera real-time mode, no frame skipping, the configured
+  IDR interval) into one Annex B packet whose `dts` is its `pts`; `request_keyframe`
+  forces an IDR on the next frame. The library's own logging is turned off.
 - **`RustAacEncoder`** (`AudioEncoder`): AAC encoding, which `VaapiCodecs` lists and
   opens. It wraps JStream's own AAC-LC encoder,
   [`jstream-aac`](../jstream-aac/README.md#purpose)
@@ -141,7 +165,11 @@ pods, the frame copy, and the H.264 parameters, parameter sets, GOP and upload a
 platform-independent. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes) pass with or without those libraries installed and need no GPU, session
-or daemon. The `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
+or daemon. The OpenH264 tests use a fake download and a fake encoder behind the
+library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
+(`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
+recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
+`hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
 GNOME or KDE session with PipeWire, and VA-API H.264 encodes on a GPU with an encode
 driver.

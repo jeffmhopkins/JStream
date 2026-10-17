@@ -50,6 +50,37 @@ impl SystemLibrary {
         })
     }
 
+    /// Loads the library file at `path`: Cisco's OpenH264 binary, which JStream
+    /// downloads itself rather than finding on the system (ADR-0061).
+    ///
+    /// # Safety
+    /// Loading runs the library's initialisers. The caller must have checked that `path`
+    /// is the library it expects, as the OpenH264 store does against its pinned SHA-256.
+    ///
+    /// # Errors
+    /// [`PlatformError::MissingComponent`] naming `component` when it doesn't load.
+    pub(crate) unsafe fn open_file(
+        component: &'static str,
+        path: &std::path::Path,
+    ) -> Result<Self, PlatformError> {
+        // SAFETY: the caller has checked the file (this function's contract), and the
+        // library is never unloaded while a function resolved from it can be called
+        // (the `Arc`).
+        match unsafe { Library::new(path) } {
+            Ok(lib) => Ok(Self {
+                lib: Arc::new(lib),
+                component,
+            }),
+            Err(e) => Err(PlatformError::MissingComponent {
+                component,
+                remedy: format!(
+                    "{} didn't load ({e}); remove it and download it again",
+                    path.display()
+                ),
+            }),
+        }
+    }
+
     /// Resolves `symbol` as a function pointer of type `F`.
     ///
     /// # Safety
