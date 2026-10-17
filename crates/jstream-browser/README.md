@@ -126,7 +126,12 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
   every page, and the loop quits once they have closed, or after ten seconds.
 - Every page is a windowless browser with shared textures on, painting at its spec's
   frame rate with a transparent background. Command-line switches let pages play sound
-  without a click and turn off first-run and error dialogs. Pop-ups are blocked. The
+  without a click and turn off first-run and error dialogs. Pop-ups are blocked. Every
+  permission a page asks for (camera, microphone, screen capture, geolocation,
+  notifications, clipboard, MIDI and the rest) is refused by the page's permission
+  handler rather than left to CEF's default: a media request is cancelled and a
+  permission prompt answered `DENY`. The answer comes from `permission.rs`, whose test
+  pins it for every permission bit (#347). The
   custom CSS is applied when the main frame finishes loading and again on each change.
   Every request a page makes, navigations included, goes through its `RequestPolicy`
   in `OnBeforeResourceLoad` and is cancelled when refused, and so does a redirect's

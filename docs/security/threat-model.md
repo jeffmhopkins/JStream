@@ -171,7 +171,11 @@ WebSocket upgrade, since its `Origin` is foreign or `null`.
 A page from a public origin is also refused loopback, private, link-local and
 local-name targets, redirects to them included, unless its source sets `local_network`.
 
-**Gaps:** no explicit policy for permission requests (camera, microphone, location) (#347).
+**Gaps:** permission requests are refused: the helper's permission handler cancels every
+camera, microphone and screen request and denies every permission prompt
+(`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
+a focused page's clipboard writes, never reaches that handler; the helper never focuses a
+page or sends it input (#347).
 The local-network refusal reads only the URL's host: a public name that resolves to a
 local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes until Chromium's
 Private Network Access checks are on, and so does any request the helper's request
@@ -297,7 +301,7 @@ or the OAuth access token, which pass through neither (#353).
 <a id="vcam"></a>
 ## Virtual camera
 <!-- @section
-depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
 -->
 
 **Threats:** another session's user reading the camera feed or injecting frames; a
@@ -313,8 +317,21 @@ it, and checks every texture's format.
 needs full access; `Global\` blocks, which only an administrator or service can create,
 are trusted.
 
-**Gaps:** a user-writable registered DLL runs in Frame Server (#242); a control mapping
-created before the producer's keeps its own DACL (#356).
+**Accepted, not yet on main (#242):** today the registered media source DLL is the one in
+the app's own folder, which the user can usually write to. Any program running as that
+user can replace it without an administrator prompt, and its code then runs in Frame
+Server's `svchost` (LOCAL SERVICE, session 0) the next time the camera loads. A hash
+check can't fix this, because Windows loads the DLL, not JStream, and a stub loader in
+the same folder could be replaced the same way. The maintainer chose the fix: "If you
+have to register it, name it optional, and then yeah, I think the program files makes
+sense". [ADR-0066](../adr/0066-portable-windows-distribution-v2.md) (accepted) makes
+registering optional. In the same UAC prompt, it copies the DLL to `%ProgramFiles%`
+with a DACL only administrators can write through, and registers that copy. The code
+is #561. Once it lands, the copy is as trustworthy as the portable folder was when the
+user approved the prompt.
+
+**Gaps:** a user-writable registered DLL runs in Frame Server until #561 lands (#242); a
+control mapping created before the producer's keeps its own DACL (#356).
 
 <a id="gaps"></a>
 ## Known gaps
@@ -328,14 +345,14 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #344 | Server, pairing | Windows token, devices and log files only inherit their folder's ACL | Medium |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |
-| #347 | Browser | No permission policy; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
+| #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
 | #348 | WASM | No CPU, memory or API-scope limits decided | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
-| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium |
+| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium; fix accepted ([ADR-0066](../adr/0066-portable-windows-distribution-v2.md)), code in #561 |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |
 
 <a id="upkeep"></a>
