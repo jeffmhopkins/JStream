@@ -350,7 +350,10 @@ plain re-verify after the merge that replaced the branch's notes. It refuses, na
 input, when the file an entry it would rewrite lives in (the doc itself for `body`, the
 covered file, the target doc for `dep:`) differs, committed or not, from what `merge-main`
 left: the merge, or its `docs migrate` commit. The branch's earlier note doesn't cover
-such a later edit, so verify that section with `--note` instead, covering both.
+such a later edit, so verify that section with `--note` instead, covering both. It fails
+when the ledger on the branch before the merge or at the merge base doesn't parse, rather
+than taking none or every one of the entries for the branch's own; `merge-main` fails the
+same way when it lists the branch's notes, after it has committed the merge.
 
 `docs verify <DOC#anchor> --by <who> --renote "<note>"` replaces the `by` and `note` of a
 section that is already fresh, as when a reviewer asks for a better note, without touching
