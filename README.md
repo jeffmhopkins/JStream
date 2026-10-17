@@ -221,7 +221,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | MAC1 | macOS platform crate | ⏳ planned |  |
 | LNX1 | Linux codec path and platform crate | ⏳ planned |  |
 | LNX2 | Linux OpenH264 download (ADR-0061) | ⏳ planned |  |
-| LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | ⏳ planned |  |
+| LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | ⏳ planned: patent check ADR-0062 (#508) |  |
 
 </details>
 <!-- @generated end progress -->
