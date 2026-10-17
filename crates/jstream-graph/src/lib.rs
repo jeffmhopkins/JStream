@@ -23,11 +23,12 @@ mod plan;
 mod read;
 mod target;
 mod touched;
+mod transition;
 
 pub use apply::Applied;
 pub use model::{
     Bus, Chains, Effect, Encoder, Filter, Graph, Item, MAX_BUSES, MAX_CANVAS_EDGE,
-    MAX_CHAIN_FILTERS, Output, Placement, Scene, Source, State, VideoMix,
+    MAX_CHAIN_FILTERS, Output, Placement, Preset, Scene, Source, State, VideoMix,
 };
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;

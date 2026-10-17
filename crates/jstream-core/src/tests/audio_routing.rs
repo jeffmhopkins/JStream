@@ -180,6 +180,7 @@ fn when_shown_audio_follows_the_program() {
         block_on(control.call(Call::Action {
             action: Action::SceneSwitch {
                 scene_id: SceneId::new(scene),
+                preset_id: None,
             },
         }))
         .expect("switched");
