@@ -544,16 +544,18 @@ async fn streams_and_records_on_the_fakes_driven_over_websocket_and_mcp() {
     let keys = Arc::new(MemoryKeyStore::new());
     let audit = AuditFile::open(&dir).expect("the audit log opens");
     // The daemon's own wiring (`jstream_daemon::live`, which `serve.rs` runs on the
-    // Windows backends), here on the fakes, with the CPU compositor so no adapter is
-    // needed.
+    // Windows backends), here on the fakes.
     let engine = live(
-        Engine::new()
-            .with_audit(Arc::new(audit))
-            .with_cpu_compositor(),
+        Engine::new().with_audit(Arc::new(audit)),
         fakes.backends(),
         Arc::clone(&keys) as _,
         rtmp(),
     );
+    // Then the CPU compositor, so no adapter is needed. It must come after `live`: a
+    // bare engine has no media host for it to set. Clones share the media host, so
+    // this sets it on `engine` too, and the opener's weak handle stays the one `live`
+    // made.
+    let _ = Engine::clone(&engine).with_cpu_compositor();
     let server = bind(Arc::clone(&engine)).await;
     let ws_url = server.ws_url();
     let authority = server.local_addr().to_string();

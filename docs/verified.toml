@@ -1452,7 +1452,7 @@ stamp = { hash = "b3:b998d11ccf5da7ab", by = "agent:wave-owner", note = "Tests b
 stamp = { hash = "b3:fa55ac483c3bac65" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/e2e.rs"]
-stamp = { hash = "b3:fe3aa0db9a6120ab", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
+stamp = { hash = "b3:227d6b118e5f59c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the e2e fix (B1): the engine is made live first, then with_cpu_compositor is set on a clone, so 'on the platform fakes with the CPU compositor' now holds; the test passes with no Vulkan ICD and fails before the fix" }
 
 ["CRATE-jstream-daemon#usage"."body"]
 stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: main's --ui-dir row and P1's Log files bullet (data folder, portable marker) sit beside the wave's pairing device file; #298 moves CEF into the sandboxed helper but adds no flag; the usage rows match args.rs; holds" }
