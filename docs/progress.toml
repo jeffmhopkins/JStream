@@ -548,8 +548,9 @@ prs = [213, 297]
 id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
-status = "done"
-prs = [235]
+status = "hardware"
+prs = [235, 565]
+note = "Windows run (#563)"
 
 [[item]]
 id = "G3d"
