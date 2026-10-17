@@ -58,7 +58,7 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
-    RateControl as ProfileRate,
+    RateControl as ProfileRate, VideoCodec,
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
 use jstream_sources::AudioScopes;
@@ -1082,7 +1082,7 @@ pub(crate) fn launch(
     let origin = program.origin()?;
     // Set once the start has succeeded; until then a recording is provisional.
     let keep = Arc::new(AtomicBool::new(false));
-    let info = stream_info(program.size, origin, &encoders.key.1);
+    let info = stream_info(program.size, origin, &encoders.key.1)?;
     let publishing = matches!(destination, Destination::Publish(_));
     let sink = Sink::open(destination, &info, Arc::clone(&keep))?;
     let stop = Arc::new(AtomicBool::new(false));
@@ -1327,6 +1327,15 @@ fn primary_target(capture: &dyn Capture) -> Result<CaptureTarget, String> {
     Ok(info.target)
 }
 
+/// The codec `profile` encodes video in. HEVC and AV1 map here once the protocol's
+/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them.
+fn video_codec(profile: &EncoderProfile) -> Result<Codec, String> {
+    match profile.video.codec {
+        VideoCodec::H264 => Ok(Codec::H264),
+        _ => Err("the encoder profile's video codec is not one this engine knows".into()),
+    }
+}
+
 /// The video encoder settings for `profile` at `size` and the base frame rate.
 fn video_config(size: FrameSize, profile: &EncoderProfile) -> Result<VideoEncoderConfig, String> {
     let period =
@@ -1343,7 +1352,7 @@ fn video_config(size: FrameSize, profile: &EncoderProfile) -> Result<VideoEncode
         _ => HardwarePreference::Avoid,
     };
     Ok(VideoEncoderConfig {
-        codec: Codec::H264,
+        codec: video_codec(profile)?,
         size,
         input_format: PixelFormat::Rgba8,
         frame_period: period,
@@ -1394,12 +1403,17 @@ fn mixer_latency(clock: &dyn MediaClock, mixer: &Mixer) -> Result<MediaTime, Str
         .map_err(|err| format!("mixer latency: {err}"))
 }
 
-fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> StreamInfo {
+fn stream_info(
+    size: FrameSize,
+    origin: MediaTime,
+    profile: &EncoderProfile,
+) -> Result<StreamInfo, String> {
     let video_kbps = match profile.video.rate_control {
         ProfileRate::Cbr { kbps } | ProfileRate::Vbr { kbps, .. } => kbps,
         _ => 0,
     };
-    StreamInfo {
+    Ok(StreamInfo {
+        codec: video_codec(profile)?,
         size,
         origin,
         frame_rate: f64::from(FRAME_DEN) / f64::from(FRAME_NUM),
@@ -1408,7 +1422,7 @@ fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> 
         sample_rate: SAMPLE_RATE,
         sps: &SPS,
         pps: &PPS,
-    }
+    })
 }
 
 struct RenderJob {
@@ -2284,16 +2298,18 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, Frames, catch_up, output_size, push_each, rgba_from_surface, video_config,
+        DrawFn, Frames, catch_up, output_size, push_each, rgba_from_surface, stream_info,
+        video_config,
     };
     use crate::snapshot::{CaptureImage, Shot};
     use jstream_media::{
-        ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane, Timebase,
-        VideoFrame, VideoFrameInfo,
+        Codec, ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane,
+        Timebase, VideoFrame, VideoFrameInfo,
     };
     use jstream_platform::{HardwarePreference, RateControl, VideoSurface};
     use jstream_protocol::{
         EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
+        VideoCodec,
     };
 
     /// Every target is pushed once; exactly the ones that refuse are taken out and
@@ -2352,6 +2368,15 @@ mod tests {
         assert_eq!(config.hardware, HardwarePreference::Prefer);
         profile.video.rate_control = ProfileRate::Unknown;
         assert!(video_config(size, &profile).is_err());
+
+        let mut profile = EncoderProfile::DEFAULT;
+        assert_eq!(
+            video_config(size, &profile).expect("h264").codec,
+            Codec::H264
+        );
+        profile.video.codec = VideoCodec::Unknown;
+        assert!(video_config(size, &profile).is_err());
+        assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());
     }
 
     /// #433: the program renders and encodes at the canvas, rounded down to even sizes
