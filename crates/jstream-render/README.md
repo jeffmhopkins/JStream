@@ -101,8 +101,8 @@ and calls this crate.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
-P010 conversion, encode-target export, WGSL effect
-packs, the video filter chain runtime (the built-in filters' passes are here, see
+P010 conversion, encode-target export, loading WGSL effect packs
+(`jstream-effects`; this crate only draws them), the video filter chain runtime (the built-in filters' passes are here, see
 [Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
@@ -327,16 +327,57 @@ kinds.
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
   colour helpers. `src` and `aux` always return premultiplied linear colour; an
   imported input is premultiplied after sampling. A pipeline is built on first use and
-  kept for the compositor's life.
+  kept for the compositor's life, keyed by the shader's label and source (up to four
+  sources per label, so a reloaded pack's old and new filters don't evict each other).
+  A shader wgpu refuses, by its own validation or a backend compiler's, is a
+  `RenderError`, not a panic: error scopes for both catch the build, and the refusal is
+  cached so it isn't recompiled every frame. An external filter's uniform bytes that
+  aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each draw creates its two small uniform buffers, two views and a bind group, and each
   `apply_filter` its output layer. Pooling them is the chain runtime's job (V0); until
   then a filter costs those small allocations per frame.
 
+**External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
+whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
+(exported as `FILTER_PRELUDE`, which packs validate against), and the `Params` bytes for
+a settings map. `VideoFilter::external(kind_id, filter, settings)` draws it as one
+replacing pass. [`jstream-effects`](../jstream-effects/README.md#purpose) implements it
+for each pack effect.
+
 **The kinds.** Each group documents its kinds here as it lands.
 
-The single-pass pack (V1): not yet.
+The single-pass pack (V1, `src/filter/pack/`): one draw each, keeping the input's
+size. The colour kinds work on straight sRGB-encoded colour, as OBS does, so OBS's
+numbers carry over; sharpen works on premultiplied encoded colour. Each decodes back to
+premultiplied linear light on the way out.
+
+- `color_correction`: `gamma` (−3..3; above 0 brightens, OBS's exponent mapping),
+  `contrast` (−4..4), `brightness` (−1..1), `saturation` (−1..5; −1 is greyscale,
+  BT.709 weights), `hue_shift` (°, a rotation about the grey axis), `multiply` (an RGB
+  colour) and `opacity` (%). Gamma first, then one affine matrix built on the CPU, then
+  a clamp to 0..1 and opacity. Every default is neutral.
+- `chroma_key`: `key_color_type` (green, blue, magenta or custom `key_color`),
+  `similarity`, `smoothness` and `spill` on OBS's 1–1000 scale. The distance is in
+  BT.709 limited-range CbCr, averaged over the 3×3 texels around each pixel as OBS's v2
+  does; spill desaturates towards luma.
+- `color_key`: `key_color`, `similarity`, `smoothness` (1–1000), by RGB distance.
+- `luma_key`: `luma_min`, `luma_max` and a smoothing width for each (0..1). A zero
+  width is a hard edge that keeps the limit itself, so the defaults keep black and white.
+  Each key multiplies the input's alpha, so stacked keys only remove more.
+- `sharpen`: an unsharp mask, `amount` (0..4) away from the mean of the
+  `(2 radius + 1)²` box, `radius` 1..3 px. It works on premultiplied encoded colour and
+  clamps colour to alpha, so a transparent edge stays clean.
+- `rounded_corners`: `radius` (px, clamped to half the shorter side), `border_width`
+  (px) and `border_color` (with alpha). A signed distance antialiases over one pixel;
+  outside is transparent; the border sits inside the frame, drawn over the picture.
+- `scroll`: `speed_x`, `speed_y` (px/s; positive moves right and down), `loop_x`,
+  `loop_y`. The offset is clock seconds times speed, worked out in `f64` on the CPU and
+  wrapped to the image, so it stays exact however long the clock runs (the shader's
+  `f32` `frame.time` would drift). Sampling is bilinear by hand: a looping axis wraps
+  across its seam; off, the area the picture leaves is transparent. A new speed jumps
+  to where that speed puts the picture at the current time.
 
 Aspect ratio (V1a): not yet.
 

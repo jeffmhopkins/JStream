@@ -158,7 +158,8 @@ impl Graph {
                     deleted.iter().any(|node| match node {
                         Node::Scene(s) => entity == EntityKind::Scene && s.as_str() == id,
                         Node::Source(s) => entity == EntityKind::Source && s.as_str() == id,
-                        Node::Bus(b) => entity == EntityKind::Bus && b.as_str() == id,
+                        // No action names a bus, so no binding can.
+                        Node::Bus(_) => false,
                     })
                 })
             })

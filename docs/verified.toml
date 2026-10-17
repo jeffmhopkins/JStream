@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:4af553d43149d3ce", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the platform row lists wave/m2's MediaDecoders (media files) with main's paths (P1); jstream-sources' jstream-meta summary is main's (YouTube chat cites ADR-0058) and it now depends on both jstream-platform (media decoders, GPU frames, audio, with its fake for tests) and main's jstream-browser (L3, below sources' L4); main's jstream-browser, outputs and apps rows stand; lint-deps passes; holds" }
+stamp = { hash = "b3:09ef8698ef5f632f", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; the jstream-effects row now says it draws through jstream-render's filter harness with no GPU device of its own, matching its Cargo.toml (L3, depends on protocol and render L2); lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -48,7 +48,7 @@ stamp = { hash = "b3:e5fef95eb12cb895" }
 stamp = { hash = "b3:5e5f89a77f45e286", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: jstream-core now depends on jstream-youtube (layer 2 under core's layer 5); core's row and Cargo metadata need no change for that; lint-deps passes; holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-effects/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:100b037ae75599a7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
+stamp = { hash = "b3:3effb533ae8ee473", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; the jstream-effects row now says it draws through jstream-render's filter harness with no GPU device of its own, matching its Cargo.toml (L3, depends on protocol and render L2); lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-encode/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:8b934df550ca875e" }
@@ -144,7 +144,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:3a3138d90da06244", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "model/mod.rs gains hotkeys: BTreeMap<Chord, Action>, accessors and the invariant that a binding's chord is valid, its action bindable and its named objects exist; the tree's 'hotkeys [{ chord, action }]' line already says this, so the section holds." }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:1d2cdcac41afbf65", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+stamp = { hash = "b3:3423ee88f7d053e3", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; edited 'still outside this crate' to say loading effect packs is jstream-effects' and render draws them; steps 1-5 untouched" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -165,7 +165,7 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:1b2a9ab203d6ac4b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+stamp = { hash = "b3:ab3398a093bbbcc1", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of V1: re-read; the 'still outside this crate' sentence (loading packs elsewhere, drawn here) holds alongside the wave's built-in filter sentence" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
@@ -191,20 +191,62 @@ stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/external.rs"]
+stamp = { hash = "b3:380b8a512d3ac1ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; edited 'still outside this crate' to say loading effect packs is jstream-effects' and render draws them; steps 1-5 untouched" }
+
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c5bee118d442bcc6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+stamp = { hash = "b3:c92fef4810923685", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of V1: re-read; the 'still outside this crate' sentence (loading packs elsewhere, drawn here) holds alongside the wave's built-in filter sentence" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/chroma_key.wgsl"]
+stamp = { hash = "b3:88a6dd167acd83f0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/color_correction.rs"]
+stamp = { hash = "b3:d309a355707cf542", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/color_correction.wgsl"]
+stamp = { hash = "b3:9b2962abbc752d3a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/color_key.wgsl"]
+stamp = { hash = "b3:fced012701216c58", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/keys.rs"]
+stamp = { hash = "b3:ea8cc0a37df47bed", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/keys.wgsl"]
+stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/luma_key.wgsl"]
+stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+stamp = { hash = "b3:038f4594124689a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
+stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
+stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
+stamp = { hash = "b3:854ea81f4391fad7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/scroll.wgsl"]
+stamp = { hash = "b3:9e2d383b65689730", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/sharpen.rs"]
+stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/sharpen.wgsl"]
+stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/params.rs"]
 stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:a2d4c23669d329f3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+stamp = { hash = "b3:2c5a58c2f08c2db4", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; edited 'still outside this crate' to say loading effect packs is jstream-effects' and render draws them; steps 1-5 untouched" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
@@ -219,7 +261,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+stamp = { hash = "b3:62431045a2096f1e", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; edited 'still outside this crate' to say loading effect packs is jstream-effects' and render draws them; steps 1-5 untouched" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -1521,10 +1563,13 @@ stamp = { hash = "b3:99e633ebddadb039" }
 stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
 
 ["CRATE-jstream-effects#purpose"."body"]
-stamp = { hash = "b3:dfe4bf2f20a9f63e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: shader-path bullet now names every rule check_shader_path enforces (.wgsl, then check_asset_path under collection: no empty or .. segment, drive letter, leading /, backslash, :, or DOS device last component) and links the protocol Rejections bullet; rest of purpose unchanged and still holds" }
+stamp = { hash = "b3:3466907ce4516fb9", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B3: re-read the whole section; restored the wave's shader-path bullet (asset-path rules under the collection root, DOS device names refused, symlink out refused), which matches manifest.rs check_shader_path; the dependency and Drawing paragraphs still match pack.rs" }
+
+["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
+stamp = { hash = "b3:1798b46dd4b634e7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 cascade from render#filters after the V1 merge: re-read; the Drawing paragraph's ExternalFilter/FILTER_PRELUDE claims still match render" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
-stamp = { hash = "b3:43d3c8a43e07d1d8" }
+stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -1545,19 +1590,16 @@ stamp = { hash = "b3:d8bdadac3cc97bf5" }
 stamp = { hash = "b3:b65c103b271db580" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/pack.rs"]
-stamp = { hash = "b3:9bd6619c606101df" }
+stamp = { hash = "b3:1c71d7ffba81c34d", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/shader.rs"]
 stamp = { hash = "b3:3ae83479a3f82d0e" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/tests.rs"]
-stamp = { hash = "b3:cf107bf4051a2857" }
+stamp = { hash = "b3:e6d9d1baef424463", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/watch.rs"]
 stamp = { hash = "b3:c605dc3799e8d4cc" }
-
-["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/tests/fixtures/host-prelude.wgsl"]
-stamp = { hash = "b3:08d1db37fb68e030" }
 
 ["CRATE-jstream-encode#design"."body"]
 stamp = { hash = "b3:9abb2b5acc27b6d8", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (70d5ce5) into #325: re-read E3c's GPU frames subsection and Not yet beside main's benchmarks (benches/session.rs) text; both hold" }
@@ -1929,10 +1971,10 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:4af553d43149d3ce", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale only through ARCH crate-map, whose platform row now lists wave/m2's MediaDecoders beside main's paths; the row still says the crate holds GpuInterop with wgpu types, which is all this section relies on, and the merge changes no GPU-frame code; holds" }
+stamp = { hash = "b3:09ef8698ef5f632f", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 cascade from ARCH#crate-map: re-read; only the effects row changed, which doesn't bear on GPU frames or the platform's wgpu types; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:1d2cdcac41afbf65", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Stale only through ARCH#gpu-pipeline, whose one edit in this PR is the filter sentence. GPU frame import and FrameSync staging rules are unchanged; apply_filter stages an imported input's hold right before its submit and moves its texture to PRESENT at the end of it (record_release), as this section requires; holds" }
+stamp = { hash = "b3:3423ee88f7d053e3", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 cascade from ARCH#crate-map: re-read; only the effects row changed, which doesn't bear on GPU frames or the platform's wgpu types; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:c66590fe31f34aee", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via the crate map's jstream-browser and helper rows and R-UNSAFE-001, which adds jstream-browser-helper; the GPU frame design is untouched (the engine side still imports shared textures as GpuFrame); holds" }
@@ -2390,20 +2432,62 @@ stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/external.rs"]
+stamp = { hash = "b3:380b8a512d3ac1ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; still no file or network I/O, and the steady render path is untouched (the filter cache is outside it)" }
+
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c5bee118d442bcc6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+stamp = { hash = "b3:c92fef4810923685", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of V1: re-read; no file or network I/O, render path untouched by this PR" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/chroma_key.wgsl"]
+stamp = { hash = "b3:88a6dd167acd83f0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/color_correction.rs"]
+stamp = { hash = "b3:d309a355707cf542", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/color_correction.wgsl"]
+stamp = { hash = "b3:9b2962abbc752d3a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/color_key.wgsl"]
+stamp = { hash = "b3:fced012701216c58", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/keys.rs"]
+stamp = { hash = "b3:ea8cc0a37df47bed", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/keys.wgsl"]
+stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/luma_key.wgsl"]
+stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+stamp = { hash = "b3:038f4594124689a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
+stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
+stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
+stamp = { hash = "b3:854ea81f4391fad7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/scroll.wgsl"]
+stamp = { hash = "b3:9e2d383b65689730", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/sharpen.rs"]
+stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/sharpen.wgsl"]
+stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/params.rs"]
 stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:a2d4c23669d329f3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+stamp = { hash = "b3:2c5a58c2f08c2db4", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; still no file or network I/O, and the steady render path is untouched (the filter cache is outside it)" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
@@ -2418,7 +2502,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+stamp = { hash = "b3:62431045a2096f1e", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; still no file or network I/O, and the steady render path is untouched (the filter cache is outside it)" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2433,7 +2517,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:bcf5059924ff7b21", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:bfd429da27589e83", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+stamp = { hash = "b3:1798b46dd4b634e7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of wave/m1-2 at V1 (#314): re-read; the wave's V1 kinds paragraph and this PR's cache/error-scope/external paragraphs sit side by side and both match the code; the Lane V unused_imports allow is gone, as V1 uses the pass types" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
@@ -2447,20 +2531,62 @@ stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/external.rs"]
+stamp = { hash = "b3:380b8a512d3ac1ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; cache keyed by label and source (4 per label), Validation and Internal scopes, cached refusals, uniform length check and the External kinds paragraph match pass.rs/external.rs/mod.rs; N4 drops the stale doc line and the per-draw key allocation, which the text never claimed" }
+
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c5bee118d442bcc6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+stamp = { hash = "b3:c92fef4810923685", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of wave/m1-2 at V1 (#314): re-read; the wave's V1 kinds paragraph and this PR's cache/error-scope/external paragraphs sit side by side and both match the code; the Lane V unused_imports allow is gone, as V1 uses the pass types" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/chroma_key.wgsl"]
+stamp = { hash = "b3:88a6dd167acd83f0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/color_correction.rs"]
+stamp = { hash = "b3:d309a355707cf542", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/color_correction.wgsl"]
+stamp = { hash = "b3:9b2962abbc752d3a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/color_key.wgsl"]
+stamp = { hash = "b3:fced012701216c58", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/keys.rs"]
+stamp = { hash = "b3:ea8cc0a37df47bed", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/keys.wgsl"]
+stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/luma_key.wgsl"]
+stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+stamp = { hash = "b3:038f4594124689a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
+stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
+stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
+stamp = { hash = "b3:854ea81f4391fad7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/scroll.wgsl"]
+stamp = { hash = "b3:9e2d383b65689730", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/sharpen.rs"]
+stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/sharpen.wgsl"]
+stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/params.rs"]
 stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:a2d4c23669d329f3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+stamp = { hash = "b3:2c5a58c2f08c2db4", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; cache keyed by label and source (4 per label), Validation and Internal scopes, cached refusals, uniform length check and the External kinds paragraph match pass.rs/external.rs/mod.rs; N4 drops the stale doc line and the per-draw key allocation, which the text never claimed" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
@@ -2469,7 +2595,7 @@ stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:1a4da5bd9642915b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+stamp = { hash = "b3:46ff94905a449fdb", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "Deps: platform gpu-frames and ARCH gpu-pipeline gained E3c's encoder text (Codecs::on_context, release fence, open_on); render still composites on the context and writes no NV12 encode target, so this section is unaffected" }
@@ -2478,7 +2604,7 @@ stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "Deps: platf
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:1d2cdcac41afbf65", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+stamp = { hash = "b3:3423ee88f7d053e3", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2510,20 +2636,62 @@ stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/external.rs"]
+stamp = { hash = "b3:380b8a512d3ac1ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
+
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c5bee118d442bcc6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+stamp = { hash = "b3:c92fef4810923685", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of V1: re-read; 'Not in this cut' still says loading packs is jstream-effects' and this crate draws them; mod.rs only lost the unused_imports allow" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/chroma_key.wgsl"]
+stamp = { hash = "b3:88a6dd167acd83f0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/color_correction.rs"]
+stamp = { hash = "b3:d309a355707cf542", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/color_correction.wgsl"]
+stamp = { hash = "b3:9b2962abbc752d3a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/color_key.wgsl"]
+stamp = { hash = "b3:fced012701216c58", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/keys.rs"]
+stamp = { hash = "b3:ea8cc0a37df47bed", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/keys.wgsl"]
+stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/luma_key.wgsl"]
+stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+stamp = { hash = "b3:038f4594124689a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
+stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
+stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
+stamp = { hash = "b3:854ea81f4391fad7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/scroll.wgsl"]
+stamp = { hash = "b3:9e2d383b65689730", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/sharpen.rs"]
+stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/sharpen.wgsl"]
+stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/params.rs"]
 stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:a2d4c23669d329f3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+stamp = { hash = "b3:2c5a58c2f08c2db4", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
@@ -2538,7 +2706,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+stamp = { hash = "b3:62431045a2096f1e", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
