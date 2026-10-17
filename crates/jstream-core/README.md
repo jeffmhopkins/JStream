@@ -238,7 +238,8 @@ state machine. Contents:
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, and an output leaving the GPU path mid-run when every GPU frame
   fails to import or the context breaks (taking the context from browser pages, and
-  failing when that fallback fails), on a software device that stands in for the platform's
+  failing when that fallback fails, or at its deadline when it hangs, still repeating
+  the last frame meanwhile), on a software device that stands in for the platform's
   (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -1387,9 +1388,11 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   start or whose target is lost is started again 2 s later; a
   composite error repeats the last composited frame, up to 30 in a row. On the
   platform's GPU context, the 10th in a row leaves the GPU path once instead, for CPU
-  capture on a device of the thread's own (see [Runtime](#runtime)).
+  capture on a device of the thread's own, and the last frames repeat while that opens
+  (see [Runtime](#runtime)).
 - **Fatal, reported:** a 31st composite error in a row (counted again after a
-  fallback), a fallback from the GPU path whose compositor does not open, a panic
+  fallback), a fallback from the GPU path whose compositor does not open, panics or
+  isn't done in time, a panic
   inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
@@ -1673,15 +1676,19 @@ open.
 
 The GPU path can also break mid-run: every GPU frame fails to import (a format the
 compositor can't take), or the context's device goes away. After 10 composite errors in
-a row on the context, a third of a second, the render thread leaves it once. It reopens
-the compositor on a device of its own, lets go of the frames it holds, and has the
-`jstream-capture` thread drop its GPU backend and start every capture again on the CPU
-path (a start asked for before is stopped when it comes back). Browser pages are told to
-stop painting on the context, on a thread of its own because that takes the collection
-lock; until the re-planned snapshot arrives their frames, carrying the context's key,
-draw nothing on the new compositor. The fallback is logged as a warning and counted
-(`OutputStats::gpu_fallbacks`). If the compositor can't open on its own device, the
-output fails at once. Errors that go on after the fallback are counted again from zero
+a row on the context, a third of a second, the render thread leaves it once. A
+`jstream-gpu-fallback` thread tells browser pages to stop painting on the context (that
+takes the collection lock) and opens the compositor on a device of its own, while the
+render thread keeps repeating the last frames and adopting snapshots. Then the render
+thread lets go of the frames it holds, has the `jstream-capture` thread drop its GPU
+backend and start every capture again on the CPU path (a start asked for before is
+stopped when it comes back), and takes the new compositor. Until the re-planned snapshot
+arrives, the pages' frames, carrying the context's key, draw nothing on it. The fallback
+is logged as a warning and counted (`OutputStats::gpu_fallbacks`). The output fails at
+once if the compositor can't open on its own device, the fallback panics, or it isn't
+done within the open bound `output.start` uses (10 s): a hung adapter fails the output
+instead of freezing it (#577). A fallback thread that times out is left to finish on
+its own and drops what it opened; none of it uses the context. Errors that go on after the fallback are counted again from zero
 and fail the output as they would on the CPU path. The context itself stays until the
 render loop ends.
 
