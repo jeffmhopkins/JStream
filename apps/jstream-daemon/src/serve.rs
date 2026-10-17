@@ -8,9 +8,7 @@ use crate::youtube;
 use anyhow::Context;
 use jstream_core::{AuditSink, Engine};
 #[cfg(windows)]
-use jstream_daemon::live::{live, rtmp};
-#[cfg(windows)]
-use jstream_platform::Backends;
+use jstream_daemon::live::rtmp;
 use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::future::Future;
 use std::io;
@@ -19,6 +17,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 #[cfg(any(all(windows, feature = "cef"), test))]
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
+#[cfg(any(windows, test))]
+use {
+    jstream_daemon::live::{Connect, live},
+    jstream_platform::{Backends, StreamKeyStore},
+};
 
 /// The engine the daemon serves: the collection in `--collection`'s file (else an empty
 /// one that is not saved), the placeholder outputs, and `audit` recording every batch,
@@ -56,7 +59,7 @@ pub fn engine(
         let backends = windows_backends()?;
         #[cfg(feature = "cef")]
         let (gpu, clock) = (Arc::clone(&backends.gpu), Arc::clone(&backends.clock));
-        let engine = live(
+        let engine = live_redacting(
             engine,
             backends,
             Arc::new(jstream_platform_windows::WindowsCredentials),
@@ -93,7 +96,11 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
                 return engine;
             }
         };
-        let tokens = Arc::new(jstream_platform_windows::WindowsCredentials);
+        // Behind `Redacting`, like the stream keys, so a refresh token is registered with
+        // the crash redaction as it is stored or loaded (#353).
+        let tokens = Arc::new(crate::crash::Redacting(Arc::new(
+            jstream_platform_windows::WindowsCredentials,
+        )));
         if let Some(client) = client {
             tracing::info!("YouTube sign-in is available, with the developer's OAuth client");
             return youtube::set_up(engine, client, transport, tokens);
@@ -203,6 +210,26 @@ pub fn browse(
     engine.with_browser(browser)
 }
 
+/// Makes `engine` live through [`jstream_daemon::live::live`], with `keys` behind
+/// [`crash::Redacting`](crate::crash::Redacting) for both the engine and the publish
+/// opener, so every stream key stored (`output.set_key`) or read (each `output.start`)
+/// is registered with the crash reports' redaction (#353). The redaction lives in the
+/// binary's `crash` module, so it wraps the store here, before the library sees it.
+#[cfg(any(windows, test))]
+fn live_redacting(
+    engine: Engine,
+    backends: Backends,
+    keys: Arc<dyn StreamKeyStore>,
+    connect: Connect,
+) -> Arc<Engine> {
+    live(
+        engine,
+        backends,
+        Arc::new(crate::crash::Redacting(keys)),
+        connect,
+    )
+}
+
 /// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token` and the
 /// devices paired in `device_file` (ADR-0044; in memory without one), with MCP's
 /// streamable-HTTP transport on, and the web UI's files from `ui_dir` when given. Each
@@ -257,17 +284,20 @@ pub fn shutdown_signal() -> io::Result<impl Future<Output = ()> + Send + 'static
 
 #[cfg(test)]
 mod tests {
-    use super::{bind, engine};
+    use super::{bind, engine, live_redacting};
     use crate::args::Options;
     use futures_util::StreamExt;
+    use jstream_control::protocol::{Action, OutputKind, ProtocolError, RtmpTarget, SecretString};
     use jstream_control::protocol::{
         Batch, Call, CallResult, Edit, Event, Hello, OutputId, OutputState, PROTOCOL_VERSION,
         Query, QueryResult, Rev, SceneId,
     };
     use jstream_control::{Control, ControlError, WsConfig, WsControl};
     use jstream_core::{AuditMemory, Engine};
+    use jstream_media::Timebase;
+    use jstream_platform::fake::{FakeClock, MemoryKeyStore, backends};
     use jstream_server::Token;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use tokio::sync::oneshot;
 
@@ -416,6 +446,169 @@ mod tests {
         let control = engine.connect();
         timely(control.hello(hello())).await.expect("welcome");
         control
+    }
+
+    fn rtmp(url: &str) -> OutputKind {
+        OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url: url.into() },
+        }
+    }
+
+    async fn create(control: &jstream_core::InProcessControl, id: &str, url: &str) {
+        timely(control.call(Call::Batch(Batch::single(Edit::OutputCreate {
+            output_id: OutputId::new(id),
+            kind: rtmp(url),
+        }))))
+        .await
+        .expect("output.create");
+    }
+
+    fn start(id: &str) -> Call {
+        Call::Action {
+            action: Action::OutputStart {
+                output_id: OutputId::new(id),
+            },
+        }
+    }
+
+    fn reason(error: &ControlError) -> String {
+        match error.protocol() {
+            Some(ProtocolError::ActionFailed { reason }) => reason.clone(),
+            other => panic!("expected action_failed, got {other:?}"),
+        }
+    }
+
+    /// What a [`tracing`] subscriber writes, kept in memory.
+    #[derive(Clone, Default)]
+    struct Written(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Written {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("written").extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// R-SEC-001 for the RTMP opener (#353): with the real `connect_rtmp` behind the
+    /// opener, a start that can't reach the server, one the server hangs up on, and one
+    /// whose server answers garbage all fail with reasons, events and log lines that
+    /// never name the stream key. The key `output.set_key` stored is registered with the
+    /// crash reports' redaction on the way into the store.
+    #[tokio::test]
+    async fn a_failing_rtmp_publish_never_names_the_key() {
+        use std::io::Write as _;
+        use std::net::TcpListener;
+        const SECRET: &str = "live_RTMP-REDACT-ME-7f3a";
+
+        // A port nothing listens on: bound, then released.
+        let closed = TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port");
+        // Servers that hang up at once, and that answer the handshake with junk (an RTMP
+        // version of 255).
+        let serve = |reply: &'static [u8]| {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+            let addr = listener.local_addr().expect("an address");
+            std::thread::spawn(move || {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    let _ = stream.write_all(reply);
+                }
+            });
+            addr
+        };
+        let hang_up = serve(b"");
+        let garbage = serve(&[0xff; 64]);
+
+        let written = Written::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_ansi(false)
+            .with_writer({
+                let written = written.clone();
+                move || written.clone()
+            })
+            .finish();
+        let _logging = tracing::subscriber::set_default(subscriber);
+
+        let clock = FakeClock::new(Timebase::MICROS);
+        let keys = MemoryKeyStore::new();
+        // The daemon's own wiring: the library's `live` and `rtmp` (the real
+        // `connect_rtmp`), with the key store behind `Redacting` as `engine` builds it.
+        let engine = live_redacting(
+            Engine::new(),
+            backends(&clock).expect("fake backends"),
+            Arc::new(keys.clone()),
+            jstream_daemon::live::rtmp(),
+        );
+        let _ = Engine::clone(&engine).with_cpu_compositor();
+        let control = session(&engine).await;
+        let mut events = control.events();
+        let mut seen = Vec::new();
+        for (id, addr) in [
+            ("closed", closed),
+            ("hang_up", hang_up),
+            ("garbage", garbage),
+        ] {
+            create(&control, id, &format!("rtmp://{addr}/live")).await;
+            timely(control.call(Call::Action {
+                action: Action::OutputSetKey {
+                    output_id: OutputId::new(id),
+                    key: SecretString::new(SECRET),
+                },
+            }))
+            .await
+            .expect("output.set_key");
+            // On the first pass no start has read the key yet, so this checks that
+            // `output.set_key` itself registered it.
+            assert!(
+                crate::crash::is_registered(SECRET),
+                "output.set_key registers the key before any start reads it"
+            );
+            let refused = timely(control.call(start(id)))
+                .await
+                .expect_err("nothing to publish to");
+            let why = reason(&refused);
+            assert!(why.starts_with("opening the publish target: "), "{why}");
+            seen.push(format!("{refused:?} {refused} {why}"));
+        }
+        assert!(
+            crate::crash::is_registered(SECRET),
+            "the stored key is registered for redaction"
+        );
+        assert_eq!(keys.len(), 3, "the keys reached the store");
+        drop(control);
+        drop(engine);
+        let drained = timely(async {
+            let mut drained = Vec::new();
+            while let Some(event) = events.next().await {
+                drained.push(event);
+            }
+            drained
+        })
+        .await;
+        assert!(
+            drained.iter().any(|e| matches!(
+                e,
+                Event::OutputStateChanged {
+                    state: OutputState::Failed,
+                    ..
+                }
+            )),
+            "the starts failed: {drained:?}"
+        );
+        seen.extend(drained.iter().map(|e| format!("{e:?}")));
+        let logged = String::from_utf8_lossy(&written.0.lock().expect("written")).into_owned();
+        assert!(
+            logged.contains("garbage"),
+            "the engine logged the starts: {logged}"
+        );
+        seen.push(logged);
+        for text in &seen {
+            assert!(!text.contains("REDACT-ME"), "the key leaked: {text}");
+        }
     }
 
     /// `--collection` loads the file and saves every change to it, so a second engine on

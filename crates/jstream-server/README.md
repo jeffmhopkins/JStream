@@ -470,6 +470,11 @@ alone.
   same way. The test
   `gate::tests::refusals_are_logged_without_the_token` checks this with a capturing
   subscriber, and `jstream-daemon`'s end-to-end test checks its stderr.
+- **Stream keys** pass through on their way to the engine and are never logged or sent
+  back ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): not in `output.set_key`'s answer,
+  the errors for a key of the wrong shape or a frame that doesn't parse, an event, or an
+  MCP tool result. The test `tests::stream_keys_are_never_echoed_or_logged` checks this
+  over a raw WebSocket and the MCP endpoint, with a capturing subscriber.
 - **Failed credentials** (a missing or wrong token, or a refused device cookie) are
   logged that way only up to 10 in a minute, counted from the first, for every peer
   together, since on loopback a peer address tells no one apart. The 11th logs `too
