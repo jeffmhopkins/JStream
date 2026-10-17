@@ -117,6 +117,13 @@ objc2-core-foundation = { version = "0.3", default-features = false, features = 
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
 objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
+# AudioToolbox and Core Audio's base types through the objc2 framework crates (ADR-0063 §7,
+# §12), for the AAC-LC `AudioConverter`: the converter and its properties, the codec's
+# bit-rate control mode, and `AudioStreamBasicDescription` and `AudioBufferList` for its
+# formats and buffers. The 0.3 line, as above; plain C APIs and no build script. Only the
+# headers the macOS crate calls (no AudioUnit, AudioQueue, blocks or Core MIDI).
+objc2-audio-toolbox = { version = "0.3", default-features = false, features = ["std", "AudioCodec", "AudioConverter", "objc2-core-audio-types"] }
+objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
 # Property tests with shrinking (`jstream-graph`'s `tests/`), test-only. Held at 1.11:
 # 1.12 moves to `rand` 0.10, a second `rand` beside the 0.9 already in the tree
 # (R-DEP-005). No default features: no `fork`/`timeout` (`rusty-fork`, `tempfile`) and

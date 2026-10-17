@@ -25,8 +25,8 @@ wrapped here behind safe APIs, with RAII types for what the system hands back
 **Bindings are maintained crates** (ADR-0063 §12, [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)).
 Apple's frameworks are called through the objc2 framework crates, at the versions wgpu's
 Metal backend already uses (`objc2-foundation`, `-core-foundation`, `-core-media`,
-`-core-video` and `-video-toolbox` so far), and Mach time through `mach2`. They carry their generated
-bindings and link frameworks with `#[link]`, so the crate type-checks from any host with
+`-core-video`, `-video-toolbox`, `-audio-toolbox` and `-core-audio-types` so far), and
+Mach time through `mach2`. They carry their generated bindings and link frameworks with `#[link]`, so the crate type-checks from any host with
 `cargo clippy -p jstream-platform-macos --target aarch64-apple-darwin`; linking and the
 macOS tests need a Mac. Everything that calls macOS is under `cfg(target_os = "macos")`.
 On other targets the crate builds just its platform-independent helpers, which are tested
@@ -64,8 +64,19 @@ It has:
   buffers from the session's own IOSurface-backed pool, and forces a keyframe on request.
   VideoToolbox's output callback, which catches any panic, converts each sample on its
   own thread and hands it over a channel that `poll` drains without blocking; at most
-  four frames are in flight, after which `can_accept` says no. The AAC converter and
-  decoding report `Unsupported`.
+  four frames are in flight, after which `can_accept` says no. It also lists and opens
+  the **AudioToolbox AAC-LC encoder** for a configuration `aac_settings` accepts: an
+  `AudioConverter` from interleaved `f32` PCM (planar input is interleaved first) at
+  constant bit rate, at the rate it offers nearest the configured one
+  (`nearest_bit_rate`). Its magic cookie must carry the `AudioSpecificConfig` the muxers
+  write from the format (`aac_lc_config`, read with `asc_from_magic_cookie`), or opening
+  fails. Decoding reports `Unsupported`.
+- **`AacFramer`**: the AAC encoder's input and packet timing, as on Linux and Windows.
+  The converter pulls the queued input through its input proc (which catches any panic)
+  one raw access unit at a time, with no ADTS. The last unit is padded with silence. Each
+  packet's `pts` (and `dts`) is the first buffer's `pts` plus 1024 frames per packet
+  before it. The encoder's priming is not subtracted, so the decoded audio lags by it:
+  2112 frames on Apple's encoder, against 1024 on `jstream-aac`.
 - **`annexb_access_unit`**: VideoToolbox's length-prefixed NAL units as Annex B, with the
   format description's parameter sets (SPS and PPS, and VPS for HEVC) in front of each
   keyframe, as Media Foundation emits them. **`cm_time_parts`** and
@@ -80,8 +91,8 @@ Not here yet, in roughly the order they follow:
   check and request, and capture streams (CPU frames first, then IOSurface into Metal
   and wgpu once a spike proves the synchronisation);
 - Core Audio devices and streams, and process taps for desktop and application audio;
-- the AudioToolbox AAC converter, and IOSurface encode targets (GPU frames) for the
-  VideoToolbox encoder once the Metal spike lands;
+- IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
+  spike lands;
 - AVFoundation webcams;
 - the Keychain stream-key and token store;
 - video decode and the media-file source.
@@ -90,7 +101,7 @@ The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until i
 ADR.
 
 Tests run on every platform where they can. The macOS ones (the clock, reading the
-release, and encoding with VideoToolbox, which falls back to Apple's software encoder on a
-Mac without a hardware one) need no permission, so they run in the `macos` CI job. The
+release, encoding with VideoToolbox, which falls back to Apple's software encoder on a
+Mac without a hardware one, and encoding AAC with AudioToolbox) need no permission, so they run in the `macos` CI job. The
 `hw-tests` feature is for tests that need the Screen Recording, Camera, Microphone or
 system audio recording permission, or the hardware encoders, which run by hand on a Mac.
