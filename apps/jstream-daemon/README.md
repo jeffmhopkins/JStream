@@ -51,8 +51,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   `__TEXT,__info_plist` section (ADR-0063 §11), so macOS can show those permission
   prompts without an app bundle. Its bundle identifier is
   io.github.jeffmhopkins.jstream.daemon<!--fact:macos-daemon-bundle-id-->, under the
-  app ID io.github.jeffmhopkins.jstream<!--fact:macos-app-id-->. A daemon started from a terminal is attributed to the
-  terminal app, which then needs the grant.
+  app ID io.github.jeffmhopkins.jstream<!--fact:macos-app-id-->. A daemon started from
+  a terminal is attributed to the terminal app, which then needs the grant.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
 - **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the

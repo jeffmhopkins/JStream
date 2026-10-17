@@ -111,7 +111,8 @@ mod backend {
         }
 
         /// Checks the Microphone permission before recording an input, asking macOS to
-        /// prompt the first time it isn't determined.
+        /// prompt the first time it isn't determined. `open_input` calls it once the
+        /// device is planned, so an unknown device never prompts.
         fn check_microphone(&self) -> Result<(), PlatformError> {
             let status = permission::authorization_status();
             match permission::mic_step(status, self.asked_microphone.load(Ordering::SeqCst)) {

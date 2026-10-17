@@ -1,7 +1,7 @@
 //! The daemon's `Info.plist` carries the usage strings macOS shows in its camera,
-//! microphone and system audio recording prompts (ADR-0063 §11), and on macOS the built
-//! binary embeds it, so the prompts work without an app bundle
-//! (apps/jstream-daemon/README.md#purpose).
+//! microphone and system audio recording prompts (ADR-0063 §11), and the bundle
+//! identifier `docs/facts.toml` pins. On macOS the built binary embeds it, so the prompts
+//! work without an app bundle (apps/jstream-daemon/README.md#purpose).
 
 /// The usage-string keys macOS requires before it prompts for each permission.
 const USAGE_KEYS: [&str; 3] = [
