@@ -49,8 +49,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
-  frame is due (the engine's `jstream-sources` thread does). Painting allocates only
-  while the source's frame pool grows, or when every pooled frame is still held.
+  frame is due (the engine's `jstream-sources` thread does). The `waveform` and
+  `spectrum` painters allocate only while their frame pool grows, or when every pooled
+  frame is still held; `chat_message`'s allocates when it redraws for a newly featured
+  message.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,

@@ -92,8 +92,9 @@ pub trait Source: Send {
 /// Drawing a frame can take milliseconds (a whole frame's pixels, an FFT), so a host
 /// that asks for frames under a lock calls `paint` before it takes that lock, when
 /// [`Source::next_change`] said the frame is due, and `frame` then hands the painted
-/// frame out at once. Painting allocates only while the source's pool of frames grows,
-/// or when every frame in it is still held.
+/// frame out at once. The `waveform` and `spectrum` painters allocate only while their
+/// pool of frames grows, or when every frame in it is still held; `chat_message`'s
+/// allocates when it redraws for a newly featured message.
 pub trait Painter: Send + Sync {
     /// Draws the frame to show at `at`, on the same clock as [`Source::frame`].
     fn paint(&self, at: MediaTime);
