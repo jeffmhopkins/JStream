@@ -47,13 +47,14 @@ Contents (a first cut; [Design](#design) explains the choices):
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
   unless `ServerConfig::pairing` is off
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
-- **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
-  an accepted upgrade request in time.
+- **Listener** (`listener.rs`): accepts TCP connections, closes one accepted while
+  `max_tcp_connections` are open, and drops one that hasn't sent an accepted upgrade
+  request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
   ([R-SEC-002](../../docs/RULES.md#R-SEC-002)), the device cookie among them.
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
-  its events.
+  its events, and the cap on calls in flight.
 - **Preview frames** (`preview.rs`): the session's binary channel, queued per
   connection and sent as WebSocket binary messages, dropping up to the next keyframe
   when the client reads slowly.
@@ -140,12 +141,13 @@ value is hashed with BLAKE3 too, and the two 32-byte digests are compared with
 `blake3::Hash`'s constant-time equality. So the compare reveals nothing about the
 token: not where the two differ, and not its length.
 
-**Connection limits.** Three bounds keep one client, or a crowd of them, from holding
+**Connection limits.** Four bounds keep one client, or a crowd of them, from holding
 the server's resources. Each is a `ServerConfig` field, and `ServerConfig::new` sets
 the default:
 
 | Limit | Default | When it is exceeded |
 |---|---|---|
+| `max_tcp_connections` | 128 open TCP connections of every kind: not yet authenticated, refused but still open, HTTP keep-alive ones to `/mcp` and the UI, and WebSocket connections | A connection accepted beyond it is closed at once, unanswered. Its place is taken when it is accepted and freed when it closes. |
 | `max_connections` | 32 open WebSocket connections | An upgrade that passes the checks above gets 503 and no session. The slot is taken just before the upgrade and freed when the connection ends. |
 | `header_read_timeout` | 10 s from accept to an accepted upgrade request | The connection is dropped, unanswered. |
 | `handshake_timeout` | 10 s from accept to a successful `hello` | The connection is closed with close code 1008 (see *Sessions*). |
@@ -154,12 +156,18 @@ the default:
 `mcp_idle_timeout` (see *MCP over streamable HTTP*), with `ServerError::InvalidLimit` before opening the
 socket, since the server would refuse or drop everything.
 
-The header-read timeout is kept on the socket, by the listener (`listener.rs`), since
-hyper's own isn't reachable through `axum::serve`: until the upgrade handler accepts a
-request, every read and write fails once the deadline has passed. So it also drops a
-connection that sends no request, asks for another path, or stays open after a refusal.
-The cap is checked after the `Host`, `Origin` and token checks, so a refused client
-learns nothing about the server's load, and a refusal costs no session. The listener
+The TCP cap and the header-read timeout are kept on the socket, by the listener
+(`listener.rs`). The cap counts every accepted stream until it is dropped, so it also
+bounds the connections the header-read deadline no longer does: authenticated UI and
+MCP keep-alive connections, and upgraded WebSocket ones. The first connection dropped
+for it is logged at `warn` (`too many open connections`), and later ones are not, until
+a connection is accepted again. The header-read timeout is there since hyper's own isn't
+reachable through `axum::serve`: until the upgrade handler accepts a request, every read
+and write fails once the deadline has passed. So it also drops a connection that sends
+no request, asks for another path, or stays open after a refusal.
+The WebSocket cap (`max_connections`) is checked after the `Host`, `Origin` and token
+checks, so a refused upgrade learns nothing about how many sessions are open, and a
+refusal costs no session. The TCP cap is checked at accept, before any request is read. The listener
 stays on loopback by default; these bounds are what a non-loopback bind would rely on
 against a misbehaving client on the network.
 
@@ -335,7 +343,8 @@ task speaks the envelope
   time`), including one whose `hello` arrived in time but that the engine hasn't
   answered by then: the wait for the engine's answer races the same deadline.
 - Each `request` is forwarded to `Control::call` and may stay in flight while others
-  run; answers go back as they complete, carrying the client's request ID. A request
+  run, up to 64 per connection (see *Slow clients*); answers go back as they complete,
+  carrying the client's request ID. A request
   before `hello` is answered by the session itself (`handshake_required`).
 - A message that doesn't parse gets a `malformed` error, with the request ID when one is
   readable. A binary message from the client gets `malformed` too: binary frames only
@@ -370,7 +379,11 @@ task speaks the envelope
   re-reads the state with `state.get`. Each drop is logged at `warn` with its count
   (see *Logging*). Replies are bounded instead by reading: while 1024 of them wait
   unsent (`REPLY_BACKLOG`), the task reads no more requests, so a client that sends
-  requests without reading the answers is held back by the socket.
+  requests without reading the answers is held back by the socket. Calls the engine
+  hasn't answered yet are bounded the same way: while 64 are in flight on a connection
+  (`MAX_IN_FLIGHT`), the task reads nothing more until one completes, so a client that
+  never waits for its answers holds at most 64 parsed requests, each of up to 4 MiB of
+  message text.
 - The connection ends when the client closes it, when the session's event stream ends
   (the engine went away; close code 1001), when the session reports `Disconnected`
   (close code 1011), or when the server shuts down.
@@ -436,7 +449,7 @@ next MCP request once that device is revoked or has lapsed.
 `mcp_idle_timeout` (default 30 minutes) is ended, and its `Control` session dropped,
 when the next MCP request arrives; until then it holds its place. These are separate
 from `max_connections`, which counts WebSocket connections: an MCP request holds no
-connection slot. A request that passes the checks disarms its connection's header-read
+connection slot, though its TCP connection counts toward `max_tcp_connections`. A request that passes the checks disarms its connection's header-read
 deadline, as an accepted upgrade does, so an authenticated client can keep the
 connection open for more requests (HTTP keep-alive) and wait on calls longer than the
 deadline.
@@ -485,7 +498,9 @@ alone.
 - A UI file that can't be read is logged at `warn` with the error (500 to the
   client); the path is not logged.
 - A request that isn't a WebSocket upgrade is logged at `debug`, and so is a connection
-  dropped by the header-read timeout. A connection closed by the handshake timeout logs
+  dropped by the header-read timeout. A connection dropped because `max_tcp_connections`
+  are open is logged at `warn` (`too many open connections`) with the peer address, once
+  per run of such drops. A connection closed by the handshake timeout logs
   `connection closed` at `info` with its code and reason, like any other close.
 
 ### Dependencies
