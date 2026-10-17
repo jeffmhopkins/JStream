@@ -794,11 +794,18 @@ status = "done"
 prs = [325]
 
 [[item]]
+id = "F6"
+milestone = "M3"
+title = "HEVC and AV1 encode"
+status = "review"
+prs = [364]
+
+[[item]]
 id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
-status = "planned"
-prs = [359]
+status = "review"
+prs = [359, 368]
 
 [[item]]
 id = "3D1"

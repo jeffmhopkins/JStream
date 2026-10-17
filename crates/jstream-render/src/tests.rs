@@ -18,14 +18,14 @@ use crate::{
 /// Fields drop in declaration order, so the device is destroyed while the lock is held
 /// for as long as this value is kept whole. Splitting the fields apart drops them as
 /// separate locals and can release the lock first.
-struct Opened {
-    compositor: Compositor,
+pub(crate) struct Opened {
+    pub(crate) compositor: Compositor,
     _lock: std::sync::MutexGuard<'static, ()>,
 }
 
 /// WARP (Microsoft Basic Render Driver) access-violates, `0xc0000005`, when several
 /// tests create and drop Dx12 devices at once.
-fn open() -> Option<Opened> {
+pub(crate) fn open() -> Option<Opened> {
     let _lock = gpu_lock();
     match Compositor::open(OpenOptions::headless()) {
         Ok(compositor) => {
@@ -55,7 +55,12 @@ fn gpu_lock() -> std::sync::MutexGuard<'static, ()> {
     LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn solid(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4]) -> crate::Image {
+pub(crate) fn solid(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> crate::Image {
     let pixel: Vec<u8> = std::iter::repeat_n(rgba, (width * height) as usize)
         .flatten()
         .collect();
@@ -83,7 +88,7 @@ fn draw(
         .clone()
 }
 
-fn near(snapshot: &Snapshot, x: u32, y: u32, expected: [u8; 4], tol: u8) {
+pub(crate) fn near(snapshot: &Snapshot, x: u32, y: u32, expected: [u8; 4], tol: u8) {
     let pixel = snapshot
         .pixel(x, y)
         .expect("invariant: the sample is inside the canvas");
@@ -1078,7 +1083,7 @@ fn the_cache_imports_gpu_frames_without_keeping_their_holds() {
 }
 
 /// An image of equal-width vertical bands, one colour each, `height` rows tall.
-fn bands(
+pub(crate) fn bands(
     compositor: &Compositor,
     band_width: u32,
     height: u32,
