@@ -203,6 +203,7 @@ compositor's own, not a shared encode target, so nothing transitions it.
 | Per-image texture and bind group | `Image`, dropped with it |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
+| A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
 | `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
 
 **`ResourceCache`.** A frame runs `begin_frame`, `upload`, `import` or `layer` for each
@@ -313,7 +314,8 @@ kinds.
 
 - `VideoFilter::new(kind_id, settings)` builds a kind's pass; `set_settings` updates it
   in place, keeping its state; `output_size` is the size it draws for a given input,
-  so a filter can change the source's reported size (aspect ratio, padding).
+  so a filter can change the source's reported size (for example aspect ratio, padding,
+  a drop shadow, an outside outline or a glow).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
   that move or hold frames. An imported input's `FrameSync` is staged once the pass has
@@ -336,8 +338,11 @@ kinds.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each draw creates its two small uniform buffers, two views and a bind group, and each
-  `apply_filter` its output layer. Pooling them is the chain runtime's job (V0); until
-  then a filter costs those small allocations per frame.
+  `apply_filter` its output layer. A multi-pass filter also creates its `Ctx::scratch`
+  layers on every call: up to three, each at most the filter's output size (about
+  16.6 MB at 1080p). Pooling all of these is the chain runtime's job (V0); until then a
+  filter costs those allocations per frame. The video delay's ring of held frames is
+  the one thing a filter keeps between frames.
 
 **External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
 whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
@@ -379,9 +384,63 @@ premultiplied linear light on the way out.
   across its seam; off, the area the picture leaves is transparent. A new speed jumps
   to where that speed puts the picture at the current time.
 
-Aspect ratio (V1a): not yet.
+Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
+Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
+`custom_width` and `custom_height` from 1 to 10000 shown only for `custom`), `mode`
+(`crop`, the default, `pad` or `stretch`), `anchor` (`center`, an edge or a corner;
+crop and pad only), `pad_color` (with alpha, default opaque black; pad only) and
+`resampling` (`bilinear`, `bicubic`, the default, or `lanczos`; stretch only). Its
+`output_size` is the rule the source's reported size follows: crop keeps one input
+dimension and shrinks the other, pad keeps one and grows the other, and stretch keeps
+the input's larger dimension as the output's larger one (1920x1080 stretched to 9:16 is
+1080x1920). A derived dimension is rounded to the nearest pixel and never 0, and the
+math saturates instead of overflowing, so a size past the adapter's limit fails as
+`TooLarge` when the layer is made. Crop and pad copy input pixels 1:1 with an offset
+(no scaling); only stretch resamples, as bilinear, Catmull-Rom bicubic (4x4 texel loads)
+or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied colour
+(an SDR assumption: values above 1 are clipped).
+The kernels are not widened for a downscale, so a large shrink along one axis can alias.
 
-The multi-pass filters (V2): not yet.
+The multi-pass filters (V2), in `src/filter/multipass/`:
+
+- `blur`: `radius` (0 to 100 px, default 8) and an area: `area` (`whole`, `inside` or
+  `outside` a rectangle) with `area_x`, `area_y`, `area_width`, `area_height` (fractions
+  of the frame). A separable gaussian (sigma radius / 3). Its cost is bounded for every
+  radius: it runs at the smallest working scale of 1, 2, 4 or 8 that keeps radius /
+  scale at 16 or less, so a box downsample reads at most 64 texels a texel and each
+  blur pass at most 33. It uses three scratch layers. The frame's edges clamp, so they
+  don't darken. The area's edge is hard (no feather), and the blur inside it still
+  reads pixels just outside it.
+- `pixelate`: `block_size` (1 to 256 px, default 16) and the same area. Blocks are
+  aligned to the top-left and are the mean of their pixels: exact up to 8 px, partial
+  edge blocks included, an 8 x 8 grid of samples above that.
+- `drop_shadow`: `color` (with alpha, default `#000000b3`), `offset_x`, `offset_y`
+  (-200 to 200 px, default 8) and `blur` (0 to 100 px, default 8). The input's alpha is
+  blurred, tinted, moved and drawn under the input. There is no spread.
+- `outline`: `width` (0 to 64 px, default 4), `color` and `position` (`outside` or
+  `inside`). It uses a jump flood: a seed pass, then steps of S, S/2, ..., 1 and one
+  more step of 1, with S the power of two that reaches width + 1. That is at most 8
+  steps of 9 loads each, in two scratch layers. Coverage is antialiased over one pixel.
+  An inside stroke treats the area past the frame as outside the shape.
+- `glow`: `color`, `radius` (0 to 100 px, default 16) and `strength` (0 to 4, default
+  1, which multiplies the blurred alpha before it is clamped). It is a drop shadow with
+  no offset.
+- `video_delay`: `delay_ms` (0 to 5000, default 0, which passes the input through) and
+  `max_memory_mb` (64 to 16384, default 1024). The pass keeps a ring of frame copies
+  stamped with the clock and shows the newest one at or before now minus the delay, or
+  the oldest one while the ring fills. The ring holds `min(300, memory / (w x h x 8))`
+  frames, and never fewer than 2. To fit the delay into that many frames, it stores a
+  frame only once delay / (capacity - 1) has passed since the last one. Past the cap
+  the delay holds and the delayed picture's frame rate drops. Frames older than the one
+  shown are reused. A new input size empties the ring, and so does a clock that goes
+  backwards.
+
+**Bounds.** Drop shadow, outline (outside) and glow grow their output by the effect's
+extent on each side, rounded up to whole pixels: the blur radius plus the offset
+toward that side, or the stroke width. The input is drawn 1:1 at the matching inset, so
+**these filters change the source's reported size**. Until the chain runtime (V0)
+reports the inset, a placement fits the grown frame rather than the original content
+box.
 
 Assets and references (V3): not yet.
 
