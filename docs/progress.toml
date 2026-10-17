@@ -848,7 +848,7 @@ milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
 prs = [272, 281, 407]
-note = "parts 1 to 3 merged (wave/m3 landed in #477): the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; CLAP filters to run; then a live-audio Windows run (#342 tracks the host's hardware run)"
+note = "parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run)"
 needs = ["build", "hardware"]
 
 [[item]]
