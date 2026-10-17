@@ -11,6 +11,7 @@ use windows::Win32::Foundation::{
 };
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    SE_KERNEL_OBJECT,
 };
 use windows::Win32::Security::{
     GetTokenInformation, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
@@ -146,6 +147,13 @@ impl Mapping {
             _handle: handle,
             existed,
         })
+    }
+
+    /// The mapping's owner and DACL, as SDDL text. The producer's handle carries
+    /// `READ_CONTROL`: `CreateFileMappingW` opens an existing mapping with full access or
+    /// fails.
+    pub(super) fn security(&self) -> Result<String, PlatformError> {
+        crate::security::sddl_of(self._handle.0, SE_KERNEL_OBJECT)
     }
 
     pub(super) fn control(&self) -> &Control {

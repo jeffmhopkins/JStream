@@ -27,6 +27,9 @@ mod gpu;
 // Its decision logic is tested on every platform.
 #[cfg(any(windows, test))]
 mod n_edition;
+// Its owner and DACL rule is tested on every platform.
+#[cfg(any(windows, test))]
+mod security;
 mod vcam;
 // Its path comparison is tested on every platform.
 #[cfg(any(windows, test))]

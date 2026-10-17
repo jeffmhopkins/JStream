@@ -377,7 +377,13 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **One producer per session:** a live control block with a fresh heartbeat in this
     session (another engine, or another sink in this process) makes `start`
     `InvalidState`. A stale one, left by a producer that died, is re-initialised as the
-    contract says: marked empty, rewritten, then marked live.
+    contract says: marked empty, rewritten, then marked live, but only if its owner and
+    DACL are ones the sink would have set (#356): `CreateFileMappingW` keeps an existing
+    mapping's security, so the sink reads it back (`GetSecurityInfo`, as SDDL text) and
+    `start` is `InvalidState` unless the owner is this user, SYSTEM or Administrators and
+    no allow entry grants more than `READ_CONTROL`, `SYNCHRONIZE` or
+    `FILE_READ_ATTRIBUTES` to anyone but them and LOCAL SERVICE. That rule (`security`)
+    works on the text, so it is tested on every platform.
   - **Publish:** each frame is copied into its ring slot (`UpdateSubresource`), the
     fence is signalled with the frame's number, and the number is published as
     `latest_frame`. It never waits on the DLL, which may have died.
