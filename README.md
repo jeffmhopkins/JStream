@@ -50,7 +50,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `██████░░░░` 61% | 14 | 5 | 4 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 2 | 5 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 3 | 4 |
 
 94 of 113 items are merged; 5 of those still wait on a run on Windows hardware.
 
@@ -217,7 +217,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
-| WA1 | WASM automation plugins | ⏳ planned |  |
+| WA1 | WASM automation plugins | 🔍 in review | #486 |
 | MAC1 | macOS platform crate | ⏳ planned |  |
 | LNX1 | Linux codec path and platform crate | ⏳ planned |  |
 

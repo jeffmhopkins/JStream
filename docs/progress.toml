@@ -833,7 +833,8 @@ note = "part 1 merged"
 id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
-status = "planned"
+status = "review"
+prs = [486]
 
 [[item]]
 id = "MAC1"
