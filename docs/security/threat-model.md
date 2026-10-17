@@ -173,6 +173,7 @@ covers = [
   "crates/jstream-browser/src/request.rs",
   "crates/jstream-browser/src/helper/mod.rs",
   "crates/jstream-browser/src/helper/handlers.rs",
+  "crates/jstream-browser/src/permission.rs",
 ]
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md"]
 -->

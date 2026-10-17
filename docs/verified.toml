@@ -1014,7 +1014,7 @@ stamp = { hash = "b3:2e4f8b5ba5a63a68", by = "agent:claude", note = "#347 part 1
 stamp = { hash = "b3:9d478feeb19361e6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/lib.rs"]
-stamp = { hash = "b3:3cda3b76676d5dea", by = "agent:claude", note = "#347 part 1: helper bullet now says every permission is refused by the page's permission handler (media cancelled, prompts DENY) via permission.rs, matching handlers.rs PagePermissions and lib.rs's cfg-gated mod; rest re-read, unchanged | merge: wave/m1-3's sync changed nothing in jstream-browser; the helper bullet's #347 refusal (media cancelled, prompts DENY, pinned by permission.rs's test) still matches handlers.rs and permission.rs" }
+stamp = { hash = "b3:b40a683012e83db3", by = "agent:vcam-optin-561", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds | merge: re-read: lib.rs keeps this branch's Docs line (threat-model#browser) on top of the wave's lib.rs, which adds the permission module" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/link.rs"]
 stamp = { hash = "b3:bff1c1534bc93db8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
@@ -3780,7 +3780,7 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:vcam-242", note = "Citation 
 stamp = { hash = "b3:5d86cc2aab180d79" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/lib.rs"]
-stamp = { hash = "b3:4ebdb58266118f7e", by = "agent:vcam-242", note = "Citation and depends_on (and lib.rs's doc) moved from superseded ADR-0020 to ADR-0066; Packaging gained the #242 sentence and the accepted Program Files copy. The section's COM, frames, pacing, trust and HKLM DllRegisterServer description is current behaviour and still matches the crate until #561" }
+stamp = { hash = "b3:1922a65b0579ca11", by = "agent:vcam-optin-561", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds | merge: re-read: lib.rs's Docs line now cites both the wave's ADR-0066 (from #556) and this branch's threat-model#vcam" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/pace.rs"]
 stamp = { hash = "b3:ddd1a9e738e6c587" }
@@ -4242,7 +4242,7 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#browser"."body"]
-stamp = { hash = "b3:32918fcef156034c", by = "agent:claude", note = "Gaps now says page permission requests are refused (PagePermissions in helper/handlers.rs cancels media access and answers every prompt DENY via permission.rs) and names the no-prompt class that never reaches the handler; loopback/LAN stance still open for #549; the #347 register row narrowed to match. Threats and the Controls paragraph are untouched by this PR (#539 rewrites Controls). | merge: wave/m1-3's sync didn't touch the Browser section; its #347 permission-refusal gap text still matches permission.rs and handlers.rs" }
+stamp = { hash = "b3:8a4a05f7b8877fed", by = "agent:vcam-optin-561", note = "re-read: this branch gives the section covers (request.rs, helper/mod.rs, handlers.rs, and now permission.rs, the policy the Gaps cite) and states it is built (C8) with its hardware run pending (#341); the merge brought #535's permission handler and its Gaps text, which agree with the Controls" }
 
 ["THREAT-MODEL#browser"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -4251,10 +4251,13 @@ stamp = { hash = "b3:64d21faa19974bc3" }
 stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/handlers.rs"]
-stamp = { hash = "b3:5e098480ae7dcb4b", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
+stamp = { hash = "b3:2e4f8b5ba5a63a68", by = "agent:vcam-optin-561", note = "re-read: this branch gives the section covers (request.rs, helper/mod.rs, handlers.rs, and now permission.rs, the policy the Gaps cite) and states it is built (C8) with its hardware run pending (#341); the merge brought #535's permission handler and its Gaps text, which agree with the Controls" }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/mod.rs"]
 stamp = { hash = "b3:9d478feeb19361e6", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
+
+["THREAT-MODEL#browser"."file:crates/jstream-browser/src/permission.rs"]
+stamp = { hash = "b3:3394a90b74d48286", by = "agent:vcam-optin-561", note = "re-read: this branch gives the section covers (request.rs, helper/mod.rs, handlers.rs, and now permission.rs, the policy the Gaps cite) and states it is built (C8) with its hardware run pending (#341); the merge brought #535's permission handler and its Gaps text, which agree with the Controls" }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/request.rs"]
 stamp = { hash = "b3:8ac270a94f116ebd", by = "agent:threat-model-covers", note = "Added covers (request.rs, helper/mod.rs, helper/handlers.rs) and ADR-0048 dep (#377). C8 landed with wave/m1 (hardware run #341): dropped 'in flight'. Checked: sandbox on (no_sandbox 0), no cache_path and no persisted cookies, on_before_resource_load runs RequestPolicy on every request, scheme list and file: folder rule, on_before_popup returns 1. #347 still open." }
