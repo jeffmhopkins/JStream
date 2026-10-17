@@ -116,9 +116,10 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 # Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
 # crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
 # and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
-# `CVPixelBuffer` for its input. The 0.3 line, as `objc2-foundation`; plain C APIs, so
-# no `objc2` feature and no build script. Only the headers the macOS crate calls.
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFDictionary", "CFNumber", "CFString"] }
+# `CVPixelBuffer` for its input; and CF data for the Keychain store's secrets (§9). The
+# 0.3 line, as `objc2-foundation`; plain C APIs, so no `objc2` feature and no build
+# script. Only the headers the macOS crate calls.
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFData", "CFDictionary", "CFNumber", "CFString"] }
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "objc2-core-video"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
 objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
@@ -136,6 +137,12 @@ objc2-core-audio-types = { version = "0.3", default-features = false, features =
 # recording output, AVFoundation or UTType. `libc` is only for `pid_t`, so JStream's own
 # windows can be left out of the list.
 objc2-screen-capture-kit = { version = "0.3", default-features = false, features = ["std", "SCError", "SCShareableContent", "SCStream", "block2", "dispatch2", "libc", "objc2-core-foundation", "objc2-core-graphics", "objc2-core-media"] }
+# The Security framework through the objc2 framework crates (ADR-0063 §9, §12), for the
+# Keychain stream-key and OAuth-token store: `SecItemAdd`, `SecItemCopyMatching`,
+# `SecItemUpdate` and `SecItemDelete` on generic-password items, and the `kSec*` keys and
+# `errSec*` codes they take. The 0.3 line, as above; plain C APIs and no build script.
+# Only the Keychain item headers (no certificates, trust, authorization or codesigning).
+objc2-security = { version = "0.3", default-features = false, features = ["std", "SecBase", "SecItem"] }
 # Core Graphics for the Screen Recording permission (`CGPreflightScreenCaptureAccess` and
 # `CGRequestScreenCaptureAccess`), the main display's ID and the sRGB colour space the
 # capture asks for. The 0.3 line, which ScreenCaptureKit's crate already brings in.
