@@ -898,7 +898,9 @@ A browser source is a CEF off-screen browser
 ([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
 ([ADR-0046](adr/0046-browser-crate-and-helper.md),
 [its README](../crates/jstream-browser/README.md)). The desktop app and the daemon wire it
-in behind their off-by-default `cef` features; the program mix doesn't use it yet.
+in behind their off-by-default `cef` features. While a program stage runs on a GPU
+context, the mix draws each page's newest texture there (a premultiplied import, see
+[GPU pipeline](#gpu-pipeline)); otherwise a page shows its transparent stand-in.
 CEF runs in the sandboxed browser helper process, never in the engine's
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), which the engine drives over two named
 pipes. Each `OnAcceleratedPaint`
