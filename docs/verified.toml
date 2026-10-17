@@ -171,7 +171,7 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:21a75e4cfb0f3283", by = "agent:claude-349", note = "Added the Device loss paragraph (#349): the compositor watches its device for a loss and keeps the invalid-resource errors from panicking; the render thread reopens at once (step 6's fallback on the context, a new device of its own otherwise), repeats the last frame meanwhile, fails at the third loss in 60 s, logs and counts each; the engine event, pack attribution and quarantine are named as not built (protocol change, X1). Matches gpu.rs, compositor.rs and core's pipeline.rs." }
+stamp = { hash = "b3:3f0be8091f8b8666", by = "agent:claude-349", note = "Device loss paragraph matches watch, lost, Switch::start with open_timeout, open(None) and the 3-in-60 s limit; the render README change (testing wording, per-frame logging and shared-context attribution) contradicts nothing here." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:84ad0a8f8034bc13", by = "agent:claude", note = "body: own device hardware first (D3D12 first on Windows) with the software fallback, next to main's context/import text. render README: device selection (headless software first; hardware: a D3D12 hardware adapter first on Windows, its device failure logged and WARP skipped, then high-performance, then software, NoAdapter; device-open fallback naming both errors; single try for a Cpu pick), engine render/snapshot/preview threads, tests and benches on hardware(), WARP 720p ~10 fps cited (#433). benches/composite.rs opens hardware(). gpu.rs: DX12 instance first taking only a non-Cpu adapter, warn on device failure, pick_adapter, or_software, Cpu skip, fallback unit test. tests.rs: Opened via hardware(). holds" }
@@ -1278,7 +1278,7 @@ stamp = { hash = "b3:88ff96c8e7cc2804", by = "agent:claude-451", note = "Render-
 stamp = { hash = "b3:88dc45882e4654f5", by = "agent:claude-349", note = "Error policy now says a lost GPU device switches at once (a new device, or off the context) and that the third loss in 60 s is fatal, matching render_loop's DrawError::Lost arm, MAX_DEVICE_LOSSES and LOSS_WINDOW in pipeline.rs. The rest of Design (snapshots, live sources, outputs) is unchanged by this PR." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:1d94282f988e5050", by = "agent:claude-349", note = "Error policy now says a lost GPU device switches at once (a new device, or off the context) and that the third loss in 60 s is fatal, matching render_loop's DrawError::Lost arm, MAX_DEVICE_LOSSES and LOSS_WINDOW in pipeline.rs. The rest of Design (snapshots, live sources, outputs) is unchanged by this PR." }
+stamp = { hash = "b3:36bc29af2f1a4658", by = "agent:claude-349", note = "pipeline.rs change only moves the failing() test helper (N1); the error policy (immediate switch on a lost context, third loss in 60 s fails the output) is unchanged and holds." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1419,7 +1419,7 @@ stamp = { hash = "b3:88ff96c8e7cc2804", by = "agent:claude-451", note = "Runtime
 stamp = { hash = "b3:88dc45882e4654f5", by = "agent:claude-349", note = "The Tests list now names the three new gpu_capture.rs tests (own device reopened, a lost context left at once, the third loss in a minute fails). runtime/mod.rs only re-exports DrawError and, for tests, DrawHook and gpu_draw_with; pipeline.rs adds DrawError, the lost-device switch and OutputStats::gpu_device_losses, none of which changes the rest of Purpose." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:1d94282f988e5050", by = "agent:claude-349", note = "The Tests list now names the three new gpu_capture.rs tests (own device reopened, a lost context left at once, the third loss in a minute fails). runtime/mod.rs only re-exports DrawError and, for tests, DrawHook and gpu_draw_with; pipeline.rs adds DrawError, the lost-device switch and OutputStats::gpu_device_losses, none of which changes the rest of Purpose." }
+stamp = { hash = "b3:36bc29af2f1a4658", by = "agent:claude-349", note = "pipeline.rs change only moves the failing() test helper above the doc comment of a_switch_off_the_gpu_path_reports_a_panic_or_a_hang (N1); the test list and the three gpu_capture tests are unchanged and hold." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1509,7 +1509,7 @@ stamp = { hash = "b3:88ff96c8e7cc2804", by = "agent:claude-451", note = "Re-appl
 stamp = { hash = "b3:88dc45882e4654f5", by = "agent:claude-349", note = "Added the A lost device paragraph after the GPU fallback: gpu_draw maps a draw on a lost device to DrawError::Lost, the render thread starts the Switch at once (leave_gpu on the context, open(None) on its own device), keeps the output active, encoders and the virtual camera as stated, OutputStats::gpu_device_losses and gpu_fallbacks, the third loss in 60 s fatal, and no event or quarantine yet. Checked against pipeline.rs (open_gpu_draw, draw_error, Switch/SwitchWhy, render_loop)." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:1d94282f988e5050", by = "agent:claude-349", note = "Added the A lost device paragraph after the GPU fallback: gpu_draw maps a draw on a lost device to DrawError::Lost, the render thread starts the Switch at once (leave_gpu on the context, open(None) on its own device), keeps the output active, encoders and the virtual camera as stated, OutputStats::gpu_device_losses and gpu_fallbacks, the third loss in 60 s fatal, and no event or quarantine yet. Checked against pipeline.rs (open_gpu_draw, draw_error, Switch/SwitchWhy, render_loop)." }
+stamp = { hash = "b3:36bc29af2f1a4658", by = "agent:claude-349", note = "pipeline.rs change only moves the failing() test helper (N1); the A lost device paragraph (DrawError::Lost arm, leave_gpu, counters, CPU readback) is unchanged and holds." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -3033,7 +3033,7 @@ stamp = { hash = "b3:f7c86a5ca6e42145", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:f02b79d7362a656c", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489, X1's harness): edited the prelude sentence: src, texel and aux now also convert a premultiplied browser-page import (Frame alpha/aux_alpha modes 0/1/2, matching composite.wgsl), as pass.rs and prelude.wgsl do; X1's cache, error-scope and external paragraphs and the V1 kinds unchanged; holds" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:427851af1a6c2f50", by = "agent:claude-349", note = "Added the lost-device bullet (#349): every compositor sets wgpu's device-lost callback and uncaptured-error handler on its device (own or the context's), Compositor::lost polls once and says why, Compositor::take_error keeps the first uncaptured error instead of wgpu's default panic, and render fails with RenderError::Uncaptured while one is pending. Re-read against gpu.rs (watch, Faults), compositor.rs and error.rs; the rest of Purpose is unchanged." }
+stamp = { hash = "b3:2a74f7d25e2a7612", by = "agent:claude-349", note = "A lost device bullet: watch sets the lost callback and uncaptured handler per device; lost polls once; take_error keeps the first error, logged as uncaptured wgpu error before a loss; render fails with Uncaptured before readback. New: render empties the slot so a recurring error logs once per frame, and on the shared context another thread's error is taken by the program's next render (N2, #604 round 1)." }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:e6f240cc14ed9d3d", by = "agent:t1-studio", note = "Re-read: the transition Track bullet (this branch) and the merge's import_premultiplied, ContextKey and filter passes both hold; gpu-frames and gpu-pipeline deps re-verified above." }
@@ -3237,7 +3237,7 @@ stamp = { hash = "b3:771010621450c5c4", by = "agent:claude-349", note = "Added t
 stamp = { hash = "b3:dcf2271ab55bc206", by = "agent:t1-studio", note = "Opacity bullet: core passes stored opacity or a track's sampled one; Transitions bullet matches transition.rs" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:7062facabb16f187", by = "agent:claude-349", note = "Added the lost-device tests to What is checked: destroy makes lost say destroyed and a render, an upload and a layer fail without a panic; an uncaptured validation error before a loss fails the next render as Uncaptured and the following render draws (tests.rs)." }
+stamp = { hash = "b3:a12cddf9d5fca010", by = "agent:claude-349", note = "What is checked now: after destroy, lost says destroyed, a render fails, and an upload and a layer return without a panic (their results are not asserted, as tests.rs says); an uncaptured error fails the next render as Uncaptured and the render after draws. Matches a_lost_device_is_reported_and_fails_without_a_panic and an_uncaptured_error_fails_the_next_frame (B1, #604 round 1)." }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }

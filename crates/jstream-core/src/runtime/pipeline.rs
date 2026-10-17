@@ -3208,9 +3208,6 @@ mod tests {
         }
     }
 
-    /// A fallback takes the context from the live sources and opens the compositor
-    /// without it on a thread of its own; a panic there, or an open past the deadline,
-    /// comes back as an error instead of unwinding or blocking the render thread (#577).
     fn failing() -> SwitchWhy {
         SwitchWhy::Failing {
             cause: "x".into(),
@@ -3218,6 +3215,9 @@ mod tests {
         }
     }
 
+    /// A fallback takes the context from the live sources and opens the compositor
+    /// without it on a thread of its own; a panic there, or an open past the deadline,
+    /// comes back as an error instead of unwinding or blocking the render thread (#577).
     #[test]
     fn a_switch_off_the_gpu_path_reports_a_panic_or_a_hang() {
         let long = Duration::from_secs(30);

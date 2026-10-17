@@ -127,9 +127,13 @@ and calls this crate.
   ([jstream-core › Design](../jstream-core/README.md#design) does). wgpu's default
   handler panics on every uncaptured error, and a lost device's invalid resources raise
   them on each later call, sometimes before wgpu reports the loss. So the handler keeps
-  the first error instead (`Compositor::take_error`, logged once as
+  the first error instead (`Compositor::take_error`, logged as
   `uncaptured wgpu error` before a loss), and `render` fails with
-  `RenderError::Uncaptured` when one is pending, before any readback.
+  `RenderError::Uncaptured` when one is pending, before any readback. `render` empties
+  the slot, so an error that recurs every frame is logged once per frame until the caller
+  gives up. The handler is per device: on the shared context an error that a browser or
+  capture thread raised is taken by the program's next `render` and counts against the
+  program's frames.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
@@ -608,7 +612,7 @@ both old imports after the fence, an upload under the key replaces the import, a
 straight import under a key that held a premultiplied one replaces it
 (the staged submit's `PRESENT` transition runs on the software adapter here). A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
-`destroyed`, and a render, an upload and a layer fail without a panic; an uncaptured
+`destroyed`, a render fails, and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
 validation error before any loss fails the next render as `Uncaptured`, and the
 render after it draws. Without
 an adapter, unit tests still cover the binary16 encode
