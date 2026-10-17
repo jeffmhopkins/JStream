@@ -243,18 +243,14 @@ fn vaapi_codecs_route_software_requests_to_openh264() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Downloads the pinned release from Cisco, checks it against the pin and prints both
-/// SHA-256 values, which is how a pin is recorded. It touches the network, so it is
-/// behind the `openh264-download` feature and `#[ignore]`d: run it by hand with
-/// `cargo test -p jstream-platform-linux --features openh264-download -- --ignored
-/// downloads_the_pinned`.
+/// Downloads the pinned release from Cisco and checks it against the pin. While the pin
+/// has no hashes, it fails with both SHA-256 values in its message, which is how a pin is
+/// recorded. It touches the network, so it is behind the `openh264-download` feature and
+/// `#[ignore]`d: run it by hand with `cargo test -p jstream-platform-linux --features
+/// openh264-download -- --ignored downloads_the_pinned`.
 #[cfg(feature = "openh264-download")]
 #[test]
 #[ignore = "downloads from Cisco's server"]
-#[allow(
-    clippy::print_stderr,
-    reason = "the hashes are this test's output, to record the pin"
-)]
 fn downloads_the_pinned_release_from_cisco() {
     let fetch = super::HttpsFetch::new().expect("TLS client");
     let archive = fetch
@@ -262,16 +258,19 @@ fn downloads_the_pinned_release_from_cisco() {
         .expect("downloads");
     let library = super::bzip2::decompress(&archive, super::MAX_LIBRARY_BYTES).expect("unpacks");
     let (a, l) = (sha256(&archive), sha256(&library));
-    eprintln!("archive_sha256: {}", super::hex(&a));
-    eprintln!("library_sha256: {}", super::hex(&l));
-    if let (Some(pa), Some(pl)) = (OPENH264_PIN.archive_sha256, OPENH264_PIN.library_sha256) {
-        assert_eq!((a, l), (pa, pl), "Cisco's file no longer matches the pin");
-        let dir = dir("download");
-        let store = OpenH264Store::new(dir.clone());
-        store.install(&fetch).expect("installs");
-        store
-            .video_encoder(&config(HardwarePreference::Avoid))
-            .expect("opens an encoder on Cisco's library");
-        let _ = std::fs::remove_dir_all(dir);
-    }
+    let (Some(pa), Some(pl)) = (OPENH264_PIN.archive_sha256, OPENH264_PIN.library_sha256) else {
+        panic!(
+            "record the pin: archive_sha256 {}, library_sha256 {}",
+            super::hex(&a),
+            super::hex(&l)
+        );
+    };
+    assert_eq!((a, l), (pa, pl), "Cisco's file no longer matches the pin");
+    let dir = dir("download");
+    let store = OpenH264Store::new(dir.clone());
+    store.install(&fetch).expect("installs");
+    store
+        .video_encoder(&config(HardwarePreference::Avoid))
+        .expect("opens an encoder on Cisco's library");
+    let _ = std::fs::remove_dir_all(dir);
 }
