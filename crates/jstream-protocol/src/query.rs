@@ -7,10 +7,14 @@ use crate::event::OutputState;
 use crate::filter::FilterChains;
 use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
-use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::hotkey::HotkeyBinding;
+use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId, TransitionPresetId};
 use crate::kind::{KindDescriptor, KindSummary};
+use crate::live::GestureInfo;
+use crate::mix::VideoMixInfo;
 use crate::output::OutputInfo;
 use crate::settings::Settings;
+use crate::transition::{ItemTransition, TransitionsInfo};
 use crate::youtube::{BroadcastInfo, BroadcastListStatus, BroadcastType, StreamInfo, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -44,8 +48,8 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, every output, every encoder profile, and the buses and sends) at one
-    /// revision: what a client
+    /// items, every output, every encoder profile, every video mix, the buses and sends,
+    /// and every hotkey binding) at one revision: what a client
     /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
     /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
@@ -73,13 +77,22 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
-    /// Reads the studio state: which scene is on program. It is runtime state, not
-    /// collection state (ADR-0030), so the result carries no `rev`.
+    /// Reads the studio state: which scenes are on program and on preview. It is runtime
+    /// state, not collection state (ADR-0030), so the result carries no `rev`.
     #[serde(rename = "studio.get")]
     StudioGet,
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
+    /// Lists the collection's video mixes, ordered by ID.
+    #[serde(rename = "video_mix.list")]
+    VideoMixList,
+    /// Lists the open live-value gestures (ADR-0032), every client's, ordered by client
+    /// and gesture ID, with the values each holds now: what a client that connects
+    /// during a drag reads to show it. Live values are runtime state, not collection
+    /// state, so the result carries no `rev`.
+    #[serde(rename = "live.list")]
+    LiveList,
     /// Whether the engine is signed in to YouTube. Never calls YouTube.
     #[serde(rename = "youtube.status")]
     YoutubeStatus,
@@ -115,7 +128,8 @@ pub enum Query {
     /// (their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,
     /// deletes the `scene` sources that show a deleted scene (and their items), and sets
     /// settings references to the target to `null`, keeping the sources that hold them.
-    /// The client shows it, then sends its `edits` as an ordinary batch with
+    /// It also lists the hotkey bindings the delete removes with what they name
+    /// (ADR-0040 §3), which need no edit of their own. The client shows it, then sends its `edits` as an ordinary batch with
     /// `expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with
     /// `not_found` if the target doesn't exist.
     #[serde(rename = "delete.plan")]
@@ -123,6 +137,13 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
+    /// Lists the displays and windows the engine can capture now: what a `display` or
+    /// `window` source's `target` setting can name. They are runtime state, not
+    /// collection state, so the result carries no `rev`, and a window closed since may
+    /// still be named by a source. Fails with `action_failed` when the engine has no
+    /// capture backend, or the OS refuses to list them.
+    #[serde(rename = "capture.targets")]
+    CaptureTargets,
     /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
     /// paired and was last used, never its token. Answered by the server that admits
     /// clients, not the engine: a `Control` with no server in front fails with
@@ -168,11 +189,14 @@ impl Query {
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
+            Query::VideoMixList => "video_mix.list",
+            Query::LiveList => "live.list",
             Query::YoutubeStatus => "youtube.status",
             Query::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
             Query::YoutubeListStreams { .. } => "youtube.list_streams",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::CaptureTargets => "capture.targets",
             Query::DeviceList => "device.list",
         }
     }
@@ -257,6 +281,10 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// Every video mix, ordered by ID. Missing (from a server older than 0.28)
+        /// parses as empty.
+        #[serde(default)]
+        video_mixes: Vec<VideoMixInfo>,
         /// Every audio bus, ordered by ID, the master among them. Missing (from a
         /// server older than 0.19) parses as empty.
         #[serde(default)]
@@ -265,6 +293,19 @@ pub enum QueryResult {
         /// than 0.19) parses as empty.
         #[serde(default)]
         sends: Vec<SendInfo>,
+        /// The master stage. Omitted while it has no filters, so missing (also from a
+        /// server older than 0.29) parses as empty.
+        #[serde(default, skip_serializing_if = "MasterInfo::is_empty")]
+        master: MasterInfo,
+        /// Every hotkey binding, ordered by chord. Missing (from a server older than
+        /// 0.25) parses as empty.
+        #[serde(default)]
+        hotkeys: Vec<HotkeyBinding>,
+        /// The transition presets and which one is the default (ADR-0029). Missing
+        /// (from a server older than 0.30) parses as the one `cut` preset every
+        /// collection starts with.
+        #[serde(default)]
+        transitions: TransitionsInfo,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -307,6 +348,10 @@ pub enum QueryResult {
         /// The scene on program. Omitted only while the collection has no scene.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
+        /// The scene on preview, which `studio.set_preview` sets. Omitted only while the
+        /// collection has no scene, and by a server older than 0.30.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preview_scene: Option<SceneId>,
     },
     /// The result of `encoder.list`.
     #[serde(rename = "encoder.list")]
@@ -315,6 +360,20 @@ pub enum QueryResult {
         rev: Rev,
         /// The profiles, ordered by ID.
         encoders: Vec<EncoderProfileInfo>,
+    },
+    /// The result of `video_mix.list`.
+    #[serde(rename = "video_mix.list")]
+    VideoMixList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The mixes, ordered by ID.
+        video_mixes: Vec<VideoMixInfo>,
+    },
+    /// The result of `live.list`.
+    #[serde(rename = "live.list")]
+    LiveList {
+        /// The open gestures, ordered by client ID, then gesture ID.
+        gestures: Vec<GestureInfo>,
     },
     /// The result of `youtube.status`. Runtime state, so it carries no `rev`.
     #[serde(rename = "youtube.status")]
@@ -361,6 +420,18 @@ pub enum QueryResult {
         /// deleted object to `null`, `source.delete` for the `scene` sources that show a deleted scene, and last the
         /// delete of the target itself.
         edits: Vec<Edit>,
+        /// The hotkey bindings the batch removes because their action names an object it
+        /// deletes, ordered by chord, so the client can say "this also removes the hotkey
+        /// Ctrl+Digit1". The deletes remove them; undo restores them. Omitted when there
+        /// are none, and missing (from a server older than 0.25) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        hotkeys: Vec<HotkeyBinding>,
+    },
+    /// The result of `capture.targets`.
+    #[serde(rename = "capture.targets")]
+    CaptureTargets {
+        /// The displays, then the windows, in the order the OS lists them.
+        targets: Vec<CaptureTargetInfo>,
     },
     /// The result of `device.list`. Devices are not collection state, so it carries no
     /// `rev`.
@@ -386,11 +457,14 @@ impl QueryResult {
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::VideoMixList { .. } => "video_mix.list",
+            QueryResult::LiveList { .. } => "live.list",
             QueryResult::YoutubeStatus { .. } => "youtube.status",
             QueryResult::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
             QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::DeviceList { .. } => "device.list",
         }
     }
@@ -411,6 +485,44 @@ pub struct DeviceInfo {
     pub last_used_at: u64,
 }
 
+/// One display or window in a `capture.targets` result.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CaptureTargetInfo {
+    /// Whether it is a display or a window: the kind of source that captures it.
+    pub kind: CaptureTargetKind,
+    /// Its capture target ID, the value of that source's `target` setting.
+    pub target: String,
+    /// A name to show: the display's name or the window's title.
+    pub name: String,
+    /// Its size in pixels now, when the OS reports it without capturing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PixelSize>,
+    /// Whether it is the primary display, which a `display` source with an empty
+    /// `target` captures. Omitted when `false`, and always `false` for a window.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub primary: bool,
+}
+
+/// What a capture target is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum CaptureTargetKind {
+    /// A whole display, captured by a `display` source.
+    Display,
+    /// One top-level window, captured by a `window` source.
+    Window,
+}
+
+/// A size in whole pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PixelSize {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+}
+
 /// One scene in a `scene.list` result.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SceneSummary {
@@ -424,6 +536,23 @@ pub struct SceneSummary {
     pub role: SceneRole,
     /// How many items it has.
     pub item_count: u32,
+}
+
+/// The master stage, as `state.get` reports it: what applies to everything leaving
+/// JStream (ADR-0027 §1).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MasterInfo {
+    /// Its chains, which `filter.*` edits with the owner `{"type":"master"}`. Only the
+    /// audio chain holds filters so far. Omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
+    pub filters: FilterChains,
+}
+
+impl MasterInfo {
+    /// Whether it has nothing to report, as `state.get` then omits it.
+    pub fn is_empty(&self) -> bool {
+        self.filters.is_empty()
+    }
 }
 
 /// One source, as `source.list` and `state.get` report it.
@@ -464,6 +593,14 @@ pub struct SceneInfo {
     /// Omitted for a `scene`.
     #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
     pub role: SceneRole,
+    /// The preset a switch into this scene uses, unless the switch names one. Omitted
+    /// for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_in: Option<TransitionPresetId>,
+    /// The preset a switch out of this scene uses, unless the switch or the next scene
+    /// names one. Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_out: Option<TransitionPresetId>,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<ItemInfo>,
 }
@@ -500,6 +637,10 @@ pub struct ItemInfo {
     /// How it composites onto what is below it. Missing parses as `normal`.
     #[serde(default)]
     pub blend: BlendMode,
+    /// Its transition settings (ADR-0029 §6). Omitted while they are the defaults it
+    /// was added with.
+    #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
+    pub transition: ItemTransition,
 }
 
 fn opaque() -> Finite32 {

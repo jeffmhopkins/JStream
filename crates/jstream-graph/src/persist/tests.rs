@@ -3,9 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    BusId, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId,
-    OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId,
-    SourceKind, parity,
+    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor,
+    OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole,
+    SourceId, SourceKind, parity,
 };
 use serde_json::{Value, json};
 
@@ -87,8 +87,9 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
 /// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
-/// deletes the virtual camera `vcam`, which the parity collection gained after the
-/// fixture was written; `a_virtual_camera_round_trips` covers it.
+/// deletes the virtual camera `vcam` and clears the hotkeys, which the parity collection
+/// gained after the fixture was written; `a_virtual_camera_round_trips` and
+/// `hotkeys_round_trip` cover them.
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -103,6 +104,12 @@ fn fixture_graph() -> Graph {
             },
             Edit::OutputDelete {
                 output_id: OutputId::new("vcam"),
+            },
+            Edit::HotkeyClear {
+                chord: Chord::new("F1"),
+            },
+            Edit::HotkeyClear {
+                chord: Chord::new("Ctrl+Digit1"),
             },
         ],
         None,
@@ -209,6 +216,63 @@ fn clone_links_round_trip() {
     assert_eq!(link("plain"), Some(None));
 }
 
+/// Hotkey bindings save ordered by chord, with their actions as `hotkey.set` takes them,
+/// and load back the same. A file without them (every v1 file written before they
+/// existed, such as the fixture) loads with none.
+#[test]
+fn hotkeys_round_trip() {
+    let mut graph = fixture_graph();
+    assert_eq!(graph.state().hotkeys().len(), 0);
+    let applied = graph.apply(
+        &[
+            Edit::HotkeySet {
+                chord: Chord::new("Shift+F2"),
+                action: Action::OutputStop {
+                    output_id: OutputId::new("yt"),
+                },
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F1"),
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("a"),
+                    preset_id: None,
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        saved["hotkeys"],
+        json!([
+            {"chord": "F1", "action": {"type": "scene.switch", "scene_id": "a"}},
+            {"chord": "Shift+F2", "action": {"type": "output.stop", "output_id": "yt"}}
+        ])
+    );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A binding is checked on load as `hotkey.set` checks it: here its scene is missing.
+#[test]
+fn a_hotkey_naming_a_missing_scene_is_refused() {
+    let file = edit_file(|v| {
+        v["hotkeys"] =
+            json!([{"chord": "F1", "action": {"type": "scene.switch", "scene_id": "gone"}}]);
+    });
+    assert_eq!(
+        load(&file),
+        Err(LoadError::Invalid {
+            object: "hotkey `F1`".into(),
+            error: Box::new(ProtocolError::NotFound {
+                entity: jstream_protocol::EntityKind::Scene,
+                id: "gone".into(),
+            }),
+        })
+    );
+}
+
 #[test]
 fn encoder_profiles_and_an_outputs_profile_round_trip() {
     let mut graph = fixture_graph();
@@ -260,6 +324,38 @@ fn a_file_without_encoder_profiles_loads() {
             .outputs()
             .all(|o| o.encoder_profile().is_none())
     );
+}
+
+/// A file written before the master stage and outputs had chains (no `master`, no
+/// `outputs[].filters`) loads with those chains empty and the sources' filters intact.
+#[test]
+fn a_file_without_master_or_output_filters_loads() {
+    use jstream_protocol::FilterChain;
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("master"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("filters"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    let state = graph.state();
+    assert!(state.master().chain(FilterChain::Audio).is_empty());
+    assert!(
+        state
+            .outputs()
+            .all(|o| o.filters().chain(FilterChain::Audio).is_empty())
+    );
+    let Ok(full) = load(&edit_file(|_| {})) else {
+        panic!("the fixture did not load");
+    };
+    for source in full.state().sources() {
+        let Some(loaded) = state.source(source.id()) else {
+            panic!("a source was lost");
+        };
+        assert_eq!(loaded.filters(), source.filters());
+    }
 }
 
 /// A file written before sends existed (no `sends`, `buses` or `audio`): each audio
@@ -321,6 +417,41 @@ fn a_removed_master_send_round_trips() {
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
     assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// A file saved before video mixes existed has neither `video_mixes` nor any output's
+/// `video_mix`. It loads with no mixes, every output showing none.
+#[test]
+fn a_file_without_video_mixes_loads() {
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("video_mixes"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("video_mix"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    assert_eq!(graph.state().video_mixes().len(), 0);
+    assert!(graph.state().outputs().all(|o| o.video_mix().is_none()));
+}
+
+/// A mix is rebuilt with `video_mix.create`, so one showing a scene the file lacks is
+/// refused, and so is an output naming a mix the file lacks.
+#[test]
+fn mixes_and_outputs_naming_missing_objects_are_refused() {
+    let file = edit_file(|v| v["video_mixes"][1]["mix"]["input"]["scene_id"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "video mix `side`"),
+        "{:?}",
+        load(&file)
+    );
+    let file = edit_file(|v| v["outputs"][0]["video_mix"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "output `rec`"),
+        "{:?}",
+        load(&file)
+    );
 }
 
 /// #362: a source whose settings draw a bus loads: the buses are made before the
@@ -607,5 +738,112 @@ fn parse_errors_quote_nothing_from_the_file() {
     assert_eq!(
         load(&missing),
         Err(LoadError::Parse("missing field `canvas`".into()))
+    );
+}
+
+/// Presets, the default, scene overrides and item settings survive a save and load,
+/// including a collection that deleted the initial `cut` preset.
+#[test]
+fn transitions_round_trip() {
+    use jstream_protocol::{Easing, Glide, ItemId, ItemTransition, TransitionPresetId};
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("smooth"),
+                name: "Smooth move".into(),
+                kind: "move".into(),
+                duration_ms: 600,
+                easing: Easing::EaseInOut,
+                settings: [("unmatched", json!("slide"))].into_iter().collect(),
+            },
+            Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("smooth"),
+            },
+            Edit::TransitionDelete {
+                preset_id: TransitionPresetId::new("cut"),
+            },
+            Edit::SceneSetTransitions {
+                scene_id: SceneId::new("a"),
+                transition_in: None,
+                transition_out: Some(TransitionPresetId::new("smooth")),
+            },
+            Edit::ItemSetTransition {
+                item_id: ItemId::new("i1"),
+                transition: ItemTransition {
+                    delay_ms: 40,
+                    glide: Glide::Never,
+                    ..ItemTransition::default()
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        value["transitions"],
+        json!({
+            "presets": [{
+                "id": "smooth",
+                "name": "Smooth move",
+                "kind": "move",
+                "kind_version": 1,
+                "duration_ms": 600,
+                "easing": "ease_in_out",
+                "settings": {"stagger_ms": 0, "unmatched": "slide"},
+            }],
+            "default": "smooth",
+        })
+    );
+    assert_eq!(load(&json), Ok(graph.clone()));
+
+    // The initial preset kept, but changed, loads changed.
+    let applied = graph.apply(
+        &[
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("cut"),
+                name: "Quick fade".into(),
+                kind: "fade".into(),
+                duration_ms: 250,
+                easing: Easing::Linear,
+                settings: Default::default(),
+            },
+            Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("cut"),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    assert_eq!(load(&graph.to_collection_json()), Ok(graph));
+}
+
+#[test]
+fn a_preset_saved_by_another_kind_version_is_refused() {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[Edit::TransitionCreate {
+            preset_id: jstream_protocol::TransitionPresetId::new("f"),
+            name: "F".into(),
+            kind: "fade".into(),
+            duration_ms: 300,
+            easing: jstream_protocol::Easing::EaseOut,
+            settings: Default::default(),
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let mut value: Value = serde_json::from_str(&graph.to_collection_json()).unwrap_or_default();
+    value["transitions"]["presets"][1]["kind_version"] = json!(7);
+    assert_eq!(
+        load(&value.to_string()).err(),
+        Some(LoadError::KindVersion {
+            object: "transition `f`".into(),
+            kind: "fade".into(),
+            saved: 7,
+            current: 1,
+        })
     );
 }

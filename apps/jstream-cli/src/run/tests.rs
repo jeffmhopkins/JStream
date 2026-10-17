@@ -5,9 +5,9 @@ use crate::args::Connection;
 use crate::block::block_on;
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
-    Batch, Call, Canvas, ClientId, DropCounts, Edit, Event, Hello, ItemGeometry, ItemId,
-    ItemTransform, OutputId, OutputState, PROTOCOL_VERSION, Response, Rev, SceneId, SourceId,
-    SourceInfo, SourceKind, Welcome,
+    Batch, Call, Canvas, ClientId, Crop, DropCounts, Edit, Event, GestureId, Hello, ItemGeometry,
+    ItemId, ItemTransform, LiveOutcome, OutputId, OutputState, PROTOCOL_VERSION, Response, Rev,
+    SceneId, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use serde_json::{Value, json};
@@ -131,6 +131,7 @@ fn populated() -> MockEngine {
         ],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     block_on(setup.call(Call::Batch(batch))).expect("setup batch");
     engine
@@ -346,8 +347,8 @@ fn state_get_golden() {
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
-            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"#,
-            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[]}}}"#,
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"video_mixes":[],"#,
+            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[],"transitions":{"presets":[{"preset_id":"cut","name":"Cut","kind":"cut","duration_ms":300,"easing":"ease_in_out"}],"default":"cut"}}}}"#,
         ))
     );
     assert_eq!(
@@ -869,7 +870,7 @@ fn program_scene_golden() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "studio", "get"]),
-        ok("program: main\n")
+        ok("program: main\npreview: main\n")
     );
     let control = session(&engine);
     let events = control.events();
@@ -881,7 +882,7 @@ fn program_scene_golden() {
         run_on(&engine, &["--json", "--mock", "studio", "get"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"studio.get","#,
-            r#""program_scene":"brb"}}}"#,
+            r#""program_scene":"brb","preview_scene":"main"}}}"#,
             "\n"
         ))
     );
@@ -890,11 +891,19 @@ fn program_scene_golden() {
     stream_events(events, Some(1), false, &mut out).expect("one event");
     assert_eq!(
         String::from_utf8_lossy(&out),
-        "studio.changed program brb by mock_4 (req_1)\n"
+        "studio.changed program brb preview main transition cut 0ms by mock_4 (req_1)\n"
     );
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "studio", "get"]),
-        ok("program: none (no scenes)\n")
+        ok("program: none (no scenes)\npreview: none (no scenes)\n")
+    );
+}
+
+#[test]
+fn capture_targets_prints_each_target() {
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "capture", "targets"]),
+        ok("display mock:display (Mock display) 1920x1080, primary\n")
     );
 }
 
@@ -971,6 +980,30 @@ fn events_golden_dropped_notice() {
         String::from_utf8_lossy(&out),
         "stats.tick seq 2 capture_frames 1 audio_frames 0 render_ticks 0 \
          encode_frames 4 encode_blocks 0 output_packets 3\n"
+    );
+
+    let events = control.events();
+    engine.emit(Event::LiveChanged {
+        gesture_id: GestureId::new("drag"),
+        client_id: ClientId::new("mock_1"),
+        values: vec![Edit::ItemSetCrop {
+            item_id: ItemId::new("cam"),
+            scene_id: None,
+            crop: Crop::NONE,
+        }],
+    });
+    engine.emit(Event::LiveEnded {
+        gesture_id: GestureId::new("drag"),
+        client_id: ClientId::new("mock_1"),
+        outcome: LiveOutcome::Committed,
+        rev: Some(Rev(3)),
+    });
+    let mut out = Vec::new();
+    stream_events(events, Some(2), false, &mut out).expect("two events");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "live.changed drag by mock_1: item.set_crop\n\
+         live.ended drag by mock_1 committed rev 3\n"
     );
 
     let events = control.events();
@@ -1624,6 +1657,7 @@ fn fitting_reads_the_state_only_when_needed() {
         edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     let unread = || -> Result<(Canvas, Vec<SourceInfo>), CliError> { panic!("read the state") };
 

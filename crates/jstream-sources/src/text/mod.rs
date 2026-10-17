@@ -1,6 +1,6 @@
 //! The `text` source: a string drawn with a TrueType or OpenType font.
 
-mod raster;
+pub(crate) mod raster;
 
 use crate::color::{parse_color, rgba_frame};
 use crate::describe::{asset, kind, param};
@@ -15,7 +15,8 @@ use std::sync::Arc;
 
 /// The font used when the `font` setting is `null`: a Latin subset of Roboto Regular
 /// (Apache-2.0; the crate README's "Bundled font" says how it was made).
-static DEFAULT_FONT: &[u8] = include_bytes!("../../assets/fonts/Roboto-Regular-subset.ttf");
+pub(crate) static DEFAULT_FONT: &[u8] =
+    include_bytes!("../../assets/fonts/Roboto-Regular-subset.ttf");
 
 /// The longest `text`, in characters.
 const MAX_TEXT_LEN: u32 = 4096;
@@ -155,7 +156,7 @@ impl SourceKind for TextKind {
 }
 
 /// The first font in `bytes`, a font file or a collection.
-fn parse(bytes: &[u8]) -> Result<FontRef<'_>, String> {
+pub(crate) fn parse(bytes: &[u8]) -> Result<FontRef<'_>, String> {
     FontRef::from_index(bytes, 0).map_err(|e| e.to_string())
 }
 
@@ -262,7 +263,7 @@ fn style(settings: &Settings) -> Result<Style, SourceError> {
     })
 }
 
-fn bad(param: &str, reason: &str) -> SourceError {
+pub(crate) fn bad(param: &str, reason: &str) -> SourceError {
     SourceError::Setting {
         param: param.to_owned(),
         reason: reason.to_owned(),
@@ -276,7 +277,7 @@ fn string<'s>(settings: &'s Settings, id: &str) -> Result<&'s str, SourceError> 
 }
 
 /// A whole number of pixels from 0 to `max`.
-fn pixels(settings: &Settings, id: &str, max: u32) -> Result<u32, SourceError> {
+pub(crate) fn pixels(settings: &Settings, id: &str, max: u32) -> Result<u32, SourceError> {
     setting(settings, id)?
         .as_u64()
         .and_then(|v| u32::try_from(v).ok())
@@ -285,7 +286,7 @@ fn pixels(settings: &Settings, id: &str, max: u32) -> Result<u32, SourceError> {
 }
 
 /// A colour setting as straight sRGB RGBA bytes.
-fn color(settings: &Settings, id: &str) -> Result<[u8; 4], SourceError> {
+pub(crate) fn color(settings: &Settings, id: &str) -> Result<[u8; 4], SourceError> {
     setting(settings, id)?
         .as_str()
         .and_then(parse_color)

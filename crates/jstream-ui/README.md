@@ -226,8 +226,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     a dB. While the pointer holds a fader the strip shows the value under it; letting
     go (or each key press) sends one `source.set_audio` or `bus.set_fader`, so a drag
     is one undo step. Hearing the fader during the drag needs live values
-    ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), not in the protocol
-    yet. Clicking the readout sets 0 dB. An accepted edit is applied to the shown
+    ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which `live.set` doesn't
+    take for faders yet. Clicking the readout sets 0 dB. An accepted edit is applied to the shown
     state at once, so the strip doesn't jump back before the re-read.
   - **Meters** take `meters.tick`: an RMS bar over a fainter peak bar per channel,
     from −60 dBFS to full scale, and a peak hold that waits about 1.5 s, then falls
@@ -291,8 +291,9 @@ scene and sends the edits. These three are pure and tested natively against
   commits it, so each gesture (and each nudge) is one undo step. It carries no
   `expected_rev`: a drag is last writer wins per field
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
-  (`live.set`), which would show the drag on the output while it happens, are not in
-  the protocol yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
+  (`live.set` with `ends_gesture` on the committing batch), which would show the drag
+  on the output while it happens, are in the protocol but the canvas doesn't send them
+  yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
   while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
   out when the engine reports nothing left, and an `undo_conflict` is explained.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
