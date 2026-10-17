@@ -569,8 +569,9 @@ It also generates one block from data rather than from docs:
   deliver it, and `docs check` fails when it doesn't parse or breaks those rules. A PR
   that delivers or advances an item updates its entry, so the README changes with the
   work. `cargo xtask docs progress` compares the file with the merged history (the
-  `(#N)` of each squash commit, and item IDs that PR titles name in parentheses) and
-  prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
+  `(#N)` of each squash commit, the `(#N)` of each `* …` line in a wave's landing squash,
+  which lists the PRs the wave carried, and item IDs that PR titles name in parentheses)
+  and prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.
 
 <a id="governance"></a>

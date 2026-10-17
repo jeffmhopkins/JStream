@@ -688,6 +688,7 @@ fn backends() -> Backends {
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
         vcam: None,
+        media: Arc::new(jstream_platform::fake::FakeMediaDecoders::new()),
     }
 }
 

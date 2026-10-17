@@ -43,6 +43,7 @@ pub use handle::{
     BusControl, BusId, BusStats, FilterControl, FilterId, InputControl, InputId, InputStats,
     MasterControl, OutputTapControl, OutputTapId,
 };
+pub use rt::bus::MAX_BUSES;
 pub use rt::chain::{FilterParams, FilterSpec};
 pub use rt::host::HostMemory;
 pub use rt::input::InputProducer;

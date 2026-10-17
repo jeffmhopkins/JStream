@@ -263,6 +263,7 @@ fn backends(clock: &FakeClock, gpu: Arc<dyn GpuInterop>, mode: GpuMode) -> Backe
         gpu,
         vcam: None,
         video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
+        media: Arc::new(jstream_platform::fake::FakeMediaDecoders::new()),
     }
 }
 
