@@ -287,8 +287,11 @@ impl Encoder {
         let attack = match self.attack_next {
             Some(a) => a,
             None => {
-                let views: Vec<&[f32]> = self.input.iter().map(Vec::as_slice).collect();
-                self.detector.attack(&views, 576)
+                let views: [&[f32]; 2] = [
+                    self.input[0].as_slice(),
+                    self.input[self.channels - 1].as_slice(),
+                ];
+                self.detector.attack(&views[..self.channels], 576)
             }
         };
         let attack_next = {
