@@ -276,7 +276,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:bcf5059924ff7b21", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:8823a5dd80261b9c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: noun list adds hotkey and tools/list is about 274 KB; checked tools.snap is 273,540 bytes (222,953 on wave/m1-2: the hotkey tool carries the full Action schema) with 23 tools (tests.rs), and the mcp README noun table adds hotkey." }
+stamp = { hash = "b3:9d0ef4b164d2a2c2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the size is now about 277 KB: tools.snap is 277,076 bytes (226,328 on wave/m1-2 at 3fe2dd4, which adds annotations). The hotkey tool carries the full Action schema. The noun list keeps hotkey; #482's annotation and remote-text bullets are the wave's and hold for the hotkey tool (not open-world, not read-only)." }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:340acdb9358d89b0", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
@@ -291,10 +291,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:b4c68d27c185d01d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: noun list adds hotkey and tools/list is about 274 KB; checked tools.snap is 273,540 bytes (222,953 on wave/m1-2: the hotkey tool carries the full Action schema) with 23 tools (tests.rs), and the mcp README noun table adds hotkey." }
+stamp = { hash = "b3:a18d66c88f728fb9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the size is now about 277 KB: tools.snap is 277,076 bytes (226,328 on wave/m1-2 at 3fe2dd4, which adds annotations). The hotkey tool carries the full Action schema. The noun list keeps hotkey; #482's annotation and remote-text bullets are the wave's and hold for the hotkey tool (not open-world, not read-only)." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:3f7780819ec90234", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: noun list adds hotkey and tools/list is about 274 KB; checked tools.snap is 273,540 bytes (222,953 on wave/m1-2: the hotkey tool carries the full Action schema) with 23 tools (tests.rs), and the mcp README noun table adds hotkey." }
+stamp = { hash = "b3:41f1af82e2b237b0", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the size is now about 277 KB: tools.snap is 277,076 bytes (226,328 on wave/m1-2 at 3fe2dd4, which adds annotations). The hotkey tool carries the full Action schema. The noun list keeps hotkey; #482's annotation and remote-text bullets are the wave's and hold for the hotkey tool (not open-world, not read-only)." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -309,16 +309,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:ef5f8f3e8c5b5988", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: noun list adds hotkey and tools/list is about 274 KB; checked tools.snap is 273,540 bytes (222,953 on wave/m1-2: the hotkey tool carries the full Action schema) with 23 tools (tests.rs), and the mcp README noun table adds hotkey." }
+stamp = { hash = "b3:52ceaad48b2c1c82", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the size is now about 277 KB: tools.snap is 277,076 bytes (226,328 on wave/m1-2 at 3fe2dd4, which adds annotations). The hotkey tool carries the full Action schema. The noun list keeps hotkey; #482's annotation and remote-text bullets are the wave's and hold for the hotkey tool (not open-world, not read-only)." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's State and Building-the-zip bullets (dist.rs, .cargo/config.toml, after-review dist job) stand beside #298's sandboxed helper (bootstrap exe renamed plus the DLL, same certificate if signed); now that the helper exists, the zip bullet says it and the CEF runtime are not in the zip yet, which matches dist.rs (it ships no helper); holds" }
@@ -1746,10 +1746,10 @@ stamp = { hash = "b3:d5931f8e252cd9f7", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:047124f3170716f4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: State gains hotkeys; the Hotkeys bullet gives the check order with bind_problem's refusals (output.set_key, session-only, server-answered and YouTube actions), inverses, removal on scene/source/output/encoder delete and the touched set; the plan, state.get, file layout and rebuild order (hotkeys last, after rebuild_audio at persist/mod.rs:655) gain hotkeys beside wave/m1-2's filters and bus references. Checked against hotkey.rs, apply.rs, plan.rs (now also matching Node::Bus), read.rs, touched.rs, model/mod.rs, lib.rs, persist and the tests (property generator arm 42 for hotkeys; the refused-action loop; the unnamed-action test renamed to the scene delete it runs, N7). dep protocol#design gained the same hotkey rules." }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:e66c549add594209", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table adds hotkey to wave/m1-2's list; checked against tests.rs (tool list, count 23) and tools.snap. dep ARCH#mcp gained the hotkey noun and the size, now about 274 KB, matching this section." }
+stamp = { hash = "b3:814abcf5e8947802", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table keeps hotkey beside #482's annotation paragraph. Checked tools.snap: the hotkey tool's annotations are readOnly false, destructive false, openWorld false, which is ADR-0059's rule as written (hotkey.set and hotkey.clear are edits, and clear is not a delete or remove verb); the tool count is 23 (tests.rs). dep ARCH#mcp changes only the size, now about 277 KB." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:8823a5dd80261b9c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table adds hotkey to wave/m1-2's list; checked against tests.rs (tool list, count 23) and tools.snap. dep ARCH#mcp gained the hotkey noun and the size, now about 274 KB, matching this section." }
+stamp = { hash = "b3:9d0ef4b164d2a2c2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table keeps hotkey beside #482's annotation paragraph. Checked tools.snap: the hotkey tool's annotations are readOnly false, destructive false, openWorld false, which is ADR-0059's rule as written (hotkey.set and hotkey.clear are edits, and clear is not a delete or remove verb); the tool count is 23 (tests.rs). dep ARCH#mcp changes only the size, now about 277 KB." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1776,19 +1776,19 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:ef5f8f3e8c5b5988", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table adds hotkey to wave/m1-2's list; checked against tests.rs (tool list, count 23) and tools.snap. dep ARCH#mcp gained the hotkey noun and the size, now about 274 KB, matching this section." }
+stamp = { hash = "b3:52ceaad48b2c1c82", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table keeps hotkey beside #482's annotation paragraph. Checked tools.snap: the hotkey tool's annotations are readOnly false, destructive false, openWorld false, which is ADR-0059's rule as written (hotkey.set and hotkey.clear are edits, and clear is not a delete or remove verb); the tool count is 23 (tests.rs). dep ARCH#mcp changes only the size, now about 277 KB." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:18f14fc86f4276c6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:b45335dabc2bb2bd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -1806,16 +1806,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:ef5f8f3e8c5b5988", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = """tests.rs changes in three places only: the "hotkey" noun in the expected tool list, "hotkeys": [] in a state fixture, and the tool count 22 -> 23 (N5). The MCP server's purpose is unchanged.""" }
+stamp = { hash = "b3:52ceaad48b2c1c82", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Merge of wave/m1-2 #482 (tool annotations, marked remote text): tools.rs is the wave's unchanged; this PR's tests.rs hunks are still the hotkey noun, hotkeys: [] and the tool count 23. Every tool, the new hotkey one included, gets annotations from its ops' classes; the server's purpose is unchanged." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }

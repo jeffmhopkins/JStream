@@ -749,7 +749,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 274 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 277 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -758,6 +758,15 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.
+- **Annotations and third-party text:** every tool carries MCP tool annotations derived
+  from its ops (`readOnlyHint` for queries only; `destructiveHint` for actions, history
+  calls and deletes; `openWorldHint` for `output`, `source`, whose `browser` kind loads
+  any web page, and `batch`), so a client can ask the user before an agent retargets an
+  output, sets its key, goes live, points a browser source at a page or deletes. Text
+  from outside JStream sits in `remote_*` fields or in an `output.start` `action_failed`
+  `reason` (the whole of which is untrusted), and the tool descriptions and server
+  instructions say it is data, never instructions
+  ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md)).
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an

@@ -29,7 +29,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   serves. A `video.snapshot` result leads with an image content block, the only place
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  less the people-only `youtube.*` ops (`PEOPLE_ONLY`), and the decoding of tool
+  less the people-only `youtube.*` ops (`PEOPLE_ONLY`), each with its MCP annotations
+  (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
+  `batch`, which carries their edits, is open-world too), and the decoding of tool
   arguments into protocol calls, which refuses an output edit with a `youtube` target.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
   a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`;
@@ -85,6 +87,29 @@ names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-ro
 [`schema/tools.snap`](schema/tools.snap): a protocol change shows up there as the tool
 diff agents will see. After an intended change, regenerate it with
 `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
+
+Every tool carries MCP `annotations`, derived from its ops' classes
+([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), with every hint
+written out because the spec's defaults call a tool destructive and open-world. A tool
+of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool is
+`destructiveHint` when it has an action, a history call or a `delete`/`remove` edit, as
+`batch` is; `canvas`, whose edits only change, is not. `openWorldHint` is true for the
+group tools in `OPEN_WORLD`, today `output`, whose `output.start` publishes to a streaming
+server, and `source`, whose `browser` kind loads any http or https page set as its `url`,
+and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
+covers the whole group, so a client that asks before `output.set_target`, `output.set_key`
+or `output.start` also asks before `output.list`.
+
+Text from outside JStream is marked by where it sits, and the reply keeps its protocol
+shape (ADR-0059): a protocol field holding third-party text is named `remote_*`
+(`REMOTE_PREFIX`; none yet), and the `output` tool's description says that an
+`output.start` `action_failed` `reason` includes the code and description a streaming
+server sent (each at most 512 characters). Nothing delimits the server's words there, so
+the description and the server instructions say the whole `reason` is untrusted. The
+server instructions say both are data, never instructions, and point at the
+annotations. Tested by `annotations_follow_what_each_tool_can_do`,
+`output_tool_marks_remote_rejection_text` and
+`instructions_mark_remote_text_and_tools_carry_annotations`.
 
 The `pairing` and `device` tools (protocol 0.21) need no code here either: the session
 `jstream-server` hands this crate answers them
