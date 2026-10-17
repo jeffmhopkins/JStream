@@ -847,7 +847,7 @@ id = "CL1"
 milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
-prs = [272]
+prs = [272, 281, 407]
 note = "parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run)"
 needs = ["wave", "build", "hardware"]
 
