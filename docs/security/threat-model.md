@@ -107,16 +107,18 @@ a stolen token, local denial of service.
   (authenticated or not), 32 WebSocket connections, 64 calls in flight per connection,
   16 MCP sessions, 10 s to send headers and finish the handshake, a bounded event
   outbox.
+- Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
+  of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
 
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
 It doesn't expire or rotate; deleting the file and restarting makes a new one. A browser
 can be given the control token through the `Basic` prompt, and then holds it as a cached,
-ambient credential until it is closed.
+ambient credential until it is closed. Failed tokens are not delayed or locked out:
+256 bits can't be guessed, and a lockout would let any local process shut out the real
+clients.
 
-**Gaps:** the Windows token file only inherits its folder's ACL (#344); failed tokens
-are not throttled, which only matters for log noise, since 256 bits can't be guessed
-(#354).
+**Gaps:** the Windows token file only inherits its folder's ACL (#344).
 
 <a id="pairing"></a>
 ## Pairing and remote browsers
@@ -318,7 +320,6 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #352 | Files | Image and font decoders unfuzzed; no fuzzing in CI | Low |
 | #353 | Secrets | `rtmp://` cleartext, crash-report redaction, redaction test scope | Low |
-| #354 | Server | Failed tokens are not throttled (log noise) | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium |
