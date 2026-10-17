@@ -16,6 +16,8 @@ mod hal;
 mod layout;
 #[cfg(any(target_os = "macos", test))]
 mod permission;
+#[cfg(any(target_os = "macos", test))]
+mod process;
 #[cfg(target_os = "macos")]
 mod stream;
 
@@ -158,7 +160,7 @@ mod backend {
 
         fn processes(&self) -> Result<Vec<AudioProcess>, PlatformError> {
             Feature::ProcessTaps.check(self.version)?;
-            Err(not_built("listing applications playing audio"))
+            super::process::list()
         }
 
         fn input_format(&self, target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {

@@ -3026,6 +3026,7 @@ dependencies = [
  "block2",
  "dispatch2",
  "jstream-platform",
+ "libc",
  "mach2",
  "objc2",
  "objc2-audio-toolbox",
