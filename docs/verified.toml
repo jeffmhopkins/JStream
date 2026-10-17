@@ -1188,7 +1188,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:3d1ceddd51b37ea4", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:54dadc799dac7ce6", by = "agent:claude-451", note = "Render thread error policy updated for the GPU fallback: the 10th composite error in a row on the context leaves the GPU path once, a failed fallback is fatal, and the compositor and cache now also drop at the fallback. Rest of the render-thread text (snapshot adoption, collector, buffers) unchanged by this diff." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:34bc4256c643b59c", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
@@ -1272,7 +1272,7 @@ stamp = { hash = "b3:d366294d283384c9", by = "agent:t1-studio", note = "Pairing 
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:a9552aec872ce29f", by = "agent:claude-451", note = "Render thread error policy updated for the GPU fallback: the 10th composite error in a row on the context leaves the GPU path once, a failed fallback is fatal, and the compositor and cache now also drop at the fallback. Rest of the render-thread text (snapshot adoption, collector, buffers) unchanged by this diff." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1308,7 +1308,7 @@ stamp = { hash = "b3:3bd6e4d8a265d502", by = "agent:t1-studio", note = "Pairing 
 stamp = { hash = "b3:20548a9eb4023c7b", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/gpu_capture.rs"]
-stamp = { hash = "b3:746e554d3bfb1532", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:d1095a951bd7de62", by = "agent:claude-451", note = "Render thread error policy updated for the GPU fallback: the 10th composite error in a row on the context leaves the GPU path once, a failed fallback is fatal, and the compositor and cache now also drop at the fallback. Rest of the render-thread text (snapshot adoption, collector, buffers) unchanged by this diff." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/history.rs"]
 stamp = { hash = "b3:1a93fdbcf279b200", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets" }
@@ -1338,7 +1338,7 @@ stamp = { hash = "b3:d6da09b88ea0e086", by = "agent:t1-studio", note = "Pairing 
 stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:6279ebd1b1c059ae", by = "agent:t1-studio", note = "Studio, Transitions, Preview bullets and the tests list (sources.rs, transitions.rs) match the merged src | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:764376ad8292cf05", by = "agent:claude-451", note = "Runtime bullet now says the render thread moves to CPU frames on its own device when compositing keeps failing on the context; tests list names the new gpu_capture.rs fallback tests (import failure, broken context, failed fallback). Engine API list unaffected: OutputStats gained gpu_fallbacks, read through output_stats as before." }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d7e4bb2db0e1df6d", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
@@ -1407,7 +1407,7 @@ stamp = { hash = "b3:d366294d283384c9", by = "agent:t1-studio", note = "Studio, 
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Studio, Transitions, Preview bullets and the tests list (sources.rs, transitions.rs) match the merged src | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:a9552aec872ce29f", by = "agent:claude-451", note = "Runtime bullet now says the render thread moves to CPU frames on its own device when compositing keeps failing on the context; tests list names the new gpu_capture.rs fallback tests (import failure, broken context, failed fallback). Engine API list unaffected: OutputStats gained gpu_fallbacks, read through output_stats as before." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1443,7 +1443,7 @@ stamp = { hash = "b3:3bd6e4d8a265d502", by = "agent:t1-studio", note = "Studio, 
 stamp = { hash = "b3:20548a9eb4023c7b", by = "agent:t1-studio", note = "Studio, Transitions, Preview bullets and the tests list (sources.rs, transitions.rs) match the merged src" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/gpu_capture.rs"]
-stamp = { hash = "b3:746e554d3bfb1532", by = "agent:t1-studio", note = "Studio, Transitions, Preview bullets and the tests list (sources.rs, transitions.rs) match the merged src | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:d1095a951bd7de62", by = "agent:claude-451", note = "Runtime bullet now says the render thread moves to CPU frames on its own device when compositing keeps failing on the context; tests list names the new gpu_capture.rs fallback tests (import failure, broken context, failed fallback). Engine API list unaffected: OutputStats gained gpu_fallbacks, read through output_stats as before." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/history.rs"]
 stamp = { hash = "b3:1a93fdbcf279b200", by = "agent:t1-studio", note = "Studio, Transitions, Preview bullets and the tests list (sources.rs, transitions.rs) match the merged src" }
@@ -1479,7 +1479,7 @@ stamp = { hash = "b3:e16ea02608fdad15", by = "agent:t1-studio", note = "Studio, 
 stamp = { hash = "b3:268f4293f65828a2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "audit.rs/engine.rs/tests.rs/scenarios.rs only carry the new removed_hotkeys field through CallResult::Batch (engine passes applied.removed_hotkeys; audit and tests use { rev, .. } or CallResult::batch). The engine's purpose is unchanged. Merges since: engine.rs/tests.rs: this PR only carries removed_hotkeys through CallResult::Batch (engine passes applied.removed_hotkeys; tests use CallResult::batch or { rev, .. }). The merge adds #491 (the engine removes a stream key on output.delete and when a target moves to another server) with its tests. The engine's purpose is unchanged by hotkeys." }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:7b8e40458a82372b", by = "agent:t1-studio", note = "Render tick passes its due media time through DrawFn to compose; capture scaled to fill without a scene | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:52792ad81697673a", by = "agent:claude-451", note = "Capture path paragraph now describes the mid-run fallback as built in pipeline.rs (leave_gpu): 10 composite errors in a row on the context restart a GPU capture on the CPU path and reopen the compositor with open(None), logged as a warning and counted in OutputStats::gpu_fallbacks; a failed fallback fails the output; drop order (frame, compositor, stream, then context) holds at the fallback too. Open-time fallbacks unchanged." }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:t1-studio", note = "merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
@@ -1491,7 +1491,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Render tick passes its due media time through DrawFn to compose; capture scaled to fill without a scene | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:a9552aec872ce29f", by = "agent:claude-451", note = "Capture path paragraph now describes the mid-run fallback as built in pipeline.rs (leave_gpu): 10 composite errors in a row on the context restart a GPU capture on the CPU path and reopen the compositor with open(None), logged as a warning and counted in OutputStats::gpu_fallbacks; a failed fallback fails the output; drop order (frame, compositor, stream, then context) holds at the fallback too. Open-time fallbacks unchanged." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1509,7 +1509,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:4e91a5d020065485", by = "agent:t1-studio", note = "Option list matches args.rs, now including --youtube-client; core#design and persistence deps re-read | merge: Merged main via wave/m1-3: serve.rs keeps with_youtube and adds scan_clap_plugins on a jstream-clap-scan thread; README text matches" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:3d1ceddd51b37ea4", by = "agent:t1-studio", note = "Option list matches args.rs, now including --youtube-client; core#design and persistence deps re-read | merge: Merged main via wave/m1-3: serve.rs keeps with_youtube and adds scan_clap_plugins on a jstream-clap-scan thread; README text matches" }
+stamp = { hash = "b3:54dadc799dac7ce6", by = "agent:claude-451", note = "Core Design changed only in the render thread's error policy (mid-run GPU fallback) and drop timing; the daemon section cites core Design for event fan-out, the placeholder output state machine and audit, none of which changed. WindowsGpu wiring text still holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against core#design and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the daemon's live.rs (engine wiring, not live values), crash redaction and the server's TCP cap and in-flight bound don't touch gestures; sessions per connection still give each client its own gestures, which expire with the session. Holds." }

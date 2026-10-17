@@ -153,7 +153,8 @@ state machine. Contents:
   clock. The render thread composites on the platform's GPU context when the interop
   opens one, and samples the captured textures there with no CPU copy when the capture
   backend can deliver them; otherwise it uses CPU frames, and its own device without a
-  context (see *Runtime*). Encode threads live in the encoder sessions, one per encoder
+  context. If compositing keeps failing on the context mid-run, it moves to CPU frames
+  on its own device (see *Runtime*). Encode threads live in the encoder sessions, one per encoder
   profile in use, shared by the outputs on that profile. Each output's own thread muxes
   FLV and publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
@@ -219,8 +220,9 @@ state machine. Contents:
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), which capture path an output takes and each
-  fallback, and an output compositing GPU capture frames, on a software device that
-  stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
+  fallback, an output compositing GPU capture frames, and one leaving the GPU path
+  mid-run when every GPU frame fails to import or the context breaks (and failing when
+  that fallback fails), on a software device that stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
   the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
   `hw-tests` and ignored), the
   pipeline against the platform fakes
@@ -1287,12 +1289,16 @@ or a fatal error stops its drawing, so `RenderHub::caught_up` treats it as caugh
 threads have dropped their senders, and the program stage (`Program`) joins it right
 after them. While the stage has no encoder session and no virtual camera it draws nothing but still adopts
 each new snapshot, so it never holds a gesture up. The compositor
-and its cache drop on the render thread when it exits, after the tick loop. What it rides out
+and its cache drop on the render thread when it exits, after the tick loop, or when it
+leaves the GPU path. What it rides out
 and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 - **Recoverable:** a capture error or a missing frame repeats the last capture (a
   missing source frame, [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)); a
-  composite error repeats the last composited frame, up to 30 in a row.
-- **Fatal, reported:** a 31st composite error in a row, a panic inside a tick (the
+  composite error repeats the last composited frame, up to 30 in a row. On the
+  platform's GPU context, the 10th in a row leaves the GPU path once instead, for CPU
+  capture on a device of the thread's own (see [Runtime](#runtime)).
+- **Fatal, reported:** a 31st composite error in a row, a fallback from the GPU path
+  that fails, a panic inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
   does not freeze before the teardown. A virtual camera's publish error is not
@@ -1560,8 +1566,16 @@ the render thread samples where they are, with no CPU copy, and counts
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, hardware adapter first with the software one as the fallback), a
 backend with no GPU path or one that refuses the context, and a GPU capture that does
-not start. The render loop drops the held frame, the compositor and the capture stream
-before the context, so the platform's state goes first as `GpuContext` requires.
+not start. The GPU path can also break mid-run: every GPU frame fails to import (a
+format the compositor can't take), or the context's device goes away. After 10
+composite errors in a row on the context, a third of a second, the render thread leaves
+it once: it restarts the capture on the CPU path if it was delivering GPU frames, reopens
+the compositor on a device of its own and carries on. The fallback is logged as a warning
+and counted (`OutputStats::gpu_fallbacks`). If the fallback can't start the capture or
+open the compositor, the output fails at once. Errors that go on after the fallback fail
+it as they would on the CPU path. The render loop drops the held frame, the compositor and
+the capture stream before the context, at a fallback and at the end, so the platform's
+state goes first as `GpuContext` requires.
 
 The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs, the pages' audio and the media files' sound (see *Audio

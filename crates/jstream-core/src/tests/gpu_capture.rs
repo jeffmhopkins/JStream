@@ -1,6 +1,7 @@
 //! The render thread's GPU capture path and its fallbacks (ARCH › GPU pipeline, step 6),
-//! on a software device: which path `open_capture` takes for each kind of platform, and
-//! an output whose capture frames are textures composited with no CPU copy.
+//! on a software device: which path `open_capture` takes for each kind of platform, an
+//! output whose capture frames are textures composited with no CPU copy, and an output
+//! that leaves the GPU path mid-run when compositing keeps failing on it (#451).
 //!
 //! A software adapter stands in for the platform's media adapter, and a fake capture
 //! backend delivers `GpuFrame`s on it. A machine with no adapter skips; CI, which
@@ -25,16 +26,21 @@ use jstream_platform::{
     AdapterId, Backends, Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
     FrameSync, GpuContext, GpuFrame, GpuInterop, MediaClock, PlatformError, VideoSurface,
 };
-use jstream_protocol::OutputId;
+use jstream_protocol::{OutputId, OutputState};
 use jstream_render::{Compositor, OpenOptions};
 
-use super::{GPU_OPEN_TIMEOUT, block_on, connected, one_gpu_test_at_a_time, output_call};
+use super::{
+    GPU_OPEN_TIMEOUT, block_on, connected, one_gpu_test_at_a_time, output_call, output_state,
+};
 use crate::audio_sources::Wanted;
 use crate::runtime::{DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from};
+use crate::snapshot::CaptureImage;
 use crate::{Engine, RecordingPublish};
 
 /// The colour every GPU capture frame is.
 const RED: [u8; 4] = [255, 0, 0, 255];
+/// What a `FakeCapture` CPU frame composites to: all-zero BGRA, alpha ignored.
+const BLACK: [u8; 4] = [0, 0, 0, 255];
 
 /// GPU interop on a software device, standing in for the platform's.
 struct SoftwareGpu;
@@ -416,4 +422,187 @@ fn an_output_composites_gpu_capture_frames() {
     );
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(engine.output_stats().is_none());
+}
+
+/// How a [`breaking_draw`] fails, standing in for the two ways the GPU path breaks
+/// mid-run (#451).
+#[derive(Clone, Copy, Debug)]
+enum Breaks {
+    /// Every GPU capture frame fails to import, as another backend's texture would.
+    GpuFrames,
+    /// Every frame fails while on the platform's context, as on a removed device.
+    Context,
+    /// As `Context`, and the compositor cannot open on a device of its own either.
+    Everywhere,
+}
+
+/// What a [`breaking_draw`] saw: the device each open was on (`true` for the
+/// platform's context), and the first pixel of the newest frame drawn without one.
+#[derive(Default)]
+struct Opens {
+    on_context: Vec<bool>,
+    own_pixel: Option<[u8; 4]>,
+}
+
+/// [`gpu_draw`], failing as `breaks` says.
+fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
+    Arc::new(move |context: Option<&GpuContext>| {
+        let on_context = context.is_some();
+        opens
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .on_context
+            .push(on_context);
+        if !on_context && matches!(breaks, Breaks::Everywhere) {
+            return Err("no device of its own in this test".to_owned());
+        }
+        let mut inner = (gpu_draw())(context)?;
+        let opens = Arc::clone(&opens);
+        let draw: DrawFn = Box::new(move |shot, live, size, capture, out, at| {
+            let gpu_frame =
+                capture.is_some_and(|frame| matches!(frame.image, CaptureImage::Gpu(_)));
+            match breaks {
+                Breaks::GpuFrames if gpu_frame => return Err("unsupported format".to_owned()),
+                Breaks::Context | Breaks::Everywhere if on_context => {
+                    return Err("device removed".to_owned());
+                }
+                _ => {}
+            }
+            let freed = inner(shot, live, size, capture, out, at)?;
+            if !on_context && let Some(pixel) = out.first_chunk::<4>() {
+                opens
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .own_pixel = Some(*pixel);
+            }
+            Ok(freed)
+        });
+        Ok(draw)
+    })
+}
+
+/// An engine on the software GPU path whose compositor breaks as `breaks` says, with
+/// its output started.
+fn breaking_engine(
+    clock: &FakeClock,
+    breaks: Breaks,
+    opens: &Arc<Mutex<Opens>>,
+) -> (Engine, crate::InProcessControl) {
+    let backends = backends(clock, Arc::new(SoftwareGpu), GpuMode::Deliver);
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(breaking_draw(breaks, Arc::clone(opens)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    (engine, control)
+}
+
+/// When compositing keeps failing on the GPU path mid-run, because every GPU capture
+/// frame fails to import or because the context's device went away, the output does
+/// not fail: the render thread restarts the capture on the CPU path, reopens the
+/// compositor on a device of its own and carries on, and the fallback is counted
+/// (#451).
+#[test]
+fn an_output_falls_back_from_the_gpu_path_mid_run() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    for breaks in [Breaks::GpuFrames, Breaks::Context] {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let opens = Arc::new(Mutex::new(Opens::default()));
+        let (engine, control) = breaking_engine(&clock, breaks, &opens);
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut fell_back = None;
+        while Instant::now() < deadline {
+            clock.advance(50_000);
+            thread::sleep(Duration::from_millis(10));
+            let stats = engine.output_stats().expect("still running");
+            let pixel = opens
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .own_pixel;
+            if stats.gpu_fallbacks == 1 && pixel == Some(BLACK) {
+                fell_back = Some(stats);
+                break;
+            }
+        }
+        let stats = fell_back.unwrap_or_else(|| {
+            panic!(
+                "{breaks:?}: no fallback to the CPU path: {:?}",
+                engine.output_stats()
+            )
+        });
+        // The CPU path keeps drawing: more frames are read back.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut later = engine.output_stats().expect("still running");
+        while later.readbacks < stats.readbacks + 3 && Instant::now() < deadline {
+            clock.advance(50_000);
+            thread::sleep(Duration::from_millis(10));
+            later = engine.output_stats().expect("still running");
+        }
+        assert!(
+            later.readbacks >= stats.readbacks + 3,
+            "{breaks:?}: {later:?}"
+        );
+        assert_eq!(
+            later.gpu_captures, stats.gpu_captures,
+            "{breaks:?}: off the GPU path"
+        );
+        assert_eq!(later.gpu_fallbacks, 1, "{breaks:?}");
+        assert_eq!(
+            output_state(&control, "yt"),
+            OutputState::Active,
+            "{breaks:?}"
+        );
+        assert_eq!(
+            opens
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .on_context,
+            vec![true, false],
+            "{breaks:?}: opened on the context, then on its own device"
+        );
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        assert!(engine.output_stats().is_none());
+    }
+}
+
+/// A fallback that cannot open the compositor on a device of its own fails the output,
+/// instead of riding out more errors on the broken path.
+#[test]
+fn an_output_fails_when_the_gpu_fallback_fails() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let opens = Arc::new(Mutex::new(Opens::default()));
+    let (engine, control) = breaking_engine(&clock, Breaks::Everywhere, &opens);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut failed = false;
+    while Instant::now() < deadline {
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(10));
+        if output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none() {
+            failed = true;
+            break;
+        }
+    }
+    assert!(
+        failed,
+        "the output did not fail: {:?}",
+        engine.output_stats()
+    );
+    assert_eq!(
+        opens
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .on_context,
+        vec![true, false],
+        "one fallback was tried"
+    );
 }

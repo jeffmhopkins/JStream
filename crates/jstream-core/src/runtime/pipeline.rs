@@ -91,6 +91,11 @@ pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// Composite errors in a row that the render thread rides out by repeating the last
 /// frame. One more reports the output failed: one second at the base rate.
 const MAX_DRAW_ERRORS: u32 = 30;
+/// Composite errors in a row on the GPU path after which the render thread leaves it:
+/// it restarts the capture on the CPU path and reopens the compositor on a device of its
+/// own ([`leave_gpu`]), well before [`MAX_DRAW_ERRORS`] would fail the output. A third of
+/// a second at the base rate, so one bad frame does not cost the GPU path.
+const GPU_FALLBACK_ERRORS: u32 = 10;
 /// How long a stop lets the output thread send the packets still queued, counted from
 /// the moment it sees the stop flag. What is left after that is dropped and counted, and
 /// the publish target is told the same deadline ([`LivePublish::stop_by`]), so a stalled
@@ -194,6 +199,10 @@ pub struct OutputStats {
     /// a texture shared with the platform, composited with no CPU copy. Zero on the CPU
     /// path.
     pub gpu_captures: u64,
+    /// Times the render thread left the GPU path mid-run because compositing kept
+    /// failing on it: 0, or 1 once it has fallen back to CPU capture on a device of its
+    /// own. Each fallback is also logged as a warning.
+    pub gpu_fallbacks: u64,
 }
 
 struct PipelineStats {
@@ -373,6 +382,7 @@ pub(crate) struct Program {
     sessions: Mutex<SessionRegistry<EncodeKey, Encoders>>,
     readbacks: Arc<AtomicU64>,
     gpu_captures: Arc<AtomicU64>,
+    gpu_fallbacks: Arc<AtomicU64>,
     /// The mixer's inputs, one per audio source, and the thread that follows the
     /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
     /// only so the program can be shared.
@@ -675,6 +685,10 @@ impl Running {
                 .program
                 .as_ref()
                 .map_or(0, |p| p.gpu_captures.load(Ordering::Relaxed)),
+            gpu_fallbacks: self
+                .program
+                .as_ref()
+                .map_or(0, |p| p.gpu_fallbacks.load(Ordering::Relaxed)),
         }
     }
 
@@ -923,6 +937,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let OpenedCapture {
         context,
         stream: capture,
+        fallback,
     } = open_capture(&parts)?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
@@ -949,6 +964,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let stop = Arc::new(AtomicBool::new(false));
     let readbacks = Arc::new(AtomicU64::new(0));
     let gpu_captures = Arc::new(AtomicU64::new(0));
+    let gpu_fallbacks = Arc::new(AtomicU64::new(0));
     let failures = Arc::new(Failures::default());
     let (ready_tx, ready_rx) = mpsc::channel();
     let (video_taps, video_inputs) = mpsc::channel();
@@ -973,6 +989,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         let job = RenderJob {
             context,
             capture,
+            fallback,
             reader: RenderReader::new(Arc::clone(&parts.render), collector.clone()),
             collector,
             open: Arc::clone(&parts.draw),
@@ -985,6 +1002,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             ready: ready_tx,
             readbacks: Arc::clone(&readbacks),
             gpu_captures: Arc::clone(&gpu_captures),
+            gpu_fallbacks: Arc::clone(&gpu_fallbacks),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
         };
@@ -1041,6 +1059,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         sessions: Mutex::new(SessionRegistry::new()),
         readbacks,
         gpu_captures,
+        gpu_fallbacks,
         audio: Mutex::new(audio),
         capture_drops,
         bus,
@@ -1272,6 +1291,18 @@ fn output_size((width, height): (u32, u32)) -> Result<FrameSize, String> {
 pub(crate) struct OpenedCapture {
     pub(crate) stream: Box<dyn CaptureStream>,
     pub(crate) context: Option<GpuContext>,
+    /// With a context, how the render thread leaves the GPU path mid-run.
+    pub(crate) fallback: Option<CpuFallback>,
+}
+
+/// What the render thread needs to leave the GPU path mid-run ([`leave_gpu`]).
+pub(crate) struct CpuFallback {
+    /// The capture backend, to start on the CPU path.
+    capture: Arc<dyn Capture>,
+    target: CaptureTarget,
+    /// Whether the stream delivers GPU frames, so the fallback restarts it on the CPU
+    /// path. A CPU stream is kept.
+    restart: bool,
 }
 
 /// Starts capturing the primary display (else the first target), on the GPU path when
@@ -1284,7 +1315,9 @@ pub(crate) struct OpenedCapture {
 /// (the fakes, CI, a machine without one), the render thread opens its own and the
 /// capture delivers CPU frames. When there is a device but the backend has no GPU path,
 /// or the GPU capture does not start, the capture delivers CPU frames and the render
-/// thread still composites on the platform's device. Each fallback is logged.
+/// thread still composites on the platform's device. Each fallback is logged. With a
+/// device, the result also holds what the render thread needs to leave the GPU path
+/// later, if compositing keeps failing on it ([`leave_gpu`]).
 pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
     let target = primary_target(parts.capture.as_ref())?;
     let context = match parts.gpu.open_device() {
@@ -1297,11 +1330,23 @@ pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
     let gpu = context
         .as_ref()
         .and_then(|context| gpu_capture(parts.capture.as_ref(), context));
+    let fallback = |restart| {
+        context.as_ref().map(|_| CpuFallback {
+            capture: Arc::clone(&parts.capture),
+            target: target.clone(),
+            restart,
+        })
+    };
     if let Some(capture) = gpu {
         match capture.start(&target) {
             Ok(stream) => {
                 tracing::info!("capture delivers GPU frames");
-                return Ok(OpenedCapture { stream, context });
+                let fallback = fallback(true);
+                return Ok(OpenedCapture {
+                    stream,
+                    context,
+                    fallback,
+                });
             }
             Err(err) => {
                 tracing::warn!(error = %err, "GPU capture did not start; capturing CPU frames");
@@ -1312,7 +1357,12 @@ pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
         .capture
         .start(&target)
         .map_err(|err| format!("starting capture: {err}"))?;
-    Ok(OpenedCapture { stream, context })
+    let fallback = fallback(false);
+    Ok(OpenedCapture {
+        stream,
+        context,
+        fallback,
+    })
 }
 
 /// The capture backend on `context`, or `None`, logged, when it has no GPU path.
@@ -1449,6 +1499,8 @@ struct RenderJob {
     /// The render loop drops it last, after the compositor and the capture stream.
     context: Option<GpuContext>,
     capture: Box<dyn CaptureStream>,
+    /// With a context, how to leave the GPU path if compositing keeps failing on it.
+    fallback: Option<CpuFallback>,
     reader: RenderReader,
     /// Takes the input of a session that has finished, so the render thread never drops
     /// the last reference to it (R-RT-003).
@@ -1465,6 +1517,7 @@ struct RenderJob {
     ready: mpsc::Sender<Result<(), String>>,
     readbacks: Arc<AtomicU64>,
     gpu_captures: Arc<AtomicU64>,
+    gpu_fallbacks: Arc<AtomicU64>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
 }
@@ -1602,8 +1655,10 @@ impl Frames {
 ///
 /// Recoverable: the capture mailbox failing or having no new frame repeats the last
 /// capture, and a composite error repeats the last composited frame, up to
-/// [`MAX_DRAW_ERRORS`] in a row. Fatal, reported on the failure channel: more composite
-/// errors than that, a panic inside a tick (the compositor's state is unknown), and a
+/// [`MAX_DRAW_ERRORS`] in a row. On the platform's context, [`GPU_FALLBACK_ERRORS`] in a
+/// row leave the GPU path once ([`leave_gpu`]) and the count starts again. Fatal,
+/// reported on the failure channel: more composite errors than [`MAX_DRAW_ERRORS`], a
+/// fallback that fails, a panic inside a tick (the compositor's state is unknown), and a
 /// frame time that overflows. After a fatal error the thread keeps pushing the last
 /// frame until the pipeline stops, so the stream does not freeze before teardown. A
 /// tick that falls a whole period or more behind the clock skips to the current tick
@@ -1616,8 +1671,9 @@ impl Frames {
 /// to the collector; the thread runs until the program stops. While it has no session and no camera it draws nothing.
 fn render_loop(job: RenderJob) {
     let RenderJob {
-        context,
+        mut context,
         mut capture,
+        mut fallback,
         mut reader,
         collector,
         open,
@@ -1630,6 +1686,7 @@ fn render_loop(job: RenderJob) {
         ready,
         readbacks,
         gpu_captures,
+        gpu_fallbacks,
         drops,
         fail,
     } = job;
@@ -1713,7 +1770,39 @@ fn render_loop(job: RenderJob) {
                     if draw_errors == 1 {
                         tracing::warn!(error = %err, "composite failed; repeating the last frame");
                     }
-                    if draw_errors > MAX_DRAW_ERRORS {
+                    if draw_errors >= GPU_FALLBACK_ERRORS
+                        && let Some(path) = fallback.take()
+                    {
+                        let stage = GpuStage {
+                            frames: &mut frames,
+                            draw: &mut draw,
+                            capture: &mut capture,
+                            context: &mut context,
+                        };
+                        match leave_gpu(stage, path, &open) {
+                            Ok(()) => {
+                                tracing::warn!(
+                                    error = %err,
+                                    errors = draw_errors,
+                                    "compositing kept failing on the GPU path; fell back to \
+                                     CPU capture on the render thread's own device"
+                                );
+                                gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
+                                draw_errors = 0;
+                            }
+                            Err(fell) => {
+                                broken = true;
+                                reader.stop();
+                                report(
+                                    &fail,
+                                    format!(
+                                        "compositing failed {draw_errors} times in a row on \
+                                         the GPU path ({err}), and falling back failed: {fell}"
+                                    ),
+                                );
+                            }
+                        }
+                    } else if draw_errors > MAX_DRAW_ERRORS {
                         broken = true;
                         // No longer adopting snapshots, so it holds no gesture up.
                         reader.stop();
@@ -1772,6 +1861,52 @@ fn render_loop(job: RenderJob) {
     drop(draw);
     drop(capture);
     drop(context);
+}
+
+/// The render thread's GPU state that [`leave_gpu`] replaces.
+struct GpuStage<'a> {
+    frames: &'a mut Frames,
+    draw: &'a mut DrawFn,
+    capture: &'a mut Box<dyn CaptureStream>,
+    context: &'a mut Option<GpuContext>,
+}
+
+/// Leaves the GPU path mid-run (#451): compositing kept failing on the platform's
+/// context, because every GPU capture frame failed to import or because the context's
+/// device went away. The capture restarts on the CPU path when it delivered GPU frames,
+/// the compositor reopens on a device of its own (`open(None)`), and the context goes.
+/// The old frame, compositor and stream are dropped before the context, as its platform
+/// state requires (README › GPU frames). They are owned by this thread and never shared,
+/// so they are not the collector's to free (R-RT-003); the open blocks the thread once,
+/// like the first open, and the ticks it misses are counted as skipped.
+///
+/// On an error the stage is left on the GPU path, and the caller fails the output.
+fn leave_gpu(stage: GpuStage<'_>, path: CpuFallback, open: &OpenDraw) -> Result<(), String> {
+    let GpuStage {
+        frames,
+        draw,
+        capture,
+        context,
+    } = stage;
+    let stream = if path.restart {
+        Some(
+            path.capture
+                .start(&path.target)
+                .map_err(|err| format!("starting the CPU capture: {err}"))?,
+        )
+    } else {
+        None
+    };
+    let own = open(None)?;
+    frames.gpu = None;
+    frames.pending = None;
+    frames.on_gpu = false;
+    *draw = own;
+    if let Some(stream) = stream {
+        *capture = stream;
+    }
+    *context = None;
+    Ok(())
 }
 
 /// The tick to draw when the clock reads `now` and the next tick was `due`, and how
