@@ -918,7 +918,7 @@ after the GPU has finished the last frame that used it (see
 [Threads › State to RT threads](#threading)). On the GPU path the engine's render
 thread composites on the platform's `GpuContext`, and capture moves onto it through
 `Capture::on_context`: each captured texture is imported once into the cache and
-sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
+sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
