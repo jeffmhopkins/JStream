@@ -439,6 +439,80 @@ fn an_imported_texture_is_read_as_straight_alpha() {
     near(&snapshot, 1, 1, [red, 0, 0, 255], 2);
 }
 
+/// A browser page's texture holds sRGB code values already multiplied by alpha. Read
+/// that way, half-transparent red over white keeps full red and lets half the white
+/// through in linear light; reading it as straight alpha would darken the red twice.
+/// The same texture is refused as a straight import, and an sRGB one as premultiplied.
+#[test]
+fn a_premultiplied_import_is_unpremultiplied_before_decoding() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    // Straight sRGB red at alpha 128, premultiplied in code values: 255 * 128 / 255.
+    let texture = unorm_texture(compositor, 2, 2, [128, 0, 0, 128]);
+    let image = compositor
+        .import_premultiplied(texture.clone(), None)
+        .expect("a Unorm texture imports premultiplied");
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(compositor, 2, 2, Color::WHITE, &items);
+    let alpha = 128.0 / 255.0;
+    let white = (linear_to_srgb(1.0 - alpha) * 255.0).round() as u8;
+    near(&snapshot, 1, 1, [255, white, white, 255], 2);
+
+    assert!(matches!(
+        compositor.import(texture, None),
+        Err(RenderError::UnsupportedFormat { .. })
+    ));
+    let srgb = srgb_texture(compositor, 2, 2, [255, 0, 0, 128]);
+    assert!(matches!(
+        compositor.import_premultiplied(srgb, None),
+        Err(RenderError::UnsupportedFormat { .. })
+    ));
+}
+
+/// A frame the cache imported one way is replaced, not reused, when the same key is
+/// imported the other way.
+#[test]
+fn the_cache_keeps_premultiplied_and_straight_imports_apart() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&'static str> = ResourceCache::new();
+    let info = VideoFrameInfo {
+        size: FrameSize::new(2, 2).unwrap(),
+        format: PixelFormat::Bgra8,
+        color: ColorInfo::default(),
+        pts: MediaTime::zero(Timebase::NANOS),
+    };
+    let page = GpuFrame::new(
+        unorm_texture(compositor, 2, 2, [0, 0, 255, 255]),
+        info,
+        Arc::new(CountSync(Arc::new(AtomicUsize::new(0)))),
+    );
+    cache.begin_frame();
+    let image = cache
+        .import_premultiplied(compositor, &"page", &page)
+        .expect("import");
+    let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(compositor, 2, 2, Color::BLACK, &items);
+    near(&snapshot, 0, 0, [0, 0, 255, 255], 1);
+    drop(cache.end_frame(compositor));
+
+    // The same key, now a straight import: a new image, and the first one retires.
+    let (straight, _) = counted_frame(compositor, 2, 2, [0, 255, 0, 255]);
+    let (pixel, early) = show_as(compositor, &mut cache, "page", &straight);
+    assert_eq!(pixel, [0, 255, 0, 255]);
+    assert_eq!((cache.live(), cache.kept_imports(&"page")), (1, 0));
+    compositor
+        .device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let late = cache.reclaim().map_or(0, |freed| freed.len());
+    assert_eq!(early + late, 1, "the premultiplied import retired");
+}
+
 #[test]
 fn an_image_from_another_compositor_is_refused() {
     let Some(opened) = open() else {
@@ -643,6 +717,51 @@ pub(crate) fn srgb_texture(
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+    let pixels: Vec<u8> = std::iter::repeat_n(rgba, (width * height) as usize)
+        .flatten()
+        .collect();
+    compositor.queue().write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        size,
+    );
+    texture
+}
+
+/// A `Rgba8Unorm` texture of one colour, `rgba` given as code values.
+pub(crate) fn unorm_texture(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> wgpu::Texture {
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let texture = compositor
+        .device()
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-render-test-unorm"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -926,8 +1045,18 @@ fn show(
     cache: &mut ResourceCache<&'static str>,
     frame: &GpuFrame,
 ) -> ([u8; 4], usize) {
+    show_as(compositor, cache, "capture", frame)
+}
+
+/// [`show`] under `key`.
+fn show_as(
+    compositor: &mut Compositor,
+    cache: &mut ResourceCache<&'static str>,
+    key: &'static str,
+    frame: &GpuFrame,
+) -> ([u8; 4], usize) {
     cache.begin_frame();
-    let image = cache.import(compositor, &"capture", frame).expect("import");
+    let image = cache.import(compositor, &key, frame).expect("import");
     let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
     let snapshot = draw(compositor, 2, 2, Color::BLACK, &items);
     let freed = cache.end_frame(compositor).map_or(0, |freed| freed.len());

@@ -9,7 +9,7 @@
 use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, Reference, Settings};
 use jstream_sources::{
-    AssetRoots, AudioTarget, Context, Limits, Registry, SourceError, needs_restart,
+    AssetRoots, AudioTarget, CaptureSpec, Context, Limits, Registry, SourceError, needs_restart,
 };
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -205,6 +205,58 @@ fn a_colour_source_is_one_solid_frame_and_its_colour_is_live() {
     assert!(
         matches!(source.update(&resized), Err(SourceError::NotLive { param }) if param == "width")
     );
+}
+
+#[test]
+fn display_and_window_sources_say_what_to_capture() {
+    let registry = Registry::builtin();
+    let ctx = Context::default();
+    let spec = |kind_id: &str, target: &str| {
+        let settings = complete(kind_id, &[("target", json!(target))]);
+        let mut source = registry.create(kind_id, &settings, &ctx).expect("a source");
+        assert!(
+            matches!(source.frame(ms(0)), Err(SourceError::Captured { kind_id: k }) if k == kind_id),
+            "{kind_id}: frames come from the capture"
+        );
+        assert_eq!(source.next_change(ms(0)), None);
+        source.capture().cloned().expect("a capture source")
+    };
+    assert_eq!(
+        spec("display", ""),
+        CaptureSpec::Display(None),
+        "the primary display"
+    );
+    assert_eq!(
+        spec("display", r"monitor:\\.\DISPLAY2"),
+        CaptureSpec::Display(Some(r"monitor:\\.\DISPLAY2".into()))
+    );
+    assert_eq!(
+        spec("window", ""),
+        CaptureSpec::Window(None),
+        "no window yet"
+    );
+    assert_eq!(
+        spec("window", "hwnd:0x1a2b"),
+        CaptureSpec::Window(Some("hwnd:0x1a2b".into()))
+    );
+
+    let colour = registry
+        .create("color", &complete("color", &[]), &ctx)
+        .expect("a source");
+    assert!(colour.capture().is_none(), "a colour makes its own frames");
+
+    let descriptor = registry.descriptor("display").expect("display");
+    let first = complete("display", &[]);
+    let second = complete("display", &[("target", json!("monitor:2"))]);
+    assert!(
+        needs_restart(descriptor, &first, &second),
+        "a new target restarts"
+    );
+    let bad = complete("window", &[("target", json!(7))]);
+    assert!(matches!(
+        registry.create("window", &bad, &ctx),
+        Err(SourceError::Setting { param, .. }) if param == "target"
+    ));
 }
 
 #[test]
