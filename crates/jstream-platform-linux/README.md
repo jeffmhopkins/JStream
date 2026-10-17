@@ -98,7 +98,9 @@ It has:
   dropping it stops it promptly; its buffers are allocated before its loop. A packet's
   time is the media clock at the read less the frames still queued and its own; a render
   buffer's is the clock plus the frames queued ahead. An overrun or underrun is
-  recovered and flags the next packet as a discontinuity (ALSA doesn't say how many
+  recovered (a capture stream is then started again, since recovery only prepares it;
+  playback restarts with its next write) and flags the next packet as a discontinuity,
+  and a short write is finished before the next period is rendered (ALSA doesn't say how many
   frames were lost, so the device position doesn't jump); a device that can't be
   recovered ends the stream with `DeviceLost`. An unknown PCM is `NotFound`. Desktop and
   application audio (`*Loopback`, `processes`) are `Unsupported`: ALSA has no loopback,
@@ -189,9 +191,11 @@ pods, the frame copy, and the H.264 parameters, parameter sets, GOP and upload a
 platform-independent. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
-stopping on drop, loopback refused, an unknown PCM and the listing) pass with or without
-those libraries installed and need no GPU, session or daemon. ALSA's sample conversion,
-channel layouts, listed names and frame times are platform-independent. The OpenH264 tests use a fake download and a fake encoder behind the
+stopping on drop, a capture stream running again after an overrun, loopback refused, an
+unknown PCM and the listing) pass with or without those libraries installed and need no
+GPU, session or daemon. ALSA's sample conversion, channel layouts, listed names and frame
+times are platform-independent. The OpenH264 tests use a fake download and a fake
+encoder behind the
 library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The

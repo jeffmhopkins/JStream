@@ -19,7 +19,8 @@
 //! A packet's time is the media clock (`CLOCK_MONOTONIC`) when it is read, less the
 //! frames still queued (`snd_pcm_delay`) and the packet's own frames; a render buffer's is
 //! the clock plus the frames queued ahead of it. An overrun or underrun is recovered with
-//! `snd_pcm_recover` and the next packet is flagged as a discontinuity. ALSA doesn't say
+//! `snd_pcm_recover` (a capture stream is then started again, since recovery only
+//! prepares it) and the next packet is flagged as a discontinuity. ALSA doesn't say
 //! how many frames were lost, so the device position doesn't jump. A device that can't be
 //! recovered, such as one unplugged, ends the stream with `DeviceLost`.
 //!
@@ -246,6 +247,8 @@ mod backend {
     const ACCESS_RW_INTERLEAVED: c_int = 3;
     /// `-EAGAIN`: nothing to read or no room to write yet.
     const EAGAIN: c_long = -11;
+    /// `SND_PCM_STATE_RUNNING`.
+    const STATE_RUNNING: c_int = 3;
 
     // The libasound functions the backend calls, as declared in <alsa/pcm.h>,
     // <alsa/control.h> (the name hints) and <alsa/error.h>. Opaque handles are `void *`.
@@ -267,6 +270,7 @@ mod backend {
     type PcmDelay = unsafe extern "C" fn(*mut c_void, *mut c_long) -> c_int;
     type PcmWait = unsafe extern "C" fn(*mut c_void, c_int) -> c_int;
     type PcmAvail = unsafe extern "C" fn(*mut c_void) -> c_long;
+    type PcmState = unsafe extern "C" fn(*mut c_void) -> c_int;
     type StrError = unsafe extern "C" fn(c_int) -> *const c_char;
     type NameHint = unsafe extern "C" fn(c_int, *const c_char, *mut *mut *mut c_void) -> c_int;
     type NameGetHint = unsafe extern "C" fn(*const c_void, *const c_char) -> *mut c_char;
@@ -298,6 +302,7 @@ mod backend {
         delay: PcmDelay,
         wait: PcmWait,
         avail_update: PcmAvail,
+        state: PcmState,
         strerror: StrError,
         name_hint: NameHint,
         name_get_hint: NameGetHint,
@@ -350,6 +355,7 @@ mod backend {
                     delay: lib.function("snd_pcm_delay")?,
                     wait: lib.function("snd_pcm_wait")?,
                     avail_update: lib.function("snd_pcm_avail_update")?,
+                    state: lib.function("snd_pcm_state")?,
                     strerror: lib.function("snd_strerror")?,
                     name_hint: lib.function("snd_device_name_hint")?,
                     name_get_hint: lib.function("snd_device_name_get_hint")?,
@@ -501,11 +507,15 @@ mod backend {
             let rc = unsafe { (api.hw_set_rate_near)(pcm, hw, &raw mut rate, &raw mut dir) };
             self.check("snd_pcm_hw_params_set_rate_near", rc)?;
             let mut buffer_us: c_uint = BUFFER_US;
+            // `dir` is an input too: start each call from "exactly", not the last
+            // call's answer.
+            dir = 0;
             // SAFETY: live handles and local out pointers (above).
             let rc =
                 unsafe { (api.hw_set_buffer_time_near)(pcm, hw, &raw mut buffer_us, &raw mut dir) };
             self.check("snd_pcm_hw_params_set_buffer_time_near", rc)?;
             let mut period_us: c_uint = PERIOD_US;
+            dir = 0;
             // SAFETY: live handles and local out pointers (above).
             let rc =
                 unsafe { (api.hw_set_period_time_near)(pcm, hw, &raw mut period_us, &raw mut dir) };
@@ -550,6 +560,27 @@ mod backend {
         fn recover(&self, code: c_int) -> bool {
             // SAFETY: a live handle; `silent` 1 keeps alsa-lib from printing.
             unsafe { (self.api.recover)(self.handle, code, 1) >= 0 }
+        }
+
+        /// Recovers a capture PCM and starts it again: `snd_pcm_recover` only
+        /// prepares the PCM after an overrun, and a prepared capture stream records
+        /// nothing until it is started, so the capture loop would wait forever (#572
+        /// review B1). `true` when the stream is running again.
+        fn recover_capture(&self, code: c_int) -> bool {
+            if !self.recover(code) {
+                return false;
+            }
+            if self.state() == STATE_RUNNING {
+                return true;
+            }
+            // SAFETY: a live handle, prepared by the recovery.
+            unsafe { (self.api.start)(self.handle) >= 0 }
+        }
+
+        /// The PCM's `snd_pcm_state_t`.
+        fn state(&self) -> c_int {
+            // SAFETY: a live handle.
+            unsafe { (self.api.state)(self.handle) }
         }
 
         fn lost(&self, code: c_int) -> PlatformError {
@@ -789,7 +820,7 @@ mod backend {
                 Ok(false) => continue,
                 Ok(true) => {}
                 Err(code) => {
-                    if pcm.recover(code) {
+                    if pcm.recover_capture(code) {
                         discontinuity = true;
                         continue;
                     }
@@ -805,7 +836,7 @@ mod backend {
             }
             if read < 0 {
                 let code = c_int::try_from(read).unwrap_or(c_int::MIN);
-                if pcm.recover(code) {
+                if pcm.recover_capture(code) {
                     discontinuity = true;
                     continue;
                 }
@@ -880,23 +911,75 @@ mod backend {
                 time: Some(time),
             });
             from_f32(n.kind, &samples, &mut raw);
-            // SAFETY: `raw` holds `period` frames of the configured kind, and the
-            // handle is live.
-            let written = unsafe {
-                (pcm.api.writei)(pcm.handle, raw.as_ptr().cast(), period.cast_unsigned())
-            };
-            if written == EAGAIN {
-                continue;
-            }
-            if written < 0 {
-                let code = c_int::try_from(written).unwrap_or(c_int::MIN);
-                if pcm.recover(code) {
+            // Write the whole period, so a short write doesn't drop its end (#572
+            // review N2). An underrun abandons the rest of it after recovering.
+            let frame_bytes = n.channels * n.kind.bytes();
+            let mut done = 0_usize;
+            while done < n.period && !stop.load(Ordering::Acquire) {
+                let rest = &raw[done * frame_bytes..];
+                let frames = c_ulong::try_from(n.period - done).unwrap_or(c_ulong::MAX);
+                // SAFETY: `rest` holds `n.period - done` frames of the configured kind,
+                // and the handle is live.
+                let written = unsafe { (pcm.api.writei)(pcm.handle, rest.as_ptr().cast(), frames) };
+                if written == EAGAIN {
+                    if let Err(code) = pcm.wait()
+                        && !pcm.recover(code)
+                    {
+                        handler.on_error(&pcm.lost(code));
+                        return;
+                    }
                     continue;
                 }
-                handler.on_error(&pcm.lost(code));
-                return;
+                if written < 0 {
+                    let code = c_int::try_from(written).unwrap_or(c_int::MIN);
+                    if pcm.recover(code) {
+                        break;
+                    }
+                    handler.on_error(&pcm.lost(code));
+                    return;
+                }
+                done += usize::try_from(written).unwrap_or(0);
             }
-            position += written.unsigned_abs() as u64;
+            position += done as u64;
+        }
+    }
+
+    /// Recovery on ALSA's `null` PCM, which needs no sound card; skipped where
+    /// libasound isn't installed.
+    #[cfg(test)]
+    mod recovery_tests {
+        use std::sync::Arc;
+
+        use super::{Api, Pcm, STATE_RUNNING, STREAM_CAPTURE};
+
+        /// `-EPIPE`, an overrun.
+        const EPIPE: i32 = -32;
+        /// `SND_PCM_STATE_PREPARED`.
+        const STATE_PREPARED: i32 = 2;
+
+        fn running_capture() -> Option<Pcm> {
+            let api = Arc::new(Api::load().ok()?);
+            let pcm = Pcm::open(&api, "null", STREAM_CAPTURE).expect("open null");
+            pcm.configure().expect("configure null");
+            // SAFETY: a live, configured handle.
+            let rc = unsafe { (pcm.api.start)(pcm.handle) };
+            assert!(rc >= 0, "start: {rc}");
+            assert_eq!(pcm.state(), STATE_RUNNING);
+            Some(pcm)
+        }
+
+        /// The regression for review B1: recovering alone leaves a capture PCM
+        /// prepared, which records nothing; `recover_capture` has it running again.
+        #[test]
+        fn an_overrun_capture_is_running_again_after_recovery() {
+            let Some(pcm) = running_capture() else { return };
+            assert!(pcm.recover(EPIPE));
+            assert_eq!(pcm.state(), STATE_PREPARED, "recover only prepares");
+
+            let Some(pcm) = running_capture() else { return };
+            assert!(pcm.recover_capture(EPIPE));
+            assert_eq!(pcm.state(), STATE_RUNNING);
+            assert_eq!(pcm.wait(), Ok(true), "data flows again");
         }
     }
 }
