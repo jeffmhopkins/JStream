@@ -3,11 +3,6 @@
 //! structs are the 64-bit layouts (x86_64 and aarch64, ADR-0060's tiers), whose sizes
 //! are part of each `ioctl` number; the test checks them against the kernel headers.
 
-#![allow(
-    dead_code,
-    reason = "the ABI is declared whole, as the header has it; not every field is read"
-)]
-
 use std::ffi::c_ulong;
 
 /// `struct v4l2_capability`.
@@ -236,7 +231,6 @@ const WRITE: c_ulong = 1;
 
 pub(crate) const VIDIOC_QUERYCAP: c_ulong = ioc(READ, 0, size_of::<Capability>());
 pub(crate) const VIDIOC_ENUM_FMT: c_ulong = ioc(READ | WRITE, 2, size_of::<FmtDesc>());
-pub(crate) const VIDIOC_G_FMT: c_ulong = ioc(READ | WRITE, 4, size_of::<Format>());
 pub(crate) const VIDIOC_S_FMT: c_ulong = ioc(READ | WRITE, 5, size_of::<Format>());
 pub(crate) const VIDIOC_REQBUFS: c_ulong = ioc(READ | WRITE, 8, size_of::<RequestBuffers>());
 pub(crate) const VIDIOC_QUERYBUF: c_ulong = ioc(READ | WRITE, 9, size_of::<Buffer>());
@@ -342,15 +336,34 @@ mod tests {
         assert_eq!(VIDIOC_ENUM_FMT, 0xc040_5602);
         assert_eq!(VIDIOC_ENUM_FRAMESIZES, 0xc02c_564a);
         assert_eq!(VIDIOC_ENUM_FRAMEINTERVALS, 0xc034_564b);
-        assert_eq!(VIDIOC_G_FMT, 0xc0d0_5604);
         assert_eq!(VIDIOC_S_FMT, 0xc0d0_5605);
+        assert_eq!(VIDIOC_G_PARM, 0xc0cc_5615);
         assert_eq!(VIDIOC_S_PARM, 0xc0cc_5616);
+        assert_eq!(CAP_TIMEPERFRAME, 0x1000);
         assert_eq!(VIDIOC_REQBUFS, 0xc014_5608);
         assert_eq!(VIDIOC_QUERYBUF, 0xc058_5609);
         assert_eq!(VIDIOC_QBUF, 0xc058_560f);
         assert_eq!(VIDIOC_DQBUF, 0xc058_5611);
         assert_eq!(VIDIOC_STREAMON, 0x4004_5612);
         assert_eq!(VIDIOC_STREAMOFF, 0x4004_5613);
+    }
+
+    /// The flag and type values `<linux/videodev2.h>` gives.
+    #[test]
+    fn constants_match_the_kernel_headers() {
+        assert_eq!(
+            (FIELD_NONE, FMT_FLAG_EMULATED, BUF_FLAG_ERROR),
+            (1, 0x2, 0x40)
+        );
+        assert_eq!((FRMSIZE_TYPE_DISCRETE, FRMIVAL_TYPE_DISCRETE), (1, 1));
+        assert_eq!(
+            (CAP_VIDEO_CAPTURE, CAP_STREAMING, CAP_DEVICE_CAPS),
+            (0x1, 0x0400_0000, 0x8000_0000)
+        );
+        assert_eq!(
+            (BUF_FLAG_TIMESTAMP_MASK, BUF_FLAG_TIMESTAMP_MONOTONIC),
+            (0xe000, 0x2000)
+        );
     }
 
     #[test]

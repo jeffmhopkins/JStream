@@ -96,10 +96,7 @@ impl Device {
     /// # Safety
     /// `request` is a V4L2 request whose argument is a `T` (its size is in the number).
     unsafe fn ioctl<T>(&self, request: c_ulong, arg: &mut T) -> io::Result<()> {
-        #[allow(
-            clippy::unnecessary_cast,
-            reason = "`libc::Ioctl` is `c_ulong` on glibc and `c_int` on musl"
-        )]
+        // `libc::Ioctl` is `c_ulong` on glibc and `c_int` on musl.
         let request = request as libc::Ioctl;
         loop {
             // SAFETY: the function's contract: `arg` is a valid, writable `T` for the
