@@ -729,7 +729,7 @@ stamp = { hash = "b3:9877d3cd56a5b6cc", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:e5a6edbd7802a068" }
 
 ["CRATE-jstream-audio#realtime"."body"]
-stamp = { hash = "b3:24972d0ee120c4b7", by = "agent:cl1-builder", note = "CLAP filters paragraph gains that HostFilter numbers blocks on from the input ring's head, so a rebuilt chain puts a new filter on a block whose filter was removed without restarting the host; cmd.rs only gains the sample_rate/block_frames getters, no real-time change." }
+stamp = { hash = "b3:a70d1312f91b899a", by = "agent:cl1-builder", note = "CLAP filters paragraph gains N2's caveat: the head is read when the filter is built, after the old filter's removal is queued but maybe before it applies, so one block can be rewritten under the same number on a rebuild." }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). The preview thread is not real-time and never touches the mixer; the CLAP sentence matches this section's host-filter text." }
@@ -1026,7 +1026,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:301b9c8555bca934", by = "agent:cl1-builder", note = "Batches no longer carve out a clap/ filter.add refusal; Audio sources says chain_of keeps clap/ kinds and adds the ClapFilter paragraph (supervisor per filter at the mixer's rate/block and DEFAULT_DEPTH, bypass until Ready, rebuild on a new block or disable, same block across rebuilds, params via the ring, missing plugin logged once, host stopped with the filter)." }
+stamp = { hash = "b3:759b740dce0817b2", by = "agent:cl1-builder", note = "B1 (#488 review): the ClapFilter paragraph now says a crashed host's mixer filter stays on the dead block passing delayed dry at the same latency until the restarted host's block rebuilds the chain, and a disabled filter is removed; ClapFilter keeps the last ready block across a crash (plugins/filter.rs). The rest as before: catalog, ticking, same block across rebuilds, removal-queued guard, params via the ring, missing plugin logged once, host stopped with the filter." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1071,7 +1071,7 @@ stamp = { hash = "b3:e2c8ca8e2772da2f", by = "agent:cl1-builder", note = "Batche
 stamp = { hash = "b3:f56b2c7983cf2c88" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/filters.rs"]
-stamp = { hash = "b3:559ab64f9b87d335", by = "agent:cl1-builder", note = "Batches no longer carve out a clap/ filter.add refusal; Audio sources says chain_of keeps clap/ kinds and adds the ClapFilter paragraph (supervisor per filter at the mixer's rate/block and DEFAULT_DEPTH, bypass until Ready, rebuild on a new block or disable, same block across rebuilds, params via the ring, missing plugin logged once, host stopped with the filter)." }
+stamp = { hash = "b3:df8da07148584db2", by = "agent:cl1-builder", note = "B1 (#488 review): the ClapFilter paragraph now says a crashed host's mixer filter stays on the dead block passing delayed dry at the same latency until the restarted host's block rebuilds the chain, and a disabled filter is removed; ClapFilter keeps the last ready block across a crash (plugins/filter.rs). The rest as before: catalog, ticking, same block across rebuilds, removal-queued guard, params via the ring, missing plugin logged once, host stopped with the filter." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:7378eab81da1ba15" }
@@ -1089,7 +1089,7 @@ stamp = { hash = "b3:b7854ccd83c4a362", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/plugins/filter.rs"]
-stamp = { hash = "b3:8b5342b70b2debf0", by = "agent:cl1-builder", note = "Batches no longer carve out a clap/ filter.add refusal; Audio sources says chain_of keeps clap/ kinds and adds the ClapFilter paragraph (supervisor per filter at the mixer's rate/block and DEFAULT_DEPTH, bypass until Ready, rebuild on a new block or disable, same block across rebuilds, params via the ring, missing plugin logged once, host stopped with the filter)." }
+stamp = { hash = "b3:36bb94312dd89a86", by = "agent:cl1-builder", note = "B1 (#488 review): the ClapFilter paragraph now says a crashed host's mixer filter stays on the dead block passing delayed dry at the same latency until the restarted host's block rebuilds the chain, and a disabled filter is removed; ClapFilter keeps the last ready block across a crash (plugins/filter.rs). The rest as before: catalog, ticking, same block across rebuilds, removal-queued guard, params via the ring, missing plugin logged once, host stopped with the filter." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/plugins/kinds.rs"]
 stamp = { hash = "b3:ccdba407a6595f37", by = "agent:cl1-builder", note = "Batches no longer carve out a clap/ filter.add refusal; Audio sources says chain_of keeps clap/ kinds and adds the ClapFilter paragraph (supervisor per filter at the mixer's rate/block and DEFAULT_DEPTH, bypass until Ready, rebuild on a new block or disable, same block across rebuilds, params via the ring, missing plugin logged once, host stopped with the filter)." }
@@ -1197,7 +1197,7 @@ stamp = { hash = "b3:e2c8ca8e2772da2f", by = "agent:cl1-builder", note = "CLAP b
 stamp = { hash = "b3:f56b2c7983cf2c88" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/filters.rs"]
-stamp = { hash = "b3:559ab64f9b87d335", by = "agent:cl1-builder", note = "CLAP bullets: scan_clap_plugins(Arc<dyn PluginHosts>) hands the audio thread a ClapCatalog; plugin_text bounds plugin names (#351); the not-yet bullet is replaced by ClapFilter in the chain and what still isn't done (param/state write-back, latency change, editor, rescan); refuse_filters is gone; tests list gains the CLAP chain and ClapFilter tests." }
+stamp = { hash = "b3:df8da07148584db2", by = "agent:cl1-builder", note = "Re-read the CLAP bullets after B1's fix: ClapFilter in the chain and the not-yet list still match; Ticked is gone (N1), which no bullet named; tests list's 'kept on the same host when the chain is rebuilt' still holds and the crash-restart case is now in that test." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:7378eab81da1ba15" }
@@ -1215,7 +1215,7 @@ stamp = { hash = "b3:b7854ccd83c4a362", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/plugins/filter.rs"]
-stamp = { hash = "b3:8b5342b70b2debf0", by = "agent:cl1-builder", note = "CLAP bullets: scan_clap_plugins(Arc<dyn PluginHosts>) hands the audio thread a ClapCatalog; plugin_text bounds plugin names (#351); the not-yet bullet is replaced by ClapFilter in the chain and what still isn't done (param/state write-back, latency change, editor, rescan); refuse_filters is gone; tests list gains the CLAP chain and ClapFilter tests." }
+stamp = { hash = "b3:36bb94312dd89a86", by = "agent:cl1-builder", note = "Re-read the CLAP bullets after B1's fix: ClapFilter in the chain and the not-yet list still match; Ticked is gone (N1), which no bullet named; tests list's 'kept on the same host when the chain is rebuilt' still holds and the crash-restart case is now in that test." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/plugins/kinds.rs"]
 stamp = { hash = "b3:ccdba407a6595f37", by = "agent:cl1-builder", note = "CLAP bullets: scan_clap_plugins(Arc<dyn PluginHosts>) hands the audio thread a ClapCatalog; plugin_text bounds plugin names (#351); the not-yet bullet is replaced by ClapFilter in the chain and what still isn't done (param/state write-back, latency change, editor, rescan); refuse_filters is gone; tests list gains the CLAP chain and ClapFilter tests." }
@@ -1329,7 +1329,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:a6dfda2fb04d2fb1", by = "agent:cl1-builder", note = "The jstream-clap-scan bullet now says the engine keeps the hosts and starts a jstream-plugin-host.exe per CLAP filter in a source's audio chain; scan_clap_plugins takes Arc<dyn PluginHosts>." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:301b9c8555bca934", by = "agent:cl1-builder", note = "The jstream-clap-scan bullet now says the engine keeps the hosts and starts a jstream-plugin-host.exe per CLAP filter in a source's audio chain; scan_clap_plugins takes Arc<dyn PluginHosts>." }
+stamp = { hash = "b3:759b740dce0817b2", by = "agent:cl1-builder", note = "Dependency stamp only: core's design changed how a crashed CLAP host's filter passes dry; the daemon's bullet (keeps the hosts, one jstream-plugin-host.exe per CLAP filter) still holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }

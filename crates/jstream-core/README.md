@@ -639,9 +639,11 @@ A CLAP filter ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) g
 a `HostSupervisor` whose host runs on a block at the mixer's rate and block size
 (`InputControl::mixer_rate`, `mixer_block_frames`) and `DEFAULT_DEPTH`. Every pass
 ticks it. It is bypassed until its host is `Ready`, then the chain is rebuilt with the
-mixer's CLAP filter on the host's block (`insert_host_filter`); while the host is down
-the mixer filter passes the dry signal itself, and a restarted host's new block, or a
-disabled filter, rebuilds the chain again. A chain rebuilt around it (a filter added,
+mixer's CLAP filter on the host's block (`insert_host_filter`). When the host crashes
+the mixer filter stays on the dead block and passes the dry signal itself, delayed by
+the same latency, so the input's latency doesn't change during the restart backoff;
+the restarted host's new block rebuilds the chain onto it, and a disabled filter is
+removed (bypassed, its latency gone). A chain rebuilt around it (a filter added,
 removed or moved) puts a new mixer filter on the same block, so the host keeps
 running; no new filter goes on a block until its old one's removal is queued. Its
 settings go to the plugin as parameter changes on the block's ring, never through a

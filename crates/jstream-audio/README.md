@@ -346,7 +346,10 @@ process's data, so non-finite ones become 0. A chain reset clears the dry delay 
 bumps `reset_seq` for the host to reset the plugin; block numbers carry on, so the
 rings stay in step. A filter numbers its blocks on from the input ring's head, so when
 a chain is rebuilt a new filter can go on a block whose filter was removed and the host
-carries on without a restart. The shared block (`HostMemory`) is dropped on the collector like
+carries on without a restart. The head is read when the new filter is built, after the
+old one's removal is queued but maybe before the mixer applies it, so a block the old
+filter writes in between can be written again under the same number: a one-block
+glitch, only on a rebuild, which resets the built-in filters anyway. The shared block (`HostMemory`) is dropped on the collector like
 any removed filter.
 
 **Master chain and output taps** (`tap.rs`,

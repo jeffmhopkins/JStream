@@ -299,9 +299,9 @@ impl Chain {
     /// edit failure (ADR-0026 §6).
     ///
     /// A CLAP filter runs in a host process that `clap` starts and supervises
-    /// ([`ClapFilter`]); it is bypassed until its host is ready and whenever the host is
-    /// down, and its settings reach the plugin as parameter changes, never through a
-    /// rebuild. Without `clap`, or with no plugin for its kind, it is bypassed.
+    /// ([`ClapFilter`]); it is bypassed until its host is first ready and while it is
+    /// disabled, passes delayed dry on its dead block while a crashed host restarts, and
+    /// its settings reach the plugin as parameter changes, never through a rebuild. Without `clap`, or with no plugin for its kind, it is bypassed.
     pub(crate) fn apply(
         &mut self,
         input: &InputControl,
@@ -399,7 +399,7 @@ impl Chain {
                 }
             }
             if let Some(filter) = self.clap.get_mut(&new.id) {
-                notes.extend(filter.tick(&new.kind, now).notes);
+                notes.extend(filter.tick(&new.kind, now));
             }
         }
         notes
@@ -794,7 +794,10 @@ mod tests {
                 "clap/org.example.gain".to_owned(),
                 ("a.clap".into(), "org.example.gain".to_owned()),
             )]),
-            policy: SupervisorPolicy::default(),
+            policy: SupervisorPolicy {
+                first_retry: Duration::from_millis(20),
+                ..SupervisorPolicy::default()
+            },
         };
         let clap = |id: &str, kind: &str| Chained {
             id: FilterId::new(id),
@@ -846,6 +849,43 @@ mod tests {
         );
         assert_eq!(fake.hosts().len(), 1);
 
+        // The host crashes: the filter stays on the dead block, passing delayed dry with
+        // the same latency, until the restarted host is ready on a new block.
+        let first = chain.filters[2].block.clone().expect("a block");
+        fake.hosts()[0].crash();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            assert!(Instant::now() < deadline, "the crash was never seen");
+            std::thread::sleep(Duration::from_millis(1));
+            let notes = pass(&mut chain, &mut mixer, &rebuilt);
+            if notes.iter().any(|note| note.contains("crashed")) {
+                break;
+            }
+        }
+        let on_dead_block = &chain.filters[2];
+        assert!(super::same_block(
+            on_dead_block.block.as_ref(),
+            Some(&first)
+        ));
+        assert_eq!(
+            on_dead_block.control.as_ref().map(|c| c.latency_frames()),
+            Some(host_latency)
+        );
+        while super::same_block(chain.filters[2].block.as_ref(), Some(&first)) {
+            assert!(Instant::now() < deadline, "the host never restarted");
+            std::thread::sleep(Duration::from_millis(1));
+            pass(&mut chain, &mut mixer, &rebuilt);
+        }
+        assert_eq!(fake.hosts().len(), 2);
+        assert!(chain.filters[2].block.is_some());
+        assert_eq!(
+            chain.filters[2]
+                .control
+                .as_ref()
+                .map(|c| c.latency_frames()),
+            Some(host_latency)
+        );
+
         // A second instance of a plugin no scan found: reported once, bypassed.
         let missing = [
             clap("verb", "clap/org.example.gain"),
@@ -863,6 +903,6 @@ mod tests {
         );
 
         assert!(pass(&mut chain, &mut mixer, &[]).is_empty());
-        assert!(fake.hosts()[0].has_exited(), "its host stopped");
+        assert!(fake.hosts()[1].has_exited(), "its host stopped");
     }
 }

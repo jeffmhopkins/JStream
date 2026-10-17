@@ -3,10 +3,12 @@
 //!
 //! The chain ([`crate::filters::Chain`]) owns one [`ClapFilter`] per CLAP filter it
 //! runs, keyed by filter ID, and ticks it on every pass of the `jstream-audio-sources`
-//! thread. Once the host is ready the chain adds the mixer's CLAP filter on its block;
-//! while the host is down the mixer passes the dry signal (ADR-0035 › 3). A chain
-//! rebuilt around it (a filter added, removed or moved) adds a new mixer filter on the
-//! same block, so the host keeps running.
+//! thread. Once the host is ready the chain adds the mixer's CLAP filter on its block.
+//! When the host crashes the filter stays on the dead block, whose missing output it
+//! passes as delayed dry with the same latency (ADR-0035 › 3), until the restarted host
+//! is ready on a new block; a disabled filter is removed. A chain rebuilt around it (a
+//! filter added, removed or moved) adds a new mixer filter on the same block, so the
+//! host keeps running.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -41,19 +43,13 @@ impl std::fmt::Debug for ClapCatalog {
 /// One CLAP filter's host, and what its plugin has been told.
 pub(crate) struct ClapFilter {
     supervisor: HostSupervisor,
+    /// The block the mixer's filter runs on: the last ready host's, kept while a
+    /// crashed host restarts so the filter passes delayed dry on it; `None` before the
+    /// first ready host and while disabled.
+    block: Option<HostBlock>,
     /// The settings sent to the running host's plugin. Cleared when a new host gets
     /// ready, so it is sent every setting.
     sent: Settings,
-}
-
-/// What a [`ClapFilter::tick`] means for the chain.
-#[derive(Default)]
-pub(crate) struct Ticked {
-    /// The filter's block changed (a host got ready, or the filter was disabled): the
-    /// chain is rebuilt on the current block.
-    pub(crate) block_changed: bool,
-    /// What to log.
-    pub(crate) notes: Vec<String>,
 }
 
 impl ClapFilter {
@@ -84,50 +80,50 @@ impl ClapFilter {
                 catalog.policy,
                 now,
             ),
+            block: None,
             sent: Settings::new(),
         })
     }
 
-    /// The running host's block, while it is ready.
+    /// The block the mixer's filter should run on: the last ready host's, kept while a
+    /// crashed host restarts. The chain is rebuilt whenever it changes.
     pub(crate) fn block(&self) -> Option<&HostBlock> {
-        self.supervisor.block()
+        self.block.as_ref()
     }
 
-    /// Advances the supervisor to `now`.
-    pub(crate) fn tick(&mut self, kind: &str, now: Instant) -> Ticked {
-        let mut ticked = Ticked::default();
+    /// Advances the supervisor to `now`, returning what to log.
+    pub(crate) fn tick(&mut self, kind: &str, now: Instant) -> Vec<String> {
+        let mut notes = Vec::new();
         for event in self.supervisor.tick(now) {
             match event {
                 HostEvent::Ready { .. } => {
                     self.sent = Settings::new();
-                    ticked.block_changed = true;
+                    self.block = self.supervisor.block().cloned();
                 }
-                HostEvent::Crashed { reason, retry_in } => ticked.notes.push(format!(
-                    "{kind} filter's plugin host crashed ({reason}); bypassed, restarting in {} ms",
+                HostEvent::Crashed { reason, retry_in } => notes.push(format!(
+                    "{kind} filter's plugin host crashed ({reason}); passing dry, restarting in {} ms",
                     retry_in.as_millis()
                 )),
                 HostEvent::Disabled { reason } => {
-                    ticked.block_changed = true;
-                    ticked
-                        .notes
-                        .push(format!("{kind} filter is disabled and bypassed: {reason}"));
+                    self.block = None;
+                    notes.push(format!("{kind} filter is disabled and bypassed: {reason}"));
                 }
-                HostEvent::Error(message) => ticked.notes.push(format!(
+                HostEvent::Error(message) => notes.push(format!(
                     "{kind} filter's plugin host reported: {}",
                     plugin_text(&message)
                 )),
-                HostEvent::Degraded => ticked.notes.push(format!(
+                HostEvent::Degraded => notes.push(format!(
                     "{kind} filter's plugin host is missing blocks; they pass dry"
                 )),
-                HostEvent::Recovered => ticked
-                    .notes
-                    .push(format!("{kind} filter's plugin host keeps up again")),
+                HostEvent::Recovered => {
+                    notes.push(format!("{kind} filter's plugin host keeps up again"));
+                }
                 // The plugin's own parameter changes and saved state aren't written back
                 // to the filter's settings yet.
                 HostEvent::Params(_) | HostEvent::ParamChanged(_) | HostEvent::StateSaved => {}
             }
         }
-        ticked
+        notes
     }
 
     /// Sends the running plugin each of `settings` that changed since it was last sent,
@@ -214,8 +210,8 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(5);
         while filter.block().is_none() {
             assert!(Instant::now() < deadline, "the host never got ready");
-            let ticked = filter.tick("clap/org.example.gain", Instant::now());
-            assert!(ticked.notes.is_empty(), "{:?}", ticked.notes);
+            let notes = filter.tick("clap/org.example.gain", Instant::now());
+            assert!(notes.is_empty(), "{notes:?}");
             std::thread::sleep(Duration::from_millis(1));
         }
         assert_eq!(fake.hosts()[0].request.config.block_frames, 64);
