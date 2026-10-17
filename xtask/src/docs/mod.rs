@@ -1433,8 +1433,10 @@ mod tests {
             .sections["S#a"]
             .clone();
         merge::merge_main(&work.0, "main").expect("merges");
-        let merged_b =
-            std::fs::read_to_string(work.0.join("src/b.rs")).expect("invariant: written");
+        // Git on Windows checks the merge out with CRLF line endings.
+        let merged_b = std::fs::read_to_string(work.0.join("src/b.rs"))
+            .expect("invariant: written")
+            .replace("\r\n", "\n");
         assert_eq!(merged_b, "b1 new\n\n\n\n\nb5 wave\n", "b.rs is the wave's");
 
         let first = "the wave's a5 edit is outside what the text says about a.rs";
