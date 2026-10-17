@@ -226,8 +226,8 @@ browser source's page paints on it, and opens its own (hardware adapter first, t
 software one as the fallback) when it does not. It has the NV12 pass that can render
 into an encode target's plane views (`Nv12Converter`). Windows' video encoders take
 encode targets on the context they reached through `Codecs::on_context`, and the
-engine's render thread converts each composite into the next of a ring of them and
-pushes it to such a session.
+engine's render thread converts each video mix's composite into the next of that mix's
+ring of them and pushes it to the mix's sessions on that path.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call

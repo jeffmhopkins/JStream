@@ -890,11 +890,11 @@ Step 4's NV12 pass is built too: it reads the sRGB output and writes the Y and C
 planes, either plane views of a native NV12 texture or an `R8Unorm` and an `Rg8Unorm`
 texture where planar render targets are missing, in BT.709 limited or full range with
 left-sited chroma. The render thread (in `jstream-core`) runs it: a video session
-opened on the context gets each composite converted into the next of a ring of the
-platform's encode targets, which it is pushed as a GPU frame, in its own submit that
-stages the target's fence and hands it back in `PRESENT`. Sessions on the CPU path and
-the virtual cameras still get the composite read back, and a tick with none of them
-skips the readback. Built-in video filters are kinds with
+opened on the context gets each composite of its video mix converted into the next of
+that mix's ring of the platform's encode targets, which it is pushed as a GPU frame, in
+its own submit that stages the target's fence and hands it back in `PRESENT`. Sessions
+on the CPU path and the virtual cameras still get their mix read back, and a mix none
+of them is fed is not read back. Built-in video filters are kinds with
 descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain

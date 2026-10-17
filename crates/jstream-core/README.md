@@ -1676,13 +1676,14 @@ writes it to the file, syncing each fragment (writes may block on the disk; the
 encoder queues absorb that and drop when full). The `output.start` that opens the
 program stage also starts `jstream-stats`, which is not a real-time thread: it emits
 `stats.tick` about once a second from the stage counters, and once more when the last
-output stops, and `meters.tick` about ten times a second. The render loop publishes capture mailbox skips, and a tick that falls a
+output stops, and `meters.tick` about ten times a second. The render loop publishes capture mailbox skips and the frames an encode ring drops
+(`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
-values, GPU images, finished sessions' inputs, the frame buffers of a mix no session
-needs any more, replaced lists of bus and source scopes) goes to the program stage's
+values, GPU images, finished sessions' inputs, the frame buffers and encode targets of a
+mix no session needs any more, replaced lists of bus and source scopes) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer
 threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a

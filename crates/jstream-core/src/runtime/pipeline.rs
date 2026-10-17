@@ -2243,14 +2243,16 @@ fn render_loop(job: RenderJob) {
             .iter()
             .zip(&frames.shown)
             .zip(&mut frames.targets)
-            .zip(&frames.encode)
+            .zip(&mut frames.encode)
         {
+            // A missed frame is this tick's alone: a broken stage repeats the last one.
+            let starved = std::mem::take(&mut encode.starved);
             if frame.due {
                 push_each(
                     targets,
                     |tap| match (tap.gpu, &encode.shown) {
                         // Every target was held: the frame is dropped, not repeated.
-                        (true, _) if encode.starved => true,
+                        (true, _) if starved => true,
                         (true, Some(target)) => push_gpu(&tap.input, target, due),
                         (false, _) if !shown.is_empty() => {
                             push_frame(&tap.input, frame.size, due, shown)
