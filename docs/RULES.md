@@ -321,7 +321,7 @@ running unless the error is fatal and reported.
 <a id="dependencies"></a>
 ## Dependencies
 <!-- @section
-depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
+depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md"]
 -->
 
 <a id="R-DEP-001"></a>
@@ -343,13 +343,16 @@ status = "active"
 enforced_by = ["deny:bans", "ci:lint-deps"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
-Per [ADR-0031](adr/0031-source-types-and-decoding-scope.md). Known binding crates are banned in
+Per [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
-allowed only through that allowlist. The one media exception is the prebuilt CEF runtime, whose
-internal media stack decodes in-page audio and video only; no JStream crate calls its
-codecs ([ADR-0021](adr/0021-browser-source.md)). Pure-Rust image and font crates are not
-banned codec libraries.
+allowed only through that allowlist. The media exceptions are two. The prebuilt CEF
+runtime's internal media stack decodes in-page audio and video only; no JStream crate calls
+its codecs ([ADR-0021](adr/0021-browser-source.md)). On Linux, Cisco's prebuilt OpenH264
+binary is a software H.264 encoder that JStream downloads from Cisco on the user's request
+and loads at run time; JStream never ships or builds it, so the `openh264` crates stay
+banned ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). Pure-Rust image and
+font crates are not banned codec libraries, and neither is JStream's own AAC-LC encoder.
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions

@@ -847,3 +847,15 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "planned"
+
+[[item]]
+id = "LNX2"
+milestone = "M3"
+title = "Linux OpenH264 download (ADR-0061)"
+status = "planned"
+
+[[item]]
+id = "LNX3"
+milestone = "M3"
+title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
+status = "planned"
