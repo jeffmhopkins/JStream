@@ -4,6 +4,7 @@
 //! over RTMP(S).
 
 use crate::args::Options;
+use crate::youtube;
 use anyhow::Context;
 use jstream_core::{AuditSink, Engine};
 use jstream_server::{Connector, Server, ServerConfig, Token};
@@ -40,7 +41,11 @@ pub type Connect =
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows, when a
 /// backend can't be created (the QPC clock).
-pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Arc<Engine>> {
+pub fn engine(
+    options: &Options,
+    audit: Arc<dyn AuditSink>,
+    youtube: Option<youtube::Client>,
+) -> anyhow::Result<Arc<Engine>> {
     let mut engine = Engine::new().with_audit(audit);
     if let Some(path) = &options.collection {
         // The error names the file and what is wrong with it.
@@ -54,6 +59,7 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
         .iter()
         .cloned()
         .fold(engine, Engine::with_output);
+    let engine = with_youtube(engine, youtube);
     #[cfg(windows)]
     let engine = {
         let backends = windows_backends()?;
@@ -74,6 +80,53 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
     #[cfg(not(windows))]
     let engine = Arc::new(engine);
     Ok(engine)
+}
+
+/// YouTube with JStream's built-in OAuth client (ADR-0058), or the developer's
+/// `client` when one is given, keeping the account's refresh token in Windows
+/// Credential Manager. While the built-in client is empty, as it is until the maintainer
+/// registers one, and on other platforms, `youtube.status` answers `unavailable`. Never
+/// fails the start: a transport that can't be built is logged, and YouTube stays
+/// unavailable.
+fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
+    #[cfg(windows)]
+    {
+        if client.is_none() && jstream_youtube::BUILT_IN_CLIENT_ID.is_empty() {
+            tracing::info!("YouTube is unavailable: this build has no OAuth client");
+            return engine;
+        }
+        let transport = match jstream_youtube::HttpsTransport::new() {
+            Ok(transport) => Arc::new(transport),
+            Err(error) => {
+                tracing::warn!(%error, "YouTube is unavailable: no HTTPS transport");
+                return engine;
+            }
+        };
+        let tokens = Arc::new(jstream_platform_windows::WindowsCredentials);
+        if let Some(client) = client {
+            tracing::info!("YouTube sign-in is available, with the developer's OAuth client");
+            return youtube::set_up(engine, client, transport, tokens);
+        }
+        match jstream_core::YoutubeSetup::built_in(transport, tokens) {
+            Some(setup) => {
+                tracing::info!("YouTube sign-in is available");
+                engine.with_youtube(setup)
+            }
+            None => engine,
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        if let Some(client) = client {
+            // Unused here: dropped without a word about its values.
+            drop((client.id, client.secret));
+            tracing::warn!(
+                "YouTube is unavailable: it keeps its sign-in in the OS credential store, \
+                 which the daemon has only on Windows"
+            );
+        }
+        engine
+    }
 }
 
 /// The Windows backends. Creating them opens no device: each opens what it needs when
@@ -338,7 +391,7 @@ mod tests {
         };
         let token = Token::new(TOKEN).expect("a valid token");
         let server = bind(
-            engine(&options, Arc::new(AuditMemory::new())).expect("an engine"),
+            engine(&options, Arc::new(AuditMemory::new()), None).expect("an engine"),
             0,
             token,
             None,
@@ -426,7 +479,7 @@ mod tests {
     async fn a_port_in_use_fails_to_bind() {
         let token = Token::new(TOKEN).expect("a valid token");
         let server = bind(
-            engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
+            engine(&Options::default(), Arc::new(AuditMemory::new()), None).expect("an engine"),
             0,
             token.clone(),
             None,
@@ -436,7 +489,7 @@ mod tests {
         .expect("binds");
         let port = server.local_addr().port();
         let error = bind(
-            engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
+            engine(&Options::default(), Arc::new(AuditMemory::new()), None).expect("an engine"),
             port,
             token,
             None,
@@ -673,7 +726,7 @@ mod tests {
             ..Options::default()
         };
         let audit = Arc::new(AuditMemory::new());
-        let first = engine(&options, Arc::clone(&audit) as _).expect("an engine");
+        let first = engine(&options, Arc::clone(&audit) as _, None).expect("an engine");
         assert!(file.exists(), "a missing file is created");
         let control = session(&first).await;
         timely(control.call(Call::Batch(Batch::single(Edit::SceneCreate {
@@ -691,7 +744,7 @@ mod tests {
         drop(control);
         drop(first);
 
-        let second = engine(&options, Arc::new(AuditMemory::new())).expect("an engine");
+        let second = engine(&options, Arc::new(AuditMemory::new()), None).expect("an engine");
         let control = session(&second).await;
         match timely(control.call(Call::Query {
             query: Query::SceneList,
@@ -712,7 +765,7 @@ mod tests {
 
         // A file that holds no collection is an error that names it, and is left as it is.
         std::fs::write(&file, "not json").expect("written");
-        let Err(error) = engine(&options, Arc::new(AuditMemory::new())) else {
+        let Err(error) = engine(&options, Arc::new(AuditMemory::new()), None) else {
             panic!("an unloadable file was loaded");
         };
         let message = format!("{error:#}");

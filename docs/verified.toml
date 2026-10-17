@@ -27,7 +27,7 @@ stamp = { hash = "b3:963d560e94ad3155", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:dbacb2dd7907964d" }
 
 ["ARCH#crate-map"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:00badea83615c29f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Layer-6 apps row: desktop links jstream-browser optionally with cef, daemon always links it; matches both Cargo.toml files" }
+stamp = { hash = "b3:daa370c4ed6a1057", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the daemon Cargo.toml only (jstream-youtube as a Windows dependency plus its fake dev-dep); the crate map's rows hold" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: #298's jstream-browser row (helper over pipes, helper feature) and apps/* row (the helper's DLL, unsafe for its one export) sit beside P1's jstream-platform paths row and main's jstream-effects and jstream-anim rows; lint-deps passes; holds" }
@@ -276,7 +276,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:bcf5059924ff7b21", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:44b412ca19ee779b", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: tool list has the wave's device/filter/pairing/preview plus live (23 tools, tests.rs), events bullet keeps the live.changed merge with the wave's youtube drop (events.rs push/supersede), tools.snap is 310,562 bytes so 'about 311 KB'." }
+stamp = { hash = "b3:e595d078d6f76848", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the MCP section after merging wave/m1-2 at fcc584b: the tool list carries live, the live.changed merge sentence matches events.rs, and the wave's annotations bullet holds for the live tool (destructive via its actions, not open-world). Schema size line edited to about 314 KB: tools.snap is 314,097 bytes with both the annotations and the live tool and ends_gesture." }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:340acdb9358d89b0", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
@@ -291,10 +291,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:cffc13aea9f4cbd9", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-checked after the jstream-mcp README purpose gained the live.changed merge in its events bullet: ARCH's events bullet already says the same, and nothing else in the section changed." }
+stamp = { hash = "b3:69095bfebbc5382d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the MCP section after merging wave/m1-2 at fcc584b: the tool list carries live, the live.changed merge sentence matches events.rs, and the wave's annotations bullet holds for the live tool (destructive via its actions, not open-world). Schema size line edited to about 314 KB: tools.snap is 314,097 bytes with both the annotations and the live tool and ends_gesture." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:d703992f51b2a601", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: tool list has the wave's device/filter/pairing/preview plus live (23 tools, tests.rs), events bullet keeps the live.changed merge with the wave's youtube drop (events.rs push/supersede), tools.snap is 310,562 bytes so 'about 311 KB'." }
+stamp = { hash = "b3:a988d558009a046a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the MCP section after merging wave/m1-2 at fcc584b: the tool list carries live, the live.changed merge sentence matches events.rs, and the wave's annotations bullet holds for the live tool (destructive via its actions, not open-world). Schema size line edited to about 314 KB: tools.snap is 314,097 bytes with both the annotations and the live tool and ends_gesture." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -309,16 +309,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:89256a0dd833eb4a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: tool list has the wave's device/filter/pairing/preview plus live (23 tools, tests.rs), events bullet keeps the live.changed merge with the wave's youtube drop (events.rs push/supersede), tools.snap is 310,562 bytes so 'about 311 KB'." }
+stamp = { hash = "b3:9375be2c1dd37c7f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the MCP section after merging wave/m1-2 at fcc584b: the tool list carries live, the live.changed merge sentence matches events.rs, and the wave's annotations bullet holds for the live tool (destructive via its actions, not open-world). Schema size line edited to about 314 KB: tools.snap is 314,097 bytes with both the annotations and the live tool and ends_gesture." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:132dc15d7eafebc8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: tool list has the wave's device/filter/pairing/preview plus live (23 tools, tests.rs), events bullet keeps the live.changed merge with the wave's youtube drop (events.rs push/supersede), tools.snap is 310,562 bytes so 'about 311 KB'." }
+stamp = { hash = "b3:7c00e407f184dab3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the MCP section after merging wave/m1-2 at fcc584b: the tool list carries live, the live.changed merge sentence matches events.rs, and the wave's annotations bullet holds for the live tool (destructive via its actions, not open-world). Schema size line edited to about 314 KB: tools.snap is 314,097 bytes with both the annotations and the live tool and ends_gesture." }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's State and Building-the-zip bullets (dist.rs, .cargo/config.toml, after-review dist job) stand beside #298's sandboxed helper (bootstrap exe renamed plus the DLL, same certificate if signed); now that the helper exists, the zip bullet says it and the CEF runtime are not in the zip yet, which matches dist.rs (it ships no helper); holds" }
@@ -546,7 +546,7 @@ stamp = { hash = "b3:a667852c45363c39", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:67e9c88a4f6bc64f", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#400 waves): main.rs's merge-main usage gains --from; P1's dist dispatch and usage entry stay; xtask line lists docs, lint-deps, governance, dist (the portable zip), gen-schema, golden; holds" }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:595a044273549e60", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: kept the wave's daemon row (opens browser sources with its cef feature) and this PR's desktop and helper rows (feature off until the runtime is packaged; the helper is the renamed bootstrap exe plus DLL driven over pipes, ADR-0048)" }
+stamp = { hash = "b3:9b8dfb560bdcf791", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -564,10 +564,10 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:fe92cdacb6278716" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:00badea83615c29f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Daemon row combines wave/m1's --ui-dir and vcam text with browser sources under cef; matches the daemon README" }
+stamp = { hash = "b3:daa370c4ed6a1057", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon row is unchanged, and main.rs only adds the device-file path; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: the desktop row now says its cef feature waits on packaging the CEF runtime, and the helper row describes the sandboxed helper (bootstrap exe plus DLL, driven over pipes, ADR-0048); P1's desktop paths dependency names no data module; both match the apps' Cargo.toml; holds" }
@@ -1380,7 +1380,7 @@ stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmE
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:e0199e0ce902424d", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's MfMediaDecoders in the Windows backends and the delay-load list (mfplat, mfreadwrite), beside wave/m1-2's note that ServerConfig::tls stays off so the pairing page and device cookie wait on TLS (/pair is 404). Both hold." }
+stamp = { hash = "b3:211f676f26ec5d84", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:2265a78484f9168a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against core#design after merging wave/m1-2 at a87556a: upstream changes are live values in previews and snapshots (this PR) and the Video codecs paragraph (F6). The daemon only builds the engine, hands sessions to the server and wires backends, and its codec check (components.rs lists MfCodecs and requires AAC) is unchanged; sessions per connection still give each client its own gestures." }
@@ -1392,10 +1392,10 @@ stamp = { hash = "b3:81ae1741733b8361", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
-stamp = { hash = "b3:31adea4c41afd5dd", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
+stamp = { hash = "b3:8699127a64ebe169", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/args.rs"]
-stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
+stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/components.rs"]
 stamp = { hash = "b3:a750642233d72b2c" }
@@ -1407,25 +1407,28 @@ stamp = { hash = "b3:5c5aac8c1b12a291" }
 stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data-directory bullet now names jstream-platform's paths module (portable marker handled), Dependencies lists the data directory under jstream-platform, open question 5 says the log default uses it and the token/collection don't yet; matches logs.rs; sits beside main's #328 delay-load text without overlap" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
+stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2c25e12aa4a88f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
+stamp = { hash = "b3:8929469333b4b033", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
+["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/youtube.rs"]
+stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
+
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:3d09afaa16bc23bd", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
+stamp = { hash = "b3:3cec8174e62950f8", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/args.rs"]
-stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
+stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/components.rs"]
 stamp = { hash = "b3:a750642233d72b2c" }
@@ -1437,19 +1440,22 @@ stamp = { hash = "b3:5c5aac8c1b12a291" }
 stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: logs.rs's default dir now comes from jstream_platform::paths::data_dir (its own data_dir() removed); the Startup bullet's 'creates the log directory' still holds; main's WindowsVcam/delay-load text unaffected" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2c25e12aa4a88f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
+stamp = { hash = "b3:8929469333b4b033", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Superseded ADR-0041 mentions in serve.rs and youtube.rs dropped or moved to ADR-0058; the YouTube bullet still matches them" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
+["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/youtube.rs"]
+stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Superseded ADR-0041 mentions in serve.rs and youtube.rs dropped or moved to ADR-0058; the YouTube bullet still matches them" }
+
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/daemon.rs"]
-stamp = { hash = "b3:b998d11ccf5da7ab", by = "agent:wave-owner", note = "Tests bullet still holds: tests/daemon.rs drives the built binary and stops it with SIGINT on Unix; the pairing test now waits for the device's audit line before stopping, which the bullet doesn't describe" }
+stamp = { hash = "b3:88c9bf4093d9c3a5", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/delay_load.rs"]
 stamp = { hash = "b3:fa55ac483c3bac65" }
@@ -1458,13 +1464,13 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:16843bae45198421", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: main's --ui-dir row and P1's Log files bullet (data folder, portable marker) sit beside the wave's pairing device file; #298 moves CEF into the sandboxed helper but adds no flag; the usage rows match args.rs; holds" }
+stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "The YouTube bullet cites ADR-0058 only (0041 and 0051 are superseded); B4's signed_out then sign_in order kept" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
-stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
+stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -1755,10 +1761,10 @@ stamp = { hash = "b3:d5931f8e252cd9f7", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:d3586a31945acf3a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:ae51985426df5664", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: tool table lists the wave's device/filter/pairing/preview and the live tool (23 tools, tests.rs), batch takes ends_gesture (tools.rs), the events paragraph keeps the live.changed in-place merge and adds the wave's youtube drop in that order, matching events.rs push/supersede; tools.snap regenerated." }
+stamp = { hash = "b3:5a1951cff9156549", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at fcc584b: the tool table lists live beside the wave's tools and batch takes ends_gesture; the live paragraph (preview without rev, commit with batch ends_gesture, expiry with the session) holds; the wave's annotations paragraph holds for live (an action makes it destructiveHint, not in OPEN_WORLD), checked by annotations_follow_what_each_tool_can_do with live added; tools.snap regenerated at 314,097 bytes; the events merge paragraph is unchanged." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:44b412ca19ee779b", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: tool table lists the wave's device/filter/pairing/preview and the live tool (23 tools, tests.rs), batch takes ends_gesture (tools.rs), the events paragraph keeps the live.changed in-place merge and adds the wave's youtube drop in that order, matching events.rs push/supersede; tools.snap regenerated." }
+stamp = { hash = "b3:e595d078d6f76848", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at fcc584b: the tool table lists live beside the wave's tools and batch takes ends_gesture; the live paragraph (preview without rev, commit with batch ends_gesture, expiry with the session) holds; the wave's annotations paragraph holds for live (an action makes it destructiveHint, not in OPEN_WORLD), checked by annotations_follow_what_each_tool_can_do with live added; tools.snap regenerated at 314,097 bytes; the events merge paragraph is unchanged." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1785,19 +1791,19 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:89256a0dd833eb4a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: tool table lists the wave's device/filter/pairing/preview and the live tool (23 tools, tests.rs), batch takes ends_gesture (tools.rs), the events paragraph keeps the live.changed in-place merge and adds the wave's youtube drop in that order, matching events.rs push/supersede; tools.snap regenerated." }
+stamp = { hash = "b3:9375be2c1dd37c7f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at fcc584b: the tool table lists live beside the wave's tools and batch takes ends_gesture; the live paragraph (preview without rev, commit with batch ends_gesture, expiry with the session) holds; the wave's annotations paragraph holds for live (an action makes it destructiveHint, not in OPEN_WORLD), checked by annotations_follow_what_each_tool_can_do with live added; tools.snap regenerated at 314,097 bytes; the events merge paragraph is unchanged." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:132dc15d7eafebc8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: tool table lists the wave's device/filter/pairing/preview and the live tool (23 tools, tests.rs), batch takes ends_gesture (tools.rs), the events paragraph keeps the live.changed in-place merge and adds the wave's youtube drop in that order, matching events.rs push/supersede; tools.snap regenerated." }
+stamp = { hash = "b3:7c00e407f184dab3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at fcc584b: the tool table lists live beside the wave's tools and batch takes ends_gesture; the live paragraph (preview without rev, commit with batch ends_gesture, expiry with the session) holds; the wave's annotations paragraph holds for live (an action makes it destructiveHint, not in OPEN_WORLD), checked by annotations_follow_what_each_tool_can_do with live added; tools.snap regenerated at 314,097 bytes; the events merge paragraph is unchanged." }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:e92d12850b2888c1", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: added the live.changed merge to the events bullet beside the wave's youtube drop (events.rs push/supersede); server, tools (PEOPLE_ONLY, live tool generated from the schema), jsonrpc, stdio and errors unchanged." }
+stamp = { hash = "b3:2eced6e946fd9545", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at fcc584b (#482 annotations, #312): the Tools bullet's annotations and OPEN_WORLD sit beside the live tool, and the Events bullet keeps the in-place live.changed merge and the youtube drop (events.rs push/supersede). The live tool gets its annotations from effect(): live.set/live.cancel are actions, so it is destructive and not open-world, which the extended annotations_follow_what_each_tool_can_do now asserts." }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -1815,16 +1821,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:89256a0dd833eb4a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: added the live.changed merge to the events bullet beside the wave's youtube drop (events.rs push/supersede); server, tools (PEOPLE_ONLY, live tool generated from the schema), jsonrpc, stdio and errors unchanged." }
+stamp = { hash = "b3:9375be2c1dd37c7f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at fcc584b (#482 annotations, #312): the Tools bullet's annotations and OPEN_WORLD sit beside the live tool, and the Events bullet keeps the in-place live.changed merge and the youtube drop (events.rs push/supersede). The live tool gets its annotations from effect(): live.set/live.cancel are actions, so it is destructive and not open-world, which the extended annotations_follow_what_each_tool_can_do now asserts." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:132dc15d7eafebc8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: added the live.changed merge to the events bullet beside the wave's youtube drop (events.rs push/supersede); server, tools (PEOPLE_ONLY, live tool generated from the schema), jsonrpc, stdio and errors unchanged." }
+stamp = { hash = "b3:7c00e407f184dab3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at fcc584b (#482 annotations, #312): the Tools bullet's annotations and OPEN_WORLD sit beside the live tool, and the Events bullet keeps the in-place live.changed merge and the youtube drop (events.rs push/supersede). The live tool gets its annotations from effect(): live.set/live.cancel are actions, so it is destructive and not open-world, which the extended annotations_follow_what_each_tool_can_do now asserts." }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
@@ -3588,7 +3594,7 @@ stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: daemon Usage now carries main's data-directory default (P1) beside the wave's pairing device file; the prerequisites use neither and the token folder step still holds; holds" }
+stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (ADR citation only); holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -3597,7 +3603,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:d329e713237eb3f1", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the smoke script section against the CLI usage change (no live-value command; events prints live.changed/live.ended): the script's steps use only output, events, status and snapshot, so its checks are unchanged." }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage (Y3's no YouTube-bound outputs; #450's capture fit) and daemon Usage (P1's data directory, the wave's device file); smoke.ps1 uses a generic RTMP output, adds no items and passes --token-file and --log-dir in its run folder; holds" }
+stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (ADR citation only); holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -3609,7 +3615,7 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:d329e713237eb3f1", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the manual steps against the CLI usage and server design changes (no live-value CLI command, live gestures expiring with the session, outbox sizing): every command and check here (output create/set-key/start/stop, events, snapshot) is unchanged." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
+stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (ADR citation only); holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:81ae1741733b8361", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the manual steps against the CLI usage and server design changes (no live-value CLI command, live gestures expiring with the session, outbox sizing): every command and check here (output create/set-key/start/stop, events, snapshot) is unchanged." }
