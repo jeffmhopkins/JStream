@@ -1,6 +1,6 @@
 //! Reading Core Audio HAL properties (ADR-0063 §4): the device list, the default
 //! devices, a device's UID, name, channels and nominal rate, its input streams' virtual
-//! formats, the process objects, and a tap's format.
+//! formats, and the process objects.
 //!
 //! Every read is `AudioObjectGetPropertyData` on a property address with the main
 //! element, into a value or buffer this module owns, so the `unsafe` stays here.
@@ -18,11 +18,11 @@ use objc2_core_audio::{
     kAudioDevicePropertyPreferredChannelsForStereo, kAudioDevicePropertyStreamConfiguration,
     kAudioDevicePropertyStreams, kAudioHardwarePropertyDefaultInputDevice,
     kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDevices,
-    kAudioHardwarePropertyProcessObjectList, kAudioObjectPropertyElementMain,
-    kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyScopeInput,
-    kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject, kAudioObjectUnknown,
-    kAudioHardwarePropertyTranslatePIDToProcessObject, kAudioProcessPropertyBundleID,
-    kAudioProcessPropertyPID, kAudioStreamPropertyVirtualFormat, kAudioTapPropertyFormat,
+    kAudioHardwarePropertyProcessObjectList, kAudioHardwarePropertyTranslatePIDToProcessObject,
+    kAudioObjectPropertyElementMain, kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal,
+    kAudioObjectPropertyScopeInput, kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject,
+    kAudioObjectUnknown, kAudioProcessPropertyBundleID, kAudioProcessPropertyPID,
+    kAudioStreamPropertyVirtualFormat,
 };
 use objc2_core_audio_types::{AudioBuffer, AudioBufferList, AudioStreamBasicDescription};
 use objc2_core_foundation::{CFRetained, CFString};
@@ -284,29 +284,6 @@ pub(super) fn process_object(pid: i32) -> Result<Option<AudioObjectID>, Platform
     Ok((object != kAudioObjectUnknown).then_some(object))
 }
 
-/// The channel count of a tap's format (`kAudioTapPropertyFormat`), if it reports one.
-pub(super) fn tap_channels(tap: AudioObjectID) -> Option<u32> {
-    let zero = AudioStreamBasicDescription {
-        mSampleRate: 0.0,
-        mFormatID: 0,
-        mFormatFlags: 0,
-        mBytesPerPacket: 0,
-        mFramesPerPacket: 0,
-        mBytesPerFrame: 0,
-        mChannelsPerFrame: 0,
-        mBitsPerChannel: 0,
-        mReserved: 0,
-    };
-    read_value(
-        tap,
-        &address(kAudioTapPropertyFormat, kAudioObjectPropertyScopeGlobal),
-        zero,
-    )
-    .ok()
-    .map(|f| f.mChannelsPerFrame)
-    .filter(|&c| c > 0)
-}
-
 /// The devices present now.
 fn device_ids() -> Result<Vec<AudioObjectID>, PlatformError> {
     read_list(
@@ -509,7 +486,9 @@ pub(super) fn plan(
 /// # Errors
 /// As for [`plan`].
 pub(super) fn plan_tap(device: AudioObjectID) -> Result<StreamPlan, PlatformError> {
-    plan_with(device, AudioDirection::Input, |_, _, buffers| tap_pair(buffers))
+    plan_with(device, AudioDirection::Input, |_, _, buffers| {
+        tap_pair(buffers)
+    })
 }
 
 /// [`plan`], with `pair` choosing the stereo pair from the device, its scope and its

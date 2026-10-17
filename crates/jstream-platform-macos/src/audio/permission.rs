@@ -147,8 +147,7 @@ mod tests {
     #[test]
     fn the_system_audio_hint_names_the_settings_pane() {
         assert!(
-            SYSTEM_AUDIO_HINT
-                .contains("Privacy & Security > Screen & System Audio Recording"),
+            SYSTEM_AUDIO_HINT.contains("Privacy & Security > Screen & System Audio Recording"),
             "{SYSTEM_AUDIO_HINT}"
         );
         assert!(!SYSTEM_AUDIO_HINT.contains("  "), "{SYSTEM_AUDIO_HINT}");

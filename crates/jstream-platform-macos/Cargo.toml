@@ -54,3 +54,4 @@ objc2-foundation.workspace = true
 objc2-screen-capture-kit.workspace = true
 objc2-security.workspace = true
 objc2-video-toolbox.workspace = true
+tracing.workspace = true
