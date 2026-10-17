@@ -45,11 +45,11 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
-| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 94% | 17 | 0 | 1 |
+| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 94% | 17 | 1 | 0 |
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 94% | 33 | 1 | 1 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 3 | 3 |
+| [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 4 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 3 | 4 |
 
 97 of 113 items are merged; 5 of those still wait on a run on Windows hardware.
@@ -95,7 +95,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Y2 | OAuth token store | ✅ merged | #169 |
 | YA | ADR-0041 one sign-in | ✅ merged | #214 |
 | Y3 | YouTube in the engine | ✅ merged | #223 |
-| A6b | Daemon YouTube wiring | ⏳ planned |  |
+| A6b | Daemon YouTube wiring | 🔍 in review | #312 |
 
 </details>
 
@@ -124,7 +124,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
 | C3 | Display and window capture sources | ⏳ planned |  |
-| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341 | #283, #289, #298 |
+| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341 | #283, #289, #298, #326 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |
@@ -200,7 +200,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | D8p | Audio chain protocol fields | 🔍 in review | #303 |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
-| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | 🔍 in review | #319 |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 
 </details>

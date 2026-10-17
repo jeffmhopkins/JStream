@@ -269,7 +269,8 @@
             }
           }
         ]
-      }
+      },
+      "video_mix": "prog"
     },
     {
       "id": "tw",
@@ -290,7 +291,8 @@
           "url": "rtmps://a.rtmps.youtube.com:443/live2"
         }
       },
-      "encoder_profile": "low"
+      "encoder_profile": "low",
+      "video_mix": "side"
     }
   ],
   "encoders": [
@@ -331,6 +333,37 @@
           "codec": "aac",
           "kbps": 128
         }
+      }
+    }
+  ],
+  "video_mixes": [
+    {
+      "id": "prog",
+      "name": "Program 720p",
+      "mix": {
+        "input": {
+          "type": "program"
+        },
+        "resolution": {
+          "width": 1280,
+          "height": 720
+        },
+        "fps_divisor": 1
+      }
+    },
+    {
+      "id": "side",
+      "name": "Side",
+      "mix": {
+        "input": {
+          "type": "scene",
+          "scene_id": "b"
+        },
+        "resolution": {
+          "width": 640,
+          "height": 360
+        },
+        "fps_divisor": 2
       }
     }
   ],

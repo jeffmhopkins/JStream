@@ -443,7 +443,7 @@ fn a_batch_a_query_and_events_round_trip() {
 
     let response = ok(harness.run(control.call(create_scene("main"))));
     assert_eq!(response.id, RequestId::new("req_1"));
-    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
     assert_eq!(engine.rev(), Rev(1));
     // The event carries this client's request ID, as the client chose it.
     assert_eq!(
@@ -517,7 +517,7 @@ fn concurrent_calls_each_get_their_own_answer_and_event() {
     let mut by_request = Vec::new();
     for answer in answers {
         let response = ok(answer);
-        let CallResult::Batch { rev } = response.result else {
+        let CallResult::Batch { rev, .. } = response.result else {
             panic!("not a batch result: {:?}", response.result);
         };
         by_request.push((response.id, rev));
@@ -1040,7 +1040,7 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
     });
     // And its calls are answered.
     let response = ok(harness.run(control.call(create_scene("main"))));
-    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
     assert!(matches!(
         next_event(&harness, &mut events),
         Some(Event::StateChanged { rev: Rev(1), .. })
@@ -1248,7 +1248,7 @@ fn a_client_that_never_says_hello_is_closed() {
     // The client that said hello in time is still served after the deadline.
     harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
     let response = ok(harness.run(control.call(create_scene("main"))));
-    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
 }
 
 /// A client that says `hello` in time to an engine that never answers it is still closed
@@ -1373,7 +1373,185 @@ fn a_client_that_sends_headers_too_slowly_is_dropped() {
     // The client whose request was accepted is still served after the deadline.
     harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
     let response = ok(harness.run(control.call(create_scene("main"))));
-    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
+}
+
+/// #354: at most `max_tcp_connections` TCP connections are open at once, whatever they
+/// carry: ones that never send a request count, and so do upgraded WebSocket
+/// connections, which the header-read deadline no longer bounds. One accepted beyond it
+/// is closed at once, unanswered; once one closes, a new connection is served again.
+#[test]
+fn tcp_connections_over_the_cap_are_dropped() {
+    use tokio::io::AsyncReadExt;
+    let harness = start_with(&MockEngine::new(), |config| {
+        config.max_tcp_connections = 4;
+        // Long enough that only the cap can drop a connection here.
+        config.header_read_timeout = Duration::from_secs(60);
+        config.handshake_timeout = Duration::from_secs(60);
+    });
+    // Two authenticated WebSocket sessions and two connections that send nothing.
+    let sessions = [harness.session(), harness.session()];
+    let addr = harness.authority.clone();
+    let mut idle: Vec<tokio::net::TcpStream> = harness.run(async {
+        let mut idle = Vec::new();
+        for _ in 0..2 {
+            match tokio::net::TcpStream::connect(&addr).await {
+                Ok(stream) => idle.push(stream),
+                Err(error) => panic!("connect: {error}"),
+            }
+        }
+        idle
+    });
+    // A fifth is closed by the server at once (without the cap it would wait for the
+    // 60 s header-read deadline).
+    let read = harness.run(async {
+        let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+            Ok(stream) => stream,
+            Err(error) => panic!("connect: {error}"),
+        };
+        let mut buf = [0u8; 64];
+        tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buf)).await
+    });
+    assert!(
+        matches!(read, Ok(Ok(0) | Err(_))),
+        "the fifth connection was not dropped: {read:?}"
+    );
+    // Through the client too: it gets no session.
+    expect_disconnected(harness.connect());
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        2,
+        "no third session"
+    );
+    // The sessions under the cap are still served.
+    for (control, _) in &sessions {
+        ok(harness.run(control.call(Call::Query {
+            query: Query::SceneList,
+        })));
+    }
+    // Closing an idle connection frees its place, once the server has seen it go.
+    drop(idle.pop());
+    harness.run(async {
+        loop {
+            match WsControl::connect(WsConfig::new(harness.url.clone(), TOKEN)).await {
+                Ok(control) => break drop(control),
+                Err(ControlError::Disconnected { .. }) => {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                Err(error) => panic!("unexpected connection error: {error}"),
+            }
+        }
+    });
+    assert_eq!(harness.sessions.load(Ordering::SeqCst), 3);
+}
+
+/// A session whose calls count themselves in `entered`, then each wait for a permit
+/// from `gate`, so a test can hold calls in flight.
+struct Stalled {
+    inner: jstream_control::MockControl,
+    entered: Arc<AtomicUsize>,
+    gate: Arc<Semaphore>,
+}
+
+impl Control for Stalled {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.inner.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        Box::pin(async move {
+            self.entered.fetch_add(1, Ordering::SeqCst);
+            match self.gate.acquire().await {
+                Ok(permit) => permit.forget(),
+                Err(error) => panic!("gate: {error}"),
+            }
+            self.inner.call(call).await
+        })
+    }
+
+    fn events(&self) -> EventStream {
+        self.inner.events()
+    }
+}
+
+/// #354: a connection has at most `MAX_IN_FLIGHT` calls in flight. A client that sends
+/// more without waiting for answers is not read until one completes, so the session
+/// never sees more than that at once; every request is still answered once the engine
+/// catches up.
+#[test]
+fn calls_in_flight_per_connection_are_capped() {
+    use crate::session::MAX_IN_FLIGHT;
+    let entered = Arc::new(AtomicUsize::new(0));
+    let gate = Arc::new(Semaphore::new(0));
+    let engine = MockEngine::new();
+    let connector: Connector = {
+        let (entered, gate) = (Arc::clone(&entered), Arc::clone(&gate));
+        Arc::new(move || {
+            Box::new(Stalled {
+                inner: engine.connect(),
+                entered: Arc::clone(&entered),
+                gate: Arc::clone(&gate),
+            })
+        })
+    };
+    let harness = serve(
+        connector,
+        |_| {},
+        Arc::default(),
+        Arc::default(),
+        Arc::default(),
+        Arc::default(),
+    );
+    let bearer = format!("Bearer {TOKEN}");
+    let host = harness.authority.clone();
+    let mut socket = match harness.raw(None, Some(&host), Some(&bearer)) {
+        Ok(socket) => socket,
+        Err(status) => panic!("refused: {status}"),
+    };
+    let hello = format!(
+        r#"{{"type":"hello","protocol":{{"major":{},"minor":{}}},"client_name":"raw"}}"#,
+        PROTOCOL_VERSION.major, PROTOCOL_VERSION.minor
+    );
+    match exchange(&harness, &mut socket, &hello) {
+        ServerMessage::Welcome(_) => {}
+        other => panic!("unexpected reply {other:?}"),
+    }
+    let sent = MAX_IN_FLIGHT * 2;
+    harness.run(async {
+        for n in 0..sent {
+            let request = format!(
+                r#"{{"type":"request","id":"q{n}","call":{{"kind":"query","query":{{"type":"scene.list"}}}}}}"#
+            );
+            if let Err(error) = socket.send(Message::Text(request.into())).await {
+                panic!("send: {error}");
+            }
+        }
+    });
+    harness.wait_until(|| entered.load(Ordering::SeqCst) >= MAX_IN_FLIGHT);
+    // Give the connection time to read more, which it must not.
+    harness.run(async { tokio::time::sleep(Duration::from_millis(300)).await });
+    assert_eq!(entered.load(Ordering::SeqCst), MAX_IN_FLIGHT);
+    // Once the engine answers, the rest are read, and everything is answered.
+    gate.add_permits(sent);
+    let answered = harness.run(async {
+        let mut answered = 0;
+        while answered < sent {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    match serde_json::from_str::<ServerMessage>(text.as_str()) {
+                        Ok(ServerMessage::Response(_)) => answered += 1,
+                        Ok(ServerMessage::Event(_)) => {}
+                        other => panic!("unexpected reply {other:?}"),
+                    }
+                }
+                Some(Ok(_)) => {}
+                other => panic!("connection ended: {other:?}"),
+            }
+        }
+        answered
+    });
+    assert_eq!(answered, sent);
+    assert_eq!(entered.load(Ordering::SeqCst), sent);
 }
 
 // MCP's streamable-HTTP transport (`mcp.rs`), driven with raw HTTP/1.1 requests.
@@ -2579,6 +2757,139 @@ fn pairing_codes_and_device_tokens_are_never_logged() {
             !logged.contains(secret.as_str()) && !logged.contains(&bare),
             "{secret} logged: {logged}"
         );
+    }
+}
+
+/// Sends a raw text frame and returns every text frame the server sends until the
+/// answer (a response or an error), the answer last, as the server wrote them.
+fn exchange_texts(harness: &Harness, socket: &mut RawSocket, text: &str) -> Vec<String> {
+    harness.run(async {
+        if let Err(error) = socket.send(Message::Text(text.into())).await {
+            panic!("send: {error}");
+        }
+        let mut texts = Vec::new();
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(reply))) => {
+                    let answered = matches!(
+                        serde_json::from_str(reply.as_str()),
+                        Ok(ServerMessage::Response(_) | ServerMessage::Error(_))
+                    );
+                    texts.push(reply.as_str().to_owned());
+                    if answered {
+                        return texts;
+                    }
+                }
+                Some(Ok(_)) => continue,
+                other => panic!("no answer to {text}: {other:?}"),
+            }
+        }
+    })
+}
+
+/// R-SEC-001 over the server's WebSocket layer and its MCP endpoint (#353): a stream
+/// key sent with `output.set_key` reaches the engine and nothing the server sends back
+/// or logs. That covers the answer, the errors for a key of the wrong shape, for a key
+/// that isn't a string and for a frame that isn't JSON, `output.status`, the events, and
+/// MCP tool results, valid and refused.
+#[test]
+fn stream_keys_are_never_echoed_or_logged() {
+    const SECRET: &str = "live_SERVER-REDACT-ME-41c9";
+    let capture = crate::gate::tests::Capture::default();
+    let engine = MockEngine::new();
+    let mut seen = Vec::new();
+    tracing::subscriber::with_default(capture.clone(), || {
+        let harness = start_on_this_thread(&engine, mcp_on());
+        let bearer = format!("Bearer {TOKEN}");
+        let mut socket = match harness.raw(
+            Some(&harness.own_origin()),
+            Some(&harness.authority.clone()),
+            Some(&bearer),
+        ) {
+            Ok(socket) => socket,
+            Err(status) => panic!("refused: {status}"),
+        };
+        let hello = r#"{"type":"hello","protocol":{"major":0,"minor":7},"client_name":"raw"}"#;
+        assert!(matches!(
+            exchange(&harness, &mut socket, hello),
+            ServerMessage::Welcome(_)
+        ));
+        let create = r#"{"type":"request","id":"c1","call":{"kind":"batch","edits":[{"type":"output.create","output_id":"out_yt","kind":{"type":"rtmp","target":{"type":"generic","url":"rtmps://a.rtmps.youtube.com:443/live2"}}}]}}"#;
+        seen.extend(exchange_texts(&harness, &mut socket, create));
+        let set_key = |id: &str, key: &str| {
+            format!(
+                r#"{{"type":"request","id":"{id}","call":{{"kind":"action","action":{{"type":"output.set_key","output_id":"out_yt","key":{key}}}}}}}"#
+            )
+        };
+        let answers = [
+            (set_key("k1", &format!("\"{SECRET}\"")), None),
+            (
+                set_key("k2", &format!("\"{SECRET} with spaces\"")),
+                Some("invalid_argument"),
+            ),
+            (set_key("k3", &format!("[\"{SECRET}\"]")), Some("malformed")),
+            (
+                format!(r#"{{"type":"request","id":"k4","call":{{"kind":"action","action":{{"type":"output.set_key","key":"{SECRET}""#),
+                Some("malformed"),
+            ),
+            (
+                r#"{"type":"request","id":"k5","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}"#.to_owned(),
+                None,
+            ),
+        ];
+        for (frame, error) in answers {
+            let texts = exchange_texts(&harness, &mut socket, &frame);
+            let answer = texts.last().map(String::as_str).unwrap_or_default();
+            match (serde_json::from_str::<ServerMessage>(answer), error) {
+                (Ok(ServerMessage::Response(_)), None) => {}
+                (Ok(ServerMessage::Error(got)), Some(code)) => {
+                    assert_eq!(got.error.error.code(), code, "{answer}");
+                }
+                other => panic!("unexpected answer to {frame}: {other:?}"),
+            }
+            seen.extend(texts);
+        }
+        assert!(
+            seen.iter().any(|text| text.contains("\"key_set\":true")),
+            "output.status reports the key: {seen:?}"
+        );
+
+        let session = harness.mcp_session("agent");
+        let mcp_set_key = |key: &str| {
+            serde_json::json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+                "name": "output",
+                "arguments": {"op": {"type": "output.set_key", "output_id": "out_yt", "key": key}}
+            }})
+        };
+        let reply = harness.mcp(Some(&session), &mcp_set_key(SECRET));
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(reply.json()["result"]["isError"], false, "{}", reply.body);
+        seen.push(reply.body);
+        let reply = harness.mcp(Some(&session), &mcp_set_key(&format!("{SECRET}\n")));
+        assert_eq!(reply.json()["result"]["isError"], true, "{}", reply.body);
+        seen.push(reply.body);
+        let events = serde_json::json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+            "params": {"name": "events", "arguments": {}}});
+        let reply = harness.mcp(Some(&session), &events);
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        seen.push(reply.body);
+    });
+    assert_eq!(
+        engine
+            .stream_key(&OutputId::new("out_yt"))
+            .as_ref()
+            .map(jstream_control::protocol::SecretString::expose),
+        Some(SECRET),
+        "the key reached the engine"
+    );
+    let logged = capture.text();
+    assert!(
+        logged.contains("output.set_key") || logged.contains("tools/call"),
+        "the server logged the calls: {logged}"
+    );
+    seen.push(logged);
+    for text in &seen {
+        assert!(!text.contains("REDACT-ME"), "the key leaked: {text}");
     }
 }
 

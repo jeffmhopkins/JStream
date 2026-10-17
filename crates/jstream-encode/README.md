@@ -190,8 +190,8 @@ SPS and PPS of the first keyframe, which carries them in-band (Annex B). See
 live session for the key or opens and registers one. `SessionKey<M>` is the key ARCH
 describes, `(mix, settings)`, with `M` the engine's mix or bus ID and
 `EncoderSettings` the platform configs. `jstream-core` keys its registry by the
-protocol's encoder profile instead (its ID and settings), because there is only the
-program mix until video mixes exist, and maps the profile to platform configs itself.
+video mix an output shows (with that mix's size and rate) and the protocol's encoder
+profile (its ID and settings), and maps the profile to platform configs itself.
 The registry isn't synchronised; the engine keeps it on the control plane. A session
 lives while an output holds its `Arc`; the output that lets go last should `finish` it
 (it can tell with `Arc::into_inner`).

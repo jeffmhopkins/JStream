@@ -3,9 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    BusId, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId,
-    OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId,
-    SourceKind, parity,
+    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor,
+    OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole,
+    SourceId, SourceKind, parity,
 };
 use serde_json::{Value, json};
 
@@ -87,8 +87,9 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
 /// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
-/// deletes the virtual camera `vcam`, which the parity collection gained after the
-/// fixture was written; `a_virtual_camera_round_trips` covers it.
+/// deletes the virtual camera `vcam` and clears the hotkeys, which the parity collection
+/// gained after the fixture was written; `a_virtual_camera_round_trips` and
+/// `hotkeys_round_trip` cover them.
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -103,6 +104,12 @@ fn fixture_graph() -> Graph {
             },
             Edit::OutputDelete {
                 output_id: OutputId::new("vcam"),
+            },
+            Edit::HotkeyClear {
+                chord: Chord::new("F1"),
+            },
+            Edit::HotkeyClear {
+                chord: Chord::new("Ctrl+Digit1"),
             },
         ],
         None,
@@ -207,6 +214,62 @@ fn clone_links_round_trip() {
     };
     assert_eq!(link("copy"), Some(Some(SourceId::new("orig"))));
     assert_eq!(link("plain"), Some(None));
+}
+
+/// Hotkey bindings save ordered by chord, with their actions as `hotkey.set` takes them,
+/// and load back the same. A file without them (every v1 file written before they
+/// existed, such as the fixture) loads with none.
+#[test]
+fn hotkeys_round_trip() {
+    let mut graph = fixture_graph();
+    assert_eq!(graph.state().hotkeys().len(), 0);
+    let applied = graph.apply(
+        &[
+            Edit::HotkeySet {
+                chord: Chord::new("Shift+F2"),
+                action: Action::OutputStop {
+                    output_id: OutputId::new("yt"),
+                },
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F1"),
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("a"),
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        saved["hotkeys"],
+        json!([
+            {"chord": "F1", "action": {"type": "scene.switch", "scene_id": "a"}},
+            {"chord": "Shift+F2", "action": {"type": "output.stop", "output_id": "yt"}}
+        ])
+    );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A binding is checked on load as `hotkey.set` checks it: here its scene is missing.
+#[test]
+fn a_hotkey_naming_a_missing_scene_is_refused() {
+    let file = edit_file(|v| {
+        v["hotkeys"] =
+            json!([{"chord": "F1", "action": {"type": "scene.switch", "scene_id": "gone"}}]);
+    });
+    assert_eq!(
+        load(&file),
+        Err(LoadError::Invalid {
+            object: "hotkey `F1`".into(),
+            error: Box::new(ProtocolError::NotFound {
+                entity: jstream_protocol::EntityKind::Scene,
+                id: "gone".into(),
+            }),
+        })
+    );
 }
 
 #[test]
@@ -353,6 +416,41 @@ fn a_removed_master_send_round_trips() {
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
     assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// A file saved before video mixes existed has neither `video_mixes` nor any output's
+/// `video_mix`. It loads with no mixes, every output showing none.
+#[test]
+fn a_file_without_video_mixes_loads() {
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("video_mixes"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("video_mix"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    assert_eq!(graph.state().video_mixes().len(), 0);
+    assert!(graph.state().outputs().all(|o| o.video_mix().is_none()));
+}
+
+/// A mix is rebuilt with `video_mix.create`, so one showing a scene the file lacks is
+/// refused, and so is an output naming a mix the file lacks.
+#[test]
+fn mixes_and_outputs_naming_missing_objects_are_refused() {
+    let file = edit_file(|v| v["video_mixes"][1]["mix"]["input"]["scene_id"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "video mix `side`"),
+        "{:?}",
+        load(&file)
+    );
+    let file = edit_file(|v| v["outputs"][0]["video_mix"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "output `rec`"),
+        "{:?}",
+        load(&file)
+    );
 }
 
 /// #362: a source whose settings draw a bus loads: the buses are made before the

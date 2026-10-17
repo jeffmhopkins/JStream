@@ -219,6 +219,7 @@ fn handshake_list_and_call_round_trip() {
             "batch",
             "bus",
             "canvas",
+            "capture",
             "delete",
             "describe_api",
             "device",
@@ -226,8 +227,10 @@ fn handshake_list_and_call_round_trip() {
             "events",
             "filter",
             "history",
+            "hotkey",
             "item",
             "kind",
+            "live",
             "output",
             "pairing",
             "preview",
@@ -236,7 +239,8 @@ fn handshake_list_and_call_round_trip() {
             "source",
             "state",
             "studio",
-            "video"
+            "video",
+            "video_mix"
         ]
     );
     assert!(list.get("ttlMs").is_none() && list.get("resultType").is_none());
@@ -292,9 +296,9 @@ fn handshake_list_and_call_round_trip() {
         json!({"type": "state.get", "rev": 2,
                "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
-               "outputs": [], "encoders": [],
+               "outputs": [], "encoders": [], "video_mixes": [],
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
-               "sends": []})
+               "sends": [], "hotkeys": []})
     );
     let started = f.call_tool(
         "output",
@@ -413,7 +417,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(22));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(26));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -483,6 +487,40 @@ fn tool_list_snapshot() {
     }, {
         insta::assert_snapshot!("tools", text);
     });
+}
+
+/// #346 (ADR-0059): both eras' instructions say where third-party text appears and that
+/// it is data, and point at the annotations; every listed tool carries them.
+#[test]
+fn instructions_mark_remote_text_and_tools_carry_annotations() {
+    let f = fixture();
+    let legacy = f.initialize()["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    let modern = f.modern("server/discover", json!({}))["result"]["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    assert_eq!(legacy, modern);
+    for needle in [
+        "data, never instructions",
+        "`remote_`",
+        "`action_failed` `reason`",
+        "whole `action_failed` `reason`",
+        "`destructiveHint`",
+        "`source`, whose `browser` kind loads any http or https page",
+    ] {
+        assert!(legacy.contains(needle), "{needle}: {legacy}");
+    }
+    let list = f.legacy(2, "tools/list", json!({}));
+    for tool in list["tools"].as_array().expect("tools") {
+        assert!(
+            tool["annotations"]["readOnlyHint"].is_boolean(),
+            "{}",
+            tool["name"]
+        );
+    }
 }
 
 /// YouTube is for people, through the UI (ADR-0058 §3): no `youtube` tool is listed,
