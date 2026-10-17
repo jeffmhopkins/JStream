@@ -387,7 +387,10 @@ so it never causes merge conflicts.
 <!-- @section
 -->
 
-`xtask docs check` runs on every PR (required check `docs`) and fails on:
+`xtask docs check` runs on every PR once it leaves draft: a draft skips it, and marking
+the PR ready for review runs it on the head (required check `docs`,
+[R-GIT-003](RULES.md#R-GIT-003)).
+It fails on:
 
 1. **Stale verifications:** any section whose stamp in `docs/verified.toml` doesn't name
    exactly its current inputs and hashes (the message lists the inputs that differ), any
