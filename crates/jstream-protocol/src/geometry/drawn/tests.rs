@@ -345,3 +345,49 @@ fn a_drawn_vertex_of_a_local_point_matches_the_polygon() {
             .is_err()
     );
 }
+
+/// Edge-on is the plane's facing, not an area: in f32 a quarter turn leaves a sliver whose
+/// area grows with the item, so a canvas-sized item turned or tilted exactly 90° would
+/// otherwise draw a polygon thousands of pixels tall (#611 review, B1).
+#[test]
+fn a_large_item_edge_on_draws_nothing_and_unplaces_nothing() {
+    let sized = |width: f32, height: f32, tilt: f32, turn: f32, p: Option<f32>| {
+        let mut geometry = ItemGeometry::try_new(
+            Vec2::new(960.0, 540.0).expect("finite"),
+            Size::try_new(width, height).expect("positive"),
+        )
+        .expect("geometry");
+        geometry.fit_mode = FitMode::Stretch;
+        geometry.tilt_deg = finite(tilt);
+        geometry.turn_deg = finite(turn);
+        geometry.perspective_px = p.map(finite);
+        geometry
+    };
+    for geometry in [
+        sized(1920.0, 1080.0, 0.0, 90.0, Some(1000.0)),
+        sized(1920.0, 1080.0, 90.0, 0.0, Some(1000.0)),
+        sized(1280.0, 720.0, 0.0, 90.0, None),
+        sized(8000.0, 8000.0, 0.0, 90.0, Some(800.0)),
+        sized(8000.0, 8000.0, -90.0, 0.0, None),
+    ] {
+        let content = geometry
+            .content(1920, 1080, Crop::default())
+            .expect("content")
+            .expect("pixels");
+        assert_eq!(geometry.drawn_polygon(&content), Ok(None), "{geometry:?}");
+        for (x, y) in [(960.0, 540.0), (960.001, -12960.0), (0.0, 0.0)] {
+            assert_eq!(geometry.unplace(CanvasPoint { x, y }), Ok(None));
+        }
+    }
+    // A degree off, it draws.
+    let content = sized(1920.0, 1080.0, 0.0, 89.0, Some(1000.0))
+        .content(1920, 1080, Crop::default())
+        .expect("content")
+        .expect("pixels");
+    assert!(
+        sized(1920.0, 1080.0, 0.0, 89.0, Some(1000.0))
+            .drawn_polygon(&content)
+            .expect("ok")
+            .is_some()
+    );
+}
