@@ -3,8 +3,8 @@
 // with its parameters at group 0, binding 4 (`var<uniform> p: Params;`).
 //
 // Images are premultiplied linear light (`Rgba16Float`). An imported input is straight
-// sRGB-decoded; `src` and `aux` premultiply it, so filter code always sees premultiplied
-// linear colour.
+// sRGB-decoded, or (a browser page) sRGB code values already multiplied by alpha; `src`,
+// `texel` and `aux` convert both, so filter code always sees premultiplied linear colour.
 
 struct Frame {
     // Input size in pixels.
@@ -17,10 +17,11 @@ struct Frame {
     // It jumps back to 0 once a day: a kind that moves with time computes its phase
     // on the CPU in f64 and passes it in its Params instead.
     time: f32,
-    // 1 when the input is straight alpha (an import), else 0.
-    straight: f32,
-    // 1 when the aux image is straight alpha, else 0.
-    aux_straight: f32,
+    // How the input stores alpha: 0 premultiplied linear, 1 straight (an import),
+    // 2 premultiplied sRGB code values (an imported browser page).
+    alpha: f32,
+    // The same for the aux image.
+    aux_alpha: f32,
 }
 
 struct VsOut {
@@ -49,24 +50,30 @@ fn vs(@builtin(vertex_index) index: u32) -> VsOut {
     return out;
 }
 
-fn premul_if(c: vec4<f32>, straight: f32) -> vec4<f32> {
-    return select(c, vec4<f32>(c.rgb * c.a, c.a), straight > 0.5);
+// `c` as premultiplied linear, given its `alpha` mode (see `Frame`).
+fn to_premul_linear(c: vec4<f32>, alpha: f32) -> vec4<f32> {
+    if (alpha > 1.5) {
+        // Premultiplied code values: a filtered texel keeps rgb <= a, up to rounding.
+        let straight = select(vec3<f32>(0.0), min(c.rgb / c.a, vec3<f32>(1.0)), c.a > 0.0);
+        return vec4<f32>(srgb_to_linear(straight) * c.a, c.a);
+    }
+    return select(c, vec4<f32>(c.rgb * c.a, c.a), alpha > 0.5);
 }
 
 // The input, bilinear, premultiplied linear. Outside 0..1 clamps to the edge.
 fn src(uv: vec2<f32>) -> vec4<f32> {
-    return premul_if(textureSampleLevel(input_tex, lin, uv, 0.0), frame.straight);
+    return to_premul_linear(textureSampleLevel(input_tex, lin, uv, 0.0), frame.alpha);
 }
 
 // One input texel, clamped to the image.
 fn texel(px: vec2<i32>) -> vec4<f32> {
     let max_px = vec2<i32>(frame.in_size) - vec2<i32>(1);
-    return premul_if(textureLoad(input_tex, clamp(px, vec2<i32>(0), max_px), 0), frame.straight);
+    return to_premul_linear(textureLoad(input_tex, clamp(px, vec2<i32>(0), max_px), 0), frame.alpha);
 }
 
 // The auxiliary image (a mask, a second pass's input), bilinear, premultiplied linear.
 fn aux(uv: vec2<f32>) -> vec4<f32> {
-    return premul_if(textureSampleLevel(aux_tex, lin, uv, 0.0), frame.aux_straight);
+    return to_premul_linear(textureSampleLevel(aux_tex, lin, uv, 0.0), frame.aux_alpha);
 }
 
 fn unpremul(c: vec4<f32>) -> vec4<f32> {

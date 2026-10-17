@@ -4,8 +4,8 @@
 //! history logs it and checks a step's touched set against other clients' later ones.
 
 use jstream_protocol::{
-    BusId, Edit, EncoderProfileId, FilterId, ItemId, OutputId, SceneId, SourceId, SourceKind,
-    VideoMixId,
+    BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, ItemId, OutputId, SceneId,
+    SourceId, SourceKind, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -24,6 +24,8 @@ enum Object {
     Bus(BusId),
     /// One source's send into one bus.
     Send(SourceId, BusId),
+    /// A hotkey binding, by its chord.
+    Hotkey(Chord),
 }
 
 /// A property an edit sets, on its object.
@@ -315,6 +317,26 @@ impl Touched {
                     .insert(Object::Send(source_id.clone(), bus_id.clone()));
                 self.uses.insert(Object::Source(source_id.clone()));
                 self.uses.insert(Object::Bus(bus_id.clone()));
+            }
+            // A binding uses what its action names, so deleting that object (which
+            // removes the binding) and binding to it conflict.
+            Edit::HotkeySet { chord, action } => {
+                self.exists.insert(Object::Hotkey(chord.clone()));
+                for (entity, id) in action.named_objects() {
+                    let object = match entity {
+                        EntityKind::Scene => Object::Scene(SceneId::new(id)),
+                        EntityKind::Source => Object::Source(SourceId::new(id)),
+                        EntityKind::Output => Object::Output(OutputId::new(id)),
+                        _ => {
+                            self.unknown = true;
+                            continue;
+                        }
+                    };
+                    self.uses.insert(object);
+                }
+            }
+            Edit::HotkeyClear { chord } => {
+                self.exists.insert(Object::Hotkey(chord.clone()));
             }
             _ => self.unknown = true,
         }

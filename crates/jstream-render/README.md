@@ -77,9 +77,14 @@ and calls this crate.
 - A source image is either straight-alpha sRGB RGBA8 bytes the compositor uploads, or
   a `GpuFrame` / `wgpu::Texture` already on this device. An upload is premultiplied in
   linear light and stored as `Rgba16Float`, so filtering cannot darken transparent
-  edges ([Passes](#design)). An imported texture must be `Rgba8UnormSrgb` or
+  edges ([Passes](#design)). An imported texture (`import`) must be `Rgba8UnormSrgb` or
   `Bgra8UnormSrgb`, so the sampler decodes it to linear, and is read as straight
-  alpha: exact for an opaque capture, a fringe at partly transparent edges. A
+  alpha: exact for an opaque capture, a fringe at partly transparent edges. A browser
+  page's texture holds sRGB code values already multiplied by alpha (CEF's layout), so
+  `import_premultiplied` takes `Rgba8Unorm` or `Bgra8Unorm` and reads it that way, with
+  no fringe. A compositor opened `on_context` reports that context's `ContextKey`
+  (`Compositor::context`), so a caller can tell a texture from that context from one
+  it can't sample. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
   before the submit that samples it, and ends that submit by moving each staged
   texture to `PRESENT`, as `stage` requires. Staging stays the safe method on
@@ -144,17 +149,24 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    without the banding 8 bits would give in the darks; it costs 8 bytes per texel
    instead of 4, and the conversion is CPU work at upload time only.
 
-   **Imported textures** (`import`, `import_frame`) are not converted: a capture
-   changes every frame while its `Image` lives, so a conversion would be a per-frame
-   pass. They are sampled as straight alpha and premultiplied after the filter. For an
-   opaque texture, such as a captured frame, that is exact and costs nothing extra.
-   A partly transparent import still fringes at its edges.
+   **Imported textures** (`import`, `import_frame`, `import_premultiplied`) are not
+   converted: a capture changes every frame while its `Image` lives, so a conversion
+   would be a per-frame pass. A straight import is sampled as straight alpha and
+   premultiplied after the filter. For an opaque texture, such as a captured frame,
+   that is exact and costs nothing extra; a partly transparent one fringes at its
+   edges. A premultiplied import (a browser page) is sampled raw, with no sRGB decode,
+   so the filter averages premultiplied code values and transparent edges stay clean;
+   the shader then divides by alpha, decodes sRGB and multiplies by alpha again.
+   Averaging code values rather than linear light differs from an upload only where
+   the filter mixes texels of different colour.
 2. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is two triangles. The vertex buffer holds clip-space
    positions, UVs, opacity and the image's alpha mode (six `f32`s, 24 bytes). The
    fragment shader samples; for a straight import it multiplies RGB by the sampled
-   alpha; then it multiplies all four channels by opacity and outputs premultiplied
+   alpha, and for a premultiplied import it divides RGB by alpha (zero where alpha is
+   0), decodes sRGB and multiplies by alpha; then it multiplies all four channels by
+   opacity and outputs premultiplied
    linear. Blend is `One, OneMinusSrcAlpha` on colour and alpha. No depth buffer:
    stacking order is draw order. No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
@@ -187,8 +199,10 @@ Both passes are one command buffer and one `queue.submit`. `FrameSync::stage` ru
 before that submit, for every distinct hold the scene samples, and the command buffer
 ends by transitioning each of those textures to `PRESENT` (on D3D12 the `COMMON` state
 the platform's other APIs read a shared texture in), which `stage` requires of the
-submit. `render_into` does the same. The compositor lets go of the holds after the
-submit, so it keeps no platform texture busy between frames. The output texture is the
+submit. `render_into` does the same. Staging comes after every other step that can
+fail (targets, vertex buffer, readback buffer), so a refused canvas or readback stages
+nothing. The compositor lets go of the holds after the submit, so it keeps no platform
+texture busy between frames. The output texture is the
 compositor's own, not a shared encode target, so nothing transitions it.
 
 ### Resources kept across frames
@@ -217,7 +231,9 @@ returns the retired images whose last frame has finished. A steady frame allocat
 only that callback; a frame that fails before `end_frame` leaves its retirees to the
 next frame's fence, which covers it.
 
-`import` keyed by an ID samples a `GpuFrame` with no copy. The entry's image carries
+`import` keyed by an ID samples a `GpuFrame` with no copy (`import_premultiplied`
+does the same for a premultiplied texture, and replaces an entry the key imported the
+other way, as a new import does). The entry's image carries
 the frame's `FrameSync` hold, so each `render` that draws it stages it, until
 `end_frame`, which drops every live entry's hold (as retiring does): a cached image
 never keeps a platform texture from being reused. The import itself, texture view and
@@ -318,17 +334,20 @@ kinds.
   a drop shadow, an outside outline or a glow).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync` is staged once the pass has
-  recorded, right before the submit, and the submit hands its texture back in
-  `PRESENT`, as `render` does. The prelude's `frame.time` is that time wrapped
+  that move or hold frames. An imported input's `FrameSync`, and that of any image the
+  filter reads besides it (`Ctx::hold`), is staged once the pass has recorded, right
+  before the submit, and the submit hands those textures back in `PRESENT`, as `render`
+  does. The prelude's `frame.time` is that time wrapped
   to a day (better than 10 ms in an `f32`) and jumps back once a day, so a kind that
   moves with time computes its phase on the CPU in `f64` and passes it in its `Params`.
 - A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
   to one prelude (`prelude.wgsl`) that defines the fullscreen triangle, the bindings
   (input, a linear clamp sampler, a `Frame` uniform with the input, output and aux
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
-  colour helpers. `src` and `aux` always return premultiplied linear colour; an
-  imported input is premultiplied after sampling. A pipeline is built on first use and
+  colour helpers. `src`, `texel` and `aux` always return premultiplied linear colour:
+  a straight import is premultiplied after sampling, and a premultiplied import (a
+  browser page) is divided by alpha, decoded from sRGB and multiplied again, as the
+  compositor's own draw does (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
   kept for the compositor's life, keyed by the shader's label and source (up to four
   sources per label, so a reloaded pack's old and new filters don't evict each other).
   A shader wgpu refuses, by its own validation or a backend compiler's, is a
@@ -442,7 +461,39 @@ toward that side, or the stroke width. The input is drawn 1:1 at the matching in
 reports the inset, a placement fits the grown frame rather than the original content
 box.
 
-Assets and references (V3): not yet.
+Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
+`scene_mask`. Each reads one external image that the chain runtime hands over with
+`VideoFilter::set_reference(Option<Arc<Image>>)` (a defaulted `Pass::set_reference`
+underneath): render opens no files (R-RT-002), so V0 resolves the asset or scene
+reference and decodes it. A kind passes its input through unchanged until both its
+reference setting is non-`null` and an image is set, and refuses an image from another
+compositor. A reference's `FrameSync` is staged and handed back with the input's, once
+per submit even when the reference is the input itself; a mask test passes one
+imported frame as both and counts one stage.
+
+- `apply_lut` (`lut`: asset, `cube` or `png`; `amount` 0 to 1, default 1). The table
+  maps sRGB-encoded straight colour, the `.cube` convention: the shader unpremultiplies,
+  encodes, looks up, mixes with the input by `amount` in encoded values, then decodes
+  and premultiplies; alpha is kept. `Lut::parse_cube` is a pure-Rust `.cube` parser
+  (`LUT_3D_SIZE` 2 to 64, `DOMAIN_MIN`/`DOMAIN_MAX` or `LUT_3D_INPUT_RANGE`, comments,
+  `TITLE` and other keywords ignored; 1D tables, bad sizes, wrong row counts and bad
+  numbers are a `LutError`). A domain other than 0 to 1 is resampled onto it, so input
+  outside the domain clamps. `Lut::from_tiled_rgba8` reads the common PNG layout (a
+  square of `k * k` tiles of `k² x k²`, 512x512 for 64 points, blue choosing the tile)
+  from decoded RGBA8. `lut_image(compositor, lut)` makes the reference image: the blue
+  slices as near-square 2D tiles (512x512 for 64 points, so no adapter limit is near),
+  stored `Rgba16Float` through a one-function data upload in `image.rs`, values clamped to
+  0 to 1. The shader recovers the size from the image's dimensions and does the
+  trilinear lookup as two bilinear taps in adjacent slices at texel centres; an image
+  that is not such a layout passes the input through. `Lut`, `LutError` and
+  `lut_image` are crate-internal until V0 re-exports them.
+- `image_mask` (`image`: asset, png/jpg/jpeg/webp/gif/bmp; `mode` alpha or luma;
+  `invert`) and `scene_mask` (`scene`: scene reference, its composited layer; `mode`
+  alpha, luma or clip; `invert`). The mask is stretched over the frame and scales the
+  premultiplied input: by its alpha, by BT.709 luma of its sRGB-encoded colour times its
+  alpha (`#808080` keeps about half), or for `clip` by 1 where the scene's alpha is at
+  least one half and 0 elsewhere (a hard clip that ignores translucency). `invert` uses
+  one minus the coverage. OBS's colour blend modes for image masks are not offered.
 
 <a id="testing"></a>
 ## Testing
@@ -463,7 +514,8 @@ same tests run on lavapipe and on WARP.
 **Filters.** `filter::testing` runs one filter over a small uploaded image and reads
 the result back through a 1:1 scene on a transparent canvas, so each kind's golden
 test is a pixel or grid check like the ones below. A two-pass copy covers the harness
-itself, including a half-transparent texel round-tripping.
+itself, including a half-transparent texel round-tripping, and copies a premultiplied
+browser-page import through unchanged (read as premultiplied linear, it would brighten).
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1
@@ -489,7 +541,8 @@ a non-axis-aligned box turning about its centre.
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
-staged once per submit and not staged when the item is hidden. Nested scenes
+staged once per submit, and not staged when the item is hidden or when a readback
+too large for a buffer refuses the render. Nested scenes
 (`render_image`), three pixel tests and an ownership check: an image placed in
 another scene lands where its scene put the item and is transparent elsewhere, and
 survives a later `render`; a half-opaque item stays exact in linear light; images
@@ -502,12 +555,15 @@ replaces it for a new size; an unused entry is handed back only after the frame 
 (not while its frame is still being built). Alpha edges: a 2x1
 opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps red
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
-imported sRGB texture is read as straight alpha. An image from another compositor on
+imported sRGB texture is read as straight alpha, and a premultiplied `Unorm` import
+of half-transparent red over white keeps full red and lets half the white through in
+linear light (each refused in the other's format). An image from another compositor on
 the same device is refused. GPU frames through the cache: a frame drawn from an
 import is staged once, and once the frame ends nothing but the frame holds its
 `FrameSync`; a second texture under the key is a second import, the first texture
 coming round again reuses its import and stages again, a frame of a new size retires
-both old imports after the fence, and an upload under the key replaces the import
+both old imports after the fence, an upload under the key replaces the import, and a
+straight import under a key that held a premultiplied one replaces it
 (the staged submit's `PRESENT` transition runs on the software adapter here). Without
 an adapter, unit tests still cover the binary16 encode
 (every value an upload can produce, within half an ulp), the premultiply order and
@@ -559,10 +615,9 @@ a hardware GPU.
   so that pass cannot be the CI path. Proposed default: keep this RGBA output, and
   let a later pass sample it into the platform `encode_target` on the real device.
 - **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are opaque
-  `Bgra8UnormSrgb`, which `import` takes as is, so they need no conversion pass. Open:
-  whether a pass that writes premultiplied linear should exist anyway, to remove the
-  straight-alpha fringe that a partly transparent import (a browser source, a nested
-  scene's output) still has, and which crate owns it.
+  `Bgra8UnormSrgb`, which `import` takes as is, so they need no conversion pass. A
+  browser page's frames are premultiplied `Bgra8Unorm`, which `import_premultiplied`
+  takes as is.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).
   The snapshot puts opacity on the item because that is what ARCH's data model and
   the compositor consequences of

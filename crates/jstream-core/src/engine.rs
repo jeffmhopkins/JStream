@@ -13,6 +13,7 @@ use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
+use crate::gesture::{Ended, Gestures};
 use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
@@ -24,17 +25,20 @@ use crate::runtime::{
     launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
-use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
 use crate::studio::Studio;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
-use jstream_platform::{Backends, Secret, StreamKeyStore};
+use jstream_platform::{
+    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, Secret, StreamKeyStore,
+};
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
-    EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
-    OutputKind, OutputState, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer,
-    RequestId, Rev, RtmpTarget, SecretString, SourceId, YoutubeAuth,
+    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
+    EncoderProfile, EncoderSessionInfo, EntityKind, Event, GestureId, HistoryCall,
+    HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
+    PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    RtmpTarget, SecretString, SourceId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -44,7 +48,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::task::Waker;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// The JStream engine. Every client talks to it through a session it opens with
 /// [`connect`](Engine::connect).
@@ -109,6 +113,7 @@ impl Default for Engine {
                     state.graph = Graph::new().with_kinds(crate::kinds::builtin());
                     let host: Weak<dyn LiveHost> = shared.clone();
                     state.live = LiveSources::new(host);
+                    state.shared = shared.clone();
                     state.live.set_audio_scopes(Arc::clone(&audio_scopes));
                     state
                 }),
@@ -305,12 +310,33 @@ impl Engine {
     /// recording output (`OutputKind::Record`) needs no publish target: the engine
     /// opens its file itself. Nor does the virtual camera (`OutputKind::VirtualCam`),
     /// which publishes to the backends' [`VcamSink`](jstream_platform::VcamSink).
+    ///
+    /// While an `output.start` of this output is opening, it answers the kind the start
+    /// saw when it checked the output's key, not the collection's current one (#343). A
+    /// retarget that lands during the opener then can't pair the new server's URL with
+    /// the old server's key: the opener connects to the server the start was checked
+    /// for, and the next start sees the new target.
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
+        if let Some(kind) = self.starting_kind(output_id) {
+            return kind;
+        }
         lock(&self.shared.state)
             .graph
             .state()
             .output(output_id)
             .map(|output| output.kind().clone())
+    }
+
+    /// The kind an `output.start` of this output saw when it checked the output's key,
+    /// while that start is opening (#343); `None` when no start of it is pending. Takes
+    /// the gate lock alone.
+    fn starting_kind(&self, output_id: &OutputId) -> Option<Option<OutputKind>> {
+        let host = self.media.as_ref()?;
+        let gate = lock(&host.gate);
+        gate.pending
+            .as_ref()
+            .filter(|pending| pending.output_id == *output_id)
+            .map(|pending| pending.kind.clone())
     }
 
     /// Injects platform backends. `output.start` then runs the media pipeline
@@ -347,8 +373,9 @@ impl Engine {
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
     /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
     /// that no backend is set; giving one builds the ones already there again.
-    /// The host also hands the backend a GPU device (`use_device`): for now one it opens
-    /// on the media adapter itself, since the engine doesn't hand out its own yet.
+    /// The host also hands the backend a GPU device (`use_device`), one it opens on the
+    /// media adapter itself, for paints before a program stage; while a stage runs the
+    /// engine lends the backend the stage's own context instead (`use_gpu`).
     #[must_use]
     pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
         {
@@ -510,6 +537,15 @@ impl Engine {
         state.route_audio();
     }
 
+    /// Lets live sources that paint on the GPU (`browser`) paint on `context`, the
+    /// program stage's platform GPU context, and re-plans the program mix. The returned
+    /// call takes the context away again; the stage makes it before it stops.
+    pub(crate) fn use_gpu(&self, context: &GpuContext) -> Box<dyn FnOnce() + Send + Sync> {
+        set_gpu(&self.shared, Some(context));
+        let shared = Arc::clone(&self.shared);
+        Box::new(move || set_gpu(&shared, None))
+    }
+
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
     /// Holds the collection and the ledger, not the [`MediaHost`], like the ticker.
     pub(crate) fn stats_emitter(&self) -> Box<dyn FnOnce() + Send> {
@@ -576,9 +612,52 @@ impl Engine {
         self
     }
 
-    /// Drops `client_id`'s undo and redo history: its session ended (ADR-0032).
+    /// Drops `client_id`'s undo and redo history and expires its open gestures: its
+    /// session ended (ADR-0032). Each gesture's parameters show their collection values
+    /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
+    /// gets an audit entry.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
-        lock(&self.shared.state).history.forget(client_id);
+        let mut wake = Vec::new();
+        let (ended, rev, client_name) = {
+            let mut state = lock(&self.shared.state);
+            state.history.forget(client_id);
+            for gesture_id in state.gestures.of_client(client_id) {
+                state.end_gesture(
+                    client_id,
+                    &gesture_id,
+                    LiveOutcome::Expired,
+                    None,
+                    &mut wake,
+                );
+            }
+            let name = state
+                .client_names
+                .get(client_id)
+                .cloned()
+                .unwrap_or_default();
+            (std::mem::take(&mut state.ended), state.graph.rev(), name)
+        };
+        wake_all(wake);
+        self.audit_gestures(ended, rev, &client_name);
+    }
+
+    /// Records one audit entry for each gesture in `ended`, which ended at `rev`
+    /// cancelled or expired (ADR-0032): a committed gesture's entry is its batch's.
+    fn audit_gestures(&self, ended: Vec<(Option<RequestId>, Ended)>, rev: Rev, client_name: &str) {
+        if ended.is_empty() {
+            return;
+        }
+        let Some(sink) = self.shared.audit.sink() else {
+            return;
+        };
+        for (request_id, ended) in ended {
+            sink.record(audit::gesture_entry(
+                ended,
+                client_name.to_owned(),
+                request_id,
+                rev,
+            ));
+        }
     }
 
     /// How many steps `client_id` can undo and redo.
@@ -682,6 +761,13 @@ impl Engine {
         } = call
         {
             self.key_action(action)
+        } else if matches!(
+            call,
+            Call::Query {
+                query: Query::CaptureTargets
+            }
+        ) {
+            self.capture_targets()
         } else if let Call::Action {
             action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
         } = call
@@ -698,10 +784,27 @@ impl Engine {
             self.run_media_action(call)
         } else {
             let mut wake = Vec::new();
-            let result = lock(&self.shared.state).execute(client_id, request_id, call, &mut wake);
+            let (result, stale, ended, rev, client_name) = {
+                let mut state = lock(&self.shared.state);
+                let (result, stale) =
+                    state.execute_and_unbind_keys(client_id, request_id, call, &mut wake);
+                let ended = std::mem::take(&mut state.ended);
+                let name = if ended.is_empty() {
+                    String::new()
+                } else {
+                    state
+                        .client_names
+                        .get(client_id)
+                        .cloned()
+                        .unwrap_or_default()
+                };
+                (result, stale, ended, state.graph.rev(), name)
+            };
             for waker in wake {
                 waker.wake();
             }
+            self.remove_stale_keys(stale);
+            self.audit_gestures(ended, rev, &client_name);
             self.with_key_set(result)
         };
         if matches!(
@@ -711,7 +814,7 @@ impl Engine {
             self.save_collection();
         }
         match (&result, output) {
-            (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
+            (Ok(CallResult::Batch { rev, .. }), _) => tracing::debug!(rev = %rev, "batch applied"),
             (Ok(CallResult::History { rev, step_rev, .. }), _) => {
                 tracing::debug!(rev = %rev, step_rev = %step_rev, "history step applied");
             }
@@ -878,12 +981,24 @@ impl Engine {
                     });
                 }
                 check_key(&key)?;
+                // The opener of a start that is opening reads the server the start
+                // checked (`output_kind`), which a retarget since may have changed, so
+                // a key set now could be paired with the old server (#343).
+                if self.starting_kind(&output_id).is_some() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!(
+                            "output `{output_id}` is starting: set its key once the start \
+                             has settled"
+                        ),
+                    });
+                }
                 let store = self.key_store().ok_or_else(no_key_store)?;
                 store
                     .set(output_id.as_str(), &Secret::new(key.expose()))
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
+                lock(&self.shared.state).stale_keys.remove(&output_id);
                 Ok(CallResult::action())
             }
             Action::OutputClearKey { output_id } => {
@@ -893,9 +1008,40 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
+                lock(&self.shared.state).stale_keys.remove(&output_id);
                 Ok(CallResult::action())
             }
             other => Err(not_implemented(other.name())),
+        }
+    }
+
+    /// Removes the stream keys of outputs that an applied batch, undo or redo deleted or
+    /// pointed at another server (`OutputKind::key_server`, #343), after the collection
+    /// lock is released. Each stays in `State::stale_keys`, which refuses its
+    /// `output.start`, until its key is gone: a store that refuses keeps it there until an
+    /// `output.set_key` or `output.clear_key` succeeds. The batch itself has already
+    /// succeeded, so a refusal is logged, never returned. Without a store there is no
+    /// key to remove.
+    fn remove_stale_keys(&self, stale: Vec<OutputId>) {
+        if stale.is_empty() {
+            return;
+        }
+        let store = self.key_store();
+        for output_id in stale {
+            let removed = match &store {
+                Some(store) => store.clear(output_id.as_str()),
+                None => Ok(()),
+            };
+            match removed {
+                Ok(()) => {
+                    lock(&self.shared.state).stale_keys.remove(&output_id);
+                }
+                Err(err) => tracing::warn!(
+                    output_id = %output_id,
+                    "the credential store did not remove the stream key of an output whose \
+                     server changed: {err}"
+                ),
+            }
         }
     }
 
@@ -983,6 +1129,33 @@ impl Engine {
         Arc::clone(host)
     }
 
+    /// `capture.targets`: what the platform's capture backend can capture now, listed
+    /// with no engine lock held, since listing windows calls the OS.
+    fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
+        let capture = self.media.as_ref().and_then(|host| {
+            lock(&host.backends)
+                .as_ref()
+                .map(|backends| Arc::clone(&backends.capture))
+        });
+        let Some(capture) = capture else {
+            return Err(ProtocolError::ActionFailed {
+                reason: "the engine has no capture backend".into(),
+            });
+        };
+        let mut targets: Vec<_> = capture
+            .targets()
+            .map_err(|err| ProtocolError::ActionFailed {
+                reason: format!("listing capture targets: {err}"),
+            })?
+            .into_iter()
+            .filter_map(capture_target_info)
+            .collect();
+        targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
+        Ok(CallResult::Query {
+            result: QueryResult::CaptureTargets { targets },
+        })
+    }
+
     fn backends_ready(&self) -> bool {
         self.media
             .as_ref()
@@ -1059,6 +1232,15 @@ impl Engine {
                     reason: "another output is starting".into(),
                 });
             }
+            if state.stale_keys.contains(&output_id) {
+                return Err(ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` changed server and its old stream key is not \
+                         removed yet: send `output.clear_key`, or `output.set_key` with the \
+                         new server's key"
+                    ),
+                });
+            }
             let key = encode_key(&state.graph, &output_id);
             let publish = match (
                 own_target(&state.graph, &output_id),
@@ -1123,6 +1305,11 @@ impl Engine {
                 output_id: output_id.clone(),
                 generation,
                 cancel: false,
+                kind: state
+                    .graph
+                    .state()
+                    .output(&output_id)
+                    .map(|output| output.kind().clone()),
             });
             match state.outputs.begin(&output_id, true) {
                 Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),
@@ -1420,15 +1607,20 @@ impl Engine {
         wake_all(wake);
     }
 
-    /// `video.snapshot`. The `rev` and the render snapshot published for it are read
-    /// together under the collection lock; the snapshot thread renders it after that
-    /// lock is released.
+    /// `video.snapshot`. The `rev`, the render snapshot published for it and the live
+    /// values on the parameter channel are read together under the collection lock; the
+    /// snapshot thread renders them after that lock is released, so the image shows
+    /// open gestures as the output does.
     fn video_snapshot(&self) -> SnapshotReply {
-        let (snapshot, rev) = {
+        let (snapshot, live, rev) = {
             let state = lock(&self.shared.state);
-            (state.render.load(), state.graph.rev())
+            (
+                state.render.load(),
+                state.render.load_live(),
+                state.graph.rev(),
+            )
         };
-        self.shared.snapshots.request(snapshot, rev)
+        self.shared.snapshots.request(snapshot, live, rev)
     }
 
     /// The render hub the pipeline's render thread reads, for tests.
@@ -1851,6 +2043,13 @@ fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake:
     );
 }
 
+/// [`Engine::use_gpu`] and its undo.
+fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
+    let mut state = lock(&shared.state);
+    state.live.use_gpu(context);
+    state.publish_render();
+}
+
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     let sampled = drops::lock_ledger(ledger).sample();
     let mut wake = Vec::new();
@@ -1935,13 +2134,68 @@ struct State {
     render: Arc<RenderHub>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
+    /// Every client's open live-value gestures (ADR-0032), and the committed values the
+    /// render thread has not caught up with yet.
+    gestures: Gestures,
+    /// Gestures cancelled or expired by the call running now, with its request, for the
+    /// audit log once the lock is released.
+    ended: Vec<(Option<RequestId>, Ended)>,
+    /// Whether the live ticker thread is running: it sends coalesced `live.changed`
+    /// events and releases committed live values ([`live_ticker`]).
+    ticking: bool,
+    /// The engine this state belongs to, for the live ticker.
+    shared: Weak<Shared>,
     /// The program mixer's controls while it runs: it follows the collection's audio.
     routing: AudioRouting,
+    /// Outputs whose stream key must be removed because an applied change deleted them
+    /// or moved them to another server (#343). Marked under this lock in the same
+    /// critical section as the change, and unmarked once the store has removed the key,
+    /// so `output.start` (which refuses a marked output) never opens the new server with
+    /// the old key.
+    stale_keys: BTreeSet<OutputId>,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
 }
 
 impl State {
+    /// Executes `call`, and when it is a batch, undo or redo that applied, marks in
+    /// `stale_keys` and returns every output whose stream key it made stale: one it
+    /// deleted, or whose `OutputKind::key_server` it changed (#343). The caller removes
+    /// those keys once this lock is released, since the store is never called under it.
+    fn execute_and_unbind_keys(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        call: Call,
+        wake: &mut Vec<Waker>,
+    ) -> (Result<CallResult, ProtocolError>, Vec<OutputId>) {
+        if !matches!(call, Call::Batch(_) | Call::History(_)) {
+            return (self.execute(client_id, request_id, call, wake), Vec::new());
+        }
+        let before: Vec<(OutputId, Option<String>)> = self
+            .graph
+            .state()
+            .outputs()
+            .map(|output| (output.id().clone(), output.kind().key_server()))
+            .collect();
+        let result = self.execute(client_id, request_id, call, wake);
+        if result.is_err() {
+            return (result, Vec::new());
+        }
+        let after = self.graph.state();
+        let stale: Vec<OutputId> = before
+            .into_iter()
+            .filter(|(output_id, server)| {
+                after
+                    .output(output_id)
+                    .is_none_or(|output| output.kind().key_server() != *server)
+            })
+            .map(|(output_id, _)| output_id)
+            .collect();
+        self.stale_keys.extend(stale.iter().cloned());
+        (result, stale)
+    }
+
     fn execute(
         &mut self,
         client_id: &ClientId,
@@ -1980,6 +2234,14 @@ impl State {
         if let Some(result) = keyed.as_ref().and_then(|keyed| self.applied.get(keyed)) {
             return Ok(result.clone());
         }
+        if let Some(gesture_id) = &batch.ends_gesture
+            && !self.gestures.is_open(client_id, gesture_id)
+        {
+            return Err(ProtocolError::invalid_argument(
+                "ends_gesture",
+                format!("the client has no open gesture `{gesture_id}`"),
+            ));
+        }
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,
@@ -1992,11 +2254,22 @@ impl State {
             applied.touched,
             applied.inverse.edits,
         );
-        let result = CallResult::Batch { rev: applied.rev };
+        let result = CallResult::Batch {
+            rev: applied.rev,
+            removed_hotkeys: applied.removed_hotkeys,
+        };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
         }
+        if let Some(gesture_id) = &batch.ends_gesture
+            && let Some(event) = self.gestures.flush(client_id, gesture_id)
+        {
+            self.subscribers.emit(&event, wake);
+        }
         self.changed(client_id, request_id, &batch.edits, applied.rev, None, wake);
+        if let Some(gesture_id) = &batch.ends_gesture {
+            self.commit_gesture(client_id, gesture_id, applied.rev, wake);
+        }
         Ok(result)
     }
 
@@ -2114,8 +2387,9 @@ impl State {
 
     /// What follows every applied batch, undo and redo: the outputs, the live sources and
     /// the program mixer follow the collection, a deleted source's stored frame goes
-    /// (unless the same edits made a new source under its id), `state.changed` is
-    /// emitted, and the program scene is reconciled (ADR-0030).
+    /// (unless the same edits made a new source under its id), live values on a deleted
+    /// item go, `state.changed` is emitted, and the program scene is reconciled
+    /// (ADR-0030).
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -2141,6 +2415,13 @@ impl State {
         // After program is reconciled: a scene edit can change what is shown.
         self.route_audio();
         self.publish_render();
+        let state = self.graph.state();
+        if self
+            .gestures
+            .drop_missing(|item_id| state.item(item_id).is_some())
+        {
+            self.publish_live();
+        }
         self.subscribers.emit(
             &Event::StateChanged {
                 rev,
@@ -2165,6 +2446,19 @@ impl State {
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            Action::LiveSet { gesture_id, values } => {
+                return self.live_set(client_id, &gesture_id, values, wake);
+            }
+            Action::LiveCancel { gesture_id } => {
+                self.end_gesture(
+                    client_id,
+                    &gesture_id,
+                    LiveOutcome::Cancelled,
+                    Some(request_id),
+                    wake,
+                );
+                return Ok(CallResult::action());
+            }
             // Restarts the master's integrated loudness, if the mixer runs; there is
             // nothing to restart otherwise, which is no failure.
             Action::AudioResetLoudness {} => {
@@ -2199,7 +2493,7 @@ impl State {
     }
 
     /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
-    /// `studio.get` the studio state.
+    /// `live.list` the open gestures, and `studio.get` the studio state.
     fn query(&self, query: &Query) -> Result<CallResult, ProtocolError> {
         let result = match self.graph.query(query) {
             Some(result) => result?,
@@ -2213,6 +2507,9 @@ impl State {
                     encoder: None,
                     encoder_sessions: 0,
                     hardware_sessions: 0,
+                },
+                Query::LiveList => QueryResult::LiveList {
+                    gestures: self.gestures.list(),
                 },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
@@ -2239,8 +2536,9 @@ impl State {
     /// Re-plans the program mix and the scene each video mix shows at the current time,
     /// and publishes them if they draw something new. A source's stored frame wins over
     /// its live one. The live sources are told when the plan's next frame change is due,
-    /// to re-plan then. The program mix shows the program scene (ADR-0030).
-    fn publish_render(&mut self) {
+    /// to re-plan then. The program mix shows the program scene (ADR-0030). Returns the
+    /// render generation current afterwards.
+    fn publish_render(&mut self) -> u64 {
         let Self {
             graph,
             frames,
@@ -2255,15 +2553,125 @@ impl State {
         live.begin_plan();
         let (shot, wake) =
             snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
-                Some(frame) => Some((frame.clone(), None)),
-                None => live.frame(id, now, frame_versions),
+                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                None => live.look(id, now, frame_versions),
             });
         live.end_plan();
         if let Some(sound) = live.take_audio() {
             audio.sync_live(sound);
         }
-        render.publish(shot);
+        let generation = render.publish(shot);
         live.wake_at(wake);
+        generation
+    }
+
+    /// Opens or updates `client_id`'s gesture with `values` (ADR-0032). They are checked
+    /// as a batch's edits are, on a copy of the collection, and an error names the value
+    /// as `values.<n>`; nothing is applied unless all of them pass. Then they go on the
+    /// render parameter channel, and a `live.changed` goes out now or, within
+    /// [`CHANGED_INTERVAL`](crate::gesture::CHANGED_INTERVAL) of the gesture's last
+    /// one, from the live ticker.
+    fn live_set(
+        &mut self,
+        client_id: &ClientId,
+        gesture_id: &GestureId,
+        values: Vec<Edit>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<CallResult, ProtocolError> {
+        self.gestures.check_set(client_id, gesture_id, &values)?;
+        self.graph
+            .clone()
+            .apply(&values, None)
+            .map_err(values_error)?;
+        self.gestures.set(client_id, gesture_id, values);
+        self.publish_live();
+        self.live_tick(Instant::now(), wake);
+        Ok(CallResult::action())
+    }
+
+    /// Ends one of `client_id`'s gestures without a commit, if it is open: its values
+    /// not sent yet go out, then `live.ended` with `outcome`, and its parameters show
+    /// their collection values again. It is queued for the audit log with `request_id`.
+    fn end_gesture(
+        &mut self,
+        client_id: &ClientId,
+        gesture_id: &GestureId,
+        outcome: LiveOutcome,
+        request_id: Option<&RequestId>,
+        wake: &mut Vec<Waker>,
+    ) {
+        if let Some(event) = self.gestures.flush(client_id, gesture_id) {
+            self.subscribers.emit(&event, wake);
+        }
+        let Some(ended) = self.gestures.cancel(client_id, gesture_id, outcome) else {
+            return;
+        };
+        self.publish_live();
+        self.subscribers.emit(
+            &Event::LiveEnded {
+                gesture_id: gesture_id.clone(),
+                client_id: client_id.clone(),
+                outcome,
+                rev: None,
+            },
+            wake,
+        );
+        self.ended.push((request_id.cloned(), ended));
+    }
+
+    /// Ends a gesture whose committing batch produced `rev`, after its `state.changed`.
+    /// Its live values stay on the parameter channel until the render thread holds the
+    /// snapshot with the committed ones (ARCH › Threads, "Live-value handover"): at
+    /// once if it already does or isn't adopting snapshots, else from the live ticker.
+    fn commit_gesture(
+        &mut self,
+        client_id: &ClientId,
+        gesture_id: &GestureId,
+        rev: Rev,
+        wake: &mut Vec<Waker>,
+    ) {
+        let generation = self.render.generation();
+        self.gestures.commit(client_id, gesture_id, generation);
+        self.subscribers.emit(
+            &Event::LiveEnded {
+                gesture_id: gesture_id.clone(),
+                client_id: client_id.clone(),
+                outcome: LiveOutcome::Committed,
+                rev: Some(rev),
+            },
+            wake,
+        );
+        self.live_tick(Instant::now(), wake);
+    }
+
+    /// Publishes the gestures' live values on the render parameter channel.
+    fn publish_live(&self) {
+        self.render.publish_live(self.gestures.params());
+    }
+
+    /// Sends the `live.changed` events due at `now` and releases the committed values
+    /// the render thread has caught up with. Starts the live ticker if work remains,
+    /// and returns when it should run next.
+    fn live_tick(&mut self, now: Instant, wake: &mut Vec<Waker>) -> Option<Instant> {
+        for event in self.gestures.due(now) {
+            self.subscribers.emit(&event, wake);
+        }
+        let render = &self.render;
+        if self
+            .gestures
+            .release(|generation| render.caught_up(generation))
+        {
+            self.publish_live();
+        }
+        let release = self.gestures.releasing().then(|| now + RELEASE_POLL);
+        let next = match (self.gestures.next_due(), release) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        if next.is_some() && !self.ticking {
+            self.ticking = spawn_live_ticker(self.shared.clone());
+        }
+        next
     }
 
     /// Brings the program mixer in line with the collection's audio, the audio sources'
@@ -2302,9 +2710,19 @@ impl State {
 }
 
 impl PreviewSource for Shared {
-    fn current(&self) -> (Arc<crate::runtime::RenderSnapshot>, Rev) {
+    fn current(
+        &self,
+    ) -> (
+        Arc<crate::runtime::RenderSnapshot>,
+        Arc<crate::snapshot::LiveParams>,
+        Rev,
+    ) {
         let state = lock(&self.state);
-        (state.render.load(), state.graph.rev())
+        (
+            state.render.load(),
+            state.render.load_live(),
+            state.graph.rev(),
+        )
     }
 }
 
@@ -2328,6 +2746,66 @@ impl Drop for State {
     /// Ends every subscription when the engine goes away.
     fn drop(&mut self) {
         self.subscribers.close_all();
+    }
+}
+
+/// How often the live ticker checks whether the render thread has caught up with a
+/// committed gesture's snapshot.
+const RELEASE_POLL: Duration = Duration::from_millis(4);
+
+/// Starts `jstream-live`, which runs [`State::live_tick`] when it is next due, until
+/// nothing is left to send or release or the engine is gone. Returns whether it
+/// started; if it didn't, the work waits for the next live call or commit.
+fn spawn_live_ticker(shared: Weak<Shared>) -> bool {
+    let started = thread::Builder::new()
+        .name("jstream-live".into())
+        .spawn(move || live_ticker(&shared));
+    if let Err(error) = &started {
+        tracing::warn!(%error, "the live ticker could not start");
+    }
+    started.is_ok()
+}
+
+fn live_ticker(shared: &Weak<Shared>) {
+    loop {
+        let Some(engine) = shared.upgrade() else {
+            return;
+        };
+        let mut wake = Vec::new();
+        let next = {
+            let mut state = lock(&engine.state);
+            let next = state.live_tick(Instant::now(), &mut wake);
+            if next.is_none() {
+                state.ticking = false;
+            }
+            next
+        };
+        drop(engine);
+        wake_all(wake);
+        match next {
+            Some(at) => thread::sleep(at.saturating_duration_since(Instant::now())),
+            None => return,
+        }
+    }
+}
+
+/// A `live.set` value's error, named as the value: the graph names a batch's edits
+/// `edits.<n>`, and `live.set` carries them as `values.<n>`.
+fn values_error(error: ProtocolError) -> ProtocolError {
+    match error {
+        ProtocolError::InvalidArgument {
+            field,
+            reason,
+            blockers,
+        } => ProtocolError::InvalidArgument {
+            field: match field.strip_prefix("edits.") {
+                Some(rest) => format!("values.{rest}"),
+                None => field,
+            },
+            reason,
+            blockers,
+        },
+        other => other,
     }
 }
 
@@ -2356,6 +2834,26 @@ fn no_key_store() -> ProtocolError {
     ProtocolError::ActionFailed {
         reason: "this engine has no credential store for stream keys".into(),
     }
+}
+
+/// A platform capture target as `capture.targets` reports it, or `None` for a kind of
+/// target no source kind captures.
+fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::CaptureTargetInfo> {
+    let (kind, target) = match info.target {
+        CaptureTarget::Display(id) => (CaptureTargetKind::Display, id),
+        CaptureTarget::Window(id) => (CaptureTargetKind::Window, id),
+        _ => return None,
+    };
+    Some(jstream_protocol::CaptureTargetInfo {
+        kind,
+        target: target.as_str().to_owned(),
+        name: info.name,
+        size: info.size.map(|size| PixelSize {
+            width: size.width(),
+            height: size.height(),
+        }),
+        primary: info.primary,
+    })
 }
 
 /// A protocol variant added after this engine was written.

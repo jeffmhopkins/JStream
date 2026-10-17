@@ -10,13 +10,13 @@
 //! Docs: crates/jstream-protocol/README.md#purpose
 
 use crate::{
-    AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Crop, Edit, EncoderProfile,
+    Action, AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Chord, Crop, Edit, EncoderProfile,
     EncoderProfileId, EncoderProfileInfo, EntityKind, FilterChain, FilterChains, FilterId,
-    FilterInfo, FilterOwner, Finite32, FitMode, HardwarePreference, ItemGeometry, ItemId, ItemInfo,
-    ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind, ParamDescriptor,
-    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RateControl, RecordContainer, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
-    SourceKind, Vec2, VideoCodec, VideoEncoding,
+    FilterInfo, FilterOwner, Finite32, FitMode, HardwarePreference, HotkeyBinding, ItemGeometry,
+    ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo,
+    OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult,
+    RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
+    Size, SourceId, SourceInfo, SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
 use crate::{AudioFollow, BusId, BusInfo, MAX_BUSES, SendInfo, SourceAudio};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
@@ -99,9 +99,11 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// they were made, and `b_src`'s audio turned off. Then the
 /// references and clones of ADR-0023: `cam` is duplicated as `cam_copy` and `i1` is
 /// switched to place the copy, keeping its ID and position; `aux` is created with a
-/// `duplicated_from` naming a source that doesn't exist, which reads as absent. Last the
+/// `duplicated_from` naming a source that doesn't exist, which reads as absent. Then the
 /// video mixes: `side` shows scene `b` and is shown by `yt`, and `prog` (updated after
-/// it was created) shows the program and is shown by `rec`; `tw` shows none.
+/// it was created) shows the program and is shown by `rec`; `tw` shows none. Last, the
+/// hotkeys of ADR-0024 §5: `F1` switches to scene `a`, and `Ctrl+Digit1`, bound first to
+/// `output.stop` and rebound by a clear and a set, starts output `yt`.
 ///
 /// Sources, outputs, encoder profiles and video mixes are created in the opposite order
 /// of their IDs, so reads that order them by ID can't pass by echoing creation order.
@@ -380,9 +382,27 @@ pub fn collection() -> Batch {
                 gain_db: None,
                 muted: None,
             },
+            Edit::HotkeySet {
+                chord: Chord::new("F1"),
+                action: switch_to_a(),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("Ctrl+Digit1"),
+                action: Action::OutputStop {
+                    output_id: OutputId::new("yt"),
+                },
+            },
+            Edit::HotkeyClear {
+                chord: Chord::new("Ctrl+Digit1"),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("Ctrl+Digit1"),
+                action: start_yt(),
+            },
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
+        ends_gesture: None,
     }
 }
 
@@ -474,6 +494,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 video_mixes: video_mixes(),
                 buses: buses(),
                 sends: sends(),
+                hotkeys: hotkeys(),
             }),
         ),
         // Outputs by ID, whatever order they were created in.
@@ -525,6 +546,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 edits: vec![],
                 expected_rev: Some(Rev(0)),
                 idempotency_key: None,
+                ends_gesture: None,
             },
             ProtocolError::RevConflict {
                 expected: Rev(0),
@@ -536,6 +558,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 edits: vec![],
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             ProtocolError::EmptyBatch,
         ),
@@ -711,6 +734,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 ],
                 expected_rev: Some(COLLECTION_REV),
                 idempotency_key: None,
+                ends_gesture: None,
             },
             ProtocolError::NotFound {
                 entity: EntityKind::Item,
@@ -824,9 +848,23 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         (
             Batch::single(Edit::OutputCreate {
                 output_id: OutputId::new("new"),
+                kind: record("\\\\host\\share\\show.mp4"),
+            }),
+            invalid("edits.0.kind.path", "must not start with two separators"),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
                 kind: record("/home/me/Videos/"),
             }),
             invalid("edits.0.kind.path", "must end in a file name"),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("C:\\Videos\\nul.mp4"),
+            }),
+            invalid("edits.0.kind.path", "must not end in a DOS device name"),
         ),
         (
             Batch::single(Edit::OutputSetTarget {
@@ -859,6 +897,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 ],
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             ProtocolError::NotFound {
                 entity: EntityKind::Output,
@@ -1073,6 +1112,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                     .collect(),
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),
@@ -1222,6 +1262,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                     .collect(),
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             invalid(
                 "edits.14.bus_id",
@@ -1241,6 +1282,63 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             ProtocolError::NotFound {
                 entity: EntityKind::Bus,
                 id: "ghost".into(),
+            },
+        ),
+        // Hotkeys (ADR-0024 §5): one spelling per chord, one binding per chord, and only
+        // actions that name objects that exist and keep no secret.
+        (
+            Batch::single(Edit::HotkeySet {
+                chord: Chord::new("Shift+Ctrl+KeyA"),
+                action: start_yt(),
+            }),
+            invalid(
+                "edits.0.chord",
+                "modifiers must each appear once, in the order Ctrl, Alt, Shift, Meta",
+            ),
+        ),
+        (
+            Batch::single(Edit::HotkeySet {
+                chord: Chord::new("F1"),
+                action: start_yt(),
+            }),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Hotkey,
+                id: "F1".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::HotkeySet {
+                chord: Chord::new("F2"),
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("ghost"),
+                },
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::HotkeySet {
+                chord: Chord::new("F2"),
+                action: Action::OutputSetKey {
+                    output_id: OutputId::new("yt"),
+                    key: crate::SecretString::new("live_secret"),
+                },
+            }),
+            invalid(
+                "edits.0.action.type",
+                "`output.set_key` can't be bound: a stream key is never stored in the \
+                 collection (R-SEC-001)",
+            ),
+        ),
+        (
+            Batch::single(Edit::HotkeyClear {
+                chord: Chord::new("F2"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Hotkey,
+                id: "F2".into(),
             },
         ),
         (
@@ -1437,6 +1535,28 @@ fn filter_add(source: &str, id: &str, chain: FilterChain, index: Option<u32>) ->
         enabled: None,
         index,
     }
+}
+
+/// The action `F1` runs.
+fn switch_to_a() -> Action {
+    Action::SceneSwitch {
+        scene_id: SceneId::new("a"),
+    }
+}
+
+/// The action `Ctrl+Digit1` runs.
+fn start_yt() -> Action {
+    Action::OutputStart {
+        output_id: OutputId::new("yt"),
+    }
+}
+
+/// The collection's hotkey bindings, ordered by chord.
+pub fn hotkeys() -> Vec<HotkeyBinding> {
+    vec![
+        HotkeyBinding::new(Chord::new("Ctrl+Digit1"), &start_yt()),
+        HotkeyBinding::new(Chord::new("F1"), &switch_to_a()),
+    ]
 }
 
 /// Profile `low`: 3000 kbit/s CBR, a keyframe every 2 s, hardware preferred, AAC at

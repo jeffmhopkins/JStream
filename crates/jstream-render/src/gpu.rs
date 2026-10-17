@@ -4,7 +4,7 @@
 use std::future::Future;
 use std::task::{Context, Poll, Waker};
 
-use jstream_platform::GpuContext;
+use jstream_platform::{ContextKey, GpuContext};
 
 use crate::error::RenderError;
 
@@ -34,6 +34,8 @@ pub(crate) struct Gpu {
     pub adapter: wgpu::Adapter,
     pub max_texture_dimension_2d: u32,
     pub max_buffer_size: u64,
+    /// The platform context the device came from, or `None` for a device of its own.
+    pub context: Option<ContextKey>,
 }
 
 impl Gpu {
@@ -50,7 +52,8 @@ impl Gpu {
 
     pub(crate) fn from_context(ctx: &GpuContext) -> Self {
         let adapter = ctx.adapter().clone();
-        let gpu = Self::bundle(adapter, ctx.device().clone(), ctx.queue().clone());
+        let mut gpu = Self::bundle(adapter, ctx.device().clone(), ctx.queue().clone());
+        gpu.context = Some(ctx.key());
         gpu.log_open("platform context");
         gpu
     }
@@ -79,6 +82,7 @@ impl Gpu {
             adapter,
             max_texture_dimension_2d: limits.max_texture_dimension_2d,
             max_buffer_size: limits.max_buffer_size,
+            context: None,
         }
     }
 
