@@ -2,17 +2,17 @@
 id = "ADR-0066"
 title = "Portable Windows distribution v2: an optional virtual camera, registered from an administrators-only copy"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0066: Portable Windows distribution v2: an optional virtual camera, registered from an administrators-only copy
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
-Supersedes [ADR-0020](0020-portable-windows-distribution.md) once accepted. It keeps all
+Supersedes [ADR-0020](0020-portable-windows-distribution.md). It keeps all
 of ADR-0020 except where the virtual camera's DLL is registered from, and makes
 registering it explicitly optional.
 

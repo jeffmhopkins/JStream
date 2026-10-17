@@ -134,7 +134,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
-| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0020). The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0066). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -145,7 +145,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
-| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
+| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling; draws an effect through `jstream-render`'s filter harness. No GPU device of its own | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
@@ -1036,11 +1036,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 ## Packaging
 <!-- @section
 covers = ["xtask/src/dist.rs", ".cargo/config.toml"]
-depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
-admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
+admin ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The folder also holds
 `jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
 runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
 with the sandboxed browser helper: CEF's `bootstrap.exe` renamed
@@ -1073,7 +1073,7 @@ Direct3D 12).
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The registered DLL is the one in the app's
   folder, which the user can usually write to (#242).
-  [ADR-0066](adr/0066-portable-windows-distribution-v2.md) (proposed) makes registering
+  [ADR-0066](adr/0066-portable-windows-distribution-v2.md) (accepted) makes registering
   optional and registers an administrators-only copy under `%ProgramFiles%` instead, in
   the same prompt (#561; [THREAT-MODEL › Virtual camera](security/threat-model.md#vcam)). The app can unregister
   the source and detects a moved folder. Until the desktop app has that mode, `jstream-daemon --register-vcam` is

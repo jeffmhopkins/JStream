@@ -292,7 +292,7 @@ or the OAuth access token, which pass through neither (#353).
 <a id="vcam"></a>
 ## Virtual camera
 <!-- @section
-depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
 -->
 
 **Threats:** another session's user reading the camera feed or injecting frames; a
@@ -308,14 +308,14 @@ it, and checks every texture's format.
 needs full access; `Global\` blocks, which only an administrator or service can create,
 are trusted.
 
-**Decided, not yet on main (#242):** today the registered media source DLL is the one in
+**Accepted, not yet on main (#242):** today the registered media source DLL is the one in
 the app's own folder, which the user can usually write to. Any program running as that
 user can replace it without an administrator prompt, and its code then runs in Frame
 Server's `svchost` (LOCAL SERVICE, session 0) the next time the camera loads. A hash
 check can't fix this, because Windows loads the DLL, not JStream, and a stub loader in
 the same folder could be replaced the same way. The maintainer chose the fix: "If you
 have to register it, name it optional, and then yeah, I think the program files makes
-sense". [ADR-0066](../adr/0066-portable-windows-distribution-v2.md) (proposed) makes
+sense". [ADR-0066](../adr/0066-portable-windows-distribution-v2.md) (accepted) makes
 registering optional. In the same UAC prompt, it copies the DLL to `%ProgramFiles%`
 with a DACL only administrators can write through, and registers that copy. The code
 is #561. Once it lands, the copy is as trustworthy as the portable folder was when the
@@ -343,7 +343,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
-| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium; fix decided ([ADR-0066](../adr/0066-portable-windows-distribution-v2.md), proposed), code in #561 |
+| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium; fix accepted ([ADR-0066](../adr/0066-portable-windows-distribution-v2.md)), code in #561 |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |
 
 <a id="upkeep"></a>
