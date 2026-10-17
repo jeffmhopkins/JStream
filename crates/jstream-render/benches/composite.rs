@@ -5,9 +5,10 @@
 //! cargo bench -p jstream-render --bench composite
 //! ```
 //!
-//! `OpenOptions::headless()` prefers a software adapter (lavapipe, WARP), as CI has. On
-//! those the numbers are CPU rasterisation, not GPU cost: they track regressions in what
-//! the compositor submits, never a GPU budget. With no adapter at all the benchmarks are
+//! `OpenOptions::hardware()` takes the GPU when there is one, else a software adapter
+//! (lavapipe, WARP), as CI has. On a software adapter the numbers are CPU rasterisation,
+//! not GPU cost: they track regressions in what the compositor submits, never a GPU
+//! budget. With no adapter at all the benchmarks are
 //! skipped with a line on stderr, except under `CI`, where that panics.
 //!
 //! - `composite_1080p_readback`: a 1920x1080 frame of N 1280x720 items, with the readback
@@ -33,7 +34,7 @@ const ITEM_HEIGHT: u32 = 720;
 const ITEM_COUNTS: [usize; 3] = [1, 4, 16];
 
 fn open() -> Option<Compositor> {
-    match Compositor::open(OpenOptions::headless()) {
+    match Compositor::open(OpenOptions::hardware()) {
         Ok(compositor) => {
             let _ = writeln!(
                 std::io::stderr(),
