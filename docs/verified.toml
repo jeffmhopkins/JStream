@@ -4128,7 +4128,7 @@ stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the steps against cli#usage and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the go-live steps use output and key commands, unaffected by the CLI's hotkey and live-event text or the server's new connection caps. Holds." }
 
 ["RUNBOOK-WAVES#current"."body"]
-stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
+stamp = { hash = "b3:5aa2a4f8e5d80425", by = "agent:wave-owner", note = "Adds the verify step after a wave merge: --merge keeps the PR's earlier note and adds the merge's change, a plain --note replaces it (DOCS#notes), and --renote with --from wave/<name> corrects a fresh section's note; matches DOCS.md's descriptions of --merge and --renote" }
 
 ["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
 stamp = { hash = "b3:13f72e4dc960fb5c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "DOCS#verification now adds that --renote fails when the ledger at the merge base doesn't parse; this section's account of merge-main --from wave/<name> and the PR loop is unaffected and still holds" }
@@ -4143,7 +4143,7 @@ stamp = { hash = "b3:d87b17731373b1f2", by = "agent:draft-ci-wording", note = "R
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
 
 ["RUNBOOK-WAVES#owner"."body"]
-stamp = { hash = "b3:3a71f5c50a47e8d9", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
+stamp = { hash = "b3:c9f78031bb1abe35", by = "agent:wave-owner", note = "Step 2's sync now verifies the stale sections as Keeping a PR current says (--merge, not a plain --note); the rest of the owner's steps are unchanged" }
 
 ["RUNBOOK-WAVES#owner"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
