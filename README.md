@@ -54,13 +54,13 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `██████████` 100% | 35 | 0 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `████████░░` 83% | 19 | 2 | 2 |
+| [M2: UI](ROADMAP.md#m2) | `█████████░` 87% | 20 | 1 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 40% | 4 | 0 | 6 |
 
-103 of 113 items are merged; 10 of those still wait on a run on Windows hardware.
+104 of 113 items are merged; 10 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 20 items, by next step: 🔨 build 6, 🌊 its wave lands 1, 🧪 Windows run 9, 👤 maintainer 4</summary>
+<summary><b>What's left</b>: 19 items, by next step: 🔨 build 6, 🧪 Windows run 9, 👤 maintainer 4</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -74,7 +74,6 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
-| U4p | Live preview on canvas | M2 | 🌊 its wave lands | #302 merged into wave/m2-2; lands with that wave | #302 |
 | T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
 | T1u | Studio-mode UI | M2 | 🔨 build | draft #304, on T1 |  |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
@@ -210,7 +209,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M2</b> UI: 19 of 23 merged</summary>
+<summary><b>M2</b> UI: 20 of 23 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -222,7 +221,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
 | U3c | Mixer panel | ✅ merged | #308 |
 | U4 | Canvas editing | ✅ merged | #255 |
-| U4p | Live preview on canvas | 🔍 in review: #302 merged into wave/m2-2; lands with that wave | #302 |
+| U4p | Live preview on canvas | ✅ merged | #302 |
 | U1 | Preview stream | ✅ merged | #251 |
 | U5 | Tauri desktop app | ✅ merged | #258 |
 | Q3 | UI end-to-end tests | ✅ merged | #309 |
@@ -317,6 +316,8 @@ depends_on = ["docs/adr/0008-windows-support-policy.md"]
   and the smoke script that checks it
 - [docs/runbooks/waves.md](docs/runbooks/waves.md): which wave branch a PR targets, and
   how a wave lands in `main`
+- [docs/runbooks/windows-hardware-pass.md](docs/runbooks/windows-hardware-pass.md): every
+  open Windows hardware run as one checklist, with the issue each one closes
 - [docs/security/threat-model.md](docs/security/threat-model.md): what JStream protects, from
   whom, the controls at each trust boundary, and the open gaps
 - [CLAUDE.md](CLAUDE.md): the entry point for builder agents
