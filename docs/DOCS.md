@@ -28,7 +28,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **Available now:** `cargo xtask docs check` validates doc identity and metadata
   schema, sections and rules (anchors, blocks, `enforced_by` vocabulary and check names),
   references (links, anchors, registered external URLs, superseded ADRs, `depends_on`), and
-  facts. It runs as the `docs` CI check.
+  facts. It also refuses git conflict markers left in a doc by a merge committed with its
+  conflicts unresolved. It runs as the `docs` CI check.
 - **Hash-bound verification** ([Hash-bound verification](#verification)): `docs check`
   fails on any section whose stamp no longer matches its text, covered files and
   dependencies, and `cargo xtask docs verify` records a re-read. Hashes skip metadata
