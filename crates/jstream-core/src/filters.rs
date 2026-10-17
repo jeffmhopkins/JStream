@@ -4,15 +4,19 @@
 //! stores them, to the kernel the mixer builds ([`spec`]) or updates in place
 //! ([`params`]).
 //!
-//! The mapping is what drives a source's audio chain once the engine routes each audio
-//! source to its own mixer input. One setting only a rebuild changes: a limiter's
+//! The mapping drives every audio chain the mixer runs: each audio source's on its own
+//! mixer input, the master stage's on every bus that feeds an output, and an output's
+//! own on its output tap (ADR-0027). One setting only a rebuild changes: a limiter's
 //! `lookahead_ms`, which is its latency, so [`params`] leaves it out and the descriptor
 //! marks it not live.
 
 use jstream_audio::filter::{
     CompressorParams, GateParams, LimiterParams, MAX_DELAY_MS, MAX_LOOKAHEAD_MS,
 };
-use jstream_audio::{FilterControl, FilterParams, FilterSpec, InputControl};
+use jstream_audio::{
+    AudioError, FilterControl, FilterParams, FilterSpec, InputControl, MasterControl,
+    OutputTapControl,
+};
 use jstream_protocol::{
     FilterChain, KindCategory, KindDescriptor, ParamDescriptor, ParamType, Settings,
 };
@@ -225,12 +229,11 @@ pub(crate) struct Chained {
     settings: Settings,
 }
 
-/// The filters the mixer runs for `source`: its audio chain in order, without the
-/// disabled filters and those of a kind the engine has no kernel for (a pack kind),
-/// which are bypassed.
-pub(crate) fn chain_of(source: &jstream_graph::Source) -> Vec<Chained> {
-    source
-        .filters()
+/// The filters the mixer runs for an audio chain of `chains` (a source's, the master
+/// stage's or an output's): in order, without the disabled filters and those of a kind
+/// the engine has no kernel for (a pack kind), which are bypassed.
+pub(crate) fn chain_of(chains: &jstream_graph::Chains) -> Vec<Chained> {
+    chains
         .chain(FilterChain::Audio)
         .iter()
         .filter(|f| f.enabled() && spec(f.kind(), f.settings()).is_some())
@@ -241,8 +244,32 @@ pub(crate) fn chain_of(source: &jstream_graph::Source) -> Vec<Chained> {
         .collect()
 }
 
-/// The filters one mixer input runs, kept in line with its source's chain by
-/// [`Self::apply`].
+/// Where a [`Chain`] runs: a mixer input, the master chain, or an output tap.
+pub(crate) trait FilterHost {
+    /// Adds a filter at the end of this host's chain.
+    fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError>;
+}
+
+impl FilterHost for InputControl {
+    fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        InputControl::add_filter(self, spec)
+    }
+}
+
+impl FilterHost for MasterControl {
+    fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        MasterControl::add_filter(self, spec)
+    }
+}
+
+impl FilterHost for OutputTapControl {
+    fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        OutputTapControl::add_filter(self, spec)
+    }
+}
+
+/// The filters one [`FilterHost`] runs, kept in line with its chain in the collection
+/// by [`Self::apply`].
 #[derive(Default)]
 pub(crate) struct Chain {
     /// What the input was last asked to run, and each filter's control: `None` for one
@@ -253,14 +280,14 @@ pub(crate) struct Chain {
 }
 
 impl Chain {
-    /// Brings `input`'s chain in line with `wanted`. When only settings changed, and
+    /// Brings `host`'s chain in line with `wanted`. When only settings changed, and
     /// none that rebuilds a filter, each changed filter is updated in place, so its
     /// state (a gate's envelope, a delay line) carries on; otherwise the chain is
     /// rebuilt. Returns what the mixer refused, to log: a filter it would not add is
     /// bypassed, and one whose new settings it would not take keeps its old ones and
     /// is tried again on the next pass. A refusal is a runtime error on that filter,
     /// never an edit failure (ADR-0026 §6).
-    pub(crate) fn apply(&mut self, input: &InputControl, wanted: &[Chained]) -> Vec<String> {
+    pub(crate) fn apply(&mut self, host: &impl FilterHost, wanted: &[Chained]) -> Vec<String> {
         self.removing.retain(|control| !control.remove());
         let current: Vec<&Chained> = self.filters.iter().map(|(chained, _)| chained).collect();
         if current.iter().copied().eq(wanted) {
@@ -303,7 +330,7 @@ impl Chain {
         }
         for chained in wanted {
             let control = spec(&chained.kind, &chained.settings)
-                .map(|spec| input.add_filter(spec))
+                .map(|spec| host.add_filter(spec))
                 .and_then(|added| {
                     added
                         .map_err(|err| {

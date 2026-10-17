@@ -2684,6 +2684,8 @@ dependencies = [
  "jstream-platform-windows",
  "jstream-protocol",
  "jstream-server",
+ "jstream-youtube",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2714,7 +2716,9 @@ dependencies = [
 name = "jstream-effects"
 version = "0.0.0"
 dependencies = [
+ "jstream-media",
  "jstream-protocol",
+ "jstream-render",
  "naga",
  "serde",
  "serde_json",
@@ -2851,6 +2855,7 @@ dependencies = [
  "jstream-media",
  "jstream-platform",
  "jstream-protocol",
+ "serde_json",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",

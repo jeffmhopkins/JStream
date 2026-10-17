@@ -37,3 +37,15 @@ while [ "$i" -lt 16 ]; do
     done
     i=$((i + 1))
 done
+
+# Image files the image source's tests decode, and the text golden PNGs. The repository
+# keeps no GIF, so a 1x1 one is written here.
+for f in "$root"/crates/jstream-sources/tests/data/*.jpg "$root"/crates/jstream-sources/tests/data/*.webp \
+    "$root"/crates/jstream-sources/tests/data/text/*.png; do
+    seed image_decode "$f"
+done
+printf 'GIF89a\001\000\001\000\200\000\000\377\000\000\000\000\000!\371\004\001\000\000\000\000,\000\000\000\000\001\000\001\000\000\002\002D\001\000;' > "$tmp/gif"
+seed image_decode "$tmp/gif"
+
+# The bundled font.
+seed font_load "$root/crates/jstream-sources/assets/fonts/Roboto-Regular-subset.ttf"

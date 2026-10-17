@@ -159,7 +159,8 @@ The code is ported from spikes S1 to S3. This first cut has:
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
   ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): the **AAC encoder** and
-  the **H.264 encoder**, from CPU frames or from encode targets on the GPU. AAC:
+  the **video encoders** (H.264, HEVC and AV1), from CPU frames or from encode targets on
+  the GPU. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
     Windows that is Microsoft's software AAC encoder. It takes 44.1 or 48 kHz; mono or
     stereo at 96, 128, 160 or 192 kbps, or 5.1 at six times those (576, 768, 960 or
@@ -174,13 +175,22 @@ The code is ported from spikes S1 to S3. This first cut has:
     initialising COM. Sessions are opened from a thread that isn't an STA.
   - **Teardown:** dropping a session ends streaming and calls `ShutdownObject` on the
     activation object, as Microsoft asks. One output sample is reused for every pull.
-  - **H.264 encoder, CPU path:** `MfCodecs::new()`'s encoders take NV12, RGBA or BGRA
+  - **Video encoders:** H.264 (High), HEVC (Main) and AV1 (Main), all 8-bit 4:2:0 from
+    NV12, through one session type (`codec/video.rs`) that differs per codec only in
+    the MFT's output subtype and profile. H.264 and HEVC packets are Annex B, AV1 packets
+    one temporal unit of low-overhead OBUs, as `jstream-media` defines; the first
+    keyframe carries the parameter sets (or sequence header) in-band, which `jstream-mux`'s
+    enhanced RTMP track builds its decoder configuration from. Windows ships a software
+    encoder for H.264 only, so HEVC and AV1 open only where the GPU has a hardware
+    encoder (or a software MFT is installed); elsewhere they are `Unsupported`.
+    `list` reports every encoder MFT for each of the three.
+  - **Video encoders, CPU path:** `MfCodecs::new()`'s encoders take NV12, RGBA or BGRA
     `VideoSurface::Cpu` frames and copy them into Media Foundation memory buffers as
     NV12, the MFTs' input. RGBA (the compositor's output, which the engine's pipeline
     encodes) and BGRA are converted first, the way display capture converts WGC's BGRA:
     BT.709 limited range, left-sited chroma. It is ARCH's fallback path
     ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
-  - **H.264 encoder, GPU path** (step 5): `Codecs::on_context` on a context `WindowsGpu`
+  - **Video encoders, GPU path** (step 5): `Codecs::on_context` on a context `WindowsGpu`
     opened (another backend's is `InvalidState`) gives the same backend on that context.
     Its video encoders take that context's NV12 encode targets (`VideoSurface::Gpu`) and
     nothing else: a CPU frame, or a GPU frame that isn't one of its encode targets, is
@@ -202,13 +212,14 @@ The code is ported from spikes S1 to S3. This first cut has:
       staged write waits for (`WindowsGpu` below). Neither waits on the CPU. The encoder
       drops the frame once the copy is queued, so a producer writes a target again only
       when it holds the frame's only clone.
-  - **H.264, both paths:**
+  - **Video encoders, both paths:**
     - **Choosing an encoder** on the CPU path: hardware encoder MFTs come first, then the
-      OS software encoder, following `HardwarePreference`. The first one that accepts the
+      OS software encoder (H.264 only), following `HardwarePreference`. The first one that accepts the
       media types wins, and `CodecInfo::hardware` says which kind it was.
     - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
       size, no B-frames (so packets come out in presentation order and `dts == pts`),
-      low latency, the High profile, and BT.709 limited range. `ICodecAPI` settings are
+      low latency, the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
+      Main), and BT.709 limited range. `ICodecAPI` settings are
       best effort; the media type always carries the bit rate.
     - **Timing:** each packet gets back its frame's exact `pts`, even when the frame's
       time base doesn't round evenly to the encoder's 100 ns. Keyframes come from
@@ -325,7 +336,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     adapter, and two fences shared between D3D11 and D3D12: the context's fence and the
     release fence. The `AdapterId` carries the adapter's LUID and PCI vendor ID.
   - **Capture** reaches the context's D3D11 device through `WgcCapture::on_gpu`, and the
-    H.264 encoder through `MfCodecs`' `Codecs::on_context`, both above.
+    video encoders through `MfCodecs`' `Codecs::on_context`, both above.
   - **`encode_target`** allocates an NV12 texture with a shared NT handle on the D3D11
     side, opens it on D3D12, and wraps it as a `wgpu::Texture` through wgpu-hal (in the
     `COMMON` state, which wgpu calls `PRESENT`).
@@ -477,8 +488,9 @@ decode through `MfMediaDecoders`), the virtual camera taking
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
 packet flags, positions across a device move), the capture helpers (BGRA and RGBA to NV12 with
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
-AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
-helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping), the GPU capture ring's slot
+AAC helpers (configuration check, PCM conversion, packet timing and padding), the video
+encoder helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts`
+mapping), the GPU capture ring's slot
 choice (reuse, drop when full, release on resize), the credential helpers (target names
 of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
 the Media Foundation check's decision (edition kinds and the advice for each) and the
@@ -496,10 +508,12 @@ display are platform tests: behind the `hw-tests` feature and `#[ignore]`d, beca
 machines may have no audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
 target, stages it and checks that the shared fence passes the staged value. The GPU
-encode test opens the H.264 encoder on the context, writes a ring of three 720p encode
+encode tests open the H.264, HEVC and AV1 encoders on the context, write a ring of three 720p encode
 targets with wgpu for 60 frames, checking that the encoder has let go of each target
-before it is written again, encodes them, refuses a CPU frame, and checks the packets
-as the CPU encode tests do. The capture
+before it is written again, encode them, refuse a CPU frame, and check the packets as
+the CPU encode tests do: each codec's framing, and the parameter sets (or AV1 sequence
+header) in the first keyframe. HEVC and AV1 run only on a GPU that encodes them (AV1
+needs an NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer). The capture
 tests list the displays, capture the primary display for a second, checking the
 frames' format and `pts`, start a capture of a destroyed window, which must be
 `NotFound`, and capture three times in a row in one process. The audio tests list the
@@ -518,7 +532,8 @@ video-device tests list devices, formats and paired audio, capture an uncompress
 and the largest MJPEG format for two seconds each (checking size, format and `pts`), open
 a device twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
 runs only when `JSTREAM_UNPLUG_TEST` is set. The H.264 tests encode two seconds in
-software from NV12 and from RGBA (the engine's input), and in hardware from RGBA. The
+software from NV12 and from RGBA (the engine's input), and in hardware from RGBA; the
+HEVC and AV1 tests encode two seconds in hardware from RGBA. The
 media-file tests play the video file `JSTREAM_TEST_MEDIA` names (over two seconds
 long): thirty frames in order, opaque and of the stream's size, a seek to the middle
 landing at or before it, a seek past the end ending the stream, a second of its audio
@@ -526,7 +541,8 @@ as contiguous `f32` blocks and a seek of it, no audio when none is asked for, an
 errors for a missing file, a file that isn't media and an unsupported pixel format.
 Run them on a
 Windows machine with a
-microphone, speakers, a display, a webcam and a DX12 GPU with a hardware H.264 encoder:
+microphone, speakers, a display, a webcam and a DX12 GPU with hardware H.264, HEVC and
+AV1 encoders:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The
 virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 ([its Hardware check](../jstream-vcam-windows/README.md#hardware-check)).

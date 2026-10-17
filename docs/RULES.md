@@ -640,6 +640,7 @@ every other check runs. The wave's PR into `main` runs every check ([ADR-0055](a
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
+| `fuzz` | nightly scheduled run of every fuzz target for a few minutes; a crashing input opens or updates an issue for its target ([Fuzz targets › In CI](../fuzz/README.md#ci)) | n/a | now |
 
 <a id="R-GIT-004"></a>
 ### R-GIT-004: One logical change per PR

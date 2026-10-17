@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pair this browser - JStream</title>
+<style nonce="{{__TRUNK NONCE__}}">
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; display: grid; place-items: center; min-height: 100vh; }
+  main { width: min(22rem, calc(100vw - 2rem)); }
+  h1 { font-size: 1.4rem; }
+  label { display: block; margin: 1rem 0; }
+  input { display: block; box-sizing: border-box; width: 100%; margin-top: 0.25rem;
+          padding: 0.5rem; font: inherit; }
+  #code { font-family: ui-monospace, monospace; letter-spacing: 0.1em;
+          text-transform: uppercase; }
+  button { padding: 0.5rem 1.25rem; font: inherit; }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pair this browser</h1>
+  <p>On the host, open JStream's pairing panel and start pairing, then type the code it
+     shows. The code works once, for two minutes.</p>
+  <form id="pair">
+    <label>Pairing code
+      <input id="code" name="code" required autocomplete="off" autocapitalize="characters"
+             spellcheck="false" maxlength="16" placeholder="XXXX-XXXX">
+    </label>
+    <label>Device name
+      <input id="name" name="name" required autocomplete="off" maxlength="64"
+             placeholder="Tablet">
+    </label>
+    <button id="submit" type="submit">Pair</button>
+  </form>
+  <p id="status" role="status"></p>
+</main>
+<script nonce="{{__TRUNK NONCE__}}">
+"use strict";
+(function () {
+  var form = document.getElementById("pair");
+  var button = document.getElementById("submit");
+  var status = document.getElementById("status");
+  var messages = {
+    401: "No pairing code is open. Start pairing on the host, then try again.",
+    415: "This browser sent the code in a form the server refused."
+  };
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var body = JSON.stringify({
+      code: document.getElementById("code").value,
+      name: document.getElementById("name").value,
+      browser: true
+    });
+    button.disabled = true;
+    status.textContent = "Pairing…";
+    fetch("/api/v1/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+      body: body
+    }).then(function (reply) {
+      if (reply.ok) {
+        status.textContent = "Paired. Opening JStream…";
+        window.location.replace("/");
+        return;
+      }
+      return reply.text().then(function (text) {
+        button.disabled = false;
+        status.textContent = messages[reply.status] || text.trim() ||
+          "Pairing failed (" + reply.status + ").";
+      });
+    }, function () {
+      button.disabled = false;
+      status.textContent = "The server could not be reached.";
+    });
+  });
+})();
+</script>
+</body>
+</html>
