@@ -357,7 +357,8 @@ section that is already fresh, as when a reviewer asks for a better note, withou
 any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
 at the merge base of `HEAD` and `origin/main`, or of the wave named with
 `--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
-`--merge`, and a section this branch never stamped.
+`--merge`, and a section this branch never stamped. It fails when the ledger at that merge
+base doesn't parse, rather than taking every entry for this branch's own.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes

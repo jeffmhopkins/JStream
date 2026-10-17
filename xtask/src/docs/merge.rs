@@ -104,7 +104,7 @@ fn git_ok(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
 /// conflicts, and commits the merge when nothing else conflicts. `branch` is `main`, or a
 /// `wave/*` branch for a PR into a wave.
 pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
-    check_branch(branch)?;
+    check_branch(branch, "can only merge")?;
     if git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
         .status
         .success()
@@ -209,11 +209,18 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
 
 /// The ledger as it was at `rev`; empty when the file is missing or doesn't parse there.
 fn ledger_at(root: &Path, rev: &str) -> Result<ledger::Ledger> {
+    Ok(ledger_text_at(root, rev)?
+        .and_then(|text| ledger::Ledger::parse(&text).ok())
+        .unwrap_or_default())
+}
+
+/// The ledger's text at `rev`; `None` when the file is missing there.
+fn ledger_text_at(root: &Path, rev: &str) -> Result<Option<String>> {
     let out = git(root, &["show", &format!("{rev}:{}", ledger::PATH)])?;
-    if !out.status.success() {
-        return Ok(ledger::Ledger::default());
-    }
-    Ok(ledger::Ledger::parse(&String::from_utf8_lossy(&out.stdout)).unwrap_or_default())
+    Ok(out
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned()))
 }
 
 /// The latest merge on this branch's first-parent chain, unless it is already on
@@ -304,18 +311,30 @@ pub(crate) fn changed_after(
 
 /// The ledger at the merge base of `HEAD` and `origin/<branch>` (`main`, or the `wave/*`
 /// branch a PR targets): the entries this branch didn't write are the ones equal to it.
+/// Empty when the ledger doesn't exist there; an error when it doesn't parse, since an
+/// empty base would make every entry look like this branch's own.
 pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
-    check_branch(branch)?;
+    check_branch(branch, "can only compare against")?;
     let upstream = format!("{REMOTE}/{branch}");
     let base = git_ok(root, &["merge-base", "HEAD", &upstream])
         .with_context(|| format!("finding where this branch left `{upstream}`"))?;
-    ledger_at(root, String::from_utf8_lossy(&base).trim())
+    let base = String::from_utf8_lossy(&base).trim().to_owned();
+    match ledger_text_at(root, &base)? {
+        None => Ok(ledger::Ledger::default()),
+        Some(text) => ledger::Ledger::parse(&text).map_err(|e| {
+            anyhow::anyhow!(
+                "{} where this branch left `{upstream}` ({base}) doesn't parse: {e}",
+                ledger::PATH
+            )
+        }),
+    }
 }
 
-/// Refuses any branch but `main` and `wave/<name>`.
-fn check_branch(branch: &str) -> Result<()> {
+/// Refuses any branch but `main` and `wave/<name>`; `refusal` says what the caller does
+/// with it, as in "`refusal` `main` or a `wave/<name>` branch".
+fn check_branch(branch: &str, refusal: &str) -> Result<()> {
     if branch != BRANCH && !branch.strip_prefix("wave/").is_some_and(|w| !w.is_empty()) {
-        bail!("can only merge `{BRANCH}` or a `wave/<name>` branch, not `{branch}`");
+        bail!("{refusal} `{BRANCH}` or a `wave/<name>` branch, not `{branch}`");
     }
     Ok(())
 }
