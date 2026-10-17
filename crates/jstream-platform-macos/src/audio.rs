@@ -175,6 +175,8 @@ mod backend {
         ) -> Result<Box<dyn AudioStream>, PlatformError> {
             check_input(target, self.version)?;
             let which = which(target)?;
+            // An unknown or unusable device is reported as such, before any prompt.
+            stream::format(&which)?;
             self.check_microphone()?;
             stream::open_input(which, handler)
         }
