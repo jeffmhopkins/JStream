@@ -47,6 +47,7 @@ pub use browser::opens_browser;
 pub use capture::CaptureSpec;
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use error::SourceError;
+pub use image::{StillImage, decode_still};
 /// The browser engine seam `browser` sources open their pages through, which the host
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;

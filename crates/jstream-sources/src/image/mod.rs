@@ -157,6 +157,46 @@ impl Animation {
     }
 }
 
+/// One still image: straight sRGB RGBA8, row by row with no padding.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StillImage {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// `width * height * 4` bytes.
+    pub rgba: Vec<u8>,
+}
+
+/// Decodes `bytes`, read from the asset at `path` (named in errors), as a PNG, JPEG,
+/// WebP or GIF file within `limits`, keeping its first frame: the image a filter reads
+/// (a mask, a LUT laid out as tiles), which never animates.
+///
+/// # Errors
+/// As the `image` kind's decoding: [`SourceError::UnsupportedFormat`],
+/// [`SourceError::Decode`] and [`SourceError::TooLarge`].
+pub fn decode_still(
+    bytes: &[u8],
+    path: &str,
+    limits: &crate::Limits,
+) -> Result<StillImage, SourceError> {
+    let decoded = decode::decode(bytes, path, limits)?;
+    let (rgba, _) = decoded
+        .frames
+        .into_iter()
+        .next()
+        .ok_or_else(|| SourceError::Decode {
+            path: path.to_owned(),
+            format: "an image",
+            reason: "it has no frames".into(),
+        })?;
+    Ok(StillImage {
+        width: decoded.width,
+        height: decoded.height,
+        rgba,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::Animation;
