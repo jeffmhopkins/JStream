@@ -4,8 +4,8 @@
 //! history logs it and checks a step's touched set against other clients' later ones.
 
 use jstream_protocol::{
-    BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, ItemId, OutputId, SceneId,
-    SourceId, SourceKind, VideoMixId,
+    BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, FilterOwner, ItemId, OutputId,
+    SceneId, SourceId, SourceKind, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -18,8 +18,8 @@ enum Object {
     Output(OutputId),
     Encoder(EncoderProfileId),
     VideoMix(VideoMixId),
-    /// A filter, by its owner's source and its ID there (ADR-0026).
-    Filter(SourceId, FilterId),
+    /// A filter, by its owner and its ID there (ADR-0026).
+    Filter(FilterOwner, FilterId),
     /// An audio bus.
     Bus(BusId),
     /// One source's send into one bus.
@@ -234,19 +234,27 @@ impl Touched {
             Edit::FilterAdd {
                 owner, filter_id, ..
             } => {
-                let source_id = owner.source_id();
                 self.exists
-                    .insert(Object::Filter(source_id.clone(), filter_id.clone()));
-                self.uses.insert(Object::Source(source_id.clone()));
+                    .insert(Object::Filter(owner.clone(), filter_id.clone()));
+                match owner {
+                    FilterOwner::Source { source_id } => {
+                        self.uses.insert(Object::Source(source_id.clone()));
+                    }
+                    FilterOwner::Output { output_id } => {
+                        self.uses.insert(Object::Output(output_id.clone()));
+                    }
+                    // The master stage always exists.
+                    _ => {}
+                }
             }
             Edit::FilterRemove { owner, filter_id } => {
                 self.exists
-                    .insert(Object::Filter(owner.source_id().clone(), filter_id.clone()));
+                    .insert(Object::Filter(owner.clone(), filter_id.clone()));
             }
             Edit::FilterSetEnabled {
                 owner, filter_id, ..
             } => {
-                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                let filter = Object::Filter(owner.clone(), filter_id.clone());
                 self.prop(filter, Prop::Enabled);
             }
             Edit::FilterSetSettings {
@@ -255,7 +263,7 @@ impl Touched {
                 patch,
             } => {
                 for param in patch.0.keys() {
-                    let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                    let filter = Object::Filter(owner.clone(), filter_id.clone());
                     self.prop(filter, Prop::Setting(param.clone()));
                 }
             }
@@ -263,7 +271,7 @@ impl Touched {
             Edit::FilterReorder {
                 owner, filter_id, ..
             } => {
-                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                let filter = Object::Filter(owner.clone(), filter_id.clone());
                 self.prop(filter, Prop::Index);
             }
             Edit::SourceSetAudio {

@@ -192,9 +192,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  monitor { device, tap: PreFilters | PostFilters }
 │                  an audio filter may name a key source (sidechain)
 ├── encoders       EncoderProfile { id, codec, rate_control, … }
-├── master         Master { video_filters[], audio_filters[] }   applies to everything leaving JStream
+├── master         Master { filters { video[], audio[] } }   applies to everything leaving JStream
 ├── privacy        Privacy { look: Blur { strength } | Slate { color | image }, muted_sources: [source_id] }
-└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, video_filters[], audio_filters[] }
+└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, filters { video[], audio[] } }
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_id } } | Record { path, container } | VirtualCam
 ```
 
@@ -276,7 +276,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   filter's kind is a `video_filter` or `audio_filter` kind matching its chain, and the
   `filter.*` edits address it by its owner and its ID, which is unique within the source
   and kept by `source.duplicate`. A disabled filter keeps its place and settings and is
-  bypassed. The audio chain runs on the source's input before its fader. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  bypassed. The audio chain runs on the source's input before its fader. The master
+  stage and each output own `filters { video, audio }` too, edited with the same
+  `filter.*` edits under the owners `master` and `output`
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)); only their audio chains
+  hold filters until video mixes run the video ones, and their filters can't hold a
+  reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
@@ -599,12 +604,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   can't be deleted, and a mix showing a scene blocks that scene's delete.
   `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
-  `filter.set_settings` and `filter.reorder` edit a source's filter chains, addressed by
-  an `owner` and a filter ID; `SourceInfo.filters` reports them
-  ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22). `source.set_audio`, `bus.create`,
-  `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set` and `send.remove` edit
-  sources' audio, the buses and the send matrix ([ADR-0028](adr/0028-audio-model-v2.md),
-  protocol 0.19).
+  `filter.set_settings` and `filter.reorder` edit the filter chains of a source, the
+  master stage or an output, addressed by an `owner` and a filter ID;
+  `SourceInfo.filters`, `OutputInfo.filters` and `state.get`'s `master` report them
+  ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22;
+  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29).
+  `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
+  `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19).
   `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
   ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.25). Deleting the scene or
   output an action names removes its bindings in the same edit, the batch result lists
@@ -777,7 +784,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 520 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 527 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

@@ -4379,6 +4379,77 @@ mod cpu_pipeline {
         assert_eq!(encoder_status(&control, "yt").2, 0);
     }
 
+    /// A recording with an audio chain of its own (ADR-0027) gets an output tap and its
+    /// own audio encode, while its video still shares the stream's session; both
+    /// outputs get audio, and the recording's file finishes.
+    #[test]
+    fn an_output_with_an_audio_chain_encodes_its_own_audio() {
+        let dir = TempDir::new("own-audio");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        batch(
+            &control,
+            edits(vec![Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Output {
+                    output_id: OutputId::new("rec"),
+                },
+                chain: jstream_protocol::FilterChain::Audio,
+                filter_id: jstream_protocol::FilterId::new("trim"),
+                kind: "gain".into(),
+                settings: [("gain_db", serde_json::json!(-6.0))].into_iter().collect(),
+                enabled: None,
+                index: None,
+            }]),
+        )
+        .expect("filter.add");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (state, encoder, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(state, OutputState::Active);
+        assert_eq!(
+            encoder.map(|encoder| encoder.shared_with),
+            Some(vec![OutputId::new("yt")]),
+            "the video session is still shared"
+        );
+        assert_eq!(sessions, 1);
+        let audio_tags = || {
+            publish
+                .tags()
+                .iter()
+                .filter(|tag| tag.tag_type == TagType::Audio)
+                .count()
+        };
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats_of(&OutputId::new("rec"))
+                    .is_some_and(|stats| {
+                        stats.video_subscriber.delivered >= 70
+                            && stats.audio_subscriber.delivered >= 10
+                    })
+                    && audio_tags() >= 10
+            }),
+            "audio never reached both outputs"
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        let before = audio_tags();
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || audio_tags() >= before + 10),
+            "the stream's audio stopped with the recording"
+        );
+
+        let bytes = std::fs::read(&path).expect("the finished recording");
+        let found = boxes(&bytes);
+        assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
+        assert!(found.iter().any(|name| name == "moof"), "{found:?}");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
     /// A program-stage failure fails every output on it. A start after that waits for
     /// the failed stage to go and opens a new one.
     #[test]
@@ -5010,6 +5081,7 @@ fn output_edits_configure_the_collection() {
             output_id: OutputId::new("out_yt"),
             kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
             encoder_profile: None,
+            filters: Default::default(),
             video_mix: None,
         }]
     );
@@ -5035,6 +5107,7 @@ fn output_edits_configure_the_collection() {
                 output_id: OutputId::new("out_yt"),
                 kind: rtmp_output("rtmps://a.rtmps.youtube.com:443/live2"),
                 encoder_profile: None,
+                filters: Default::default(),
                 video_mix: None,
             }]
         ),

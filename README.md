@@ -54,13 +54,13 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 94% | 33 | 2 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 2 | 4 |
+| [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 3 | 3 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 2 | 5 |
 
 97 of 113 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 23 items, by next step: 🔨 build 6, 🌊 its wave lands 7, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 1</summary>
+<summary><b>What's left</b>: 23 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -79,7 +79,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
 | T1u | Studio-mode UI | M2 | 🔨 build | draft #304, on T1 |  |
 | E2 | Video mixes | M2 | 🌊 its wave lands | #259 merged into wave/m1-2 | #259 |
-| D8p | Audio chain protocol fields | M2 | 🔨 build | draft #303 |  |
+| D8p | Audio chain protocol fields | M2 | 🌊 its wave lands | #303 merged into wave/m1-2 | #303 |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🌊 its wave lands, then 🔨 build | hotkeys #319 merged into wave/m1-2; organisation metadata draft #323 | #319 |
 | F6 | HEVC and AV1 encode | M3 | ❔ not set |  | #364 |
@@ -235,7 +235,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | T1u | Studio-mode UI | ⏳ planned: draft #304, on T1 |  |
 | E2 | Video mixes | 🔍 in review: #259 merged into wave/m1-2 | #259 |
 | D8 | Master and output audio chains | ✅ merged | #249 |
-| D8p | Audio chain protocol fields | ⏳ planned: draft #303 |  |
+| D8p | Audio chain protocol fields | 🔍 in review: #303 merged into wave/m1-2 | #303 |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned: hotkeys #319 merged into wave/m1-2; organisation metadata draft #323 | #319 |

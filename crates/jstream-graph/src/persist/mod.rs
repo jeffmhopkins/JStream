@@ -125,10 +125,27 @@ struct File {
     /// one with no audio), every channel source keeps its default master send.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sends: Option<Vec<FileSend>>,
+    /// The master stage (ADR-0027); omitted while it has no filters.
+    #[serde(default, skip_serializing_if = "FileMaster::is_empty")]
+    master: FileMaster,
     /// Hotkey bindings (ADR-0024 §5), ordered by chord; omitted when there are none, so
     /// a collection without hotkeys saves as it did before they existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     hotkeys: Vec<FileHotkey>,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileMaster {
+    /// Its filter chains; omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FileChains::is_empty")]
+    filters: FileChains,
+}
+
+impl FileMaster {
+    fn is_empty(&self) -> bool {
+        self.filters.is_empty()
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -238,6 +255,9 @@ struct FileOutput {
     /// The output's encoder profile; omitted for the engine's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     encoder_profile: Option<EncoderProfileId>,
+    /// Its own filter chains (ADR-0027); omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FileChains::is_empty")]
+    filters: FileChains,
     /// The video mix the output shows; omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     video_mix: Option<VideoMixId>,
@@ -286,6 +306,14 @@ struct FileMix {
 }
 
 impl Graph {
+    /// Both chains as the file saves them.
+    fn file_chains(&self, chains: &crate::Chains) -> FileChains {
+        FileChains {
+            video: self.file_filters(&chains.video),
+            audio: self.file_filters(&chains.audio),
+        }
+    }
+
     /// One chain as the file saves it.
     fn file_filters(&self, filters: &[crate::Filter]) -> Vec<FileFilter> {
         filters
@@ -353,10 +381,7 @@ impl Graph {
                     },
                     settings: source.settings.clone(),
                     duplicated_from: source.duplicated_from.clone(),
-                    filters: FileChains {
-                        video: self.file_filters(&source.filters.video),
-                        audio: self.file_filters(&source.filters.audio),
-                    },
+                    filters: self.file_chains(&source.filters),
                     audio: source
                         .audio
                         .filter(|a| Some(*a) != audio::default_audio(&source.kind, &self.kinds)),
@@ -369,6 +394,7 @@ impl Graph {
                     id: output.id.clone(),
                     kind: output.kind.clone(),
                     encoder_profile: output.encoder_profile.clone(),
+                    filters: self.file_chains(&output.filters),
                     video_mix: output.video_mix.clone(),
                 })
                 .collect(),
@@ -392,6 +418,9 @@ impl Graph {
                 .collect(),
             buses: file_buses(state),
             sends: file_sends(state),
+            master: FileMaster {
+                filters: self.file_chains(&state.master),
+            },
             hotkeys: state
                 .hotkeys
                 .iter()
@@ -541,10 +570,10 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 /// scenes, empty, in display order and with their roles; then the buses with their
 /// faders, which a source's settings may refer to; then sources, each after the
 /// sources its settings refer to; then every source's filters; then items, encoder
-/// profiles, video mixes, and outputs, each with its profile and mix; then the sends (the
-/// sources made their default master sends, so when the file lists sends a source without
-/// one has it removed), and each source's audio settings; and last the hotkey bindings,
-/// whose actions name scenes and outputs.
+/// profiles, video mixes, and outputs, each with its profile, mix and filters; then the
+/// master's filters; then the sends (the sources made their default master sends, so when
+/// the file lists sends a source without one has it removed), and each source's audio
+/// settings; and last the hotkey bindings, whose actions name scenes and outputs.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -575,30 +604,11 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
     }
     // After every source, so a filter's references find what they name.
     for source in &file.sources {
-        let chains = [
-            (FilterChain::Video, &source.filters.video),
-            (FilterChain::Audio, &source.filters.audio),
-        ];
-        for (chain, filters) in chains {
-            for filter in filters {
-                let object = format!("filter `{}` of source `{}`", filter.id, source.id);
-                check_kind_version(graph, &object, &filter.kind, filter.kind_version)?;
-                edits.push((
-                    object,
-                    Edit::FilterAdd {
-                        owner: FilterOwner::Source {
-                            source_id: source.id.clone(),
-                        },
-                        chain,
-                        filter_id: filter.id.clone(),
-                        kind: filter.kind.clone(),
-                        settings: filter.settings.clone(),
-                        enabled: (!filter.enabled).then_some(false),
-                        index: None,
-                    },
-                ));
-            }
-        }
+        let owner = FilterOwner::Source {
+            source_id: source.id.clone(),
+        };
+        let of = format!("source `{}`", source.id);
+        add_filters(graph, &owner, &of, &source.filters, &mut edits)?;
     }
     for scene in &file.scenes {
         for item in &scene.items {
@@ -685,6 +695,10 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 },
             ));
         }
+        let owner = FilterOwner::Output {
+            output_id: output.id.clone(),
+        };
+        add_filters(graph, &owner, &object, &output.filters, &mut edits)?;
         if output.video_mix.is_some() {
             edits.push((
                 object,
@@ -695,6 +709,14 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             ));
         }
     }
+    let master = &file.master.filters;
+    add_filters(
+        graph,
+        &FilterOwner::Master,
+        "the master",
+        master,
+        &mut edits,
+    )?;
     rebuild_audio(graph, file, &mut edits);
     for hotkey in &file.hotkeys {
         edits.push((
@@ -706,6 +728,40 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         ));
     }
     Ok(edits)
+}
+
+/// Pushes the `filter.add`s that rebuild `chains` on `owner`, named `of` in errors,
+/// video chain first.
+fn add_filters(
+    graph: &Graph,
+    owner: &FilterOwner,
+    of: &str,
+    chains: &FileChains,
+    edits: &mut Vec<(String, Edit)>,
+) -> Result<(), LoadError> {
+    let chains = [
+        (FilterChain::Video, &chains.video),
+        (FilterChain::Audio, &chains.audio),
+    ];
+    for (chain, filters) in chains {
+        for filter in filters {
+            let object = format!("filter `{}` of {of}", filter.id);
+            check_kind_version(graph, &object, &filter.kind, filter.kind_version)?;
+            edits.push((
+                object,
+                Edit::FilterAdd {
+                    owner: owner.clone(),
+                    chain,
+                    filter_id: filter.id.clone(),
+                    kind: filter.kind.clone(),
+                    settings: filter.settings.clone(),
+                    enabled: (!filter.enabled).then_some(false),
+                    index: None,
+                },
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Refuses settings saved by another version of `kind`'s descriptor (a missing version

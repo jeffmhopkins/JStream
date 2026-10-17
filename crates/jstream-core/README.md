@@ -74,8 +74,8 @@ state machine. Contents:
 - **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
-  `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's filters in
-  line with its source's audio chain.
+  `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
+  master's or an output tap's filters in line with its owner's audio chain.
 - **CLAP plugins** (`plugins/`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)):
   - `Engine::scan_clap_plugins(&dyn PluginHosts)` scans the CLAP search directories
     (recursively, for `.clap` entries, each scanned in its own host process) and adds
@@ -154,9 +154,10 @@ state machine. Contents:
   when the interop opens one, and samples the captured textures there with no CPU copy
   when the capture backend can deliver them; otherwise it uses CPU frames, and its own
   device without a context (see *Runtime*). Encode threads live in the encoder
-  sessions, one per video mix and encoder profile in use, shared by the outputs on
-  that pair. Each output's own thread muxes FLV and publishes it, or muxes MP4 and
-  records it
+  sessions: one video session per video mix and encoder profile in use, shared by the
+  outputs on that pair, one audio session of the master bus per such pair, shared by
+  its outputs with no audio chain, and one per output with an audio chain. Each
+  output's own thread muxes FLV and publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
   (`runtime/vcam.rs`).
@@ -165,7 +166,10 @@ state machine. Contents:
   of the collection has a mixer bus with its fader and mute, and every source with a
   mixer input has its fader and its sends (silenced while it is `muted`), scaled by
   its activity gain (`activity.rs`): a `when_shown` source is heard only while the
-  Program mix shows it; `meters.tick` carries their levels about ten times a second, with the master's true
+  Program mix shows it. The master stage's audio chain runs on the mixer's master
+  chain, and an output with an audio chain has an output tap running it
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md));
+  `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
   `audio.reset_loudness` restarts its integrated loudness. Every bus a source's
   settings draw (#362) has a scope the mixer thread feeds from that mixer bus, and
@@ -1000,7 +1004,23 @@ brings the mixer in line with the collection under the collection lock:
   source draws silence at once. A source's mute silences its sends, not its input, so
   the routing turns it into silence here. The graph refuses a source that produces no
   audio, a `scene` source among them (it has no channel of its own), and a drawn
-  source's delete until `delete.plan` clears the reference.
+  source's delete until `delete.plan` clears the reference;
+- the master stage's audio chain on the mixer's master chain (`MixerControl::master`),
+  which runs on every bus that feeds an output, and each running output tap's chain
+  (below), with `filters::Chain::apply`: a filter whose kind and position are
+  unchanged is updated in place, anything else rebuilds the chain. A filter the mixer
+  refuses to add is bypassed, and new settings it refuses leave the filter on its old
+  ones until the next routing sync tries again; each refusal is logged at `warn`.
+
+An output whose audio chain holds a filter, even a disabled one
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), gets an output
+tap on the master bus when it starts (`Engine::add_output_tap`), and its own audio
+encode fed from the tap's blocks, stamped earlier by its chain's latency. Its video
+still shares a session as *Encoder profiles* says. The other outputs on its video
+session (the same video mix and encoder profile) share one audio encode of the master
+bus, opened when the first of them starts; each video session has its own. The tap is
+removed when the output stops; a chain added to a running output takes effect at its
+next start, while edits to an existing tap's chain apply live.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -1614,12 +1634,15 @@ routing* in Design). Every running output shares that one program stage (capture
 render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same video mix and encoder profile
-share one session, and the render and mixer threads take a new session's inputs from a channel,
-never a lock, and hand a finished session's input to the collector rather than drop
-it. While the stage has no session and no virtual camera, or no mix is due on a
-tick, it draws nothing but still adopts the latest render snapshot. A virtual camera
-is fed the program at the canvas size on every tick, so that feed is drawn while a
-camera runs even if no session is on it; its video mix doesn't apply yet. Each output but a virtual
+share one video session; those of them with no audio chain share one audio session of
+the master bus; an output with an audio chain has an audio session of its own that the
+mixer thread feeds from the output's tap. The render and mixer threads take a new
+session's inputs from a channel, never a lock, and hand a finished session's input to
+the collector rather than drop it. While the stage has no session and no virtual
+camera, or no mix is due on a tick, it draws nothing but still adopts the latest render
+snapshot. A virtual camera is fed the program at the canvas size on every tick, so that
+feed is drawn while a camera runs even if no session is on it; its video mix doesn't
+apply yet. Each output but a virtual
 camera has its own output thread that muxes; a virtual camera's thread converts and
 publishes what the render thread sends it through a tap, which the render thread takes
 from a channel like a session's input and hands to the collector when it leaves. An output leaving a session others still use takes what is queued for

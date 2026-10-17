@@ -771,9 +771,10 @@ prs = [249]
 id = "D8p"
 milestone = "M2"
 title = "Audio chain protocol fields"
-status = "planned"
-note = "draft #303"
-needs = ["build"]
+status = "review"
+prs = [303]
+note = "#303 merged into wave/m1-2"
+needs = ["wave"]
 
 [[item]]
 id = "C9"

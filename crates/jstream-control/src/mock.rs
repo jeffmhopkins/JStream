@@ -462,6 +462,10 @@ struct Collection {
     output_encoders: BTreeMap<OutputId, EncoderProfileId>,
     /// The encoder profiles, ordered by ID: name and encoding.
     encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
+    /// Each output's own filter chains, for those that have had a filter (ADR-0027).
+    output_filters: BTreeMap<OutputId, jstream_protocol::FilterChains>,
+    /// The master stage's filter chains.
+    master: jstream_protocol::FilterChains,
     /// The video mix each output shows, for those that chose one.
     output_mixes: BTreeMap<OutputId, VideoMixId>,
     /// The video mixes, ordered by ID: name and mix.
@@ -493,6 +497,8 @@ impl Default for Collection {
             buses: BTreeMap::from([audio::Bus::master()]),
             sends: BTreeMap::new(),
             audio_kinds: BTreeMap::new(),
+            output_filters: BTreeMap::new(),
+            master: jstream_protocol::FilterChains::default(),
             hotkeys: BTreeMap::new(),
         }
     }
@@ -933,6 +939,9 @@ impl State {
                 video_mixes: self.collection.video_mix_infos(),
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
+                master: jstream_protocol::MasterInfo {
+                    filters: self.collection.master.clone(),
+                },
                 hotkeys: self
                     .collection
                     .hotkeys
@@ -1556,7 +1565,8 @@ impl Collection {
                     duplicated_from: source.duplicated_from,
                 }];
                 inverse.extend(restore_audio);
-                inverse.extend(filter::restore_all(&source_id, source.filters));
+                let owner = jstream_protocol::FilterOwner::Source { source_id };
+                inverse.extend(filter::restore_all(&owner, source.filters));
                 inverse
             }
             Edit::OutputCreate { output_id, kind } => {
@@ -1617,9 +1627,13 @@ impl Collection {
                 }
                 if let Some(mix_id) = self.output_mixes.remove(&output_id) {
                     inverse.push(Edit::OutputSetVideoMix {
-                        output_id,
+                        output_id: output_id.clone(),
                         mix_id: Some(mix_id),
                     });
+                }
+                if let Some(filters) = self.output_filters.remove(&output_id) {
+                    let owner = jstream_protocol::FilterOwner::Output { output_id };
+                    inverse.extend(filter::restore_all(&owner, filters));
                 }
                 inverse
             }
@@ -1967,6 +1981,7 @@ impl Collection {
                 output_id: id.clone(),
                 kind: kind.clone(),
                 encoder_profile: self.output_encoders.get(id).cloned(),
+                filters: self.output_filters.get(id).cloned().unwrap_or_default(),
                 video_mix: self.output_mixes.get(id).cloned(),
             })
             .collect()
@@ -2959,6 +2974,7 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                master,
                 video_mixes,
                 buses,
                 sends,
@@ -2971,6 +2987,7 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                master,
                 video_mixes,
                 buses,
                 sends,
@@ -3135,11 +3152,16 @@ mod tests {
                 Edit::OutputDelete {
                     output_id: OutputId::new("yt"),
                 },
+                // Its inverse re-adds its own filter (ADR-0027).
                 Edit::OutputDelete {
                     output_id: OutputId::new("rec"),
                 },
                 Edit::OutputDelete {
                     output_id: OutputId::new("vcam"),
+                },
+                Edit::FilterRemove {
+                    owner: jstream_protocol::FilterOwner::Master,
+                    filter_id: jstream_protocol::FilterId::new("m1"),
                 },
                 Edit::EncoderDelete {
                     profile_id: EncoderProfileId::new("low"),
@@ -3177,6 +3199,7 @@ mod tests {
                     muted: false,
                 }],
                 sends: vec![],
+                master: Default::default(),
                 hotkeys: vec![],
             }
         );
@@ -4297,6 +4320,7 @@ mod tests {
                     output_id: OutputId::new("yt"),
                     kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
                     encoder_profile: None,
+                    filters: Default::default(),
                     video_mix: None,
                 }],
             })

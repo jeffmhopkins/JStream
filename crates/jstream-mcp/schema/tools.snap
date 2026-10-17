@@ -1985,7 +1985,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "FilterOwner": {
-            "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
             "oneOf": [
               {
                 "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -2002,6 +2002,37 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+                "properties": {
+                  "type": {
+                    "const": "master",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output."
+                  },
+                  "type": {
+                    "const": "output",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
                 ],
                 "type": "object"
               }
@@ -3473,7 +3504,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "FilterOwner": {
-            "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
             "oneOf": [
               {
                 "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -3492,11 +3523,46 @@ source: crates/jstream-mcp/src/tests.rs
                   "source_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+                "properties": {
+                  "type": {
+                    "const": "master",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output."
+                  },
+                  "type": {
+                    "const": "output",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
               }
             ]
           },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "OutputId": {
+            "description": "An output (RTMP(S), recording, virtual camera).",
             "type": "string"
           },
           "Rev": {
@@ -5743,7 +5809,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "FilterOwner": {
-            "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
             "oneOf": [
               {
                 "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -5760,6 +5826,37 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+                "properties": {
+                  "type": {
+                    "const": "master",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output."
+                  },
+                  "type": {
+                    "const": "output",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
                 ],
                 "type": "object"
               }
@@ -9085,7 +9182,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "FilterOwner": {
-            "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
             "oneOf": [
               {
                 "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -9102,6 +9199,37 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+                "properties": {
+                  "type": {
+                    "const": "master",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output."
+                  },
+                  "type": {
+                    "const": "output",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
                 ],
                 "type": "object"
               }

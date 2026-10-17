@@ -22,13 +22,14 @@ use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
-    OutputStats, Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program,
-    launch_vcam, parts_from,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, VcamOut,
+    launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
 use crate::studio::Studio;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
+use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
 use jstream_platform::{
@@ -36,7 +37,7 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EntityKind, Event, GestureId, HistoryCall,
+    EncoderProfile, EncoderSessionInfo, EntityKind, Event, FilterChain, GestureId, HistoryCall,
     HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
     PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
     RtmpTarget, SecretString, SourceId, YoutubeAuth,
@@ -521,6 +522,36 @@ impl Engine {
         Box::new(move || lock(&shared.state).routing.detach(generation))
     }
 
+    /// Adds an output tap for `output_id` to the program's mixer, running the output's
+    /// audio chain, and returns its id and the closure that removes it once the output
+    /// has stopped. The closure holds the collection, not the [`MediaHost`].
+    ///
+    /// # Errors
+    /// When no program mixer runs, or the mixer refuses the tap.
+    pub(crate) fn add_output_tap(
+        &self,
+        output_id: &OutputId,
+    ) -> Result<(OutputTapId, Release), String> {
+        let tap = {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state
+                .routing
+                .add_output_tap(output_id, state.graph.state())?
+        };
+        let id = tap.id();
+        let shared = Arc::clone(&self.shared);
+        let output_id = output_id.clone();
+        Ok((
+            id,
+            Box::new(move || {
+                lock(&shared.state)
+                    .routing
+                    .remove_output_tap(&output_id, id);
+            }),
+        ))
+    }
+
     /// Adds kinds the built-in registry doesn't have: the parity fixture's `mic`, an
     /// audio kind with no parameters.
     #[cfg(test)]
@@ -845,7 +876,7 @@ impl Engine {
         if let Some((sink, pending)) = audit {
             sink.record(pending.finish(client_id, request_id, &result));
         }
-        Executed::Ready(result)
+        Executed::Ready(Box::new(result))
     }
 
     /// The YouTube actions and queries, or `None` for any other call. They run with no
@@ -1219,7 +1250,7 @@ impl Engine {
             None => None,
         };
         let mut wake = Vec::new();
-        let (parts, publish, generation, program, key) = loop {
+        let (parts, publish, generation, program, key, own_audio) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
             // wait that out before opening devices, and do not hold the collection
             // lock across the wait.
@@ -1257,6 +1288,7 @@ impl Engine {
                 });
             }
             let key = encode_key(&state.graph, &output_id);
+            let own_audio = has_audio_chain(&state.graph, &output_id);
             let publish = match (
                 own_target(&state.graph, &output_id),
                 youtube_broadcast(&state.graph, &output_id),
@@ -1338,7 +1370,7 @@ impl Engine {
             // until this start has its own hold, or gives up. Taken last, so no early
             // return drops it under the locks.
             let program = gate.program();
-            break (parts, publish, generation, program, key);
+            break (parts, publish, generation, program, key, own_audio);
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -1364,7 +1396,7 @@ impl Engine {
                 Opened::Muxed(destination) => launch(
                     self,
                     program,
-                    key,
+                    OutputEncode { key, own_audio },
                     destination,
                     output_id.clone(),
                     generation,
@@ -1690,7 +1722,8 @@ impl Engine {
 
 /// What [`Engine::execute`] produced: an answer, or a snapshot still being drawn.
 pub(crate) enum Executed {
-    Ready(Result<CallResult, ProtocolError>),
+    /// Boxed: a `state.get` result is large, and the snapshot case is small.
+    Ready(Box<Result<CallResult, ProtocolError>>),
     /// `video.snapshot`, answered by the snapshot thread, and the call's `command` span.
     Pending(SnapshotReply, tracing::Span),
 }
@@ -1733,6 +1766,17 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
             }
         });
     (mix, profile_id, profile)
+}
+
+/// Whether `output_id` starts with its own audio encode: it has an audio chain
+/// (ADR-0027), even one whose filters are all off, so switching one on later changes
+/// nothing but the chain. A chain added to a running output takes effect at its next
+/// start.
+fn has_audio_chain(graph: &Graph, output_id: &OutputId) -> bool {
+    graph
+        .state()
+        .output(output_id)
+        .is_some_and(|output| !output.filters().chain(FilterChain::Audio).is_empty())
 }
 
 /// Where an output the engine sends to itself goes, rather than to a publish target
