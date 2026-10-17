@@ -118,6 +118,18 @@ and calls this crate.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
+- **A lost device** (a driver reset after a hang, Windows' TDR, a removed GPU; #349).
+  Every compositor sets wgpu's device-lost callback and uncaptured-error handler on its
+  device, its own or the context's (wgpu keeps one of each per device, and the program
+  stage opens one compositor on the context). `Compositor::lost` says why the device is
+  gone, polling it once because wgpu reports the loss on a poll. Nothing on a lost
+  device comes back: the caller opens a new compositor
+  ([jstream-core › Design](../jstream-core/README.md#design) does). wgpu's default
+  handler panics on every uncaptured error, and a lost device's invalid resources raise
+  them on each later call, sometimes before wgpu reports the loss. So the handler keeps
+  the first error instead (`Compositor::take_error`, logged once as
+  `uncaptured wgpu error` before a loss), and `render` fails with
+  `RenderError::Uncaptured` when one is pending, before any readback.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
@@ -594,7 +606,11 @@ import is staged once, and once the frame ends nothing but the frame holds its
 coming round again reuses its import and stages again, a frame of a new size retires
 both old imports after the fence, an upload under the key replaces the import, and a
 straight import under a key that held a premultiplied one replaces it
-(the staged submit's `PRESENT` transition runs on the software adapter here). Without
+(the staged submit's `PRESENT` transition runs on the software adapter here). A lost
+device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
+`destroyed`, and a render, an upload and a layer fail without a panic; an uncaptured
+validation error before any loss fails the next render as `Uncaptured`, and the
+render after it draws. Without
 an adapter, unit tests still cover the binary16 encode
 (every value an upload can produce, within half an ulp), the premultiply order and
 the compositor identity.
