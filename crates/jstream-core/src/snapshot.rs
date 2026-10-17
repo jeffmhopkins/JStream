@@ -1422,7 +1422,8 @@ pub(crate) fn compose(
                 size.height(),
                 rgba,
             )?,
-            CaptureImage::Gpu(frame) => cache.import(compositor, &key, frame)?,
+            // Opaque, as the CPU path ignores a capture's alpha (#451).
+            CaptureImage::Gpu(frame) => cache.import_opaque(compositor, &key, frame)?,
         };
         fallback = Some(key);
     }
