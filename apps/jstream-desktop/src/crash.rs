@@ -7,9 +7,9 @@
 //! process ID, the panicking thread's name, the panic's location and message, and a
 //! backtrace. It holds nothing else: no environment, no command line, no settings.
 //! Registered secrets (the control token, and every stream key that passes through a
-//! [`Redacting`] key store) are replaced by `***` wherever they appear (R-SEC-001), and
-//! only their BLAKE3 digests are kept for that, never their text. The newest
-//! [`MAX_REPORTS`] reports are kept.
+//! `Redacting` key store, which exists on Windows only) are replaced by `***` wherever
+//! they appear (R-SEC-001), and only their BLAKE3 digests are kept for that, never their
+//! text. The newest [`MAX_REPORTS`] reports are kept.
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
