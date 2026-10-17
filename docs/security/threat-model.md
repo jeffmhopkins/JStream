@@ -306,18 +306,21 @@ it, and checks every texture's format.
 needs full access; `Global\` blocks, which only an administrator or service can create,
 are trusted.
 
-**Accepted by the maintainer (#242):** the registered media source DLL stays in the
-app's own folder, which the user can usually write to. Any program running as that user
-can replace it without an administrator prompt, and its code then runs in Frame
-Server's `svchost` (LOCAL SERVICE, session 0) the next time the camera loads. Copying
-the DLL to a folder only administrators can write to, such as under `%ProgramFiles%`,
-would close this; checking the DLL's hash can't, because Windows loads it, not JStream,
-and a stub loader in the same folder could be replaced the same way. The maintainer
-chose to keep it as it is: "Go no prompt still. It'll be fine". Registering the camera
-still costs its one UAC prompt, because Frame Server ignores per-user registration
-([ARCH › Packaging](../ARCHITECTURE.md#packaging)).
+**Decided, not yet on main (#242):** today the registered media source DLL is the one in
+the app's own folder, which the user can usually write to. Any program running as that
+user can replace it without an administrator prompt, and its code then runs in Frame
+Server's `svchost` (LOCAL SERVICE, session 0) the next time the camera loads. A hash
+check can't fix this, because Windows loads the DLL, not JStream, and a stub loader in
+the same folder could be replaced the same way. The maintainer chose the fix: "If you
+have to register it, name it optional, and then yeah, I think the program files makes
+sense". [ADR-0066](../adr/0066-portable-windows-distribution-v2.md) (proposed) makes
+registering optional. In the same UAC prompt, it copies the DLL to `%ProgramFiles%`
+with a DACL only administrators can write through, and registers that copy. The code
+is #561. Once it lands, the copy is as trustworthy as the portable folder was when the
+user approved the prompt.
 
-**Gaps:** a control mapping created before the producer's keeps its own DACL (#356).
+**Gaps:** a user-writable registered DLL runs in Frame Server until #561 lands (#242); a
+control mapping created before the producer's keeps its own DACL (#356).
 
 <a id="gaps"></a>
 ## Known gaps
@@ -338,7 +341,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #353 | Secrets | `rtmp://` cleartext, crash-report redaction, redaction test scope | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
-| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium; risk accepted by the maintainer ([Virtual camera](#vcam)) |
+| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium; fix decided ([ADR-0066](../adr/0066-portable-windows-distribution-v2.md), proposed), code in #561 |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |
 
 <a id="upkeep"></a>

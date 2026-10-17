@@ -1071,9 +1071,11 @@ Direct3D 12).
   and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The sandboxed browser helper and the CEF runtime are not in it yet; they join it when the hosts turn their `cef` features on.
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
-  because Frame Server ignores per-user registration. The registered DLL stays in the app's
-  folder, which the user can usually write to; the maintainer accepted that risk
-  ([THREAT-MODEL › Virtual camera](security/threat-model.md#vcam)). The app can unregister
+  because Frame Server ignores per-user registration. The registered DLL is the one in the app's
+  folder, which the user can usually write to (#242).
+  [ADR-0066](adr/0066-portable-windows-distribution-v2.md) (proposed) makes registering
+  optional and registers an administrators-only copy under `%ProgramFiles%` instead, in
+  the same prompt (#561; [THREAT-MODEL › Virtual camera](security/threat-model.md#vcam)). The app can unregister
   the source and detects a moved folder. Until the desktop app has that mode, `jstream-daemon --register-vcam` is
   that mode, and the daemon warns at startup when the registration names another folder
   ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)); unregistering waits
