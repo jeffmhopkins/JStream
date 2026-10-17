@@ -596,6 +596,9 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 turn_deg: Finite32::ZERO,
                 depth_px: Finite32::ZERO,
                 perspective_px: None,
+                // No flip argument yet: the command sets an unflipped box.
+                flip_h: false,
+                flip_v: false,
             },
         },
         ("canvas.set_size", [width, height]) => Edit::CanvasSetSize {
