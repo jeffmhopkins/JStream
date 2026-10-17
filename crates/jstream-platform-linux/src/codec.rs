@@ -1,7 +1,8 @@
 //! Codecs on Linux (ADR-0060 §6, §7).
 //!
-//! Video encode goes through VA-API. There is no software H.264 encoder until the download
-//! of Cisco's OpenH264 binary lands (ADR-0061). Audio encode is JStream's own AAC-LC
+//! Video encode goes through VA-API. Software H.264 is Cisco's OpenH264 binary, once the
+//! user has downloaded it (`crate::openh264`, ADR-0061): it serves
+//! [`HardwarePreference::Avoid`], and `Prefer` on a machine with no VA-API encoder. Audio encode is JStream's own AAC-LC
 //! encoder (`crate::aac`, ADR-0061 and ADR-0062), unless the `aac-encoder` feature is off.
 //! For now, [`VaapiCodecs`] lists the encoders the probe finds and picks one for a
 //! configuration; opening a video session itself reports `Unsupported` until the VA-API
@@ -16,7 +17,7 @@ use crate::VaEncoder;
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for a codec other than H.264 and for
-/// [`HardwarePreference::Avoid`] (no software encoder until the OpenH264 download lands);
+/// [`HardwarePreference::Avoid`] (software H.264 is OpenH264's, not VA-API's);
 /// [`PlatformError::MissingComponent`], with the distributions' remedy, when no driver
 /// encodes H.264 (ADR-0060 §6).
 pub fn choose_encoder<'a>(
@@ -33,8 +34,8 @@ pub fn choose_encoder<'a>(
     }
     if config.hardware == HardwarePreference::Avoid {
         return Err(PlatformError::Unsupported {
-            what: "a software H.264 encoder on Linux (none until Cisco's OpenH264 download \
-                   lands, ADR-0060 question 1)"
+            what: "a software H.264 encoder through VA-API (software H.264 on Linux is \
+                   Cisco's OpenH264, ADR-0061)"
                 .into(),
         });
     }
@@ -61,6 +62,9 @@ mod backend {
     };
 
     use super::choose_encoder;
+    use crate::openh264::{
+        OPENH264_COMPONENT, OpenH264Store, openh264_encoder_info, wants_software,
+    };
     use crate::{VaEncoder, probe_encoders};
 
     /// Codecs through VA-API (ADR-0060 §6), and the Rust AAC-LC encoder. For now it lists
@@ -69,6 +73,8 @@ mod backend {
     pub struct VaapiCodecs {
         /// What the probe found, or why it couldn't run (libva missing).
         encoders: Result<Vec<VaEncoder>, PlatformError>,
+        /// Where Cisco's OpenH264 is kept once downloaded; `None` without a data folder.
+        openh264: Option<OpenH264Store>,
     }
 
     impl VaapiCodecs {
@@ -77,7 +83,38 @@ mod backend {
         pub fn new() -> Self {
             Self {
                 encoders: probe_encoders(),
+                openh264: OpenH264Store::in_data_dir(),
             }
+        }
+
+        /// The same backend with Cisco's OpenH264 kept in `store`, not the data folder.
+        pub fn with_openh264(mut self, store: OpenH264Store) -> Self {
+            self.openh264 = Some(store);
+            self
+        }
+
+        /// The software H.264 encoder (ADR-0061): Cisco's OpenH264, if downloaded.
+        fn software_encoder(
+            &self,
+            config: &VideoEncoderConfig,
+            hardware: usize,
+        ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+            let mut result = match &self.openh264 {
+                Some(store) => store.video_encoder(config),
+                None => Err(PlatformError::MissingComponent {
+                    component: OPENH264_COMPONENT,
+                    remedy: "JStream has no data folder to download it to".into(),
+                }),
+            };
+            // With no hardware encoder either, say both ways out (ADR-0060 §6).
+            if hardware == 0
+                && let Err(PlatformError::MissingComponent { remedy, .. }) = &mut result
+            {
+                remedy.push_str(
+                    "; or, for hardware encoding, install a VA-API driver with H.264 encode",
+                );
+            }
+            result
         }
     }
 
@@ -90,12 +127,20 @@ mod backend {
     impl Codecs for VaapiCodecs {
         fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
             let encoders = self.encoders.as_deref().unwrap_or_default();
-            let video = encoders.iter().map(|e| CodecInfo {
-                name: format!("VA-API H.264 ({}, {})", e.vendor, e.node),
-                codec: Codec::H264,
-                role: CodecRole::VideoEncoder,
-                hardware: true,
-            });
+            let software = self
+                .openh264
+                .as_ref()
+                .filter(|s| s.is_installed())
+                .map(|_| openh264_encoder_info());
+            let video = encoders
+                .iter()
+                .map(|e| CodecInfo {
+                    name: format!("VA-API H.264 ({}, {})", e.vendor, e.node),
+                    codec: Codec::H264,
+                    role: CodecRole::VideoEncoder,
+                    hardware: true,
+                })
+                .chain(software);
             #[cfg(feature = "aac-encoder")]
             let list = video.chain([crate::aac::aac_encoder_info()]).collect();
             #[cfg(not(feature = "aac-encoder"))]
@@ -107,6 +152,10 @@ mod backend {
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+            let hardware = self.encoders.as_ref().map_or(0, Vec::len);
+            if wants_software(hardware, config) {
+                return self.software_encoder(config, hardware);
+            }
             let encoders = self.encoders.as_ref().map_err(Clone::clone)?;
             let encoder = choose_encoder(encoders, config)?;
             Err(PlatformError::Unsupported {

@@ -3013,6 +3013,9 @@ dependencies = [
  "jstream-platform",
  "libc",
  "libloading 0.9.0",
+ "ring",
+ "rustls",
+ "rustls-native-certs",
 ]
 
 [[package]]
