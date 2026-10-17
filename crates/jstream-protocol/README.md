@@ -243,8 +243,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":29},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":29},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":30},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":30},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
