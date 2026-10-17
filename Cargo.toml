@@ -23,6 +23,9 @@ arc-swap = { version = "1.9", default-features = false }
 assert_no_alloc = { version = "1", default-features = false, features = ["warn_debug", "warn_release"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
+# The CLAP plugin ABI's raw bindings for `jstream-plugin-clap` (ADR-0035, R-UNSAFE-004):
+# MIT or Apache-2.0, no dependencies.
+clap-sys = { version = "0.5", default-features = false }
 # CEF's C API for browser sources (ADR-0021, picked by spike S4; ADR-0046), pinned
 # exactly: the version carries the CEF build it was generated from (154.0.34), and its
 # sys crate's build script downloads that exact CEF distribution. No default features:
@@ -72,6 +75,7 @@ jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
+jstream-plugin-clap = { path = "crates/jstream-plugin-clap" }
 jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
@@ -90,6 +94,9 @@ png = { version = "0.18", default-features = false }
 # The web UI framework (ADR-0045): client-side rendering only, no server functions or
 # hydration. Its `csr` feature also turns on `getrandom`'s browser backend.
 leptos = { version = "0.8", default-features = false, features = ["csr"] }
+# Loads a CLAP plugin file (a DLL) in the plugin host (`jstream-plugin-clap`, ADR-0035).
+# Already in the tree through wgpu; no default features.
+libloading = { version = "0.8", default-features = false }
 # Property tests with shrinking (`jstream-graph`'s `tests/`), test-only. Held at 1.11:
 # 1.12 moves to `rand` 0.10, a second `rand` beside the 0.9 already in the tree
 # (R-DEP-005). No default features: no `fork`/`timeout` (`rusty-fork`, `tempfile`) and

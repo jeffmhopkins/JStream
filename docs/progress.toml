@@ -8,6 +8,13 @@
 #
 # status: done (merged) | hardware (merged; a run on Windows hardware is still pending,
 #         named by `note`) | review (a PR is open) | planned
+# needs:  the steps an unfinished item still needs before it is `done`, in order, for the
+#         README's "What's left" table: build (code to write or finish through review),
+#         wave (merged into a wave that hasn't landed), hardware (a Windows run),
+#         maintainer (a decision or an action only the maintainer can take). Set it on
+#         every `planned` and `review` item (`docs progress` lists the ones without); a
+#         `hardware` item without it needs its run. Drop it when the item is `done`.
+#         ROADMAP.md#endgame has the order they land in.
 # Item IDs are the roadmap board's; PR titles name them in parentheses, e.g. "(A5)".
 
 [[milestone]]
@@ -186,8 +193,9 @@ prs = [166]
 id = "A3"
 milestone = "M1a"
 title = "Daemon goes live on Windows"
-status = "done"
+status = "hardware"
 prs = [226]
+note = "Windows 11 Pro N run (#333)"
 
 [[item]]
 id = "A6"
@@ -251,6 +259,8 @@ id = "A6b"
 milestone = "M1a"
 title = "Daemon YouTube wiring"
 status = "planned"
+note = "draft #312; sign-in needs the OAuth client (ADR-0058); Windows run #337"
+needs = ["build", "maintainer", "hardware"]
 
 # M1b
 
@@ -393,6 +403,8 @@ id = "C3"
 milestone = "M1b"
 title = "Display and window capture sources"
 status = "planned"
+note = "draft #365; Windows run #378"
+needs = ["build", "hardware"]
 
 [[item]]
 id = "C8"
@@ -400,7 +412,7 @@ milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
 prs = [283, 289, 298]
-note = "#341"
+note = "#341, #335, #336"
 
 [[item]]
 id = "D1"
@@ -499,6 +511,7 @@ milestone = "M1b"
 title = "Live values"
 status = "review"
 prs = [244]
+needs = ["build"]
 
 # M1c
 
@@ -542,8 +555,9 @@ prs = [235]
 id = "G3d"
 milestone = "M1c"
 title = "Virtual camera in the UI and the desktop app"
-status = "done"
+status = "hardware"
 prs = [316]
+note = "Windows run (#390)"
 
 [[item]]
 id = "P1"
@@ -681,6 +695,8 @@ milestone = "M2"
 title = "Live preview on canvas"
 status = "review"
 prs = [302]
+note = "#302 merged into wave/m2-2; lands with that wave"
+needs = ["wave"]
 
 [[item]]
 id = "U1"
@@ -723,12 +739,15 @@ milestone = "M2"
 title = "Studio mode and transitions"
 status = "review"
 prs = [260]
+needs = ["build"]
 
 [[item]]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
 status = "planned"
+note = "draft #304, on T1"
+needs = ["build"]
 
 [[item]]
 id = "E2"
@@ -736,6 +755,7 @@ milestone = "M2"
 title = "Video mixes"
 status = "review"
 prs = [259]
+needs = ["build"]
 
 [[item]]
 id = "D8"
@@ -749,6 +769,8 @@ id = "D8p"
 milestone = "M2"
 title = "Audio chain protocol fields"
 status = "planned"
+note = "draft #303"
+needs = ["build"]
 
 [[item]]
 id = "C9"
@@ -770,6 +792,8 @@ id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "planned"
+note = "drafts #319 and #323"
+needs = ["build"]
 
 [[item]]
 id = "K2"
@@ -800,6 +824,8 @@ milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
 prs = [359]
+note = "effect packs #368 land with wave/m1-2; full 3D transforms to build"
+needs = ["wave", "build"]
 
 [[item]]
 id = "3D1"
@@ -814,29 +840,37 @@ milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
 status = "review"
 prs = [363, 375]
+note = "draft #363; signed-in features need the OAuth client (ADR-0058)"
+needs = ["build", "maintainer"]
 
 [[item]]
 id = "CL1"
 milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
-prs = [272]
-note = "part 1 merged"
+prs = [272, 281, 407]
+note = "parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run)"
+needs = ["wave", "build", "hardware"]
 
 [[item]]
 id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "planned"
+needs = ["build"]
 
 [[item]]
 id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
 status = "planned"
+note = "the maintainer decides whether it stays in M3; then the macOS ADR"
+needs = ["maintainer", "build"]
 
 [[item]]
 id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "planned"
+note = "the maintainer decides platform support; then the Linux codec-path ADR"
+needs = ["maintainer", "build"]
