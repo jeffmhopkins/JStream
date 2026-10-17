@@ -1,8 +1,11 @@
 //! Events: what the server pushes to every connected client after the handshake.
 
 use crate::audio::{BusMeter, SourceMeter};
+use crate::command::Edit;
 use crate::history::HistoryDirection;
-use crate::id::{ClientId, OutputId, RequestId, Rev, SceneId};
+use crate::id::{ClientId, GestureId, OutputId, RequestId, Rev, SceneId};
+use crate::live::LiveOutcome;
+use crate::youtube::{HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// Serialized with an internal `type` tag holding the event name (`noun.past_tense`).
 /// Clients must ignore events they don't know: a newer server may send new ones in a
 /// minor version, and they parse as [`Event::Unknown`].
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum Event {
@@ -80,6 +83,62 @@ pub enum Event {
         /// Running drop totals.
         drops: DropCounts,
     },
+    /// A gesture's live values changed (ADR-0032): the newest value of each parameter
+    /// that changed since the gesture's last `live.changed`, as setter edits. The engine
+    /// coalesces them per gesture to at most 30 a second, so a slow client gets fewer,
+    /// newer values, never a backlog; the last values before the gesture ends are always
+    /// sent. Live values are runtime state: no `rev` changes.
+    #[serde(rename = "live.changed")]
+    LiveChanged {
+        /// The gesture.
+        gesture_id: GestureId,
+        /// The client that holds it.
+        client_id: ClientId,
+        /// The parameters' new values.
+        values: Vec<Edit>,
+    },
+    /// A gesture ended, and its parameters show their collection values again. For
+    /// `committed`, the committing batch's `state.changed` comes first, and `rev` is the
+    /// revision it produced.
+    #[serde(rename = "live.ended")]
+    LiveEnded {
+        /// The gesture.
+        gesture_id: GestureId,
+        /// The client that held it.
+        client_id: ClientId,
+        /// How it ended.
+        outcome: LiveOutcome,
+        /// The committing batch's revision, for `committed` only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rev: Option<Rev>,
+    },
+    /// The engine's YouTube sign-in state changed: a sign-in started, finished or failed,
+    /// the user signed out, or Google stopped accepting the account's token.
+    #[serde(rename = "youtube.status_changed")]
+    YoutubeStatusChanged {
+        /// The new state.
+        auth: YoutubeAuth,
+    },
+    /// What YouTube says about the stream a running `youtube` output sends to changed
+    /// (ADR-0058). The engine polls the stream's health while the output runs and sends
+    /// this when the status, the health or the issues differ from the last report, and
+    /// once on the first reading.
+    #[serde(rename = "youtube.health_changed")]
+    YoutubeHealthChanged {
+        /// The output.
+        output_id: OutputId,
+        /// The broadcast it sends to.
+        broadcast_id: String,
+        /// The stream bound to that broadcast.
+        stream_id: String,
+        /// What YouTube says the stream is doing.
+        status: StreamStatus,
+        /// How healthy what it receives is.
+        health: StreamHealth,
+        /// The problems YouTube found. Omitted when there are none.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        issues: Vec<HealthIssue>,
+    },
     /// The mixer's levels (ADR-0028): sent about ten times a second while the mixer runs
     /// (an output is running), and never while it doesn't. Runtime state: a client that
     /// misses one just shows the next. Until event subscriptions exist, every client
@@ -108,6 +167,10 @@ impl Event {
             Event::OutputStateChanged { .. } => Some("output.state_changed"),
             Event::EventsDropped { .. } => Some("events.dropped"),
             Event::StatsTick { .. } => Some("stats.tick"),
+            Event::LiveChanged { .. } => Some("live.changed"),
+            Event::LiveEnded { .. } => Some("live.ended"),
+            Event::YoutubeStatusChanged { .. } => Some("youtube.status_changed"),
+            Event::YoutubeHealthChanged { .. } => Some("youtube.health_changed"),
             Event::MetersTick { .. } => Some("meters.tick"),
             Event::StudioChanged { .. } => Some("studio.changed"),
             Event::Unknown => None,

@@ -151,14 +151,17 @@ video mix), ADR-0022 (canvas and item geometry) and ADR-0023 (placement fields).
 
 **3. Folders and scene order.**
 - Scenes keep their **flat display order**, and `scene.reorder` keeps its meaning.
-- The collection gains an ordered list of **folders** `{ id, name }`, and `Scene` gains
-  `folder: Option<FolderId>`. A folder's scenes are the scenes that name it, in display
-  order. Folders are for organising only: they change no rendering, switching or
-  nesting.
-- New edits: `folder.create`, `folder.rename`, `folder.delete`, `folder.reorder` and
-  `scene.set_folder`, each with the obvious inverse. `folder.delete` is rejected while a
-  scene names the folder.
-- Folders are one level deep. Nested folders can come later as an optional parent field.
+- The collection gains an ordered list of **folders** `{ id, name, parent? }`, and
+  `Scene` gains `folder: Option<FolderId>`. A folder's scenes are the scenes that name
+  it, in display order. Folders are for organising only: they change no rendering,
+  switching or nesting.
+- New edits: `folder.create`, `folder.rename`, `folder.set_parent`, `folder.delete`,
+  `folder.reorder` and `scene.set_folder`, each with the obvious inverse.
+  `folder.delete` is rejected while a scene or a folder names the folder.
+- Folders nest through the optional `parent`, so the folders form a tree: a folder's
+  children show in folder order, and `folder.create` and `folder.set_parent` reject a
+  parent that doesn't exist or that would put the folder inside itself. A folder with
+  no parent is top level, so a collection with flat folders reads as before.
 - Variants sit under their parent through `variant_of`, never through folders:
   `scene.set_folder` on a variant is rejected. Groups may sit in folders like any scene.
 

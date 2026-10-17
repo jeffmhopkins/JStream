@@ -1,12 +1,13 @@
 //! Golden output (human and `--json`) and exit codes of whole CLI runs against the mock.
 
-use super::{CLIENT_NAME, Connector, connect, read_token, run, stream_events};
+use super::{CLIENT_NAME, Connector, connect, fit_captures, read_token, run, stream_events};
 use crate::args::Connection;
 use crate::block::block_on;
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
-    Batch, Call, ClientId, DropCounts, Edit, Event, Hello, ItemId, OutputId, OutputState,
-    PROTOCOL_VERSION, Response, Rev, SceneId, SourceId, SourceKind, Welcome,
+    Batch, Call, Canvas, ClientId, Crop, DropCounts, Edit, Event, GestureId, Hello, ItemGeometry,
+    ItemId, ItemTransform, LiveOutcome, OutputId, OutputState, PROTOCOL_VERSION, Response, Rev,
+    SceneId, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use serde_json::{Value, json};
@@ -115,6 +116,8 @@ fn populated() -> MockEngine {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),
@@ -122,10 +125,13 @@ fn populated() -> MockEngine {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
         ],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     block_on(setup.call(Call::Batch(batch))).expect("setup batch");
     engine
@@ -289,10 +295,10 @@ fn item_list_golden() {
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"item.list","rev":2,"#,
             r#""scene_id":"main","items":[{"item_id":"cam_1","source_id":"cam","placement":"legacy","#,
             r#""transform":{"position":{"x":0.0,"y":0.0},"scale":{"x":1.0,"y":1.0},"rotation_deg":0.0},"#,
-            r#""crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true},"#,
+            r#""crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true,"opacity":1.0,"blend":"normal"},"#,
             r#"{"item_id":"cam_2","source_id":"cam","placement":"legacy","#,
             r#""transform":{"position":{"x":100.0,"y":50.5},"scale":{"x":0.5,"y":0.5},"rotation_deg":-90.0},"#,
-            r#""crop":{"left":0,"top":0,"right":10,"bottom":0},"visible":false}]}}}"#,
+            r#""crop":{"left":0,"top":0,"right":10,"bottom":0},"visible":false,"opacity":1.0,"blend":"normal"}]}}}"#,
             "\n"
         ))
     );
@@ -330,7 +336,7 @@ fn state_get_golden() {
     );
     let item = |id: &str| {
         format!(
-            r#"{{"item_id":"{id}","source_id":"cam","placement":"legacy","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true}}"#
+            r#"{{"item_id":"{id}","source_id":"cam","placement":"legacy","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true,"opacity":1.0,"blend":"normal"}}"#
         )
     };
     assert_eq!(
@@ -342,7 +348,7 @@ fn state_get_golden() {
             item("cam_2"),
             item("cam_1"),
             r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"#,
-            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[]}}}"#,
+            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[]}}}"#,
         ))
     );
     assert_eq!(
@@ -784,6 +790,81 @@ fn stream_keys_golden() {
     );
 }
 
+/// #438: a key piped from Windows PowerShell 5.1, or saved by Notepad as "UTF-8 with
+/// BOM", starts with U+FEFF. It is dropped with the surrounding whitespace, and a key
+/// that still has a control or non-ASCII character is refused before connecting,
+/// without being repeated. The asserts never print a stored key.
+#[test]
+fn stream_key_byte_order_mark_and_unusable_keys() {
+    let engine = MockEngine::new();
+    let yt = OutputId::new("yt");
+    let create = ["--mock", "edit", "output.create", "yt", "rtmp://host/live2"];
+    assert_eq!(run_on(&engine, &create), ok("applied: rev 1 (req_1)\n"));
+    let stored = |expected: &str| {
+        engine
+            .stream_key(&yt)
+            .is_some_and(|key| key.expose() == expected)
+    };
+    let set_key = ["--mock", "output", "set-key", "yt"];
+
+    assert_eq!(
+        run_on_with_input(&engine, &set_key, "\u{FEFF}bom-key-1\r\n"),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-1"),
+        "stdin: the stored key is not the bare key"
+    );
+    assert_eq!(
+        run_on_with_input(&engine, &set_key, "\u{FEFF} \tbom-key-2 \n"),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-2"),
+        "stdin: the stored key is not the bare key"
+    );
+
+    let dir = std::env::temp_dir().join(format!("jstream-cli-bom-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let file = dir.join("key");
+    let path = file.to_str().expect("a UTF-8 temp path").to_owned();
+    let from_file = ["--mock", "output", "set-key", "yt", "--key-file", &path];
+    std::fs::write(&file, "\u{FEFF}bom-key-3\r\n").expect("written");
+    assert_eq!(
+        run_on(&engine, &from_file),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-3"),
+        "key file: the stored key is not the bare key"
+    );
+
+    for bad in ["sec\u{7}ret", "sec\tret", "s\u{e9}cret", "sec\u{FEFF}ret"] {
+        std::fs::write(&file, bad).expect("written");
+        assert_eq!(
+            run_on(&engine, &from_file),
+            failed(
+                2,
+                &format!(
+                    "error: the key file `{path}` holds a stream key with a control or \
+                     non-ASCII character, which no streaming service accepts (the key is \
+                     not shown)\n"
+                )
+            )
+        );
+        assert_eq!(
+            run_on_with_input(&engine, &set_key, bad),
+            failed(
+                2,
+                "error: stdin holds a stream key with a control or non-ASCII character, \
+                 which no streaming service accepts (the key is not shown)\n"
+            )
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(stored("bom-key-3"), "a refused key replaced the stored one");
+}
+
 #[test]
 fn program_scene_golden() {
     let engine = populated();
@@ -815,6 +896,14 @@ fn program_scene_golden() {
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "studio", "get"]),
         ok("program: none (no scenes)\n")
+    );
+}
+
+#[test]
+fn capture_targets_prints_each_target() {
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "capture", "targets"]),
+        ok("display mock:display (Mock display) 1920x1080, primary\n")
     );
 }
 
@@ -891,6 +980,30 @@ fn events_golden_dropped_notice() {
         String::from_utf8_lossy(&out),
         "stats.tick seq 2 capture_frames 1 audio_frames 0 render_ticks 0 \
          encode_frames 4 encode_blocks 0 output_packets 3\n"
+    );
+
+    let events = control.events();
+    engine.emit(Event::LiveChanged {
+        gesture_id: GestureId::new("drag"),
+        client_id: ClientId::new("mock_1"),
+        values: vec![Edit::ItemSetCrop {
+            item_id: ItemId::new("cam"),
+            scene_id: None,
+            crop: Crop::NONE,
+        }],
+    });
+    engine.emit(Event::LiveEnded {
+        gesture_id: GestureId::new("drag"),
+        client_id: ClientId::new("mock_1"),
+        outcome: LiveOutcome::Committed,
+        rev: Some(Rev(3)),
+    });
+    let mut out = Vec::new();
+    stream_events(events, Some(2), false, &mut out).expect("two events");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "live.changed drag by mock_1: item.set_crop\n\
+         live.ended drag by mock_1 committed rev 3\n"
     );
 
     let events = control.events();
@@ -1357,4 +1470,258 @@ fn mcp_over_the_mock_connection() {
         replies[1]["result"]["structuredContent"]["result"]["result"]["state"],
         "stopped"
     );
+}
+
+/// A session that answers the pairing calls as `jstream-server` does, over the mock.
+struct Pairing(MockControl);
+
+impl Control for Pairing {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.0.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        use jstream_control::protocol::{
+            Action, ActionResult, CallResult, DeviceId, DeviceInfo, Query, QueryResult, RequestId,
+            SecretString,
+        };
+        let result = match call {
+            Call::Action {
+                action: Action::PairingStart,
+            } => CallResult::Action {
+                result: Some(ActionResult::PairingStart {
+                    code: SecretString::new("7K3M-9QXA"),
+                    expires_in_secs: 120,
+                }),
+            },
+            Call::Query {
+                query: Query::DeviceList,
+            } => CallResult::Query {
+                result: QueryResult::DeviceList {
+                    devices: vec![DeviceInfo {
+                        device_id: DeviceId::new("dev_1"),
+                        name: "Tablet".into(),
+                        paired_at: 1_790_000_000,
+                        last_used_at: 1_790_003_600,
+                    }],
+                },
+            },
+            other => return self.0.call(other),
+        };
+        Box::pin(async move {
+            Ok(Response {
+                id: RequestId::new("server_1"),
+                result,
+            })
+        })
+    }
+
+    fn events(&self) -> EventStream {
+        self.0.events()
+    }
+}
+
+#[test]
+fn pairing_golden() {
+    let engine = MockEngine::new();
+    let connector = |_: &Connection| -> Result<Box<dyn Control>, CliError> {
+        Ok(Box::new(Pairing(engine.connect())))
+    };
+    assert_eq!(
+        run_with(&connector, &["pair"]),
+        ok("pairing code: 7K3M-9QXA\nenter it on the device within 120 s; it works once\n")
+    );
+    let json = run_with(&connector, &["--json", "pair"]);
+    assert_eq!(json.code, exit::OK);
+    let value: Value = serde_json::from_str(json.out.trim()).expect("one JSON line");
+    assert_eq!(value["result"]["result"]["code"], "7K3M-9QXA");
+    let listed = run_with(&connector, &["device", "list"]);
+    assert_eq!(listed.code, exit::OK, "{}", listed.err);
+    assert!(
+        listed.out.starts_with("ID     NAME    PAIRED (UNIX S)")
+            && listed.out.contains("dev_1  Tablet  1790000000"),
+        "{}",
+        listed.out
+    );
+}
+
+/// The placement of `item` in `scene`, from `state.get --json`.
+fn placement(engine: &MockEngine, scene: usize, item: usize) -> (Value, Value) {
+    let json = run_on(engine, &["--json", "--mock", "state", "get"]);
+    let value: Value = serde_json::from_str(json.out.trim()).expect("json");
+    let item = &value["result"]["result"]["scenes"][scene]["items"][item];
+    (item["geometry"].clone(), item["transform"].clone())
+}
+
+fn covering(width: f64, height: f64) -> Value {
+    json!({
+        "center": {"x": width / 2.0, "y": height / 2.0},
+        "size": {"width": width, "height": height},
+        "fit_mode": "fit",
+        "rotation_deg": 0.0,
+        "tilt_deg": 0.0,
+        "turn_deg": 0.0,
+        "depth_px": 0.0
+    })
+}
+
+/// An `item.add` of a capture source with no placement covers the canvas with `fit`, so
+/// a 4K display on a 720p canvas shows whole rather than its top-left corner. The canvas
+/// is the batch's own `canvas.set_size` when it has one.
+#[test]
+fn a_new_capture_item_fits_the_canvas() {
+    let engine = MockEngine::new();
+    let line = [
+        "--mock",
+        "edit",
+        "canvas.set_size",
+        "1280",
+        "720",
+        "scene.create",
+        "main",
+        "Main",
+        "source.create",
+        "screen",
+        "Screen",
+        "builtin:display",
+        "item.add",
+        "main",
+        "screen_1",
+        "screen",
+    ];
+    assert_eq!(run_on(&engine, &line), ok("applied: rev 1 (req_1)\n"));
+    let (geometry, _) = placement(&engine, 0, 0);
+    assert_eq!(geometry, covering(1280.0, 720.0));
+}
+
+/// A capture source that already exists is found through `state.get`, which also gives
+/// the canvas; a source of another kind keeps the legacy placement.
+#[test]
+fn an_existing_capture_source_fits_and_others_stay_legacy() {
+    let engine = populated();
+    assert_eq!(
+        run_on(
+            &engine,
+            &[
+                "--mock",
+                "edit",
+                "source.create",
+                "logo",
+                "Logo",
+                "builtin:image",
+                "item.add",
+                "brb",
+                "logo_1",
+                "logo",
+                "item.add",
+                "brb",
+                "cam_3",
+                "cam",
+            ],
+        ),
+        ok("applied: rev 2 (req_2)\n")
+    );
+    let (geometry, transform) = placement(&engine, 1, 0);
+    assert_eq!(geometry, Value::Null);
+    assert_ne!(transform, Value::Null);
+    let (geometry, _) = placement(&engine, 1, 1);
+    assert_eq!(geometry, covering(1920.0, 1080.0));
+}
+
+/// `state.get` is read only when an `item.add` needs it, and at most once.
+#[test]
+fn fitting_reads_the_state_only_when_needed() {
+    let add = |item: &str, source: &str| Edit::ItemAdd {
+        scene_id: SceneId::new("main"),
+        item_id: ItemId::new(item),
+        source_id: SourceId::new(source),
+        transform: None,
+        geometry: None,
+        opacity: None,
+        blend: None,
+    };
+    let screen = Edit::SourceCreate {
+        source_id: SourceId::new("screen"),
+        name: "Screen".into(),
+        kind: SourceKind::Builtin {
+            kind: "display".into(),
+        },
+        settings: Default::default(),
+        duplicated_from: None,
+    };
+    let canvas = Edit::CanvasSetSize {
+        width: 640,
+        height: 360,
+    };
+    let batch = |edits: Vec<Edit>| Batch {
+        edits,
+        expected_rev: None,
+        idempotency_key: None,
+        ends_gesture: None,
+    };
+    let unread = || -> Result<(Canvas, Vec<SourceInfo>), CliError> { panic!("read the state") };
+
+    let mut known = batch(vec![canvas.clone(), screen.clone(), add("a", "screen")]);
+    fit_captures(&mut known, unread).expect("fits");
+    let Edit::ItemAdd { geometry, .. } = &known.edits[2] else {
+        panic!("item.add");
+    };
+    assert_eq!(
+        *geometry,
+        Some(ItemGeometry::covering_canvas(640, 360).expect("canvas"))
+    );
+
+    let reads = AtomicUsize::new(0);
+    let mut unknown = batch(vec![add("a", "cam"), add("b", "cam"), add("c", "gone")]);
+    fit_captures(&mut unknown, || {
+        reads.fetch_add(1, Ordering::SeqCst);
+        Ok((
+            Canvas {
+                width: 100,
+                height: 50,
+            },
+            vec![SourceInfo {
+                source_id: SourceId::new("cam"),
+                name: "Camera".into(),
+                kind: SourceKind::Builtin {
+                    kind: "webcam".into(),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
+                audio: None,
+                filters: Default::default(),
+                meta: Default::default(),
+            }],
+        ))
+    })
+    .expect("fits");
+    assert_eq!(reads.load(Ordering::SeqCst), 1);
+    let fitted = Some(ItemGeometry::covering_canvas(100, 50).expect("canvas"));
+    let geometries: Vec<_> = unknown
+        .edits
+        .iter()
+        .map(|edit| match edit {
+            Edit::ItemAdd { geometry, .. } => *geometry,
+            _ => None,
+        })
+        .collect();
+    assert_eq!(geometries, vec![fitted, fitted, None]);
+
+    // A placement the user sent is kept.
+    let mut placed = batch(vec![
+        canvas,
+        screen,
+        Edit::ItemAdd {
+            scene_id: SceneId::new("main"),
+            item_id: ItemId::new("a"),
+            source_id: SourceId::new("screen"),
+            transform: Some(ItemTransform::IDENTITY),
+            geometry: None,
+            opacity: None,
+            blend: None,
+        },
+    ]);
+    let before = placed.clone();
+    fit_captures(&mut placed, unread).expect("fits");
+    assert_eq!(placed, before);
 }

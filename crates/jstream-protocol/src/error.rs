@@ -106,6 +106,14 @@ pub enum ProtocolError {
         /// What went wrong.
         reason: String,
     },
+    /// The call is valid, but whoever answered it doesn't serve it: `pairing.start`,
+    /// `device.list` and `device.revoke` sent to an engine with no server in front.
+    /// Retrying won't help.
+    #[error("`{call}` is not served here")]
+    Unsupported {
+        /// The call's name (`pairing.start`).
+        call: String,
+    },
     /// The engine hit a bug or an unexpected condition. The request may be retried.
     #[error("internal error: {reason}")]
     Internal {
@@ -144,6 +152,7 @@ impl ProtocolError {
             ProtocolError::UndoConflict { .. } => "undo_conflict",
             ProtocolError::HistoryEmpty { .. } => "history_empty",
             ProtocolError::ActionFailed { .. } => "action_failed",
+            ProtocolError::Unsupported { .. } => "unsupported",
             ProtocolError::Internal { .. } => "internal",
             ProtocolError::Unknown => "unknown",
         }
@@ -165,12 +174,21 @@ pub enum EntityKind {
     Output,
     /// An encoder profile.
     Encoder,
+    /// A filter in a source's chain (0.22, ADR-0026). Its ID is unique within the
+    /// source. Only an error answering a filter edit names it, so a client older than
+    /// 0.22, which sends none, never reads it.
+    Filter,
     /// A folder of the scene list.
     Folder,
     /// A label.
     Label,
     /// An audio bus.
     Bus,
+    /// A paired device (0.21). Only an error answering `device.revoke` names it, so a
+    /// client older than 0.21, which sends none, never reads it.
+    Device,
+    /// A hotkey binding, named by its chord.
+    Hotkey,
 }
 
 impl fmt::Display for EntityKind {
@@ -181,9 +199,12 @@ impl fmt::Display for EntityKind {
             EntityKind::Source => "source",
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
+            EntityKind::Filter => "filter",
             EntityKind::Folder => "folder",
             EntityKind::Label => "label",
             EntityKind::Bus => "bus",
+            EntityKind::Device => "device",
+            EntityKind::Hotkey => "hotkey",
         })
     }
 }

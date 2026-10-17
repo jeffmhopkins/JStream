@@ -26,7 +26,6 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:8ec9b73d903b8a6c", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Added the progress.toml bullet (update the entry, run docs generate); DOCS#verification and #notes unchanged, verify/no-dates/hash/merge-main bullets hold" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
@@ -38,18 +37,22 @@ verified = { hash = "b3:8ec9b73d903b8a6c", by = "agent:claude@session_0113X373pg
   number, then `status`) and run `cargo xtask docs generate`; it feeds the README's progress table.
 - New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
 - New crate root → add its `//! Docs:` line.
-- Never type a `hash` by hand. Only `docs verify` writes it (apart from the one-time
-  `docs rehash` migration of ADR-0039, which never restamps a stale section, and
-  `docs merge-main`, which only keeps main's committed stamp).
+- Never edit `docs/verified.toml` by hand. Only `docs verify` writes it (apart from
+  `docs migrate`, which moves inline stamps from before ADR-0053 there and never moves a
+  stale one, and `docs merge-main`, which only keeps main's committed entries).
 - To bring `main` into your branch, run `cargo xtask docs merge-main`. It resolves
-  conflicts between two `verified` stamps and leaves every other conflict to you. Then
-  re-read and verify each section it lists as stale.
+  conflicts between stamps or inside `@generated` blocks, and leaves every other conflict
+  to you. Then re-read and
+  verify each section it lists as stale, each with its own note: keep what the earlier
+  note it prints said about your change and add what the merge changed
+  ([DOCS › notes](docs/DOCS.md#notes)). A PR into a wave branch merges its wave instead:
+  `cargo xtask docs merge-main --from wave/<name>`. Which branch a PR targets, and how waves
+  land, is in [docs/runbooks/waves.md](docs/runbooks/waves.md).
 
 <a id="pr-loop"></a>
 ## The PR loop (you are a builder)
 <!-- @section
 depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
-verified = { hash = "b3:714ee3aea6bce70e", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
 -->
 
 1. Open the PR with **auto-merge (squash) enabled**. It merges by itself once every required
@@ -67,7 +70,7 @@ verified = { hash = "b3:714ee3aea6bce70e", by = "agent:claude@session_01QqhacPgB
 5. A `needs-human` label means the maintainer decides. Stop arguing that point.
 6. **Dependabot PRs** (author `dependabot[bot]`): enable auto-merge (squash) on them,
    and handle CI failures as if they were your own PRs. Action-pin-only bumps are
-   pre-approved governance ([ADR-0018](docs/adr/0018-ci-supply-chain-policy.md)).
+   pre-approved governance ([ADR-0056](docs/adr/0056-ci-supply-chain-policy-v2.md)).
 7. **Writing an ADR:** set its `tier` per [R-GOV-005](docs/RULES.md#R-GOV-005). For
    `maintainer` (product scope, licensing, security and privacy posture, public
    compatibility promises, spending, or the tier rules themselves): open it as `proposed`,
@@ -102,6 +105,6 @@ Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo de
 `cargo xtask docs generate` (rewrites `@generated` blocks, e.g. ADR status banners),
 `cargo xtask docs log <DOC[#anchor]>` (history from git), `cargo xtask docs review <DOC>`
 (doc-level TTL review), `cargo xtask docs merge-main` (merges `origin/main`, resolving
-stamp-only conflicts),
+stamp and `@generated`-block conflicts),
 `cargo xtask lint-deps` and `cargo xtask governance --base origin/main` (lists your
 governance changes).

@@ -5,7 +5,7 @@
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
-# Dependabot proposes updates (ADR-0018). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+# Dependabot proposes updates (ADR-0056). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
 
 name: sweep
 
@@ -131,7 +131,7 @@ jobs:
           held=$(grep -E '^ +Unchanged [A-Za-z0-9_-]+ v.*\(available: ' "$RUNNER_TEMP/update.txt" | sed 's/^ *Unchanged //' || true)
           {
             if [ -n "$changes" ]; then
-              echo "Compatible updates the lockfile would take. Dependabot's weekly \`build(deps)\` PR proposes them (ADR-0018)."
+              echo "Compatible updates the lockfile would take. Dependabot's weekly \`build(deps)\` PR proposes them (ADR-0056)."
               echo
               echo '```text'
               printf '%s\n' "$changes" | head -c 15000

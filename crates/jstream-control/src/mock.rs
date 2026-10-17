@@ -8,9 +8,15 @@
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
 //! stream-key actions, `scene.switch` and the program scene it sets (`studio.get`),
-//! `state.changed`, `studio.changed` and `output.state_changed` events, and per-client
-//! undo and redo. Each [`MockEngine::connect`] opens one client session. It does no
-//! persistence or real output work.
+//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`]),
+//! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
+//! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
+//! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
+//! session. It does no persistence or real output work.
+//!
+//! The mock has no render thread, so a gesture's values are released the moment it ends,
+//! and it sends one `live.changed` per `live.set` instead of coalescing them: the engine
+//! sends at most that many.
 //!
 //! Undo and redo build the same inverse edits as `jstream-graph`, but detect conflicts
 //! more strictly than the engine: once any other client has changed the collection since
@@ -21,16 +27,18 @@
 use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
+use jstream_protocol::KindDescriptor;
 use jstream_protocol::{
-    Action, Batch, BusId, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
-    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, GeometryError, Hello, HistoryCall,
-    HistoryDirection, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
+    Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
+    CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
+    EncoderProfileInfo, EntityKind, Event, Finite32, GeometryError, GestureId, GestureInfo, Hello,
+    HistoryCall, HistoryDirection, HotkeyBinding, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
+    ItemTransform, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo,
+    OutputKind, OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query,
     QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
     SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo,
-    SourceKind, Welcome,
+    SourceKind, Welcome, is_live_adjustable,
 };
-use jstream_protocol::{Finite32, KindDescriptor};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
 use std::pin::Pin;
@@ -39,6 +47,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::task::{Context, Poll, Waker};
 
 mod audio;
+mod filter;
 
 /// Locks `mutex`, ignoring poisoning: the mock's state stays consistent because every
 /// change is computed first and committed without panicking.
@@ -213,13 +222,23 @@ impl Control for MockControl {
 }
 
 impl Drop for MockControl {
-    /// Ends this session's event streams and drops its undo history: the session is
-    /// gone, as when a socket closes.
+    /// Ends this session's event streams, drops its undo history and expires its open
+    /// gestures: the session is gone, as when a socket closes.
     fn drop(&mut self) {
         let mine = std::mem::take(&mut *lock(&self.subscriptions));
         close_all(mine);
         if let Some(client_id) = lock(&self.client_id).take() {
-            lock(&self.shared).history.forget(&client_id);
+            let mut state = lock(&self.shared);
+            state.history.forget(&client_id);
+            let open: Vec<GestureId> = state
+                .gestures
+                .keys()
+                .filter(|(owner, _)| *owner == client_id)
+                .map(|(_, gesture_id)| gesture_id.clone())
+                .collect();
+            for gesture_id in open {
+                state.end_gesture(&client_id, &gesture_id, LiveOutcome::Expired, None);
+            }
         }
     }
 }
@@ -234,8 +253,9 @@ struct State {
     /// collection holds.
     declared: BTreeSet<OutputId>,
     /// The in-memory stand-in for the OS credential store: the stream keys
-    /// `output.set_key` stored, by output. Kept when an output is deleted, as the
-    /// engine's store keeps them, until `output.clear_key`.
+    /// `output.set_key` stored, by output. As in the engine, a key is removed by
+    /// `output.clear_key`, and by an applied batch, undo or redo that deletes its output
+    /// or changes its `OutputKind::key_server` (#343).
     keys: BTreeMap<OutputId, SecretString>,
     /// The result of each batch, undo or redo applied with an idempotency key, per
     /// client: batches and history calls share a client's keys.
@@ -249,7 +269,31 @@ struct State {
     /// rules (ADR-0030): the first scene created goes on program, and a deleted program
     /// scene gives way to the first scene left.
     program: Option<SceneId>,
+    /// Every client's open gestures, with the value of each parameter each holds.
+    gestures: BTreeMap<(ClientId, GestureId), BTreeMap<Param, Edit>>,
+    /// Which gesture holds each parameter: at most one.
+    holders: BTreeMap<Param, (ClientId, GestureId)>,
 }
+
+/// A parameter a live value overrides: an item's placement (`false`) or its crop
+/// (`true`). Ordered as the engine orders them, placements first, so `live.changed` and
+/// `live.list` list values in the same order.
+type Param = (bool, ItemId);
+
+/// The parameter `value` sets, if it is live-adjustable.
+fn param_of(value: &Edit) -> Option<Param> {
+    match value {
+        Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
+            Some((false, item_id.clone()))
+        }
+        Edit::ItemSetCrop { item_id, .. } => Some((true, item_id.clone())),
+        _ => None,
+    }
+}
+
+/// The capture target ID of the one display the mock's `capture.targets` lists, a
+/// 1920×1080 primary display.
+pub const MOCK_DISPLAY: &str = "mock:display";
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
 /// says otherwise, as in the engine.
@@ -418,6 +462,8 @@ struct Collection {
     output_encoders: BTreeMap<OutputId, EncoderProfileId>,
     /// The encoder profiles, ordered by ID: name and encoding.
     encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
+    /// The hotkey bindings, ordered by chord.
+    hotkeys: BTreeMap<Chord, Action>,
     /// The buses, ordered by ID, the master among them.
     buses: BTreeMap<BusId, audio::Bus>,
     /// Each send's gain in dB, keyed by bus, then by source.
@@ -441,6 +487,7 @@ impl Default for Collection {
             buses: BTreeMap::from([audio::Bus::master()]),
             sends: BTreeMap::new(),
             audio_kinds: BTreeMap::new(),
+            hotkeys: BTreeMap::new(),
         }
     }
 }
@@ -454,6 +501,8 @@ struct Source {
     settings: Settings,
     /// A plain link, which may name a deleted source; reported only while it exists.
     duplicated_from: Option<SourceId>,
+    /// Its filter chains, settings as given (ADR-0026).
+    filters: jstream_protocol::FilterChains,
     /// Set exactly for an audio source.
     audio: Option<SourceAudio>,
 }
@@ -478,6 +527,8 @@ struct Item {
     geometry: Option<ItemGeometry>,
     crop: Crop,
     visible: bool,
+    opacity: Finite32,
+    blend: BlendMode,
 }
 
 impl State {
@@ -507,6 +558,17 @@ impl State {
         {
             return Ok(result.clone());
         }
+        // The engine checks `ends_gesture` before the graph's own checks.
+        if let Some(gesture_id) = &batch.ends_gesture
+            && !self
+                .gestures
+                .contains_key(&(client_id.clone(), gesture_id.clone()))
+        {
+            return Err(ProtocolError::invalid_argument(
+                "ends_gesture",
+                format!("the client has no open gesture `{gesture_id}`"),
+            ));
+        }
         // Same order as `jstream_graph::Graph::apply`: the revision check comes first.
         let current = self.collection.rev;
         if let Some(expected) = batch.expected_rev
@@ -517,14 +579,26 @@ impl State {
         if batch.edits.is_empty() {
             return Err(ProtocolError::EmptyBatch);
         }
-        let (rev, inverse) = self.apply(batch.edits)?;
+        let (rev, inverse, removed_hotkeys) = self.apply(batch.edits)?;
         self.history.record_batch(client_id, rev, inverse);
-        let result = CallResult::Batch { rev };
+        let result = CallResult::Batch {
+            rev,
+            removed_hotkeys,
+        };
         if let Some(key) = batch.idempotency_key {
             self.applied
                 .insert((client_id.clone(), key), result.clone());
         }
         self.changed(client_id, request_id, rev, None);
+        if let Some(gesture_id) = batch.ends_gesture {
+            self.remove_gesture(client_id, &gesture_id);
+            self.emit(Event::LiveEnded {
+                gesture_id,
+                client_id: client_id.clone(),
+                outcome: LiveOutcome::Committed,
+                rev: Some(rev),
+            });
+        }
         Ok(result)
     }
 
@@ -564,7 +638,7 @@ impl State {
         }
         // With no other client's change since, only a running output can be in the way
         // (undoing its `output.create`): keep the step for a retry once it stops.
-        let (rev, inverse) = match self.apply(step.edits.clone()) {
+        let (rev, inverse, _) = match self.apply(step.edits.clone()) {
             Ok(applied) => applied,
             Err(error) => {
                 self.history.put_back(client_id, direction, step);
@@ -587,14 +661,35 @@ impl State {
         Ok(result)
     }
 
-    /// Applies `edits` atomically as one `rev` bump, and returns that `rev` and the
-    /// edits that undo them.
-    fn apply(&mut self, edits: Vec<Edit>) -> Result<(Rev, Vec<Edit>), ProtocolError> {
+    /// Applies `edits` atomically as one `rev` bump, and returns that `rev`, the edits
+    /// that undo them, and the hotkey bindings their deletes removed (ADR-0040 §3).
+    fn apply(
+        &mut self,
+        edits: Vec<Edit>,
+    ) -> Result<(Rev, Vec<Edit>, Vec<HotkeyBinding>), ProtocolError> {
         let running = self.running();
         let mut next = self.collection.clone();
         let mut undo = Vec::with_capacity(edits.len());
+        let mut removed = Vec::new();
         for (at, edit) in edits.into_iter().enumerate() {
-            undo.push(next.apply(edit, at, &running)?);
+            let deleted = match &edit {
+                Edit::SceneDelete { scene_id } => Some((EntityKind::Scene, scene_id.to_string())),
+                Edit::SourceDelete { source_id } => {
+                    Some((EntityKind::Source, source_id.to_string()))
+                }
+                Edit::OutputDelete { output_id } => {
+                    Some((EntityKind::Output, output_id.to_string()))
+                }
+                Edit::EncoderDelete { profile_id } => {
+                    Some((EntityKind::Encoder, profile_id.to_string()))
+                }
+                _ => None,
+            };
+            let mut inverse = next.apply(edit, at, &running)?;
+            if let Some((entity, id)) = deleted {
+                inverse.extend(next.remove_hotkeys_naming(entity, &id, &mut removed));
+            }
+            undo.push(inverse);
         }
         next.rev = self
             .collection
@@ -604,12 +699,28 @@ impl State {
                 reason: "rev overflowed".into(),
             })?;
         let rev = next.rev;
+        // A key never follows its output to another server, or outlives it (#343).
+        let stale: Vec<OutputId> = self
+            .collection
+            .outputs
+            .iter()
+            .filter(|(output_id, kind)| {
+                next.outputs
+                    .get(*output_id)
+                    .is_none_or(|now| now.key_server() != kind.key_server())
+            })
+            .map(|(output_id, _)| output_id.clone())
+            .collect();
+        for output_id in stale {
+            self.keys.remove(&output_id);
+        }
         self.collection = next;
-        Ok((rev, undo.into_iter().rev().flatten().collect()))
+        Ok((rev, undo.into_iter().rev().flatten().collect(), removed))
     }
 
     /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, `state.changed` is emitted, and the program scene is reconciled.
+    /// collection, live values on deleted items go, `state.changed` is emitted, and the
+    /// program scene is reconciled.
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -618,6 +729,12 @@ impl State {
         cause: Option<HistoryDirection>,
     ) {
         self.sync_outputs();
+        let items = &self.collection.items;
+        self.holders
+            .retain(|(_, item_id), _| items.contains_key(item_id));
+        for values in self.gestures.values_mut() {
+            values.retain(|(_, item_id), _| items.contains_key(item_id));
+        }
         self.emit(Event::StateChanged {
             rev,
             client_id: client_id.clone(),
@@ -685,10 +802,17 @@ impl State {
                     self.program = Some(scene_id);
                     self.emit_program(client_id, request_id);
                 }
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            Action::LiveSet { gesture_id, values } => {
+                return self.live_set(client_id, gesture_id, values);
+            }
+            Action::LiveCancel { gesture_id } => {
+                self.end_gesture(client_id, &gesture_id, LiveOutcome::Cancelled, None);
+                return Ok(CallResult::action());
+            }
             Action::OutputSetKey { output_id, key } => {
                 // The engine's order: the output must be configured, then the key valid.
                 if !self.collection.outputs.contains_key(&output_id) {
@@ -696,15 +820,21 @@ impl State {
                 }
                 check_key(&key)?;
                 self.keys.insert(output_id, key);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputClearKey { output_id } => {
                 // Succeeds with no key, and for an output no longer in the collection.
                 self.keys.remove(&output_id);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
+            }
+            // As the engine: the server in front answers these (ADR-0044).
+            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
             }
             // The mock runs no mixer, so there is no loudness to reset.
-            Action::AudioResetLoudness {} => return Ok(CallResult::Action {}),
+            Action::AudioResetLoudness {} => return Ok(CallResult::action()),
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -732,7 +862,7 @@ impl State {
                 state,
             });
         }
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     fn query(&self, query: Query) -> Result<CallResult, ProtocolError> {
@@ -800,6 +930,12 @@ impl State {
                 encoders: self.collection.encoder_infos(),
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
+                hotkeys: self
+                    .collection
+                    .hotkeys
+                    .iter()
+                    .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                    .collect(),
                 folders: Vec::new(),
                 labels: Vec::new(),
             },
@@ -814,14 +950,149 @@ impl State {
                 rev: self.collection.rev,
                 encoders: self.collection.encoder_infos(),
             },
+            Query::CaptureTargets => QueryResult::CaptureTargets {
+                targets: vec![CaptureTargetInfo {
+                    kind: CaptureTargetKind::Display,
+                    target: MOCK_DISPLAY.into(),
+                    name: "Mock display".into(),
+                    size: Some(PixelSize {
+                        width: 1920,
+                        height: 1080,
+                    }),
+                    primary: true,
+                }],
+            },
+            Query::LiveList => QueryResult::LiveList {
+                gestures: self
+                    .gestures
+                    .iter()
+                    .map(|((client_id, gesture_id), values)| GestureInfo {
+                        gesture_id: gesture_id.clone(),
+                        client_id: client_id.clone(),
+                        values: values.values().cloned().collect(),
+                    })
+                    .collect(),
+            },
             Query::BusList => QueryResult::BusList {
                 rev: self.collection.rev,
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
             },
+            // The mock describes no kinds, so it lists none.
+            Query::KindList => QueryResult::KindList { kinds: Vec::new() },
+            Query::DeviceList => {
+                return Err(ProtocolError::Unsupported {
+                    call: "device.list".into(),
+                });
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
+    }
+
+    /// `live.set`, checked in the engine's order: the shape of the message, then each
+    /// value against the collection as a batch's edits are, named `values.<n>`.
+    fn live_set(
+        &mut self,
+        client_id: &ClientId,
+        gesture_id: GestureId,
+        values: Vec<Edit>,
+    ) -> Result<CallResult, ProtocolError> {
+        let invalid = |field: String, reason: &str| ProtocolError::invalid_argument(field, reason);
+        if values.is_empty() {
+            return Err(invalid("values".into(), "must name at least one value"));
+        }
+        if values.len() > MAX_LIVE_VALUES {
+            return Err(invalid("values".into(), "must name at most 256 values"));
+        }
+        if let Some(at) = values.iter().position(|value| !is_live_adjustable(value)) {
+            return Err(invalid(format!("values.{at}.type"), "not live-adjustable"));
+        }
+        let key = (client_id.clone(), gesture_id);
+        let open = self
+            .gestures
+            .keys()
+            .filter(|(owner, _)| owner == client_id)
+            .count();
+        if !self.gestures.contains_key(&key) && open >= MAX_GESTURES_PER_CLIENT {
+            return Err(invalid("gesture_id".into(), "16 gestures are open"));
+        }
+        let running = self.running();
+        let mut check = self.collection.clone();
+        for (at, value) in values.iter().enumerate() {
+            check
+                .apply(value.clone(), at, &running)
+                .map_err(|error| match error {
+                    ProtocolError::InvalidArgument {
+                        field,
+                        reason,
+                        blockers,
+                    } => ProtocolError::InvalidArgument {
+                        field: match field.strip_prefix("edits.") {
+                            Some(rest) => format!("values.{rest}"),
+                            None => field,
+                        },
+                        reason,
+                        blockers,
+                    },
+                    other => other,
+                })?;
+        }
+        let mut changed = BTreeMap::new();
+        for value in values {
+            let Some(param) = param_of(&value) else {
+                continue;
+            };
+            if let Some(holder) = self.holders.insert(param.clone(), key.clone())
+                && holder != key
+                && let Some(other) = self.gestures.get_mut(&holder)
+            {
+                other.remove(&param);
+            }
+            changed.insert(param, value);
+        }
+        self.gestures
+            .entry(key.clone())
+            .or_default()
+            .extend(changed.clone());
+        self.emit(Event::LiveChanged {
+            gesture_id: key.1,
+            client_id: key.0,
+            values: changed.into_values().collect(),
+        });
+        Ok(CallResult::action())
+    }
+
+    /// Ends `client_id`'s gesture without a commit, if it is open, and emits `live.ended`.
+    fn end_gesture(
+        &mut self,
+        client_id: &ClientId,
+        gesture_id: &GestureId,
+        outcome: LiveOutcome,
+        rev: Option<Rev>,
+    ) {
+        if self.remove_gesture(client_id, gesture_id) {
+            self.emit(Event::LiveEnded {
+                gesture_id: gesture_id.clone(),
+                client_id: client_id.clone(),
+                outcome,
+                rev,
+            });
+        }
+    }
+
+    /// Closes a gesture and lets go of the parameters it held. Returns whether it was open.
+    fn remove_gesture(&mut self, client_id: &ClientId, gesture_id: &GestureId) -> bool {
+        let key = (client_id.clone(), gesture_id.clone());
+        let Some(values) = self.gestures.remove(&key) else {
+            return false;
+        };
+        for param in values.keys() {
+            if self.holders.get(param) == Some(&key) {
+                self.holders.remove(param);
+            }
+        }
+        true
     }
 
     /// Queues `event` for every live subscriber, and forgets subscriptions that were
@@ -984,6 +1255,8 @@ impl Collection {
                 source_id,
                 transform,
                 geometry,
+                opacity,
+                blend,
             } => {
                 check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
@@ -1005,6 +1278,10 @@ impl Collection {
                     (None, Some(geometry)) => geometry_view(&geometry, at)?,
                     (transform, None) => transform.unwrap_or(ItemTransform::IDENTITY),
                 };
+                let opacity = opacity.unwrap_or(Finite32::ONE);
+                check_opacity(opacity, at)?;
+                let blend = blend.unwrap_or_default();
+                check_blend(blend, at)?;
                 self.scenes[index].items.push(item_id.clone());
                 self.items.insert(
                     item_id.clone(),
@@ -1015,6 +1292,8 @@ impl Collection {
                         geometry,
                         crop: Crop::NONE,
                         visible: true,
+                        opacity,
+                        blend,
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -1120,6 +1399,29 @@ impl Collection {
                     visible: old,
                 }]
             }
+            Edit::ItemSetOpacity {
+                item_id,
+                scene_id,
+                opacity,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
+                check_opacity(opacity, at)?;
+                let old = std::mem::replace(&mut item.opacity, opacity);
+                vec![Edit::ItemSetOpacity {
+                    item_id,
+                    scene_id,
+                    opacity: old,
+                }]
+            }
+            Edit::ItemSetBlend { item_id, blend } => {
+                let item = self.existing_item(&item_id)?;
+                check_blend(blend, at)?;
+                let old = std::mem::replace(&mut item.blend, blend);
+                vec![Edit::ItemSetBlend {
+                    item_id,
+                    blend: old,
+                }]
+            }
             Edit::SourceCreate {
                 source_id,
                 name,
@@ -1179,10 +1481,10 @@ impl Collection {
                 new_source_id,
                 name,
             } => {
-                let Some((kind, settings)) = self
+                let Some((kind, settings, filters)) = self
                     .sources
                     .get(&source_id)
-                    .map(|s| (s.kind.clone(), s.settings.clone()))
+                    .map(|s| (s.kind.clone(), s.settings.clone(), s.filters.clone()))
                 else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
@@ -1195,6 +1497,10 @@ impl Collection {
                     settings,
                     Some(source_id.clone()),
                 )?;
+                // A duplicate keeps its original's filter IDs (ADR-0026 §2).
+                if let Some(copy) = self.sources.get_mut(&new_source_id) {
+                    copy.filters = filters;
+                }
                 self.audio_copied(&source_id, &new_source_id);
                 inverse
             }
@@ -1225,13 +1531,14 @@ impl Collection {
                 };
                 let restore_audio = self.audio_deleted(&source_id, &source.kind, source.audio);
                 let mut inverse = vec![Edit::SourceCreate {
-                    source_id,
+                    source_id: source_id.clone(),
                     name: source.name,
                     kind: source.kind,
                     settings: source.settings,
                     duplicated_from: source.duplicated_from,
                 }];
                 inverse.extend(restore_audio);
+                inverse.extend(filter::restore_all(&source_id, source.filters));
                 inverse
             }
             Edit::OutputCreate { output_id, kind } => {
@@ -1374,9 +1681,72 @@ impl Collection {
                     profile,
                 }]
             }
+            edit @ (Edit::FilterAdd { .. }
+            | Edit::FilterRemove { .. }
+            | Edit::FilterSetEnabled { .. }
+            | Edit::FilterSetSettings { .. }
+            | Edit::FilterReorder { .. }) => self.apply_filter(edit, at)?,
+            // The graph's checks, in its order: the chord, whether it is bound, whether
+            // the action can be bound, then the objects it names.
+            Edit::HotkeySet { chord, action } => {
+                if let Some(reason) = chord.problem() {
+                    return Err(invalid(at, "chord", reason));
+                }
+                if self.hotkeys.contains_key(&chord) {
+                    return Err(already_exists(EntityKind::Hotkey, chord.as_str()));
+                }
+                if let Some((field, reason)) = action.bind_problem() {
+                    return Err(invalid(at, &format!("action.{field}"), reason));
+                }
+                for (entity, id) in action.named_objects() {
+                    let exists = match entity {
+                        EntityKind::Scene => self.scenes.iter().any(|s| s.id.as_str() == id),
+                        EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
+                        EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
+                        EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
+                        _ => false,
+                    };
+                    if !exists {
+                        return Err(not_found(entity, id));
+                    }
+                }
+                self.hotkeys.insert(chord.clone(), action);
+                vec![Edit::HotkeyClear { chord }]
+            }
+            Edit::HotkeyClear { chord } => {
+                let Some(action) = self.hotkeys.remove(&chord) else {
+                    return Err(not_found(EntityKind::Hotkey, chord.as_str()));
+                };
+                vec![Edit::HotkeySet { chord, action }]
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
+    }
+
+    /// Removes the hotkey bindings whose action names `entity` `id`, which a delete has
+    /// just removed, records them in `removed`, and returns the `hotkey.set` edits that
+    /// restore them, ordered by chord.
+    fn remove_hotkeys_naming(
+        &mut self,
+        entity: EntityKind,
+        id: &str,
+        removed: &mut Vec<HotkeyBinding>,
+    ) -> Vec<Edit> {
+        let chords: Vec<Chord> = self
+            .hotkeys
+            .iter()
+            .filter(|(_, action)| action.named_objects().contains(&(entity, id)))
+            .map(|(chord, _)| chord.clone())
+            .collect();
+        chords
+            .into_iter()
+            .filter_map(|chord| {
+                let action = self.hotkeys.remove(&chord)?;
+                removed.push(HotkeyBinding::new(chord.clone(), &action));
+                Some(Edit::HotkeySet { chord, action })
+            })
+            .collect()
     }
 
     /// Applies `item.move` with `jstream-graph`'s checks in its order: the item, the
@@ -1444,6 +1814,7 @@ impl Collection {
                 kind,
                 settings,
                 duplicated_from,
+                filters: jstream_protocol::FilterChains::default(),
                 audio,
             },
         );
@@ -1457,11 +1828,15 @@ impl Collection {
             .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))
     }
 
-    /// Whether any source's settings hold a reference matching `is_target`.
+    /// Whether any source's settings, or its filters' settings, hold a reference
+    /// matching `is_target`.
     fn is_referred_to(&self, is_target: impl Fn(&Reference) -> bool) -> bool {
-        self.sources
-            .values()
-            .any(|source| source.settings.references().any(|(_, r)| is_target(&r)))
+        self.sources.values().any(|source| {
+            let filters = source.filters.video.iter().chain(&source.filters.audio);
+            std::iter::once(&source.settings)
+                .chain(filters.map(|f| &f.settings))
+                .any(|settings| settings.references().any(|(_, r)| is_target(&r)))
+        })
     }
 
     /// Every source, ordered by ID, as queries report them.
@@ -1477,6 +1852,7 @@ impl Collection {
                     .duplicated_from
                     .clone()
                     .filter(|original| self.sources.contains_key(original)),
+                filters: source.filters.clone(),
                 audio: source.audio,
                 meta: Default::default(),
             })
@@ -1525,6 +1901,8 @@ impl Collection {
                     geometry: item.geometry,
                     crop: item.crop,
                     visible: item.visible,
+                    opacity: item.opacity,
+                    blend: item.blend,
                 })
             })
             .collect()
@@ -1760,6 +2138,8 @@ fn restore_item(
         source_id: item.source_id.clone(),
         transform,
         geometry,
+        opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
+        blend: (!item.blend.is_normal()).then_some(item.blend),
     }];
     if index != top {
         edits.push(Edit::ItemReorder {
@@ -1784,6 +2164,30 @@ fn restore_item(
     Ok(edits)
 }
 
+/// Rejects an opacity outside [0, 1], as `jstream-graph` does.
+fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
+    if !(0.0..=1.0).contains(&opacity.get()) {
+        return Err(invalid(at, "opacity", "must be from 0 to 1"));
+    }
+    Ok(())
+}
+
+/// Rejects every blend mode but `normal`, which is all the engine draws, as
+/// `jstream-graph` does.
+fn check_blend(blend: BlendMode, at: usize) -> Result<(), ProtocolError> {
+    if !blend.is_normal() {
+        return Err(invalid(
+            at,
+            "blend",
+            format!(
+                "`{}` is not drawn by the compositor yet; only `normal` is",
+                blend.as_str()
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// Whether an output in `state` is not running: `stopped` or `failed`.
 fn is_idle(state: OutputState) -> bool {
     matches!(state, OutputState::Stopped | OutputState::Failed)
@@ -1801,6 +2205,9 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
         "must be at most 1024 bytes"
     } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
         "must not contain whitespace or control characters"
+    } else if !key.is_ascii() {
+        // No streaming service issues one; a leading U+FEFF is the usual case (#441).
+        "must contain only ASCII characters"
     } else {
         return Ok(());
     };
@@ -1855,8 +2262,9 @@ const MAX_PATH_LEN: usize = 4096;
 
 /// Why `path` is not an acceptable recording path, or `None` when it is: the checks and
 /// fixed reasons of `jstream-graph`'s path validation, in the same order. The rule is
-/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, no `..` segment, and a
-/// file name last.
+/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, not two leading
+/// separators (a UNC or device path), no `:` but a drive letter's, no `?` or `*`, no
+/// `..` segment, and a file name last that is not a DOS device name.
 fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
         return Some("must not be empty");
@@ -1875,13 +2283,41 @@ fn record_path_problem(path: &str) -> Option<&'static str> {
     if !(path.starts_with(['/', '\\']) || drive) {
         return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
     }
+    let rest = if drive { &path[2..] } else { path };
+    if rest[1..].starts_with(['/', '\\']) {
+        return Some("must not start with two separators");
+    }
+    if rest.contains(':') {
+        return Some("must not contain `:` but a drive letter's");
+    }
+    if rest.contains(['?', '*']) {
+        return Some("must not contain `?` or `*`");
+    }
     let mut segments = path.split(['/', '\\']);
     if segments.clone().any(|segment| segment == "..") {
         return Some("must not contain a `..` segment");
     }
     match segments.next_back() {
         Some("" | ".") | None => Some("must end in a file name"),
+        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
         Some(_) => None,
+    }
+}
+
+/// Whether Win32 opens the path component `name` as a DOS device, as in `jstream-graph`:
+/// a stem (the name before its first `.`, without trailing spaces, in any ASCII case) of
+/// `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`,
+/// `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`.
+fn is_dos_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    match upper.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        _ => ["COM", "LPT"].iter().any(|port| {
+            upper.strip_prefix(port).is_some_and(|n| {
+                matches!(n.as_bytes(), [b'0'..=b'9']) || matches!(n, "\u{b9}" | "\u{b2}" | "\u{b3}")
+            })
+        }),
     }
 }
 
@@ -2008,7 +2444,7 @@ mod tests {
     use super::MockEngine;
     use crate::{Control, ControlError, EventStream};
     use jstream_protocol::{
-        Action, Batch, BusId, BusInfo, Call, CallResult, Canvas, ClientId, Crop, Edit,
+        Action, Batch, BlendMode, BusId, BusInfo, Call, CallResult, Canvas, ClientId, Crop, Edit,
         EncoderProfile, EncoderProfileId, EntityKind, Event, Finite32, Hello, HistoryCall,
         HistoryDirection, HistoryOp, IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo,
         OutputKind, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
@@ -2087,12 +2523,14 @@ mod tests {
             source_id: SourceId::new(source),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         }
     }
 
     fn batch(control: &dyn Control, batch: Batch) -> Result<Rev, ControlError> {
         match block_on(control.call(Call::Batch(batch)))?.result {
-            CallResult::Batch { rev } => Ok(rev),
+            CallResult::Batch { rev, .. } => Ok(rev),
             other => panic!("not a batch result: {other:?}"),
         }
     }
@@ -2177,6 +2615,8 @@ mod tests {
                     source_id: SourceId::new("webcam"),
                     transform: None,
                     geometry: None,
+                    opacity: None,
+                    blend: None,
                 },
                 Edit::SceneRename {
                     scene_id: SceneId::new("intro"),
@@ -2185,6 +2625,7 @@ mod tests {
             ],
             expected_rev: Some(Rev(0)),
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, edits), Ok(Rev(1)));
         assert_eq!(engine.rev(), Rev(1));
@@ -2204,6 +2645,8 @@ mod tests {
             source_id: SourceId::new("webcam"),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         });
         assert_eq!(batch(&*control, readd), Ok(Rev(3)));
     }
@@ -2249,6 +2692,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(1)));
         assert_eq!(
@@ -2279,6 +2723,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         let error = batch(&*control, cycle).expect_err("cycle");
         assert!(matches!(
@@ -2314,6 +2759,19 @@ mod tests {
         assert_eq!(batch(&*control, unplaced), Ok(Rev(2)));
     }
 
+    #[test]
+    fn capture_targets_lists_one_primary_display() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let Ok(QueryResult::CaptureTargets { targets }) = query(&*control, Query::CaptureTargets)
+        else {
+            panic!("a capture.targets result");
+        };
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].target, super::MOCK_DISPLAY);
+        assert!(targets[0].primary);
+    }
+
     fn query(control: &dyn Control, query: Query) -> Result<QueryResult, ControlError> {
         match block_on(control.call(Call::Query { query }))?.result {
             CallResult::Query { result } => Ok(result),
@@ -2332,6 +2790,27 @@ mod tests {
             Ok(parity::COLLECTION_REV)
         );
         (engine, control)
+    }
+
+    /// `kind.list` answers with no kinds, even for kinds `with_kinds` told it about: the
+    /// mock describes none. It answers rather than failing, so a client can report a
+    /// failed `kind.list` without the mock tripping it (#401). `kind.describe` still
+    /// answers `internal`.
+    #[test]
+    fn kind_list_lists_no_kinds() {
+        let (_engine, control) = parity_engine();
+        assert_eq!(
+            query(&*control, Query::KindList),
+            Ok(QueryResult::KindList { kinds: Vec::new() })
+        );
+        let describe = Query::KindDescribe {
+            kind_id: "color".into(),
+        };
+        let refused = query(&*control, describe).expect_err("kind.describe");
+        assert!(
+            matches!(refused.protocol(), Some(ProtocolError::Internal { .. })),
+            "{refused:?}"
+        );
     }
 
     /// The answer to a history call: `(rev, step_rev, undo_depth, redo_depth)`.
@@ -2369,6 +2848,7 @@ mod tests {
                 encoders,
                 buses,
                 sends,
+                hotkeys,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -2379,6 +2859,7 @@ mod tests {
                 encoders,
                 buses,
                 sends,
+                hotkeys,
                 folders: Vec::new(),
                 labels: Vec::new(),
             },
@@ -2391,8 +2872,9 @@ mod tests {
     /// its placement (in its own form, transform or geometry), crop and visibility, a
     /// deleted scene with its items and its position, a source with its settings and its
     /// `duplicated_from`, an item's source, an output with its encoder profile, the encoder profiles, the canvas size,
-    /// a deleted bus with its fader and sends, a source's audio and sends as they were, and
-    /// the faders and sends set since. Its
+    /// a deleted bus with its fader and sends, a source's audio and sends as they were,
+    /// the faders and sends set since, and the hotkey bindings that the deletes of scene
+    /// `a` and output `yt` removed. Its
     /// placement, crop and visibility edits name the item's own scene, and their
     /// inverses do too.
     #[test]
@@ -2466,6 +2948,10 @@ mod tests {
                 Edit::SourceDelete {
                     source_id: SourceId::new("aux"),
                 },
+                // Its inverse re-adds its filters, in order and with their switches.
+                Edit::SourceDelete {
+                    source_id: SourceId::new("desk"),
+                },
                 // The audio: a bus's name, the master's fader, a send's gain, a source's
                 // audio, a new send, then a bus with its fader and send, and the audio
                 // sources with their audio and sends.
@@ -2534,6 +3020,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, teardown), Ok(Rev(2)));
         let empty = state(&*control);
@@ -2553,6 +3040,7 @@ mod tests {
                     muted: false,
                 }],
                 sends: vec![],
+                hotkeys: vec![],
                 folders: Vec::new(),
                 labels: Vec::new(),
             }
@@ -2756,6 +3244,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, more), Ok(Rev(2)));
         let Ok(QueryResult::SourceList { rev, sources }) = query(&*control, Query::SourceList)
@@ -2775,6 +3264,7 @@ mod tests {
                 ("cam", "Camera"),
                 ("cam_2", "Camera 2"),
                 ("cam_copy", "Camera copy"),
+                ("desk", "Desktop"),
                 ("mic", "Microphone"),
                 ("mic_copy", "Microphone copy"),
             ]
@@ -2797,6 +3287,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, unplace), Ok(Rev(3)));
         let Ok(QueryResult::SourceList { sources, .. }) = query(&*control, Query::SourceList)
@@ -2832,6 +3323,7 @@ mod tests {
             edits,
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         let setup = edits(vec![
             create("a"),
@@ -2902,10 +3394,13 @@ mod tests {
                     source_id: SourceId::new("cam"),
                     transform: None,
                     geometry: None,
+                    opacity: None,
+                    blend: None,
                 },
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(2)));
         let cycle = Batch::single(Edit::ItemSetSource {
@@ -2928,6 +3423,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, retarget), Ok(Rev(3)));
         let Ok(QueryResult::ItemList { items, .. }) = query(
@@ -2945,6 +3441,64 @@ mod tests {
         assert_eq!(ib.source_id.as_str(), "a_src");
     }
 
+    /// #362: a bus a source's settings draw can't be deleted until they are cleared, as
+    /// the engine refuses it (`jstream-graph`), in the same batch or before.
+    #[test]
+    fn a_bus_a_source_draws_cannot_be_deleted() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let wave = |bus: serde_json::Value| Edit::SourceSetSettings {
+            source_id: SourceId::new("wave"),
+            patch: [("audio", bus)].into_iter().collect(),
+        };
+        batch(
+            &*control,
+            Batch {
+                edits: vec![
+                    Edit::BusCreate {
+                        bus_id: BusId::new("vod"),
+                        name: "VOD".into(),
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("wave"),
+                        name: "Waveform".into(),
+                        kind: SourceKind::Builtin {
+                            kind: "waveform".into(),
+                        },
+                        settings: Settings::new(),
+                        duplicated_from: None,
+                    },
+                    wave(serde_json::json!({"type": "bus", "bus_id": "vod"})),
+                ],
+                expected_rev: None,
+                idempotency_key: None,
+                ends_gesture: None,
+            },
+        )
+        .expect("created");
+        let delete = Edit::BusDelete {
+            bus_id: BusId::new("vod"),
+        };
+        let error = batch(&*control, Batch::single(delete.clone())).expect_err("refused");
+        assert!(
+            matches!(
+                error.protocol(),
+                Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.bus_id"
+            ),
+            "{error:?}"
+        );
+        batch(
+            &*control,
+            Batch {
+                edits: vec![wave(serde_json::Value::Null), delete],
+                expected_rev: None,
+                idempotency_key: None,
+                ends_gesture: None,
+            },
+        )
+        .expect("cleared, then deleted");
+    }
+
     /// Every batch the shared parity fixture rejects fails with exactly the error
     /// `Graph::apply` returns for it, and applies nothing.
     #[test]
@@ -2959,6 +3513,60 @@ mod tests {
             let got = query(&*control, call.clone()).map_err(|error| error.protocol().cloned());
             assert_eq!(got, expected.map_err(Some), "{call:?}");
         }
+    }
+
+    /// ADR-0040 §3, as `jstream-graph` does it: deleting what a binding names removes the
+    /// binding, the batch result lists it, and undo brings it back.
+    #[test]
+    fn deletes_remove_the_hotkeys_naming_their_target() {
+        let (_engine, control) = parity_engine();
+        let delete = Batch::single(Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        });
+        let result = block_on(control.call(Call::Batch(delete)))
+            .expect("applies")
+            .result;
+        let CallResult::Batch {
+            removed_hotkeys, ..
+        } = result
+        else {
+            panic!("not a batch result: {result:?}");
+        };
+        let start_yt = parity::hotkeys()
+            .into_iter()
+            .find(|b| b.chord.as_str() == "Ctrl+Digit1");
+        assert_eq!(removed_hotkeys, start_yt.into_iter().collect::<Vec<_>>());
+        let QueryResult::StateGet { hotkeys, .. } = state(&*control) else {
+            panic!("not a state");
+        };
+        let chords: Vec<_> = hotkeys.iter().map(|b| b.chord.as_str()).collect();
+        assert_eq!(chords, ["F1"]);
+        assert!(undo(&*control).is_ok());
+        let QueryResult::StateGet { hotkeys, .. } = state(&*control) else {
+            panic!("not a state");
+        };
+        assert_eq!(hotkeys, parity::hotkeys());
+    }
+
+    /// `audio.reset_loudness` names nothing, so it binds and an output's delete leaves it
+    /// bound.
+    #[test]
+    fn an_action_that_names_nothing_can_be_bound() {
+        let (_engine, control) = parity_engine();
+        let bind = Batch::single(Edit::HotkeySet {
+            chord: jstream_protocol::Chord::new("F9"),
+            action: Action::AudioResetLoudness {},
+        });
+        assert!(batch(&*control, bind).is_ok());
+        let delete = Batch::single(Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        });
+        assert!(batch(&*control, delete).is_ok());
+        let QueryResult::StateGet { hotkeys, .. } = state(&*control) else {
+            panic!("not a state");
+        };
+        let chords: Vec<_> = hotkeys.iter().map(|b| b.chord.as_str()).collect();
+        assert_eq!(chords, ["F1", "F9"]);
     }
 
     #[test]
@@ -3041,6 +3649,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(1)));
         let roles = |control: &dyn Control| match query(control, Query::SceneList) {
@@ -3081,6 +3690,7 @@ mod tests {
             edits: vec![mv("i1", "g", 0), mv("i2", "g", 1)],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, grouped), Ok(Rev(2)));
         assert_eq!(items(&*control, "a"), ["gi"]);
@@ -3153,6 +3763,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, back), Ok(Rev(5)));
         assert_eq!(items(&*control, "a"), ["i1", "gi"]);
@@ -3192,6 +3803,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(1)));
         let before = state(&*control);
@@ -3212,6 +3824,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, group), Ok(Rev(2)));
         let grouped = state(&*control);
@@ -3230,6 +3843,52 @@ mod tests {
         assert_eq!(state(&*control), grouped);
     }
 
+    /// `item.set_opacity` undoes to the old value, and removing a faded item comes back
+    /// faded, as `jstream-graph`'s inverses do.
+    #[test]
+    fn undo_restores_opacity_and_a_removed_items_opacity() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = Batch {
+            edits: vec![create("a"), webcam(), add("a", "i1", "webcam")],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let before = state(&*control);
+        let fade = Batch {
+            edits: vec![
+                Edit::ItemSetOpacity {
+                    item_id: ItemId::new("i1"),
+                    scene_id: None,
+                    opacity: Finite32::new(0.25).expect("finite"),
+                },
+                Edit::ItemSetBlend {
+                    item_id: ItemId::new("i1"),
+                    blend: BlendMode::Normal,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        };
+        assert_eq!(batch(&*control, fade), Ok(Rev(2)));
+        let faded = state(&*control);
+        assert_ne!(faded, before);
+        assert_eq!(undo(&*control), Ok((Rev(3), Rev(2), 1, 1)));
+        assert_eq!(state(&*control), before);
+        assert_eq!(redo(&*control), Ok((Rev(4), Rev(2), 2, 0)));
+        assert_eq!(state(&*control), faded);
+
+        let remove = Batch::single(Edit::ItemRemove {
+            item_id: ItemId::new("i1"),
+        });
+        assert_eq!(batch(&*control, remove), Ok(Rev(5)));
+        assert_eq!(undo(&*control), Ok((Rev(6), Rev(5), 2, 1)));
+        assert_eq!(state(&*control), faded);
+    }
+
     #[test]
     fn rev_conflict_is_checked_before_empty_batch() {
         let engine = MockEngine::new();
@@ -3238,6 +3897,7 @@ mod tests {
             edits: vec![],
             expected_rev: Some(Rev(5)),
             idempotency_key: None,
+            ends_gesture: None,
         };
         // `jstream_graph::Graph::apply` answers this with `rev_conflict` too.
         let error = batch(&*control, empty_and_stale).expect_err("stale");
@@ -3299,6 +3959,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         let error = batch(&*control, edits).expect_err("fails");
         assert_eq!(
@@ -3317,6 +3978,7 @@ mod tests {
             edits: vec![],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         let empty = batch(&*control, empty).expect_err("empty");
         assert_eq!(code(&empty), Some("empty_batch"));
@@ -3402,7 +4064,7 @@ mod tests {
             },
         };
         let started = block_on(agent.call(start)).expect("start");
-        assert_eq!(started.result, CallResult::Action {});
+        assert_eq!(started.result, CallResult::action());
 
         let changed = |state| Event::OutputStateChanged {
             output_id: OutputId::new("yt"),
@@ -3507,7 +4169,7 @@ mod tests {
         let start = Action::OutputStart {
             output_id: OutputId::new("yt"),
         };
-        assert_eq!(action(&*control, start), Ok(CallResult::Action {}));
+        assert_eq!(action(&*control, start), Ok(CallResult::action()));
         let delete = || {
             Batch::single(Edit::OutputDelete {
                 output_id: OutputId::new("yt"),
@@ -3532,7 +4194,7 @@ mod tests {
         let stop = Action::OutputStop {
             output_id: OutputId::new("yt"),
         };
-        assert_eq!(action(&*control, stop), Ok(CallResult::Action {}));
+        assert_eq!(action(&*control, stop), Ok(CallResult::action()));
         assert_eq!(batch(&*control, delete()), Ok(Rev(3)));
         let gone = status(&*control, "yt").expect_err("forgotten");
         assert_eq!(code(&gone), Some("not_found"));
@@ -3601,6 +4263,8 @@ mod tests {
                 "secret\u{7}",
                 "must not contain whitespace or control characters",
             ),
+            ("\u{FEFF}secret", "must contain only ASCII characters"),
+            ("s\u{e9}cret", "must contain only ASCII characters"),
         ] {
             let error = set("yt", key).expect_err("bad key");
             assert_eq!(
@@ -3610,7 +4274,7 @@ mod tests {
         }
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, false)));
 
-        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::Action {}));
+        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::action()));
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, true)));
         assert_eq!(
             engine
@@ -3623,22 +4287,36 @@ mod tests {
         let state = format!("{:?}", query(&*control, Query::StateGet));
         assert!(!state.contains("abcd"), "{state}");
 
-        // The key outlives the output, as in the engine's store, until it is cleared;
-        // clearing an unknown output's key, or a missing key, succeeds.
+        // As in the engine (#343): a new path on the same server keeps the key, a new
+        // server removes it, and so does deleting the output.
+        let retarget = |url: &str| {
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("yt"),
+                target: RtmpTarget::Generic { url: url.into() },
+            })
+        };
+        let path_only = retarget("rtmp://A.rtmp.youtube.com:1935/other");
+        assert_eq!(batch(&*control, path_only), Ok(Rev(2)));
+        assert!(engine.stream_key(&OutputId::new("yt")).is_some());
+        let elsewhere = retarget("rtmp://attacker.example/live2");
+        assert_eq!(batch(&*control, elsewhere), Ok(Rev(3)));
+        assert!(engine.stream_key(&OutputId::new("yt")).is_none());
+        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::action()));
         let delete = Batch::single(Edit::OutputDelete {
             output_id: OutputId::new("yt"),
         });
-        assert_eq!(batch(&*control, delete), Ok(Rev(2)));
-        assert!(engine.stream_key(&OutputId::new("yt")).is_some());
+        assert_eq!(batch(&*control, delete), Ok(Rev(4)));
+        assert!(engine.stream_key(&OutputId::new("yt")).is_none());
+        // Clearing an unknown output's key, or a missing key, succeeds.
         for _ in 0..2 {
             let clear = Action::OutputClearKey {
                 output_id: OutputId::new("yt"),
             };
-            assert_eq!(action(&*control, clear), Ok(CallResult::Action {}));
+            assert_eq!(action(&*control, clear), Ok(CallResult::action()));
         }
         assert!(engine.stream_key(&OutputId::new("yt")).is_none());
         let events = drain(&mut events);
-        assert_eq!(events.len(), 2, "only the two batches: {events:?}");
+        assert_eq!(events.len(), 4, "only the four batches: {events:?}");
     }
 
     #[test]

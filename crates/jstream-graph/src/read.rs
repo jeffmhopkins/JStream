@@ -7,12 +7,12 @@
 //! read at; kinds are not collection state, so their results carry none.
 
 use crate::model::{
-    Bus, Encoder, Folder, Graph, Item, Label, Output, Placement, Scene, Source, State,
+    Bus, Encoder, Filter, Folder, Graph, Item, Label, Output, Placement, Scene, Source, State,
 };
 use jstream_protocol::{
-    BusInfo, EncoderProfileInfo, EntityKind, FolderInfo, ItemInfo, KindDescriptor, LabelInfo,
-    OutputInfo, ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary, SendInfo,
-    SourceInfo,
+    BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo, HotkeyBinding,
+    ItemInfo, KindDescriptor, LabelInfo, OutputInfo, ProtocolError, Query, QueryResult, SceneId,
+    SceneInfo, SceneSummary, SendInfo, SourceInfo,
 };
 
 impl Graph {
@@ -148,8 +148,8 @@ impl Graph {
     }
 
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
-    /// in display order, every output, encoder profile and bus by ID, every send, and
-    /// the folders and labels in their own orders.
+    /// in display order, every output, encoder profile and bus by ID, every send, every
+    /// hotkey binding by chord, and the folders and labels in their own orders.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
@@ -164,6 +164,11 @@ impl Graph {
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
             buses: self.state.buses().map(Bus::to_info).collect(),
             sends: self.send_infos(),
+            hotkeys: self
+                .state
+                .hotkeys()
+                .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                .collect(),
             folders: self.state.folders().iter().map(Folder::to_info).collect(),
             labels: self.state.labels().iter().map(Label::to_info).collect(),
         }
@@ -185,6 +190,22 @@ impl Source {
                 .filter(|original| state.source(original).is_some()),
             audio: self.audio,
             meta: crate::organise::source_meta(self),
+            filters: FilterChains {
+                video: self.filters.video.iter().map(Filter::to_info).collect(),
+                audio: self.filters.audio.iter().map(Filter::to_info).collect(),
+            },
+        }
+    }
+}
+
+impl Filter {
+    /// This filter as query results report it.
+    pub fn to_info(&self) -> FilterInfo {
+        FilterInfo {
+            filter_id: self.id.clone(),
+            kind: self.kind.clone(),
+            enabled: self.enabled,
+            settings: self.settings.clone(),
         }
     }
 }
@@ -285,6 +306,8 @@ impl Item {
             geometry,
             crop: self.crop,
             visible: self.visible,
+            opacity: self.opacity,
+            blend: self.blend,
         }
     }
 }
@@ -368,6 +391,7 @@ mod tests {
                     muted: false,
                 }],
                 sends: vec![],
+                hotkeys: vec![],
                 folders: Vec::new(),
                 labels: Vec::new(),
             }
@@ -394,7 +418,8 @@ mod tests {
         let Some(Ok(QueryResult::KindList { kinds })) = graph.query(&Query::KindList) else {
             panic!("kind.list");
         };
-        let expected: Vec<_> = parity::kinds().iter().map(|k| k.summary()).collect();
+        let mut expected: Vec<_> = parity::kinds().iter().map(|k| k.summary()).collect();
+        expected.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
         assert_eq!(kinds, expected);
         let describe = |id: &str| graph.query(&Query::KindDescribe { kind_id: id.into() });
         let Some(Ok(QueryResult::KindDescribe {
@@ -405,7 +430,7 @@ mod tests {
             panic!("kind.describe");
         };
         assert_eq!(settings_schema, kind.settings_schema());
-        assert_eq!(kind, parity::kinds()[1]);
+        assert_eq!(kind, parity::kinds()[0]);
         assert!(matches!(
             describe("ghost"),
             Some(Err(ProtocolError::InvalidArgument { field, .. })) if field == "kind_id"

@@ -1,15 +1,17 @@
-//! `delete.plan`: the batch that deletes a scene, source, folder or label together with
-//! everything that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+//! `delete.plan`: the batch that deletes a scene, source, bus, folder or label together
+//! with everything that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
 //!
-//! Rejection stays the only delete: `scene.delete` and `source.delete` refuse while
-//! anything refers to their target. The plan spells out the removal as ordinary edits,
+//! Rejection stays the only delete: `scene.delete`, `source.delete` and `bus.delete`
+//! refuse while anything refers to their target. The plan spells out the removal as ordinary edits,
 //! so the client can show it, and its undo is the batch's normal inverse.
+//! Hotkey bindings are not blockers: the deletes remove those that name their targets
+//! (ADR-0040 §3), and the plan lists them.
 
 use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
-    DeleteTarget, Edit, EntityKind, ItemId, ProtocolError, QueryResult, Settings, SourceId,
-    SourceKind,
+    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, ProtocolError,
+    QueryResult, Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -20,16 +22,21 @@ impl Graph {
     /// succeed. Fails with `not_found` if the target doesn't exist.
     ///
     /// Deleting a scene also deletes the `scene` sources that show it. Deleting a source
-    /// never deletes a scene, so the cascade stops there. The edits are, in order:
+    /// never deletes a scene, so the cascade stops there. A bus is held only by settings
+    /// values, which the plan clears; `bus.delete` takes its sends itself. The edits are, in order:
     /// - `item.remove` for each item that places a deleted source;
     /// - one `source.set_settings` per remaining source whose settings refer to a deleted
     ///   object, setting each such parameter to `null`;
+    /// - one `filter.set_settings` per remaining filter whose settings do, likewise;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
     /// - the delete of the target.
     ///
+    /// It also lists, ordered by chord, the hotkey bindings those deletes remove.
+    ///
     /// A folder's plan moves the scenes and folders in it up to its parent
     /// (`scene.set_folder`, then `folder.set_parent`), then deletes it. A label's plan
-    /// takes it off each source carrying it (`source.set_meta`), then deletes it.
+    /// takes it off each source carrying it (`source.set_meta`), then deletes it. No
+    /// action names a folder or label, so neither removes a hotkey binding.
     pub fn delete_plan(&self, target: &DeleteTarget) -> Result<QueryResult, ProtocolError> {
         let state = &self.state;
         let (target, last) = match target {
@@ -59,13 +66,32 @@ impl Graph {
                 return Ok(QueryResult::DeletePlan {
                     rev: self.rev,
                     edits: crate::organise::folder_plan(state, folder_id)?,
+                    hotkeys: Vec::new(),
                 });
             }
             DeleteTarget::Label { label_id } => {
                 return Ok(QueryResult::DeletePlan {
                     rev: self.rev,
                     edits: crate::organise::label_plan(state, label_id)?,
+                    hotkeys: Vec::new(),
                 });
+            }
+            DeleteTarget::Bus { bus_id } => {
+                if state.bus(bus_id).is_none() {
+                    return Err(not_found(EntityKind::Bus, bus_id.as_str()));
+                }
+                if bus_id.is_master() {
+                    return Err(ProtocolError::invalid_argument(
+                        "target.bus_id",
+                        "the master bus can't be deleted",
+                    ));
+                }
+                (
+                    Node::Bus(bus_id.clone()),
+                    Edit::BusDelete {
+                        bus_id: bus_id.clone(),
+                    },
+                )
             }
             _ => {
                 return Err(ProtocolError::invalid_argument(
@@ -89,24 +115,34 @@ impl Graph {
 
         let mut removes: Vec<ItemId> = Vec::new();
         let mut clears: BTreeMap<SourceId, Settings> = BTreeMap::new();
+        let mut filter_clears: BTreeMap<(SourceId, FilterId), Settings> = BTreeMap::new();
         for node in &deleted {
             for blocker in deps::blockers(state, node) {
-                match (blocker.entity, blocker.field.strip_prefix("settings.")) {
-                    (EntityKind::Item, _) => removes.push(ItemId::new(blocker.id)),
-                    (EntityKind::Source, Some(param)) => {
-                        let source_id = SourceId::new(blocker.id);
-                        // A source the batch deletes anyway needs no clearing.
-                        if !deleted.contains(&Node::Source(source_id.clone())) {
-                            let param = param.to_owned();
-                            clears
-                                .entry(source_id)
-                                .or_default()
-                                .insert(param, Value::Null);
-                        }
-                    }
-                    // `kind.scene_id`: a `scene` source, already in `shown_by`.
-                    _ => {}
+                if blocker.entity == EntityKind::Item {
+                    removes.push(ItemId::new(blocker.id));
+                    continue;
                 }
+                let source_id = SourceId::new(blocker.id);
+                // A source the batch deletes anyway needs no clearing.
+                if deleted.contains(&Node::Source(source_id.clone())) {
+                    continue;
+                }
+                if let Some(param) = blocker.field.strip_prefix("settings.") {
+                    clears
+                        .entry(source_id)
+                        .or_default()
+                        .insert(param.to_owned(), Value::Null);
+                } else if let Some((filter, param)) = blocker
+                    .field
+                    .strip_prefix("filters.")
+                    .and_then(|rest| rest.rsplit_once('.'))
+                {
+                    filter_clears
+                        .entry((source_id, FilterId::new(filter)))
+                        .or_default()
+                        .insert(param.to_owned(), Value::Null);
+                }
+                // `kind.scene_id`: a `scene` source, already in `shown_by`.
             }
         }
 
@@ -120,14 +156,38 @@ impl Graph {
                 .map(|(source_id, patch)| Edit::SourceSetSettings { source_id, patch }),
         );
         edits.extend(
+            filter_clears
+                .into_iter()
+                .map(|((source_id, filter_id), patch)| Edit::FilterSetSettings {
+                    owner: FilterOwner::Source { source_id },
+                    filter_id,
+                    patch,
+                }),
+        );
+        edits.extend(
             shown_by
                 .into_iter()
                 .map(|source_id| Edit::SourceDelete { source_id }),
         );
         edits.push(last);
+        let hotkeys = state
+            .hotkeys()
+            .filter(|(_, action)| {
+                action.named_objects().iter().any(|&(entity, id)| {
+                    deleted.iter().any(|node| match node {
+                        Node::Scene(s) => entity == EntityKind::Scene && s.as_str() == id,
+                        Node::Source(s) => entity == EntityKind::Source && s.as_str() == id,
+                        // No action names a bus, so no binding can.
+                        Node::Bus(_) => false,
+                    })
+                })
+            })
+            .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+            .collect();
         Ok(QueryResult::DeletePlan {
             rev: self.rev,
             edits,
+            hotkeys,
         })
     }
 }
@@ -183,6 +243,7 @@ mod tests {
                 edits: vec![Edit::SceneDelete {
                     scene_id: SceneId::new("a"),
                 }],
+                hotkeys: vec![],
             })
         );
     }

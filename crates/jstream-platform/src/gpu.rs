@@ -153,6 +153,14 @@ pub trait FrameSync: Send + Sync + fmt::Debug {
     /// [`PlatformError::InvalidState`] for a queue of another device or backend, and
     /// [`PlatformError::Os`] when the driver refuses.
     fn stage(&self, queue: &wgpu::Queue) -> Result<(), PlatformError>;
+
+    /// The implementation, for the platform that made the hold to recognise its own, as
+    /// [`GpuContext::platform`] does for contexts: an encoder reading a frame on the
+    /// platform's other API finds the texture's raw objects through it. `None`, the
+    /// default, for a hold no platform reads back.
+    fn platform(&self) -> Option<&dyn Any> {
+        None
+    }
 }
 
 /// A frame in a texture shared with the platform: what capture delivers on the GPU path,

@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:525e576650397644", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main: re-read; stale via ARCH#data-model only, encode code identical to main; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -29,8 +28,10 @@ outputs with no video chain and the same mix and encoder profile share one sessi
 an output with a video chain gets its own) needs no new shape.
 
 Its only JStream dependency is `jstream-platform` (layer 1), whose `media` re-export
-supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependency:
-`jstream-platform`'s `fake` feature, for `FakeCodecs`.
+supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependencies:
+`jstream-platform`'s `fake` feature, for `FakeCodecs`, and `wgpu` at the workspace pin
+with jstream-render's backends, so the GPU-frame tests can make textures on a software
+adapter.
 
 Why a crate: the crate map puts encoder sessions in their own layer-3 crate, between
 the platform traits they drive and the layer-4 outputs that consume them, and it keeps
@@ -40,7 +41,10 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
 **API.**
 - `VideoSession` / `AudioSession`: `open(codecs, config, options)` opens the encoder
   through `Codecs` and starts the thread; `start(encoder, config, options)` takes an
-  encoder that is already open. Both check the codec is of the right media kind.
+  encoder that is already open for CPU frames. Both check the codec is of the right
+  media kind. `VideoSession::open_on(codecs, Option<&GpuContext>, config, options)`
+  opens an encoder that takes GPU frames on the context when the platform has one, and
+  otherwise a CPU one; `path()` returns the `VideoPath` it took.
   `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `request_keyframe()`,
   `info()`, `stats()` and `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
 - `VideoInput` / `AudioInput`: cloneable push handles. `push` never blocks.
@@ -49,6 +53,7 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
   `request_keyframe()` for a consumer that holds only its subscription.
 - `StreamInfo`: the `CodecInfo` that was opened plus `EncoderSettings` (the video or
   audio config it was opened with).
+- `VideoPath`: `Gpu`, or `Cpu` with the reason a given context was not used.
 - `SessionOptions`, `SessionStats`, `SubscriberStats`, `SessionKey`,
   `SessionRegistry`, and the errors `EncodeError`, `PushError`, `StreamEnd`.
 
@@ -63,14 +68,19 @@ next regular one when the encoder can't force it; keyframe requests coalesce; `f
 drains; an encoder error and a panic reach every subscriber; dropping a session closes
 the streams and joins the thread; dropped audio blocks become silence, also when that
 silence is first refused as busy; the fan-out's
-keyframe resync; and the registry.
+keyframe resync; and the registry. `src/gpu_tests.rs` covers `open_on` on every
+platform, with GPU frames that are textures on a software adapter: CPU frames without a
+context, the CPU fallback (opened as configured, with its reason) for a backend with no
+GPU path, one that refuses the context and one whose GPU encoder fails to open, and a
+GPU session that is opened in NV12, encodes a ring of two targets and leaves the
+producer holding the only clone of each, and fails on a CPU frame. A machine with no
+wgpu adapter skips the ones that need a context, except on CI.
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:0bb3ee6c69f3bd6a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Sharing paragraph now says jstream-core keys its registry by the protocol encoder profile (id and settings) and maps it to platform configs; Not yet drops encoder profiles in the protocol" }
 -->
 
 ### Threads and pacing
@@ -197,17 +207,42 @@ drops to `encode_frames` and an audio session's to `encode_blocks`, and both ses
 ([R-RT-004](../../docs/RULES.md#R-RT-004)). `silence_frames` is gap-fill, not a drop.
 The pipeline registers the session; this crate does not emit the event.
 
+### GPU frames
+
+`VideoSession::open_on` takes the platform's `GpuContext`, when the engine has one, and
+asks the codec backend for its encoders on it (`Codecs::on_context`). If the backend
+has a GPU path and its encoder opens, the session takes GPU frames (`VideoPath::Gpu`):
+the platform's NV12 encode targets, so that encoder is opened in NV12 whatever the
+configured input format. Otherwise, with no context, a backend with no GPU path, one
+that refuses the context, or no encoder that reads it, the session opens the CPU
+encoder with the configuration as given (`VideoPath::Cpu`, with the reason), as
+ARCH's step 6 asks; only that encoder failing is an error. The caller logs the reason
+and pushes the matching kind of frame; the other kind fails the session.
+
+Sessions pass `VideoSurface`s through untouched, so a GPU frame reaches the encoder as
+it was pushed. The encoder takes each frame and drops it once its read is queued, and
+the session drops a frame it doesn't encode (queue full, encoder busy, a finish
+timeout), so the producer gets its encode target back without waiting for the encoder:
+it writes a target again only when it holds the frame's only clone.
+
 ### Not yet
 
 - **Rate control** beyond what the platform encoder does with the configured
   `RateControl`: no bitrate adaptation or reconfiguration of a running session.
-- **GPU frames**: sessions pass `VideoSurface`s through untouched, so they work once the
-  encoders take GPU input; nothing here depends on the CPU path.
+- **GPU frames in the engine.** The engine does not open sessions with `open_on` yet:
+  that needs its render thread to write NV12 encode targets
+  ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 4).
 - `tracing` spans ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing` is a workspace
   dependency now, but this crate doesn't use it yet; it reports through its counters
   and `StreamEnd`. Spans would go on the control side (session start and end), not in
   the encode thread's per-frame loop ([R-RT-002](../../docs/RULES.md#R-RT-002)).
-- Performance: not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
+- Performance ([R-RT-005](../../docs/RULES.md#R-RT-005)): `benches/session.rs`
+  (criterion) times the session's own cost around the fake encoder, from `push` until
+  every subscriber has the packet: about 40 µs for a 1080p NV12 frame to 1 or 4
+  subscribers and 29 µs for a 1024-frame audio block, measured on a cloud container
+  (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release build. The `bench`
+  workflow records them on every push to `main`
+  ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A real encoder's cost is not measured.
 
 <a id="open-questions"></a>
 ## Open questions
