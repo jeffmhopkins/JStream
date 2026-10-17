@@ -16,74 +16,17 @@ use std::sync::{Arc, Mutex};
 use jstream_platform::mailbox::Mailbox;
 use jstream_platform::{MediaClock, PlatformError, VideoSurface};
 
+use super::ffi::{
+    CHUNK_SKIP, FLAG_AUTOCONNECT, FLAG_MAP_BUFFERS, Fns, PW_DIRECTION_INPUT,
+    PW_VERSION_STREAM_EVENTS, Ptr, PwBuffer, PwStreamEvents, STATE_ERROR, STATE_STREAMING,
+    STATE_UNCONNECTED, SpaHook, SpaMeta, SpaPod,
+};
 use crate::MonotonicClock;
 use crate::dl::SystemLibrary;
 use crate::spa::{
     self, Chunk, Crop, META_HEADER, META_HEADER_SIZE, META_REGION_SIZE, META_VIDEO_CROP,
     PARAM_FORMAT, Pod, VideoFormat,
 };
-
-/// `struct spa_list` in <spa/utils/list.h>.
-#[repr(C)]
-struct SpaList {
-    next: *mut SpaList,
-    prev: *mut SpaList,
-}
-
-/// `struct spa_hook` in <spa/utils/hook.h>: a listener's storage, which PipeWire links
-/// into the stream's listener list. Zeroed before `pw_stream_add_listener` fills it.
-#[repr(C)]
-struct SpaHook {
-    link: SpaList,
-    funcs: *const c_void,
-    data: *mut c_void,
-    removed: Option<unsafe extern "C" fn(*mut SpaHook)>,
-    priv_: *mut c_void,
-}
-
-/// `struct pw_buffer` in <pipewire/stream.h> (only its first field is read).
-#[repr(C)]
-struct PwBuffer {
-    buffer: *mut SpaBuffer,
-}
-
-/// `struct spa_buffer` in <spa/buffer/buffer.h>.
-#[repr(C)]
-struct SpaBuffer {
-    n_metas: u32,
-    n_datas: u32,
-    metas: *mut SpaMeta,
-    datas: *mut SpaData,
-}
-
-/// `struct spa_meta` in <spa/buffer/meta.h>.
-#[repr(C)]
-struct SpaMeta {
-    type_: u32,
-    size: u32,
-    data: *mut c_void,
-}
-
-/// `struct spa_data` in <spa/buffer/buffer.h>.
-#[repr(C)]
-struct SpaData {
-    type_: u32,
-    flags: u32,
-    fd: i64,
-    mapoffset: u32,
-    maxsize: u32,
-    data: *mut c_void,
-    chunk: *mut SpaChunk,
-}
-
-/// `struct spa_chunk` in <spa/buffer/buffer.h>.
-#[repr(C)]
-struct SpaChunk {
-    offset: u32,
-    size: u32,
-    stride: i32,
-    flags: i32,
-}
 
 /// `struct spa_meta_header` in <spa/buffer/meta.h>.
 #[repr(C)]
@@ -104,128 +47,10 @@ struct SpaMetaRegion {
     height: u32,
 }
 
-/// `struct spa_pod` in <spa/pod/pod.h>.
-#[repr(C)]
-struct SpaPod {
-    size: u32,
-    type_: u32,
-}
-
-/// `struct pw_stream_events` in <pipewire/stream.h>, version 2.
-#[repr(C)]
-struct PwStreamEvents {
-    version: u32,
-    destroy: Option<unsafe extern "C" fn(*mut c_void)>,
-    state_changed: Option<unsafe extern "C" fn(*mut c_void, c_int, c_int, *const c_char)>,
-    control_info: Option<unsafe extern "C" fn(*mut c_void, u32, *const c_void)>,
-    io_changed: Option<unsafe extern "C" fn(*mut c_void, u32, *mut c_void, u32)>,
-    param_changed: Option<unsafe extern "C" fn(*mut c_void, u32, *const SpaPod)>,
-    add_buffer: Option<unsafe extern "C" fn(*mut c_void, *mut PwBuffer)>,
-    remove_buffer: Option<unsafe extern "C" fn(*mut c_void, *mut PwBuffer)>,
-    process: Option<unsafe extern "C" fn(*mut c_void)>,
-    drained: Option<unsafe extern "C" fn(*mut c_void)>,
-    command: Option<unsafe extern "C" fn(*mut c_void, *const c_void)>,
-    trigger_done: Option<unsafe extern "C" fn(*mut c_void)>,
-}
-
-const PW_VERSION_STREAM_EVENTS: u32 = 2;
-/// `PW_DIRECTION_INPUT` (`SPA_DIRECTION_INPUT`).
-const PW_DIRECTION_INPUT: c_int = 0;
 /// `PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS`.
-const STREAM_FLAGS: u32 = (1 << 0) | (1 << 2);
-/// `PW_STREAM_STATE_ERROR`.
-const STATE_ERROR: c_int = -1;
-/// `PW_STREAM_STATE_UNCONNECTED`.
-const STATE_UNCONNECTED: c_int = 0;
-/// `PW_STREAM_STATE_STREAMING`.
-const STATE_STREAMING: c_int = 3;
-/// `SPA_CHUNK_FLAG_CORRUPTED | SPA_CHUNK_FLAG_EMPTY`.
-const CHUNK_SKIP: i32 = (1 << 0) | (1 << 1);
+const STREAM_FLAGS: u32 = FLAG_AUTOCONNECT | FLAG_MAP_BUFFERS;
 /// `SPA_META_HEADER_FLAG_CORRUPTED`.
 const HEADER_CORRUPTED: u32 = 1 << 1;
-
-type Ptr = *mut c_void;
-
-/// The libpipewire functions the stream calls, with their C declarations.
-#[derive(Clone, Copy)]
-struct Fns {
-    /// `void pw_init(int *argc, char **argv[])`
-    init: unsafe extern "C" fn(*mut c_int, *mut *mut *mut c_char),
-    /// `struct pw_thread_loop *pw_thread_loop_new(const char *name, const struct spa_dict *props)`
-    thread_loop_new: unsafe extern "C" fn(*const c_char, *const c_void) -> Ptr,
-    /// `struct pw_loop *pw_thread_loop_get_loop(struct pw_thread_loop *loop)`
-    thread_loop_get_loop: unsafe extern "C" fn(Ptr) -> Ptr,
-    /// `int pw_thread_loop_start(struct pw_thread_loop *loop)`
-    thread_loop_start: unsafe extern "C" fn(Ptr) -> c_int,
-    /// `void pw_thread_loop_stop(struct pw_thread_loop *loop)`
-    thread_loop_stop: unsafe extern "C" fn(Ptr),
-    /// `void pw_thread_loop_lock(struct pw_thread_loop *loop)`
-    thread_loop_lock: unsafe extern "C" fn(Ptr),
-    /// `void pw_thread_loop_unlock(struct pw_thread_loop *loop)`
-    thread_loop_unlock: unsafe extern "C" fn(Ptr),
-    /// `void pw_thread_loop_destroy(struct pw_thread_loop *loop)`
-    thread_loop_destroy: unsafe extern "C" fn(Ptr),
-    /// `struct pw_context *pw_context_new(struct pw_loop *main_loop, struct pw_properties *props, size_t user_data_size)`
-    context_new: unsafe extern "C" fn(Ptr, Ptr, usize) -> Ptr,
-    /// `void pw_context_destroy(struct pw_context *context)`
-    context_destroy: unsafe extern "C" fn(Ptr),
-    /// `struct pw_core *pw_context_connect_fd(struct pw_context *context, int fd, struct pw_properties *properties, size_t user_data_size)`
-    context_connect_fd: unsafe extern "C" fn(Ptr, c_int, Ptr, usize) -> Ptr,
-    /// `int pw_core_disconnect(struct pw_core *core)`
-    core_disconnect: unsafe extern "C" fn(Ptr) -> c_int,
-    /// `struct pw_properties *pw_properties_new_string(const char *args)`
-    properties_new_string: unsafe extern "C" fn(*const c_char) -> Ptr,
-    /// `struct pw_stream *pw_stream_new(struct pw_core *core, const char *name, struct pw_properties *props)`
-    stream_new: unsafe extern "C" fn(Ptr, *const c_char, Ptr) -> Ptr,
-    /// `void pw_stream_add_listener(struct pw_stream *stream, struct spa_hook *listener, const struct pw_stream_events *events, void *data)`
-    stream_add_listener: unsafe extern "C" fn(Ptr, *mut SpaHook, *const PwStreamEvents, Ptr),
-    /// `int pw_stream_connect(struct pw_stream *stream, enum pw_direction direction, uint32_t target_id, enum pw_stream_flags flags, const struct spa_pod **params, uint32_t n_params)`
-    stream_connect: unsafe extern "C" fn(Ptr, c_int, u32, u32, *mut *const c_void, u32) -> c_int,
-    /// `int pw_stream_update_params(struct pw_stream *stream, const struct spa_pod **params, uint32_t n_params)`
-    stream_update_params: unsafe extern "C" fn(Ptr, *mut *const c_void, u32) -> c_int,
-    /// `struct pw_buffer *pw_stream_dequeue_buffer(struct pw_stream *stream)`
-    stream_dequeue_buffer: unsafe extern "C" fn(Ptr) -> *mut PwBuffer,
-    /// `int pw_stream_queue_buffer(struct pw_stream *stream, struct pw_buffer *buffer)`
-    stream_queue_buffer: unsafe extern "C" fn(Ptr, *mut PwBuffer) -> c_int,
-    /// `int pw_stream_disconnect(struct pw_stream *stream)`
-    stream_disconnect: unsafe extern "C" fn(Ptr) -> c_int,
-    /// `void pw_stream_destroy(struct pw_stream *stream)`
-    stream_destroy: unsafe extern "C" fn(Ptr),
-}
-
-impl Fns {
-    fn load(lib: &SystemLibrary) -> Result<Self, PlatformError> {
-        // SAFETY: each type below is the C declaration in its field's doc comment, from
-        // <pipewire/pipewire.h>, <pipewire/thread-loop.h>, <pipewire/context.h>,
-        // <pipewire/core.h>, <pipewire/properties.h> and <pipewire/stream.h>; `lib` is
-        // kept beside the table (in `VideoStream`) so they stay callable.
-        unsafe {
-            Ok(Self {
-                init: lib.function("pw_init")?,
-                thread_loop_new: lib.function("pw_thread_loop_new")?,
-                thread_loop_get_loop: lib.function("pw_thread_loop_get_loop")?,
-                thread_loop_start: lib.function("pw_thread_loop_start")?,
-                thread_loop_stop: lib.function("pw_thread_loop_stop")?,
-                thread_loop_lock: lib.function("pw_thread_loop_lock")?,
-                thread_loop_unlock: lib.function("pw_thread_loop_unlock")?,
-                thread_loop_destroy: lib.function("pw_thread_loop_destroy")?,
-                context_new: lib.function("pw_context_new")?,
-                context_destroy: lib.function("pw_context_destroy")?,
-                context_connect_fd: lib.function("pw_context_connect_fd")?,
-                core_disconnect: lib.function("pw_core_disconnect")?,
-                properties_new_string: lib.function("pw_properties_new_string")?,
-                stream_new: lib.function("pw_stream_new")?,
-                stream_add_listener: lib.function("pw_stream_add_listener")?,
-                stream_connect: lib.function("pw_stream_connect")?,
-                stream_update_params: lib.function("pw_stream_update_params")?,
-                stream_dequeue_buffer: lib.function("pw_stream_dequeue_buffer")?,
-                stream_queue_buffer: lib.function("pw_stream_queue_buffer")?,
-                stream_disconnect: lib.function("pw_stream_disconnect")?,
-                stream_destroy: lib.function("pw_stream_destroy")?,
-            })
-        }
-    }
-}
 
 /// What the stream's callbacks share with the [`CaptureStream`](jstream_platform::CaptureStream)
 /// that reads it, and with the portal watcher.
@@ -548,9 +373,7 @@ impl VideoStream {
             context: ptr::null_mut(),
             core: ptr::null_mut(),
             stream: ptr::null_mut(),
-            // SAFETY: `spa_hook` is pointers and an optional function pointer; all-zero
-            // (null, None) is the state `pw_stream_add_listener` expects.
-            hook: Box::new(unsafe { std::mem::zeroed() }),
+            hook: SpaHook::boxed(),
             callbacks: Box::new(Callbacks {
                 fns,
                 stream: ptr::null_mut(),
@@ -671,28 +494,17 @@ impl Drop for VideoStream {
 
 #[cfg(test)]
 mod tests {
-    use std::mem::{offset_of, size_of};
+    use std::mem::size_of;
 
-    use super::{
-        PwStreamEvents, Shared, SpaBuffer, SpaChunk, SpaData, SpaHook, SpaMeta, SpaMetaHeader,
-        SpaMetaRegion,
-    };
+    use super::{Shared, SpaMetaHeader, SpaMetaRegion};
 
-    /// The struct layouts match libspa's and libpipewire's on 64-bit Linux.
+    /// The video-only layouts match libspa's on 64-bit Linux; the shared ones are
+    /// checked in `ffi`.
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn layouts_match_the_c_headers() {
-        assert_eq!(size_of::<SpaHook>(), 48);
-        assert_eq!(size_of::<SpaBuffer>(), 24);
-        assert_eq!(size_of::<SpaMeta>(), 16);
-        assert_eq!(size_of::<SpaData>(), 40);
-        assert_eq!(offset_of!(SpaData, data), 24);
-        assert_eq!(offset_of!(SpaData, chunk), 32);
-        assert_eq!(size_of::<SpaChunk>(), 16);
         assert_eq!(size_of::<SpaMetaHeader>(), 32);
         assert_eq!(size_of::<SpaMetaRegion>(), 16);
-        assert_eq!(offset_of!(PwStreamEvents, process), 64);
-        assert_eq!(size_of::<PwStreamEvents>(), 96);
     }
 
     #[test]
