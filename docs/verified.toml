@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:d014feb2720169cc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "The jstream-sources row links ADR-0061 instead of the superseded ADR-0031, and the jstream-platform-linux row names ADR-0060, ADR-0061 and the OpenH264 loader, as ADR-0061's acceptance edits list. The wave/m3-2 merge added the WA1 jstream-plugin-wasm row and E3d's wording; neither cites ADR-0031; holds" }
+stamp = { hash = "b3:8e949f6ec6d7ecc4", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Resolved the Linux row's merge conflict by keeping both sides: ADR-0060, ADR-0061 and the OpenH264 loader from #494, and 'a crate loading its system libraries at run time' from this branch; other rows are wave/m3-2's; holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -67,6 +67,9 @@ stamp = { hash = "b3:24f40f915476b541" }
 
 ["ARCH#crate-map"."file:crates/jstream-outputs/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:5d9bb5b509981c85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "jstream-outputs row and its manifest summary now match the crate: RTMP(S) client with reconnect and the recording sink are built, it depends on mux (not encode or a platform crate), and the Output trait plus encode/platform use are marked planned; other rows unchanged" }
+
+["ARCH#crate-map"."file:crates/jstream-platform-linux/Cargo.toml#jstream-meta"]
+stamp = { hash = "b3:9bcd778e074f7ae6", by = "agent:find-idle-work", note = "jstream-meta summary now 'First part of ADR-0060' instead of 'Draft (ADR-0060, proposed)'; the Linux row (layer 2, unsafe yes, ADR-0060) still matches; holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-platform-windows/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:70046124f5cf9949" }
@@ -1905,7 +1908,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:48aac723c0fe210f", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:d014feb2720169cc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Upstream changed only by moving ADR-0031 citations to ADR-0061 and the crate map's Linux row; the wave/m3-2 merge (E3d NV12, WA1) changed nothing this section relies on about ADR-0031; holds" }
+stamp = { hash = "b3:8e949f6ec6d7ecc4", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "The crate map changed only in the Linux row (ADR-0061 and run-time loading wording); gpu-frames says nothing about Linux; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:bb9d34d698b4cea6", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
@@ -1993,6 +1996,57 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/video_device.rs"]
 stamp = { hash = "b3:7b2e9b7e7b944c2b", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
+
+["CRATE-jstream-platform-linux#purpose"."body"]
+stamp = { hash = "b3:e18bb75c26f9300a", by = "agent:find-idle-work", note = "ADR-0060's questions are answered (§questions): encoder text now says no software H.264 until the OpenH264 download lands and no AAC until the Rust AAC-LC encoder; no-driver case is MissingComponent with distro packages per §6, matching choose_encoder and its test; follow-up list adds ALSA fallback (§4/§8) and the restore token (§3); 'Draft' gone from src docs and the manifest; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."dep:crates/jstream-platform/README.md#purpose"]
+stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "After merging wave/m3-2 (ADR-0061 accepted, #494): depends_on and the Docs: line now cite ADR-0061 instead of the superseded ADR-0031, and codec.rs says software H.264 and AAC wait on ADR-0061's OpenH264 download and Rust AAC-LC encoder; the purpose text (clock, session, portal targets, PipeWire load, VA-API probe, refusals) still matches the code; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-linux"]
+stamp = { hash = "b3:9a74990050adc277", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "After merging wave/m3-2 (ADR-0061 accepted, #494): depends_on and the Docs: line now cite ADR-0061 instead of the superseded ADR-0031, and codec.rs says software H.264 and AAC wait on ADR-0061's OpenH264 download and Rust AAC-LC encoder; the purpose text (clock, session, portal targets, PipeWire load, VA-API probe, refusals) still matches the code; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."dep:docs/ARCHITECTURE.md#threading"]
+stamp = { hash = "b3:74397f35965002f4", by = "agent:l1-builder", note = "New section for the draft crate. Re-read it against every file in src/ and the manifest: the clock is CLOCK_MONOTONIC in 100 ns ticks with hns_from_timespec; Session reads the four XDG/display variables and gives ADR-0060's tiers; PortalCapture lists two picker targets (none headless) and start is Unsupported; PipeWire checks the 1.0 floor; probe_encoders and VaapiCodecs pick High/Main/CB and EncSlice before EncSliceLP and refuse other codecs, Avoid and no driver; audio encode and decode are Unsupported; libraries come in through dlopen, and the R-UNSAFE-004 deviation is stated" }
+
+["CRATE-jstream-platform-linux#purpose"."dep:docs/RULES.md#unsafe"]
+stamp = { hash = "b3:c66590fe31f34aee", by = "agent:l1-builder", note = "New section for the draft crate. Re-read it against every file in src/ and the manifest: the clock is CLOCK_MONOTONIC in 100 ns ticks with hns_from_timespec; Session reads the four XDG/display variables and gives ADR-0060's tiers; PortalCapture lists two picker targets (none headless) and start is Unsupported; PipeWire checks the 1.0 floor; probe_encoders and VaapiCodecs pick High/Main/CB and EncSlice before EncSliceLP and refuse other codecs, Avoid and no driver; audio encode and decode are Unsupported; libraries come in through dlopen, and the R-UNSAFE-004 deviation is stated" }
+
+["CRATE-jstream-platform-linux#purpose"."dep:docs/adr/0014-media-clock.md"]
+stamp = { hash = "b3:68451099d1cf8c6d", by = "agent:l1-builder", note = "New section for the draft crate. Re-read it against every file in src/ and the manifest: the clock is CLOCK_MONOTONIC in 100 ns ticks with hns_from_timespec; Session reads the four XDG/display variables and gives ADR-0060's tiers; PortalCapture lists two picker targets (none headless) and start is Unsupported; PipeWire checks the 1.0 floor; probe_encoders and VaapiCodecs pick High/Main/CB and EncSlice before EncSliceLP and refuse other codecs, Avoid and no driver; audio encode and decode are Unsupported; libraries come in through dlopen, and the R-UNSAFE-004 deviation is stated" }
+
+["CRATE-jstream-platform-linux#purpose"."dep:docs/adr/0060-linux-platform-support.md"]
+stamp = { hash = "b3:3d3663bf20225913", by = "agent:find-idle-work", note = "ADR-0060 now accepted and the crate-map row drops 'proposed/draft': purpose says accepted, first part, later PRs add capture/audio/encode sessions; the listed contents still match src (clock, Session, PortalCapture stub, PipeWire load, VA-API probe); holds" }
+
+["CRATE-jstream-platform-linux#purpose"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "After merging wave/m3-2 (ADR-0061 accepted, #494): depends_on and the Docs: line now cite ADR-0061 instead of the superseded ADR-0031, and codec.rs says software H.264 and AAC wait on ADR-0061's OpenH264 download and Rust AAC-LC encoder; the purpose text (clock, session, portal targets, PipeWire load, VA-API probe, refusals) still matches the code; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/Cargo.toml"]
+stamp = { hash = "b3:5a03597b12dfcf46", by = "agent:find-idle-work", note = "ADR-0060's questions are answered (§questions): encoder text now says no software H.264 until the OpenH264 download lands and no AAC until the Rust AAC-LC encoder; no-driver case is MissingComponent with distro packages per §6, matching choose_encoder and its test; follow-up list adds ALSA fallback (§4/§8) and the restore token (§3); 'Draft' gone from src docs and the manifest; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/clock.rs"]
+stamp = { hash = "b3:69927182c771ec4d", by = "agent:l1-builder", note = "New section for the draft crate. Re-read it against every file in src/ and the manifest: the clock is CLOCK_MONOTONIC in 100 ns ticks with hns_from_timespec; Session reads the four XDG/display variables and gives ADR-0060's tiers; PortalCapture lists two picker targets (none headless) and start is Unsupported; PipeWire checks the 1.0 floor; probe_encoders and VaapiCodecs pick High/Main/CB and EncSlice before EncSliceLP and refuse other codecs, Avoid and no driver; audio encode and decode are Unsupported; libraries come in through dlopen, and the R-UNSAFE-004 deviation is stated" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/codec.rs"]
+stamp = { hash = "b3:71f213371046ed08", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "After merging wave/m3-2 (ADR-0061 accepted, #494): depends_on and the Docs: line now cite ADR-0061 instead of the superseded ADR-0031, and codec.rs says software H.264 and AAC wait on ADR-0061's OpenH264 download and Rust AAC-LC encoder; the purpose text (clock, session, portal targets, PipeWire load, VA-API probe, refusals) still matches the code; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/dl.rs"]
+stamp = { hash = "b3:06126000ab77764a", by = "agent:l1-builder", note = "New section for the draft crate. Re-read it against every file in src/ and the manifest: the clock is CLOCK_MONOTONIC in 100 ns ticks with hns_from_timespec; Session reads the four XDG/display variables and gives ADR-0060's tiers; PortalCapture lists two picker targets (none headless) and start is Unsupported; PipeWire checks the 1.0 floor; probe_encoders and VaapiCodecs pick High/Main/CB and EncSlice before EncSliceLP and refuse other codecs, Avoid and no driver; audio encode and decode are Unsupported; libraries come in through dlopen, and the R-UNSAFE-004 deviation is stated" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/lib.rs"]
+stamp = { hash = "b3:0367e339b09b8008", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "After merging wave/m3-2 (ADR-0061 accepted, #494): depends_on and the Docs: line now cite ADR-0061 instead of the superseded ADR-0031, and codec.rs says software H.264 and AAC wait on ADR-0061's OpenH264 download and Rust AAC-LC encoder; the purpose text (clock, session, portal targets, PipeWire load, VA-API probe, refusals) still matches the code; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/pipewire.rs"]
+stamp = { hash = "b3:89c2a25bde80f00f", by = "agent:find-idle-work", note = "ADR-0060's questions are answered (§questions): encoder text now says no software H.264 until the OpenH264 download lands and no AAC until the Rust AAC-LC encoder; no-driver case is MissingComponent with distro packages per §6, matching choose_encoder and its test; follow-up list adds ALSA fallback (§4/§8) and the restore token (§3); 'Draft' gone from src docs and the manifest; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/portal.rs"]
+stamp = { hash = "b3:4128b42a1f40c1bb", by = "agent:find-idle-work", note = "ADR-0060's questions are answered (§questions): encoder text now says no software H.264 until the OpenH264 download lands and no AAC until the Rust AAC-LC encoder; no-driver case is MissingComponent with distro packages per §6, matching choose_encoder and its test; follow-up list adds ALSA fallback (§4/§8) and the restore token (§3); 'Draft' gone from src docs and the manifest; holds" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/session.rs"]
+stamp = { hash = "b3:b165e9acd59eb68b", by = "agent:l1-builder", note = "New section for the draft crate. Re-read it against every file in src/ and the manifest: the clock is CLOCK_MONOTONIC in 100 ns ticks with hns_from_timespec; Session reads the four XDG/display variables and gives ADR-0060's tiers; PortalCapture lists two picker targets (none headless) and start is Unsupported; PipeWire checks the 1.0 floor; probe_encoders and VaapiCodecs pick High/Main/CB and EncSlice before EncSliceLP and refuse other codecs, Avoid and no driver; audio encode and decode are Unsupported; libraries come in through dlopen, and the R-UNSAFE-004 deviation is stated" }
+
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/vaapi.rs"]
+stamp = { hash = "b3:049ea2f4a8c9089f", by = "agent:find-idle-work", note = "ADR-0060's questions are answered (§questions): encoder text now says no software H.264 until the OpenH264 download lands and no AAC until the Rust AAC-LC encoder; no-driver case is MissingComponent with distro packages per §6, matching choose_encoder and its test; follow-up list adds ALSA fallback (§4/§8) and the restore token (§3); 'Draft' gone from src docs and the manifest; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
 stamp = { hash = "b3:07f2285ab0aa30d5", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
