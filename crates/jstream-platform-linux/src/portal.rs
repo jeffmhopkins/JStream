@@ -448,6 +448,9 @@ mod backend {
                     QUICK,
                 )?;
             }
+            // Read before the token, so a forget between the two is seen: the new token
+            // isn't stored, rather than stored under a source that was just forgotten.
+            let forgets = self.tokens.forgets(grant);
             let mut h = Handshake::new(
                 pick,
                 info,
@@ -459,7 +462,6 @@ mod backend {
                 h = h.with_cursor_metadata();
             }
             let cursor_metadata = h.sends_cursor_metadata();
-            let forgets = self.tokens.forgets(grant);
             let (granted, fd) = match run(&mut bus, &mut h) {
                 Ok(done) => done,
                 Err(e) => {
