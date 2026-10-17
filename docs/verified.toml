@@ -3741,7 +3741,7 @@ stamp = { hash = "b3:741967485a750fec" }
 stamp = { hash = "b3:52b22e31260a816a" }
 
 ["CRATE-jstream-vcam-windows#purpose"."body"]
-stamp = { hash = "b3:c640c2439b8b37f8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only: the daemon registers until the desktop app has --register-vcam): the Registration bullet's jstream-daemon --register-vcam still holds; rest unchanged" }
+stamp = { hash = "b3:86b34c91b66577c8", by = "agent:claude", note = "Trust bullet now states the #204 console-only rule while several sessions are active (check_session_choice), the WTSEnumerateSessionsW read, and the 5 s RECHECK that drops a block failing trust; Frames probe order and the rest unchanged | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's console-session rule, the only-active-session case and the 5 s RECHECK still match trust.rs, session.rs and frames.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:crates/jstream-vcam-proto/README.md#purpose"]
 stamp = { hash = "b3:b6a3f609729e0f1f" }
@@ -3771,7 +3771,7 @@ stamp = { hash = "b3:ddd1a9e738e6c587" }
 stamp = { hash = "b3:9c9bb12d6619a1fa" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/trust.rs"]
-stamp = { hash = "b3:052ff36d65680eb3" }
+stamp = { hash = "b3:aef044a0d551961c", by = "agent:claude", note = "Trust bullet now states the #204 console-only rule while several sessions are active (check_session_choice), the WTSEnumerateSessionsW read, and the 5 s RECHECK that drops a block failing trust; Frames probe order and the rest unchanged | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's console-session rule, the only-active-session case and the 5 s RECHECK still match trust.rs, session.rs and frames.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/activate.rs"]
 stamp = { hash = "b3:a09d085fe5a1383e" }
@@ -3783,7 +3783,7 @@ stamp = { hash = "b3:9c3a291d17eb2496" }
 stamp = { hash = "b3:d9ce3ae1ef818d95" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/frames.rs"]
-stamp = { hash = "b3:22be68cdd50e8dd9" }
+stamp = { hash = "b3:b5886b3395debf3b", by = "agent:claude", note = "Trust bullet now states the #204 console-only rule while several sessions are active (check_session_choice), the WTSEnumerateSessionsW read, and the 5 s RECHECK that drops a block failing trust; Frames probe order and the rest unchanged | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's console-session rule, the only-active-session case and the 5 s RECHECK still match trust.rs, session.rs and frames.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/log.rs"]
 stamp = { hash = "b3:4442f4b5cabff0d9" }
@@ -3795,7 +3795,7 @@ stamp = { hash = "b3:8f00cd699547e6a2" }
 stamp = { hash = "b3:c28895e1e4c38b31" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/session.rs"]
-stamp = { hash = "b3:8bfe86421fa75457" }
+stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "Trust bullet now states the #204 console-only rule while several sessions are active (check_session_choice), the WTSEnumerateSessionsW read, and the 5 s RECHECK that drops a block failing trust; Frames probe order and the rest unchanged | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's console-session rule, the only-active-session case and the 5 s RECHECK still match trust.rs, session.rs and frames.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/shared.rs"]
 stamp = { hash = "b3:5ae80ee249a7723b" }
