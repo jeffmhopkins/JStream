@@ -105,12 +105,34 @@ left needs a real YouTube channel. Part B waits for JStream's built-in OAuth cli
 4. Search `%APPDATA%\JStream\logs` and `audit.jsonl` for the key. **Pass:** it never
    appears.
 
+### 4. Looping and MP3 media sound (closes #382)
+
+Everything else in #382 passed. Its remaining steps failed on #445 (a gap at each loop
+wrap) and #446 (an MP3 playing about 0.2 s of every second). #448 and #447 fixed them,
+and both landed in `main` with `wave/m2` (#470). Use the same test files as #382's
+re-run: `audio.m4a` (AAC mono 44.1 kHz, a 5 s sine), `audio.mp3` (the same tone as
+MP3), `longsound.mp4` (3 s of video, 8 s of AAC) and `surround51.mp4` (H.264 with 5.1
+AAC, 6 s).
+
+1. Make one `media` source with `loop: true` alone in the program, and record 12 s for
+   each file.
+2. **Pass, with each file:** no silence below -40 dB that lasts 20 ms or more
+   (`ffmpeg -i <recording> -af silencedetect=n=-40dB:d=0.02 -f null -` finds none).
+   - `audio.m4a`: no hole at either wrap (#445 had 39 ms at each).
+   - `audio.mp3`: continuous sound at about the same level as `audio.m4a` (#446 had
+     -28 dBFS against -21).
+   - `longsound.mp4`: the sound plays on under the last frame, with no blip (#445 had
+     25 ms).
+   - `surround51.mp4`: no holes at the wrap (#445 had two), still mixed down to stereo.
+3. With a 1 s flash-and-beep sync clip looping: **Pass:** flashes in the recording stay
+   1.000 s apart across the wrap (#445 had a 1.067 s step).
+
 <a id="m3-2"></a>
 ## On wave/m3-2
 <!-- @section
 -->
 
-### 4. NV12 encode targets into Media Foundation (closes #492)
+### 5. NV12 encode targets into Media Foundation (closes #492)
 
 E3d (#280) merged into `wave/m3-2`, which hasn't landed in `main`. Build that wave.
 
@@ -135,7 +157,7 @@ Post the GPU, the driver version and the results on #492.
 Each of these runs a PR that hasn't merged. Use the PR's branch, or its wave once it
 has merged.
 
-### 5. Virtual camera owner and DACL checks (#546, PR #540)
+### 6. Virtual camera owner and DACL checks (#546, PR #540)
 
 1. On #540's branch, run the `vcam_smoke` check in
    [jstream-vcam-windows › Hardware check](../../crates/jstream-vcam-windows/README.md#hardware-check).
@@ -146,7 +168,7 @@ has merged.
 3. Optional: pre-create `Local\JStream-VCam-Control` from another account, or with an
    `Everyone` grant. **Pass:** `start` fails with `InvalidState`.
 
-### 6. User-only token, devices and log files (#546, PR #548)
+### 7. User-only token, devices and log files (#546, PR #548)
 
 On #548's branch (stacked on #540):
 
@@ -160,7 +182,7 @@ On #548's branch (stacked on #540):
 4. If one is at hand, repeat step 1 with a domain or Microsoft account and with the
    built-in Administrator.
 
-### 7. User-only audit log and collection file (#546, PR #574)
+### 8. User-only audit log and collection file (#546, PR #574)
 
 On #574's branch:
 
@@ -173,9 +195,9 @@ On #574's branch:
    an error naming the file and the foreign grant.
 4. Let `audit.jsonl` rotate past 8 MiB. **Pass:** the new `audit.jsonl` is private too.
 
-Items 5 to 7 together close #546.
+Items 6 to 8 together close #546.
 
-### 8. Opt-in virtual camera registration from a Program Files copy (closes #563, PR #565)
+### 9. Opt-in virtual camera registration from a Program Files copy (closes #563, PR #565)
 
 Use a built portable folder (`cargo xtask dist`, or the release `jstream-daemon.exe`
 with `jstream_vcam_windows.dll` beside it) in a user-writable folder such as
@@ -203,7 +225,7 @@ with `jstream_vcam_windows.dll` beside it) in a user-writable folder such as
 7. Decline the UAC prompt. **Pass:** it exits 1 with "the administrator prompt was
    declined".
 
-### 9. Mid-run GPU capture fallback (closes #576, PR #569)
+### 10. Mid-run GPU capture fallback (closes #576, PR #569)
 
 On #569's branch (#580, its deadline and panic fix, is stacked on it), with a display
 source on program and the screen changing:
@@ -230,8 +252,5 @@ source on program and the screen changing:
 These reruns can't pass until an open bug is fixed. Run them in the next pass after the
 fix lands:
 
-- **#382, steps 3a to 3d (C9b media sound):** a looping audio-only file with no gap at
-  the wrap, sound playing on under the last frame with no blip, and no picture skip at
-  each wrap wait on #445. MP3 playback waits on #446. Everything else in #382 passed.
 - **#335, step 5 (C8b4 daemon browser sources):** Ctrl-C with CEF running should print
   `stopped` and write the shutdown log. It waits on #436. Steps 1 to 4 passed.
