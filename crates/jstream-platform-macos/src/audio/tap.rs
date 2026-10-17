@@ -71,9 +71,9 @@ impl TapKind {
 /// What a tap's source is, to notice it going away.
 #[derive(Clone, Copy, Debug)]
 enum Source {
-    /// Every process: nothing to lose.
+    /// Every process: nothing to lose but the clock.
     Everything,
-    /// An output device.
+    /// An output device, which also clocks the aggregate.
     Device(AudioObjectID),
     /// A process object.
     Process(AudioObjectID),
@@ -85,6 +85,9 @@ pub(super) struct Tap {
     tap: AudioObjectID,
     aggregate: AudioObjectID,
     source: Source,
+    /// The output device the aggregate is clocked by: the tapped one, or the default
+    /// output when the tap opened.
+    clock: AudioObjectID,
 }
 
 impl Drop for Tap {
@@ -193,10 +196,23 @@ impl Tap {
             description.setMono(false);
             description.setName(&NSString::from_str("JStream"));
         }
+        let clock = match source {
+            Source::Device(device) => device,
+            Source::Everything | Source::Process(_) => hal::default_device(AudioDirection::Output)?
+                .ok_or_else(|| PlatformError::NotFound {
+                    kind: "audio device",
+                    id: "the default output, which a tap is clocked by".into(),
+                })?,
+        };
+        let main_uid = match kind {
+            TapKind::Output(id) => id.as_str().to_owned(),
+            TapKind::Desktop | TapKind::Process(_) => hal::uid(clock)?,
+        };
         let mut tap = Self {
             tap: kAudioObjectUnknown,
             aggregate: kAudioObjectUnknown,
             source,
+            clock,
         };
         // SAFETY: `description` is a valid tap description; `tap.tap` is a valid out-slot.
         let status = unsafe { AudioHardwareCreateProcessTap(Some(&description), &raw mut tap.tap) };
@@ -209,18 +225,6 @@ impl Tap {
         }
         // SAFETY: a getter on the description.
         let tap_uid = unsafe { description.UUID() }.UUIDString().to_string();
-        let main_uid = match kind {
-            TapKind::Output(id) => id.as_str().to_owned(),
-            TapKind::Desktop | TapKind::Process(_) => {
-                let output = hal::default_device(AudioDirection::Output)?.ok_or_else(|| {
-                    PlatformError::NotFound {
-                        kind: "audio device",
-                        id: "the default output, which a tap is clocked by".into(),
-                    }
-                })?;
-                hal::uid(output)?
-            }
-        };
         let spec = aggregate_spec(&tap_uid, &main_uid);
         let mut aggregate = kAudioObjectUnknown;
         // SAFETY: `spec` is a dictionary of the documented aggregate-device keys, with
@@ -250,14 +254,21 @@ impl Tap {
         hal::plan_tap(self.aggregate)
     }
 
-    /// Why the stream should end, if what it taps has gone: the output device was
-    /// removed, or the process exited.
+    /// Why the stream should end, if what it taps or is clocked by has gone: the
+    /// tapped output, or the output a desktop or process tap is clocked by, was removed,
+    /// or the process exited. An aggregate that loses its clock may stay alive but stop
+    /// running IO, so this doesn't wait for the aggregate to die.
     pub(super) fn gone(&self) -> Option<&'static str> {
+        if !hal::is_alive(self.clock) {
+            return Some(match self.source {
+                Source::Device(_) => "the output device was removed or stopped working",
+                Source::Everything | Source::Process(_) => {
+                    "the output device the tap is clocked by was removed or stopped working"
+                }
+            });
+        }
         match self.source {
-            Source::Everything => None,
-            Source::Device(d) => {
-                (!hal::is_alive(d)).then_some("the output device was removed or stopped working")
-            }
+            Source::Everything | Source::Device(_) => None,
             Source::Process(p) => hal::process_pid(p)
                 .is_none()
                 .then_some("the process exited"),
