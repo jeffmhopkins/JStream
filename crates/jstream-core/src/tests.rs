@@ -4787,6 +4787,59 @@ mod cpu_pipeline {
         assert_eq!(log.pixels[0], ([30, 20, 10, 255], [30, 20, 10, 255]));
     }
 
+    /// The privacy screen covers a virtual camera: with it on, the camera gets black
+    /// frames from the CPU stand-in, here scaling a 1x1 grey capture to the 64x64
+    /// program, and the program again once it is off (ADR-0027 §4, review N5).
+    #[test]
+    fn a_virtual_camera_is_covered_by_the_privacy_screen() {
+        use crate::snapshot::{CaptureFrame, CaptureImage, Captures};
+        use jstream_protocol::{Action, Call};
+        use jstream_sources::CaptureSpec;
+
+        struct Grey;
+        impl Captures for Grey {
+            fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+                Some(CaptureFrame {
+                    version: 1,
+                    image: CaptureImage::Rgba {
+                        size: FrameSize::new(1, 1).expect("size"),
+                        rgba: &[90, 90, 90, 255],
+                    },
+                })
+            }
+        }
+        let draw: OpenDraw = Arc::new(|context| {
+            let mut inner = (cpu_draw())(context)?;
+            let draw: DrawFn =
+                Box::new(move |shot, live, _, frames| inner(shot, live, &Grey, frames));
+            Ok(draw)
+        });
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (_engine, control, mut events) =
+            vcam_engine(&fakes, draw, scripted(&log), (64, 64), None);
+        let last = || log.lock().expect("vcam log").pixels.last().copied();
+        let grey = ([90, 90, 90, 255], [90, 90, 90, 255]);
+        let privacy = |on| Call::Action {
+            action: Action::PrivacySet { on },
+        };
+        start_output(&control, &mut events, "cam");
+        assert!(pump_until(&fakes.clock, &fakes.audio, || last() == Some(grey)));
+        block_on(control.call(privacy(true))).expect("privacy on");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                last().is_some_and(|(first, middle)| first[..3] == [0; 3] && middle[..3] == [0; 3])
+            }),
+            "the camera is covered"
+        );
+        block_on(control.call(privacy(false))).expect("privacy off");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(grey)),
+            "and shows the program once it is off"
+        );
+        block_on(control.call(output_call("cam", false))).expect("output.stop");
+    }
+
     /// A virtual camera shares the program stage with a stream: both run at once, and
     /// stopping the camera leaves the stream running.
     #[test]

@@ -167,7 +167,10 @@ pub(crate) fn cpu_draw() -> OpenDraw {
                     let (size, private, out) = (frame.size, frame.privacy, &mut frame.out);
                     out.clear();
                     match first.map(|capture| capture.image) {
-                        Some(CaptureImage::Rgba { size: own, rgba }) if own == size && !private => {
+                        _ if private => {
+                            out.resize(size.width() as usize * size.height() as usize * 4, 0)
+                        }
+                        Some(CaptureImage::Rgba { size: own, rgba }) if own == size => {
                             out.extend_from_slice(rgba);
                         }
                         Some(CaptureImage::Rgba { size: own, rgba }) => {
@@ -2388,9 +2391,11 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        Feed, Frames, catch_up, open_video, output_size, push_each, stream_info, video_config,
+        Feed, Frames, MixFrame, catch_up, open_video, output_size, push_each, stream_info,
+        video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
+    use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
     use jstream_media::{
         Codec, ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane,
         Timebase, VideoFrame, VideoFrameInfo,
@@ -2400,6 +2405,7 @@ mod tests {
         EncoderProfile, HardwarePreference as ProfileHardware, OutputId,
         RateControl as ProfileRate, VideoCodec, VideoMixId,
     };
+    use jstream_sources::CaptureSpec;
 
     /// Every target is pushed once; exactly the ones that refuse are taken out and
     /// retired (handed to the collector), and the rest stay.
@@ -2711,6 +2717,50 @@ mod tests {
         frames.blacken_due();
         assert_eq!(frames.shown[0], [0, 0, 0, 255, 0, 0, 0, 255]);
         assert_eq!(frames.shown[1], [200; 8], "not due, not pushed");
+    }
+
+    /// The CPU stand-in draws a covered frame black whatever the capture's size, and
+    /// copies or scales the capture into an uncovered one (review B2).
+    #[test]
+    fn the_cpu_stand_in_draws_covered_frames_black() {
+        struct One<'a>(CaptureImage<'a>);
+        impl Captures for One<'_> {
+            fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+                Some(CaptureFrame {
+                    version: 1,
+                    image: self.0,
+                })
+            }
+        }
+        let mut draw = (super::cpu_draw())(None).expect("cpu draw");
+        let shot = Shot::default();
+        let size = FrameSize::new(2, 1).expect("size");
+        let frame = |privacy| MixFrame {
+            mix: None,
+            size,
+            divisor: 1,
+            owner: None,
+            due: true,
+            next: 0,
+            privacy,
+            out: Vec::new(),
+        };
+        let same = [200; 8];
+        let other = [100; 16];
+        for (own, rgba) in [
+            (size, &same[..]),
+            (FrameSize::new(2, 2).expect("size"), &other[..]),
+        ] {
+            let captures = One(CaptureImage::Rgba { size: own, rgba });
+            let mut frames = [frame(true), frame(false)];
+            draw(&shot, &LiveParams::default(), &captures, &mut frames).expect("draw");
+            assert_eq!(frames[0].out, [0; 8], "covered, from a {own:?} capture");
+            assert_eq!(
+                frames[1].out,
+                rgba[..8],
+                "uncovered, from a {own:?} capture"
+            );
+        }
     }
 
     /// A virtual camera holds the program at the program stage's size: its frame is drawn on
