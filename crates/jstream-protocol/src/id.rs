@@ -86,6 +86,10 @@ opaque_id!(
     DeviceId
 );
 opaque_id!(
+    /// A transition preset in the collection (ADR-0029).
+    TransitionPresetId
+);
+opaque_id!(
     /// An audio bus in the collection (ADR-0028). [`BusId::master`] names the master
     /// bus, which every collection has.
     BusId

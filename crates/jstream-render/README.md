@@ -47,8 +47,8 @@ and calls this crate.
   Both depend on the image's size, which is runtime state, so the compositor evaluates
   the placement on every `render`.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
-- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1. The graph does not
-  store it; the snapshot carries it so `jstream-core` can pass it when it does
+- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
+  an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). The only blend is
   premultiplied src-over. Other modes stay rejected by the engine until a later change
   draws them.
@@ -65,6 +65,20 @@ and calls this crate.
   picks the thread that drops it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
 
+- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
+  a `Track` is one item's part in a transition: a `Pair` that interpolates between two
+  `Endpoint`s (a geometry, a crop and an opacity), an `Appear` or a `Disappear` with
+  its effect (`Fade`, `Scale` to 65 %, `Slide` to the nearest canvas edge, or `None`),
+  each with its `Timing` (delay, duration and easing); `None` waits for the delay,
+  then shows or hides the item at once. `Track::sample` gives the
+  endpoint at a time since the start, or nothing once the item is invisible; it is a
+  pure function, so the render thread and the control thread that retargets a running
+  transition get the same answer. Angles take the shortest way round, discrete fields
+  (fit mode, a perspective present at one end) switch halfway, and after easing the
+  opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
+  perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
+  `jstream-core`'s.
+
 **Where it sits on the existing APIs.**
 
 - It does **not** open the media adapter. When platform interop works, the engine
@@ -72,8 +86,9 @@ and calls this crate.
   ([jstream-platform › GPU frames](../jstream-platform/README.md#gpu-frames)), so
   capture, composite and encode share one device. `Compositor::open` is the other
   path: no interop (the fakes, CI, a headless machine). It opens a device itself,
-  software adapter first, as ARCH principle 7 and that section's "when there is no
-  interop" paragraph say.
+  a hardware adapter first by default (`OpenOptions::hardware`), with the software
+  adapter as the fallback, so ARCH principle 7's "runs with a software adapter" still
+  holds on a machine with no GPU. `OpenOptions::headless` asks for software first.
 - A source image is either straight-alpha sRGB RGBA8 bytes the compositor uploads, or
   a `GpuFrame` / `wgpu::Texture` already on this device. An upload is premultiplied in
   linear light and stored as `Rgba16Float`, so filtering cannot darken transparent
@@ -108,7 +123,7 @@ and calls this crate.
 (`runtime/`), not this crate's. Also not here: NV12 or
 P010 conversion, encode-target export, loading WGSL effect packs
 (`jstream-effects`; this crate only draws them), the video filter chain runtime (the built-in filters' passes are here, see
-[Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
+[Filters](#filters)), 3D tilt/turn/depth/perspective, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
 steps stay in
@@ -294,12 +309,25 @@ Vulkan, DX12 and Metal (one `wgpu` pin, ADR-0004; features are additive,
 without an EGL stack. Instance flags start empty and `with_env()`, so a debug build
 does not require the Khronos validation layer; `WGPU_VALIDATION` still opts in.
 
-Adapter order when `OpenOptions` asks for software (the test and headless default):
+Adapter order when `OpenOptions` asks for software (`OpenOptions::headless`):
 
 1. `force_fallback_adapter: true`, which is a CPU adapter when the backend has one
    (lavapipe, WARP).
 2. Any adapter, so a machine with a GPU and no software rasterizer still runs.
 3. `RenderError::NoAdapter` when the instance has none.
+
+When it asks for hardware (`OpenOptions::hardware`, the default, which the engine's
+render, snapshot and preview threads, the tests and the benchmarks use; on WARP a 720p
+program ran at about 10 fps, #433): on Windows, a D3D12 hardware adapter first, since
+the platform's capture, interop and encoders are D3D11/D3D12 and wgpu's own pick on a
+Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped, and WARP,
+which D3D12 offers when it has no GPU, is skipped too); then, everywhere, the
+high-performance adapter without `force_fallback_adapter`, then the software adapter,
+then `RenderError::NoAdapter`. A hardware adapter whose device refuses to open (limits
+below the defaults, a removed or hung GPU) falls back to the software adapter too, and
+the error names both when that fails as well. When the pick already was the software
+adapter (no GPU), its device error is returned without a second try. A machine with no
+GPU still runs, on lavapipe or WARP.
 
 `Compositor::on_context` does not search. It uses the `GpuContext` it is given.
 
@@ -509,7 +537,9 @@ Linux lavapipe for a render smoke, Windows WARP as the golden-frame reference.
 [R-TEST-003](../../docs/RULES.md#R-TEST-003) says files under `tests/golden/` change
 only through that command on WARP. This cut therefore does **not** add golden PNGs.
 It renders offscreen and checks pixels in the crate tests, with a tolerance, so the
-same tests run on lavapipe and on WARP.
+same tests run on lavapipe and on WARP. They open the compositor hardware first, so a
+machine with a GPU runs them there (what the Windows hardware runs check); CI has no
+GPU and gets the software adapter.
 
 **Filters.** `filter::testing` runs one filter over a small uploaded image and reads
 the result back through a 1:1 scene on a transparent canvas, so each kind's golden
@@ -596,8 +626,8 @@ adds a package so tests can render, and it does not weaken a check.
 A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
 (`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
 and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
-`cargo bench -p jstream-render --bench composite`; the `bench` workflow records them on
-lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
+`cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
+one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the
 compositor submits, and say nothing about GPU frame time. **Not measured:** frame time on
 a hardware GPU.

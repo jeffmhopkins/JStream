@@ -310,8 +310,8 @@ intercepted connection.
   (#343). While that start is opening, `output.set_key` is refused, so a key sent for
   the new server isn't read with the old one either.
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
-- The daemon's crash reports replace the control token, and every stream key and
-  refresh token it stores or loads, with `***`.
+- The daemon's and the desktop app's crash reports replace the control token, and every
+  stream key and refresh token their credential stores hold or load, with `***`.
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
   Further tests check the server's WebSocket and MCP layers, the daemon's RTMP opener and
   its crash reports.
@@ -319,7 +319,10 @@ intercepted connection.
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
 the URL, as the target documentation warns.
 
-**Gaps:** `rtmp://` sends the key in cleartext with no warning (#353).
+**Gaps:** `rtmp://` sends the key in cleartext with no warning (#353). The daemon's and
+the desktop app's crash reports redact the control token and the keys and refresh
+tokens that pass through their credential stores, but not a YouTube-bound output's key
+or the OAuth access token, which pass through neither (#353).
 
 <a id="vcam"></a>
 ## Virtual camera
@@ -366,7 +369,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #348 | WASM | No CPU, memory or API-scope limits decided | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
-| #353 | Secrets | `rtmp://` sends a stream key in cleartext with no warning | Low |
+| #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium |

@@ -328,14 +328,43 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every\noutput that shows program) shows it from the next frame. The program scene is\nruntime state, not collection state (ADR-0030): the switch changes no `rev`, is\nnever undone, and emits `studio.changed`, which `studio.get` reads back. Switching\nto the scene already on program succeeds and emits nothing. Fails with\n`not_found` for a scene not in the collection.",
+          "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
           "properties": {
+            "preset_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TransitionPresetId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The preset to use, overriding the scenes' and the default."
+            },
             "scene_id": {
               "$ref": "#/$defs/SceneId",
               "description": "The scene to put on program."
             },
             "type": {
               "const": "scene.switch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Puts a scene on preview, the scene studio mode prepares before it goes on program\nwith `scene.switch`. Preview is runtime state like program: it changes no `rev`,\nis never undone, and emits `studio.changed`. It never affects what an output\nshows unless the output's mix is the preview mix. Setting the scene already on\npreview succeeds and emits nothing. Fails with `not_found` for a scene not in\nthe collection.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to put on preview."
+            },
+            "type": {
+              "const": "studio.set_preview",
               "type": "string"
             }
           },
@@ -1395,6 +1424,31 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "type": "object"
     },
+    "Easing": {
+      "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+      "oneOf": [
+        {
+          "const": "ease_in_out",
+          "description": "Cubic ease-in-out: slow at both ends.",
+          "type": "string"
+        },
+        {
+          "const": "ease_out",
+          "description": "Cubic ease-out: fast at the start, slow at the end.",
+          "type": "string"
+        },
+        {
+          "const": "linear",
+          "description": "Constant speed.",
+          "type": "string"
+        },
+        {
+          "const": "spring",
+          "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
+          "type": "string"
+        }
+      ]
+    },
     "Edit": {
       "description": "A change to the collection state: undoable, batchable and atomic.\n\nSerialized with an internal `type` tag holding the command name (`noun.verb`,\nR-API-002). Every variant documents its inverse. The engine (`jstream-graph`)\ncomputes the inverse from the state *before* the edit, so the protocol has to be\nclosed under inversion: every inverse must itself be a sequence of edits, and it is.\n\nPositions are indexes: scenes in display order (0 is first), items in stacking order\nwithin their scene (0 is the bottom).",
       "oneOf": [
@@ -1479,7 +1533,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), then each deleted item's\n`item.remove` inverse, from bottom to top, then `hotkey.set` for each removed\nbinding.",
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, then each deleted item's\n`item.remove` inverse, from bottom to top, then `hotkey.set` for each removed\nbinding.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1569,7 +1623,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, and `item.set_visible` if it was hidden.",
+          "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and\n`item.set_transition` if its transition settings were not the default.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -2519,6 +2573,205 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Adds a transition preset (ADR-0029, ADR-0037). Inverse: `transition.delete`.",
+          "properties": {
+            "duration_ms": {
+              "description": "How long one item takes, in milliseconds; at most 60000.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "easing": {
+              "$ref": "#/$defs/Easing",
+              "description": "The curve its items follow unless they set their own."
+            },
+            "kind": {
+              "description": "A transition kind `kind.list` reports (`cut`, `fade`, `move`), else\n`invalid_argument`.",
+              "type": "string"
+            },
+            "name": {
+              "description": "Display name.",
+              "type": "string"
+            },
+            "preset_id": {
+              "$ref": "#/$defs/TransitionPresetId",
+              "description": "The new preset's ID, chosen by the client. Rejected if it exists."
+            },
+            "settings": {
+              "$ref": "#/$defs/Settings",
+              "description": "Initial settings, checked against the kind's descriptor as `source.create`'s\nare. Parameters left out take their defaults. Omitted means all defaults."
+            },
+            "type": {
+              "const": "transition.create",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "preset_id",
+            "name",
+            "kind",
+            "duration_ms",
+            "easing"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Changes a transition preset. Fields left out keep their values; `patch` changes\nsettings as `source.set_settings` does. A new `kind` replaces the settings with\nthat kind's defaults, overlaid by `patch`. Inverse: `transition.update` with the\nprevious values of what it changed (and, after a kind change, the previous kind\nand every previous setting).",
+          "properties": {
+            "duration_ms": {
+              "description": "A new duration, in milliseconds; at most 60000.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "easing": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Easing"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A new easing."
+            },
+            "kind": {
+              "description": "A new transition kind, checked as in `transition.create`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "description": "A new display name.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "patch": {
+              "$ref": "#/$defs/Settings",
+              "description": "Parameter ID to new value, or `null` for the default."
+            },
+            "preset_id": {
+              "$ref": "#/$defs/TransitionPresetId",
+              "description": "The preset to change."
+            },
+            "type": {
+              "const": "transition.update",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "preset_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a transition preset, and clears every scene's `transition_in` and\n`transition_out` that names it. Hotkey bindings whose `scene.switch` names it\nare removed with it (ADR-0040 §3). The default preset can't be deleted\n(`invalid_argument`): make another one the default first. Inverse:\n`transition.create` with its name, kind, timing and settings, then\n`scene.set_transitions` for each scene it cleared, then `hotkey.set` for each\nremoved binding.",
+          "properties": {
+            "preset_id": {
+              "$ref": "#/$defs/TransitionPresetId",
+              "description": "The preset to delete."
+            },
+            "type": {
+              "const": "transition.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "preset_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Makes a preset the default: the one a switch uses when neither the switch nor\nthe scenes name one. Inverse: `transition.set_default` with the previous default.",
+          "properties": {
+            "preset_id": {
+              "$ref": "#/$defs/TransitionPresetId",
+              "description": "The preset, which must exist, else `not_found`."
+            },
+            "type": {
+              "const": "transition.set_default",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "preset_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets the presets a scene overrides switches with: `transition_in` when switching\ninto it, `transition_out` when switching out of it. A switch that names a preset\nwins over both, and `transition_in` wins over the other scene's `transition_out`.\nEach must name an existing preset, else `not_found`; omitted means none. Inverse:\n`scene.set_transitions` with the previous two.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "transition_in": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TransitionPresetId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The preset for switching into this scene, or none."
+            },
+            "transition_out": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TransitionPresetId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The preset for switching out of this scene, or none."
+            },
+            "type": {
+              "const": "scene.set_transitions",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Replaces an item's transition settings (ADR-0029 §6): its delay, easing, whether\nit may glide to other scenes, and how it appears and disappears without a\npartner. A `delay_ms` over 60000 is `invalid_argument`. Inverse:\n`item.set_transition` with the previous settings.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to change."
+            },
+            "transition": {
+              "$ref": "#/$defs/ItemTransition",
+              "description": "Its new settings."
+            },
+            "type": {
+              "const": "item.set_transition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id",
+            "transition"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
           "properties": {
             "enabled": {
@@ -2726,7 +2979,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "EncoderProfile": {
-      "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,\nand AAC at 160 kbit/s.",
+      "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
       "properties": {
         "audio": {
           "$ref": "#/$defs/AudioEncoding",
@@ -2838,6 +3091,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "filter",
           "description": "A filter in a source's chain (0.22, ADR-0026). Its ID is unique within the\nsource. Only an error answering a filter edit names it, so a client older than\n0.22, which sends none, never reads it.",
+          "type": "string"
+        },
+        {
+          "const": "transition",
+          "description": "A transition preset.",
           "type": "string"
         },
         {
@@ -2971,11 +3229,22 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The scene on program changed: after a `scene.switch`, or after a batch, undo or\nredo deleted the program scene (program moves to the first remaining scene) or\ncreated the collection's first scene (it goes on program). Studio state is runtime state\n(ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits\ncomes first.",
+          "description": "The scene on program or on preview changed: after a `scene.switch` or a\n`studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives\nway to the first remaining scene) or created the collection's first scene (it goes\non program and on preview). Studio state is runtime state (ADR-0030), so the event\ncarries no `rev`; a `state.changed` for the same edits comes first.",
           "properties": {
             "client_id": {
               "$ref": "#/$defs/ClientId",
               "description": "The client whose request caused it."
+            },
+            "preview_scene": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene now on preview. Omitted when the collection has no scene left, and\nby a server older than 0.30."
             },
             "program_scene": {
               "anyOf": [
@@ -2998,6 +3267,17 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "That client's request ID, so it can match the event to its own response."
+            },
+            "transition": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TransitionStarted"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The transition a `scene.switch` started: the preset the engine chose and how\nlong it runs. Omitted when program did not change by a switch."
             },
             "type": {
               "const": "studio.changed",
@@ -3248,7 +3528,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "FilterChains": {
-      "description": "A source's two chains, each first filter first.",
+      "description": "An owner's two chains, each first filter first.",
       "properties": {
         "audio": {
           "description": "The audio chain. Omitted when empty.",
@@ -3272,7 +3552,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "string"
     },
     "FilterInfo": {
-      "description": "One filter, as `source.list` and `state.get` report it.",
+      "description": "One filter, as `source.list`, `output.list` and `state.get` report it.",
       "properties": {
         "enabled": {
           "description": "Whether it runs. A disabled filter is bypassed and keeps its settings.",
@@ -3280,7 +3560,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "filter_id": {
           "$ref": "#/$defs/FilterId",
-          "description": "Its ID, unique within its source."
+          "description": "Its ID, unique within its owner's chains."
         },
         "kind": {
           "description": "Its kind, as `kind.list` reports it.",
@@ -3299,7 +3579,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "FilterOwner": {
-      "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+      "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
       "oneOf": [
         {
           "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -3316,6 +3596,37 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+          "properties": {
+            "type": {
+              "const": "master",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "output",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
           ],
           "type": "object"
         }
@@ -3376,12 +3687,27 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Glide": {
+      "description": "Whether an item may pair with an item of another scene in a `move` transition.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "It pairs with the other scene's placement of the same source.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "It never pairs: it disappears and appears with its effects instead.",
+          "type": "string"
+        }
+      ]
+    },
     "HardwarePreference": {
       "description": "Whether a video encoder runs on the GPU's encoder block. Serialized as a snake_case\nstring. Hardware encoders limit how many sessions run at once, per GPU vendor and\ndriver; the engine doesn't guess that limit, and `output.status` reports the\nhardware sessions in use.",
       "oneOf": [
         {
           "const": "prefer",
-          "description": "Hardware if there is one, else software.",
+          "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
           "type": "string"
         },
         {
@@ -3391,7 +3717,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "avoid",
-          "description": "Software only.",
+          "description": "Software only. What an omitted `hardware` field means.",
           "type": "string"
         }
       ]
@@ -3570,6 +3896,36 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "ItemEasing": {
+      "description": "An item's own easing: one of the curves, or the preset's.",
+      "oneOf": [
+        {
+          "const": "inherit",
+          "description": "The preset's easing.",
+          "type": "string"
+        },
+        {
+          "const": "ease_in_out",
+          "description": "[`Easing::EaseInOut`].",
+          "type": "string"
+        },
+        {
+          "const": "ease_out",
+          "description": "[`Easing::EaseOut`].",
+          "type": "string"
+        },
+        {
+          "const": "linear",
+          "description": "[`Easing::Linear`].",
+          "type": "string"
+        },
+        {
+          "const": "spring",
+          "description": "[`Easing::Spring`].",
+          "type": "string"
+        }
+      ]
+    },
     "ItemGeometry": {
       "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, and omitted `perspective_px` means orthographic.",
       "properties": {
@@ -3673,6 +4029,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/ItemTransform",
           "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: read `geometry`. For a\nlegacy item, the stored transform exactly as written. For a geometry item, a\nview computed from the geometry alone: the box's rotated top-left corner, its\nrotation, and scale (1, 1)."
         },
+        "transition": {
+          "$ref": "#/$defs/ItemTransition",
+          "description": "Its transition settings (ADR-0029 §6). Omitted while they are the defaults it\nwas added with."
+        },
         "visible": {
           "description": "Whether it is drawn.",
           "type": "boolean"
@@ -3710,6 +4070,39 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "ItemTransition": {
+      "description": "An item's transition settings ([ADR-0029](../../../docs/adr/0029-transitions.md) §6).\nThey belong to the placement, keyed by item ID. Items are added with the default:\nno delay, and the preset's easing and effects.",
+      "properties": {
+        "appear": {
+          "$ref": "#/$defs/TransitionEffect",
+          "default": "inherit",
+          "description": "How it appears when it has no partner."
+        },
+        "delay_ms": {
+          "default": 0,
+          "description": "Milliseconds before the item starts moving. An item of the scene being switched\nto also waits the preset's `stagger_ms` × its stacking index; a leaving item\nwaits only its own delay (ADR-0052). At most 60000.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "disappear": {
+          "$ref": "#/$defs/TransitionEffect",
+          "default": "inherit",
+          "description": "How it disappears when it has no partner."
+        },
+        "easing": {
+          "$ref": "#/$defs/ItemEasing",
+          "default": "inherit",
+          "description": "Its easing, or the preset's."
+        },
+        "glide": {
+          "$ref": "#/$defs/Glide",
+          "default": "auto",
+          "description": "Whether it may pair in a `move` transition."
+        }
+      },
+      "type": "object"
+    },
     "KindCategory": {
       "description": "What a kind is: a source kind, or a filter kind for video or audio.",
       "oneOf": [
@@ -3726,6 +4119,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "audio_filter",
           "description": "An audio filter kind.",
+          "type": "string"
+        },
+        {
+          "const": "transition",
+          "description": "A transition kind, which a transition preset names (ADR-0037).",
           "type": "string"
         }
       ]
@@ -3867,6 +4265,16 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "type": "object"
     },
+    "MasterInfo": {
+      "description": "The master stage, as `state.get` reports it: what applies to everything leaving\nJStream (ADR-0027 §1).",
+      "properties": {
+        "filters": {
+          "$ref": "#/$defs/FilterChains",
+          "description": "Its chains, which `filter.*` edits with the owner `{\"type\":\"master\"}`. Only the\naudio chain holds filters so far. Omitted while both are empty."
+        }
+      },
+      "type": "object"
+    },
     "Media": {
       "description": "What a source produces, for restricting a source reference.",
       "oneOf": [
@@ -3899,7 +4307,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The scene on preview. Until studio mode exists there is no preview scene, and a\n`preview` mix shows the program.",
+          "description": "The scene on preview. No mix draws studio mode's preview scene yet, so a\n`preview` mix shows the program.",
           "properties": {
             "type": {
               "const": "preview",
@@ -3970,6 +4378,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "The encoder profile it uses (`output.set_encoder`). Absent means the engine's\ndefault, as from a server older than 0.13."
+        },
+        "filters": {
+          "$ref": "#/$defs/FilterChains",
+          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0027 §2). Only the audio chain holds filters so far, and a virtual camera,\nwhich has no audio, has none. Omitted while both are empty."
         },
         "kind": {
           "$ref": "#/$defs/OutputKind",
@@ -4595,7 +5007,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Reads the studio state: which scene is on program. It is runtime state, not\ncollection state (ADR-0030), so the result carries no `rev`.",
+          "description": "Reads the studio state: which scenes are on program and on preview. It is runtime\nstate, not collection state (ADR-0030), so the result carries no `rev`.",
           "properties": {
             "type": {
               "const": "studio.get",
@@ -4942,6 +5354,10 @@ source: crates/jstream-protocol/src/fixtures.rs
               },
               "type": "array"
             },
+            "master": {
+              "$ref": "#/$defs/MasterInfo",
+              "description": "The master stage. Omitted while it has no filters, so missing (also from a\nserver older than 0.29) parses as empty."
+            },
             "outputs": {
               "default": [],
               "description": "Every output, ordered by ID. Missing (from a server older than 0.7) parses\nas empty.",
@@ -4975,6 +5391,22 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "$ref": "#/$defs/SourceInfo"
               },
               "type": "array"
+            },
+            "transitions": {
+              "$ref": "#/$defs/TransitionsInfo",
+              "default": {
+                "default": "cut",
+                "presets": [
+                  {
+                    "duration_ms": 300,
+                    "easing": "ease_in_out",
+                    "kind": "cut",
+                    "name": "Cut",
+                    "preset_id": "cut"
+                  }
+                ]
+              },
+              "description": "The transition presets and which one is the default (ADR-0029). Missing\n(from a server older than 0.30) parses as the one `cut` preset every\ncollection starts with."
             },
             "type": {
               "const": "state.get",
@@ -5106,6 +5538,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.",
           "properties": {
+            "preview_scene": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene on preview, which `studio.set_preview` sets. Omitted only while the\ncollection has no scene, and by a server older than 0.30."
+            },
             "program_scene": {
               "anyOf": [
                 {
@@ -5559,6 +6002,28 @@ source: crates/jstream-protocol/src/fixtures.rs
         "scene_id": {
           "$ref": "#/$defs/SceneId",
           "description": "The scene's ID."
+        },
+        "transition_in": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The preset a switch into this scene uses, unless the switch names one. Omitted\nfor none."
+        },
+        "transition_out": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransitionPresetId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The preset a switch out of this scene uses, unless the switch or the next scene\nnames one. Omitted for none."
         }
       },
       "required": [
@@ -5974,6 +6439,120 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "TransitionEffect": {
+      "description": "How an item without a partner appears or disappears.",
+      "oneOf": [
+        {
+          "const": "inherit",
+          "description": "The preset's `unmatched` setting.",
+          "type": "string"
+        },
+        {
+          "const": "fade",
+          "description": "Opacity only.",
+          "type": "string"
+        },
+        {
+          "const": "scale",
+          "description": "Toward 65% of its size about its centre, while fading.",
+          "type": "string"
+        },
+        {
+          "const": "slide",
+          "description": "Toward the nearest canvas edge until it is off the canvas, while fading.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "At once, at the item's start: no animation.",
+          "type": "string"
+        }
+      ]
+    },
+    "TransitionPresetId": {
+      "description": "A transition preset in the collection (ADR-0029).",
+      "type": "string"
+    },
+    "TransitionPresetInfo": {
+      "description": "One transition preset, as `state.get` reports it.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long one item takes, in milliseconds. A kind that ignores it (`cut`) still\nkeeps it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "easing": {
+          "$ref": "#/$defs/Easing",
+          "description": "The curve its items follow unless they set their own."
+        },
+        "kind": {
+          "description": "Its transition kind's ID, as `kind.list` reports it (`cut`, `fade`, `move`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "preset_id": {
+          "$ref": "#/$defs/TransitionPresetId",
+          "description": "The preset's ID."
+        },
+        "settings": {
+          "$ref": "#/$defs/Settings",
+          "description": "Its kind's settings: every parameter of the kind. Omitted for a kind without\nparameters."
+        }
+      },
+      "required": [
+        "preset_id",
+        "name",
+        "kind",
+        "duration_ms",
+        "easing"
+      ],
+      "type": "object"
+    },
+    "TransitionStarted": {
+      "description": "What `studio.changed` reports about the transition a switch started.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long the transition runs, in milliseconds, from the switch to its last item's\nend. 0 for a cut, which shows the new scene on the next frame.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "preset_id": {
+          "$ref": "#/$defs/TransitionPresetId",
+          "description": "The preset the engine chose: the one the switch named, else the new scene's\n`transition_in`, else the old scene's `transition_out`, else the default."
+        }
+      },
+      "required": [
+        "preset_id",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "TransitionsInfo": {
+      "description": "The collection's transition presets, as `state.get` reports them.",
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/TransitionPresetId",
+          "description": "The preset a switch uses when nothing else names one. It always exists."
+        },
+        "presets": {
+          "description": "Every preset, ordered by ID.",
+          "items": {
+            "$ref": "#/$defs/TransitionPresetInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "presets",
+        "default"
+      ],
+      "type": "object"
     },
     "Vec2": {
       "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)\nfails deserialization, so the message is rejected as `malformed`, and in-process code\ncan't build a non-finite value.",
@@ -6447,5 +7026,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.28"
+  "title": "JStream protocol 0.30"
 }
