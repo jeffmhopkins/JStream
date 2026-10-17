@@ -36,3 +36,10 @@ value = "43, 44"
 check = "manual"
 source = { ext = "fedora-eol" }
 note = "Fedora releases not yet end of life; changes every six months"
+
+[[fact]]
+id = "macos-security-updated"
+value = "15, 26, 27"
+check = "manual"
+source = { ext = "apple-security-releases" }
+note = "macOS releases Apple still ships security updates for; changes yearly when a new release ships"
