@@ -46,9 +46,10 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
-- **Virtual camera registration** (`register.rs`, Windows only): `--register-vcam`
-  registers the media source DLL shipped beside the daemon, and startup logs a warning
-  when the registration names another folder ([Design](#design)).
+- **Virtual camera registration** (`register.rs`, Windows only): the optional
+  `--register-vcam` registers an administrators-only copy of the media source DLL
+  shipped beside the daemon, `--unregister-vcam` removes it, and startup only logs the
+  registration's state ([Design](#design)).
 - **Live engine wiring** (`live.rs`, in the crate's library target `lib.rs`): the
   backends, the stream key store and the publish opener that make an engine live
   ([Design](#design)). It is a library so the integration tests build the daemon's own
@@ -111,7 +112,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `--youtube-client <path>` | Windows, for developers: a Google OAuth client to use for YouTube sign-in instead of JStream's built-in one, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables, else the built-in client. |
-| `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
+| `--register-vcam` | Windows, optional: registers the virtual camera for this machine from an administrators-only copy, then exits (see **Virtual camera** below). Takes no other options. |
+| `--unregister-vcam` | Windows: removes the virtual camera's registration and its copy, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
 
@@ -197,18 +199,27 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   and before touching the token file. If Media Foundation is there but has no AAC
   encoder, it does the same with `error: Media Foundation's AAC encoder is not
   installed: …`. Listing the codecs fails with exit 1.
-- **Virtual camera (Windows).** `jstream-daemon --register-vcam` registers
-  `jstream_vcam_windows.dll` from the daemon's own folder machine-wide, as the Windows
-  camera Frame Server requires. From a normal prompt it shows one UAC prompt and runs
-  itself elevated, without a window. It prints `virtual camera: registered <dll>`, adding
-  the old path when the registration named another folder, or `virtual camera: already
-  registered (<dll>)` without asking for elevation, leaving the registration and the
-  file's ACL as they are (a DLL registered with `regsvr32`, or rebuilt in place, keeps
-  whatever ACL it has). A missing DLL, a declined prompt or a
-  failed registration exits 1; from an administrator prompt the error says what failed.
-  At startup the daemon logs a warning when the registration names another folder (a
-  moved install), and an `info` line when there is none. Elsewhere `--register-vcam`
-  fails with exit 1.
+- **Virtual camera (Windows).** Registering the camera is optional, and only these
+  two flags do it or ask for elevation
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)).
+  `jstream-daemon --register-vcam` copies the `jstream_vcam_windows.dll` beside the
+  daemon to `%ProgramFiles%\JStream\vcam\`, a folder only administrators can write to,
+  and registers that copy machine-wide, as the Windows camera Frame Server requires. The
+  DLL in the daemon's own folder is never registered. From a normal prompt it shows one
+  UAC prompt and runs itself elevated, without a window. It prints `virtual camera:
+  registered <copy>, a copy of <dll>`, adding the old path when something else was
+  registered, or `virtual camera: already registered (<copy>)` without asking for
+  elevation when the copy already has this DLL's content. After an update whose DLL
+  changed, running it again replaces the copy: a new opt-in, with its own prompt.
+  `jstream-daemon --unregister-vcam` removes the registration and the copy's folder,
+  with one prompt, or prints `virtual camera: not registered` without one. A copy the
+  camera still has loaded can't be deleted: the registration is removed, it exits 1
+  and says to close the camera's apps and run it again. A missing DLL, a declined
+  prompt or a failed step exits 1; from an administrator prompt the error says what
+  failed. At startup the daemon only reports: a warning when the registration names a
+  DLL outside that folder or a copy whose content differs from this DLL's, saying
+  registering again is optional, and an `info` line when there is none. Elsewhere both
+  flags fail with exit 1.
 - **Collection file.** With `--collection`, the engine loads the file at startup
   (upgrading an older version) and replaces it atomically after every applied batch,
   undo and redo, before the call returns. A file that can't be read, holds no
@@ -228,8 +239,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 0 | Stopped by a signal, printed the help or version, or registered or unregistered the virtual camera (`--register-vcam`, `--unregister-vcam`) |
+| 1 | Failed: `--register-vcam` or `--unregister-vcam` could not finish (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -306,14 +317,17 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   imports, and fails when a listed DLL is no longer imported. It checks only the DLLs
   it lists, so a DLL added to `build.rs` alone, or a new Media Foundation import listed
   nowhere, gets past it.
-- **Virtual camera registration** (`register.rs`). `--register-vcam` is a separate mode
-  that exits without serving, so it creates no logs or token. The registry and ACL work
-  is `jstream-platform-windows`'s (`register_vcam`), because the daemon has no `unsafe`.
-  A non-elevated daemon doesn't write: it relaunches itself elevated with the same fixed
-  argument (`run_elevated`), then reads the registration back, so success is judged by
-  what the registry holds rather than by the hidden child's output. A registration that
-  already names this DLL is left alone, so repeating the command never prompts. The
-  startup check (`log_status`) only logs: the daemon serves without the camera, and
+- **Virtual camera registration** (`register.rs`). `--register-vcam` and
+  `--unregister-vcam` are separate modes that exit without serving, so they create no
+  logs or token. The copy, DACL and registry work is `jstream-platform-windows`'s
+  (`register_vcam`, `unregister_vcam`), because the daemon has no `unsafe`. A
+  non-elevated daemon doesn't write: it relaunches itself elevated with the same fixed
+  argument (`run_elevated`), then reads the registration back
+  (`vcam_registration`, which compares the copy with the shipped DLL by content), so
+  success is judged by what the registry and the copy hold rather than by the hidden
+  child's output. A registration whose copy already has this DLL's content is left
+  alone, so repeating the command never prompts. The startup check (`log_status`) only
+  logs, and never prompts: the daemon serves without the camera, and
   `WindowsVcam::start` refuses to start an unregistered camera on its own.
 - **YouTube** (`youtube.rs`, `serve.rs`). `youtube::client` reads a developer's OAuth
   client from `--youtube-client`'s file (Google's `{"installed": {…}}` download, or the two
@@ -461,7 +475,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--ui-dir`, `--log-dir`,
-  `--log-level`, `--youtube-client`, `--register-vcam`) don't pay for a
+  `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-platform` (`Backends`, the key store trait, the data directory),

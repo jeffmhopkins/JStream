@@ -367,7 +367,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     binary that delay-loads the DLL gets an error rather than a delay-load exception on
     Windows 10 or an N edition. The media source must already be registered
     machine-wide, so `start` then checks for its `HKLM` class key and is `Unsupported` without it (registering
-    is `jstream-daemon --register-vcam`, through `register_vcam` below). It then creates, on a D3D11 device of its own
+    is the optional `jstream-daemon --register-vcam`, through `register_vcam` below). It then creates, on a D3D11 device of its own
     on the default hardware adapter, a ring of three shared BGRA textures and a shared
     fence, plus the control block. They are named in **this session's namespace**,
     because a non-elevated engine can't create `Global\` objects
@@ -436,19 +436,37 @@ The code is ported from spikes S1 to S3. This first cut has:
     `MfMediaDecoders`; `mfplat.dll` for `MfMjpegDecoder`;
     `mfplat.dll` and `mfsensorgroup.dll` for `WindowsVcam`. The check itself never imports Media Foundation.
 
-- **`register_vcam`** and **`vcam_registration`**, the virtual camera's registration
-  ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Frame Server ignores
-  per-user registration, so `register_vcam` writes the media source's class machine-wide:
-  `HKLM\Software\Classes\CLSID\{clsid}` with `InprocServer32` naming the DLL and
-  `ThreadingModel = Both`, the path written last. It then adds a read-and-execute ACE for
-  LOCAL SERVICE, Frame Server's account, to the DLL file's DACL. It needs an elevated
-  process (`is_elevated`); `run_elevated` relaunches the current executable with the
-  `runas` verb, hidden, and waits for its exit code, which is the one UAC prompt (a
-  declined prompt is `InvalidState`). `vcam_registration` needs no elevation: it reads the
-  registered path and compares it with the DLL the host ships (`VCAM_DLL`, beside the
-  executable), ignoring case, `\\?\` and `/`. The answer is `Missing`, `Current` or
-  `Moved`, the last when a portable install was moved after registering. That comparison
-  is tested on every platform.
+- **`register_vcam`**, **`unregister_vcam`** and **`vcam_registration`**, the virtual
+  camera's optional registration, from an administrators-only copy
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md),
+  [ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Only a host's explicit
+  opt-in step calls the first two. Frame Server ignores per-user registration, so both
+  need an elevated process (`is_elevated`); `run_elevated` relaunches the current
+  executable with the `runas` verb, hidden, and waits for its exit code, which is the one
+  UAC prompt (a declined prompt is `InvalidState`).
+  - **Register:** `register_vcam` creates `vcam_copy_dir`, `%ProgramFiles%\JStream\vcam\`
+    (`program_files` is `FOLDERID_ProgramFiles`), and replaces its DACL with `COPY_DACL`,
+    protected so nothing is inherited: SYSTEM and Administrators full control, LOCAL
+    SERVICE (Frame Server's account) and Users read and execute. It copies the shipped
+    DLL in under a staging name, gives the file the same protected DACL, renames a
+    previous copy aside (Windows lets a loaded DLL be renamed but not replaced) and moves
+    the new one into place, then deletes the leftovers it can. Last it writes
+    `HKLM\Software\Classes\CLSID\{clsid}` with `InprocServer32` naming the copy and
+    `ThreadingModel = Both`, the path written last. The DLL in the user-writable portable
+    folder is never registered (#242).
+  - **Unregister:** `unregister_vcam` deletes the class keys, then the copy's folder, and
+    `%ProgramFiles%\JStream` if that is then empty. A copy Frame Server still has loaded
+    makes it fail after the keys are gone; running it again finishes it.
+  - **Status:** `vcam_registration` needs no elevation. It reads the registered path and
+    compares it with the copy's (ignoring case, `\\?\`, quotes and `/`), then the copy's
+    content with the DLL the host ships (`VCAM_DLL`, beside the executable). The answer
+    is `Missing`, `Current`, or `Outdated` with why: `Elsewhere` (a DLL outside the
+    folder, such as one an older JStream registered from its portable folder),
+    `Differs` (an update) or `CopyMissing`.
+
+  The path, content and DACL decisions are tested on every platform. CI's Windows job
+  runs the OS calls that need no elevation (reading the registration, finding Program
+  Files, creating the DACL's SIDs); the elevated steps are checked on hardware.
 
 - **`PluginBlock`** and **`ProAudioThread`**, for CLAP filters hosted out of process
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)).
