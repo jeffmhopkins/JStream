@@ -218,7 +218,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | 🔍 in review | #486 |
-| MAC1 | macOS platform crate | ⏳ planned: ADR-0063 proposed (#511); crate part 1 in draft (#513) | #511, #513 |
+| MAC1 | macOS platform crate | ⏳ planned: ADR-0063 accepted (#511); crate part 1 in draft (#513) | #511, #513 |
 | LNX1 | Linux codec path and platform crate | 🔍 in review: ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509) | #481, #490, #509 |
 | LNX2 | Linux OpenH264 download (ADR-0061) | ⏳ planned |  |
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | ⏳ planned: patent check ADR-0062 accepted (#508); encoder not started |  |
@@ -260,13 +260,13 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token \
 <a id="platforms"></a>
 ## Platforms
 <!-- @section
-depends_on = ["docs/adr/0008-windows-support-policy.md"]
+depends_on = ["docs/adr/0008-windows-support-policy.md", "docs/adr/0063-macos-platform-support.md"]
 -->
 
 | Platform | Status | Support |
 |---|---|---|
 | Windows | Primary target | Runs on Windows 11 build 22000<!--fact:min-windows-build--> and later; supported on the versions Microsoft currently services ([ADR-0008](docs/adr/0008-windows-support-policy.md)) |
-| macOS | Later (M3) | To be decided in the macOS ADR |
+| macOS | Later (M3) | Per [ADR-0063](docs/adr/0063-macos-platform-support.md): macOS 14 and later, Apple Silicon (Intel best effort) |
 | Linux | Later (M3) | Per [ADR-0060](docs/adr/0060-linux-platform-support.md): GNOME or KDE Plasma on Wayland, current Ubuntu LTS and Fedora |
 
 <a id="documentation"></a>

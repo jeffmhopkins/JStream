@@ -2,14 +2,14 @@
 id = "ADR-0063"
 title = "macOS platform support: ScreenCaptureKit, Core Audio taps, VideoToolbox"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0063: macOS platform support: ScreenCaptureKit, Core Audio taps, VideoToolbox
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -248,6 +248,11 @@ run the bundled app.
 ## Questions for the maintainer
 Accepting this ADR as written accepts decisions 1 to 14 with the recommended answers
 below.
+
+**Answered:** on acceptance the maintainer chose the recommendation on all five:
+signing and notarisation later (1), macOS 14 as the floor (2), Apple Silicon supported
+with Intel best effort (3), macOS CI on PRs into `main` and wave landings (4), and the
+virtual camera later, in its own ADR (5). The decision text above already reads that way.
 
 1. **Pay for the Apple Developer Program ($99 a year) for signing and notarisation?**
    Options: now, later, or never. Without it, builds are ad-hoc signed: Gatekeeper blocks

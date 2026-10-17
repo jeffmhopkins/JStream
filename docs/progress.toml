@@ -842,7 +842,7 @@ milestone = "M3"
 title = "macOS platform crate"
 status = "planned"
 prs = [511, 513]
-note = "ADR-0063 proposed (#511); crate part 1 in draft (#513)"
+note = "ADR-0063 accepted (#511); crate part 1 in draft (#513)"
 
 [[item]]
 id = "LNX1"
