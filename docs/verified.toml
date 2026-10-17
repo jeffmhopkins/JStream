@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:ac9ec48f04dbd7ac", by = "agent:w1-builder", note = "jstream-plugin-wasm now exists at layer 3 as the row said; row now names the capability list (empty by default), fuel/memory limits and no WASI. Its only member dependency is jstream-control (L2), so layering holds" }
+stamp = { hash = "b3:d014feb2720169cc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "The jstream-sources row links ADR-0061 instead of the superseded ADR-0031, and the jstream-platform-linux row names ADR-0060, ADR-0061 and the OpenH264 loader, as ADR-0061's acceptance edits list. The wave/m3-2 merge added the WA1 jstream-plugin-wasm row and E3d's wording; neither cites ADR-0031; holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -1029,7 +1029,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:4f3a0d6c2b139c4f", by = "agent:claude-e3d", note = "Drop counts table now lists the encode ring as a render-thread source of encode_frames (review B3), next to the session input drops; render thread paragraph still holds" }
+stamp = { hash = "b3:66b28773c491abf0", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Its ADR-0031 citations moved to ADR-0061, which restates the same source list and decoding scope. The wave/m3-2 merge's E3d/WA1 changes add nothing that cites ADR-0031; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1308,7 +1308,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:c65c43538952c785", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:4f3a0d6c2b139c4f", by = "agent:claude-e3d", note = "Re-read: no drop-count or encode-path text; the core Design change (drop table row) doesn't affect it" }
+stamp = { hash = "b3:66b28773c491abf0", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Upstream changed only by moving ADR-0031 citations to ADR-0061 and the crate map's Linux row; the wave/m3-2 merge (E3d NV12, WA1) changed nothing this section relies on about ADR-0031; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
@@ -1905,7 +1905,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:48aac723c0fe210f", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:ac9ec48f04dbd7ac", by = "agent:w1-builder", note = "Crate-map change is only the jstream-plugin-wasm row; the jstream-platform row this section cites (wgpu types in this crate) is unchanged" }
+stamp = { hash = "b3:d014feb2720169cc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Upstream changed only by moving ADR-0031 citations to ADR-0061 and the crate map's Linux row; the wave/m3-2 merge (E3d NV12, WA1) changed nothing this section relies on about ADR-0031; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:bb9d34d698b4cea6", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
@@ -3201,7 +3201,7 @@ stamp = { hash = "b3:c6836c98530b7bf5" }
 stamp = { hash = "b3:8a62a8e5ce8558a7", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }
 
 ["DOCS#dependency-lint"."file:xtask/src/lint_deps.rs"]
-stamp = { hash = "b3:f205d4d9739b29a1", by = "agent:w1-builder", note = "lint_deps.rs only gains three NATIVE_ALLOWLIST entries (wasmtime, wasmtime-internal-fiber, wasmtime-internal-jit-debug); the checks, the allowlist mechanism and the default-features graph described here are unchanged" }
+stamp = { hash = "b3:3d37c44140ddaaba", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Only the ADR citation in the lint-deps paragraph and lint_deps.rs messages moved from ADR-0031 to ADR-0061; the allowlist mechanics are unchanged, and R-DEP-002's OpenH264 exception adds no crate. The wave/m3-2 merge (WA1's wasmtime) added no ADR-0031 citation; re-grepped, holds" }
 
 ["DOCS#governance"."body"]
 stamp = { hash = "b3:8351920c7315d119", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
