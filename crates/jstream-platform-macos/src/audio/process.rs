@@ -2,7 +2,8 @@
 //! objects (`kAudioHardwarePropertyProcessObjectList`), each a process the HAL knows as
 //! an audio client, which is what a process tap can target. Each is listed with its PID,
 //! its parent's PID and its executable's file name, read from the kernel by PID
-//! (`proc_pidinfo`, `proc_pidpath`).
+//! (`proc_pidpath`, and `proc_pidinfo`'s short BSD info, which the kernel answers for
+//! other users' processes too, such as system daemons).
 //!
 //! Unlike Windows, which lists every process and records a whole process tree, this lists
 //! only processes Core Audio knows, and a tap records the one process chosen, not its
@@ -37,6 +38,14 @@ pub(crate) fn parent(ppid: u32) -> Option<u32> {
     (ppid != 0).then_some(ppid)
 }
 
+/// The kernel's short name for a process (`pbsi_comm`), up to its first NUL, if it is
+/// non-empty UTF-8.
+pub(crate) fn comm_name(comm: &[u8]) -> Option<String> {
+    let end = comm.iter().position(|&b| b == 0).unwrap_or(comm.len());
+    let name = std::str::from_utf8(&comm[..end]).ok()?;
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) use system::list;
 
@@ -48,7 +57,7 @@ mod system {
     use jstream_platform::{AudioProcess, PlatformError};
 
     use super::super::hal;
-    use super::{display_name, parent};
+    use super::{comm_name, display_name, parent};
 
     /// The executable's full path, from the kernel.
     fn path(pid: c_int) -> Option<String> {
@@ -62,38 +71,33 @@ mod system {
         String::from_utf8(buf).ok()
     }
 
-    /// The kernel's short name for the process.
-    fn short_name(pid: c_int) -> Option<String> {
-        let mut buf = [0u8; 256];
-        let len = u32::try_from(buf.len()).ok()?;
-        // SAFETY: as above, for `buf`.
-        let n = unsafe { libc::proc_name(pid, buf.as_mut_ptr().cast::<c_void>(), len) };
-        let n = usize::try_from(n).ok().filter(|&n| n > 0)?;
-        String::from_utf8(buf[..n].to_vec()).ok()
-    }
-
-    /// The parent's PID, from the kernel's BSD info for the process.
-    fn parent_pid(pid: c_int) -> Option<u32> {
-        let mut info = MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-        let size = c_int::try_from(size_of::<libc::proc_bsdinfo>()).ok()?;
-        // SAFETY: `info` is a zeroed `proc_bsdinfo` of `size` bytes, which the call fills
-        // (returning `size`) or leaves alone.
+    /// The parent's PID and the kernel's short name for the process, from its short BSD
+    /// info (`PROC_PIDT_SHORTBSDINFO`). Unlike the full BSD info, which `proc_name` also
+    /// reads, the kernel gives it for other users' processes too.
+    fn short_info(pid: c_int) -> (Option<u32>, Option<String>) {
+        let mut info = MaybeUninit::<libc::proc_bsdshortinfo>::zeroed();
+        let Ok(size) = c_int::try_from(size_of::<libc::proc_bsdshortinfo>()) else {
+            return (None, None);
+        };
+        // SAFETY: `info` is a zeroed `proc_bsdshortinfo` of `size` bytes, which the call
+        // fills (returning `size`) or leaves alone.
         let n = unsafe {
             libc::proc_pidinfo(
                 pid,
-                libc::PROC_PIDTBSDINFO,
+                libc::PROC_PIDT_SHORTBSDINFO,
                 0,
                 info.as_mut_ptr().cast(),
                 size,
             )
         };
         if n != size {
-            return None;
+            return (None, None);
         }
         // SAFETY: zeroed, and filled by the kernel; every field is an integer or a byte
         // array, valid for any bit pattern.
         let info = unsafe { info.assume_init() };
-        parent(info.pbi_ppid)
+        let comm: Vec<u8> = info.pbsi_comm.iter().map(|&c| c.to_ne_bytes()[0]).collect();
+        (parent(info.pbsi_ppid), comm_name(&comm))
     }
 
     /// The processes Core Audio knows now. One that exits while being read is left out.
@@ -104,12 +108,13 @@ mod system {
                 let pid = hal::process_pid(object)?;
                 let pid_u = u32::try_from(pid).ok()?;
                 let bundle = hal::process_bundle_id(object);
+                let (parent_pid, short) = short_info(pid);
                 Some(AudioProcess {
                     pid: pid_u,
-                    parent_pid: parent_pid(pid),
+                    parent_pid,
                     exe: display_name(
                         path(pid).as_deref(),
-                        short_name(pid).as_deref(),
+                        short.as_deref(),
                         bundle.as_deref(),
                         pid_u,
                     ),
@@ -149,6 +154,20 @@ mod tests {
             "com.apple.Music"
         );
         assert_eq!(display_name(None, None, None, 42), "42");
+    }
+
+    #[test]
+    fn the_short_name_ends_at_its_nul() {
+        assert_eq!(
+            comm_name(b"coreaudiod\0\0\0\0\0\0").as_deref(),
+            Some("coreaudiod")
+        );
+        assert_eq!(
+            comm_name(b"sixteen-chars-xx").as_deref(),
+            Some("sixteen-chars-xx")
+        );
+        assert_eq!(comm_name(b"\0abc"), None);
+        assert_eq!(comm_name(&[0xFF, 0]), None);
     }
 
     #[test]
