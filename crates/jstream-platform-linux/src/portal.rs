@@ -157,6 +157,10 @@ mod backend {
     struct RestoreTokens {
         dir: Option<PathBuf>,
         memory: Mutex<HashMap<String, String>>,
+        /// How many times each source was forgotten. A start reads it before the picker
+        /// and stores the new token only if it hasn't changed, under this lock, so a
+        /// source deleted while its capture was starting doesn't get its token back.
+        forgotten: Mutex<HashMap<String, u64>>,
     }
 
     /// Whose grant a token restores: the last pick of a kind, for
@@ -263,9 +267,40 @@ mod backend {
             }
         }
 
-        /// Forgets `source`'s tokens, both kinds, in memory and on disk. The pick-kind
-        /// tokens `start` uses are kept: they belong to no source.
+        /// How many times `grant`'s source was forgotten so far (0 for a pick-kind
+        /// grant), for [`put_unless_forgotten`](Self::put_unless_forgotten).
+        fn forgets(&self, grant: Grant<'_>) -> u64 {
+            let Grant::Source(_, source) = grant else {
+                return 0;
+            };
+            self.forgotten
+                .lock()
+                .map_or(0, |f| f.get(source).copied().unwrap_or(0))
+        }
+
+        /// As [`put`](Self::put), unless `grant`'s source was forgotten since
+        /// [`forgets`](Self::forgets) returned `forgets`.
+        fn put_unless_forgotten(&self, grant: Grant<'_>, token: &str, forgets: u64) {
+            let Ok(forgotten) = self.forgotten.lock() else {
+                return;
+            };
+            let now = match grant {
+                Grant::Source(_, source) => forgotten.get(source).copied().unwrap_or(0),
+                Grant::Pick(_) => 0,
+            };
+            if now == forgets {
+                self.put(grant, token);
+            }
+        }
+
+        /// Forgets `source`'s tokens, both kinds, in memory and on disk, and keeps a
+        /// start already under way from storing one. The pick-kind tokens `start` uses
+        /// are kept: they belong to no source.
         fn forget(&self, source: &str) {
+            let mut forgotten = self.forgotten.lock().ok();
+            if let Some(f) = forgotten.as_mut() {
+                *f.entry(source.to_owned()).or_default() += 1;
+            }
             for pick in [PortalPick::Display, PortalPick::Window] {
                 let grant = Grant::Source(pick, source);
                 if let Ok(mut m) = self.memory.lock() {
@@ -331,7 +366,7 @@ mod backend {
                 session,
                 tokens: RestoreTokens {
                     dir: Some(dir),
-                    memory: Mutex::default(),
+                    ..RestoreTokens::default()
                 },
             }
         }
@@ -424,6 +459,7 @@ mod backend {
                 h = h.with_cursor_metadata();
             }
             let cursor_metadata = h.sends_cursor_metadata();
+            let forgets = self.tokens.forgets(grant);
             let (granted, fd) = match run(&mut bus, &mut h) {
                 Ok(done) => done,
                 Err(e) => {
@@ -432,7 +468,7 @@ mod backend {
                 }
             };
             if let Some(token) = &granted.restore_token {
-                self.tokens.put(grant, token);
+                self.tokens.put_unless_forgotten(grant, token, forgets);
             }
             let shared = Arc::new(Shared::new());
             let node = granted.streams[0].node_id;
@@ -825,6 +861,19 @@ mod backend {
                 Some("last-pick")
             );
             again.forget("never-captured");
+
+            // A start that began before its source was deleted doesn't store the token
+            // it is granted after (#598 review N1); one that began after does.
+            let before = again.forgets(game);
+            again.forget("game");
+            again.put_unless_forgotten(game, "late", before);
+            assert_eq!(again.get(game), None, "deleted while starting");
+            assert!(!dir.join("screencast-window-source-67616d65.token").exists());
+            again.put_unless_forgotten(game, "fresh", again.forgets(game));
+            assert_eq!(again.get(game).as_deref(), Some("fresh"), "a new source");
+            let pick = Grant::Pick(PortalPick::Window);
+            again.put_unless_forgotten(pick, "pick", again.forgets(pick));
+            assert_eq!(again.get(pick).as_deref(), Some("pick"));
 
             // A very long ID keeps its token in memory only.
             let long = "s".repeat(MAX_FILED_SOURCE + 1);

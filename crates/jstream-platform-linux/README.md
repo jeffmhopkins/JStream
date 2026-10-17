@@ -65,7 +65,8 @@ It has:
   gets the picker rather than the last pick. A source's file is
   `screencast-<kind>-source-<hex of its ID>.token`, so any ID stays a plain name in the
   folder (an ID over 96 bytes keeps its token in memory only), and `forget_source`
-  removes both of its files when the source is deleted. A
+  removes both of its files when the source is deleted; a start of that source still
+  waiting on the picker then doesn't store the token it is granted. A
   thread keeps the portal's connection open for the session's
   life and reports the portal closing it (sharing stopped, grant revoked) as
   `DeviceLost`.

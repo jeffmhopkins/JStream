@@ -59,7 +59,8 @@ Contents:
   (the default is `start`'s). `CaptureOptions::for_source` names the source a capture
   is for, so a backend that keeps a grant per source (the ScreenCast portal's restore
   token, [ADR-0060](../../docs/adr/0060-linux-platform-support.md) §3) keeps each
-  source's apart, and `Capture::forget_source` drops it when the source is deleted. By
+  source's apart, and `Capture::forget_source` drops it when the source is deleted, once
+  its captures have stopped (best effort: a grant file that can't be removed stays). By
   default `start_with` ignores its options and calls `start`, and `forget_source` does
   nothing. `CaptureOptions::with_cursor(CursorCapture::Metadata)` asks for the pointer
   beside the frames instead of drawn into them (`Drawn`, the default): the stream's
