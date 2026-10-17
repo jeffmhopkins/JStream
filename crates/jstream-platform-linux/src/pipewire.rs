@@ -1,6 +1,6 @@
 //! PipeWire, loaded at run time (ADR-0060 §4, §8).
 //!
-//! Draft: [`PipeWire`] loads libpipewire and checks its version against ADR-0060's floor,
+//! For now, [`PipeWire`] loads libpipewire and checks its version against ADR-0060's floor,
 //! and [`PipeWireAudio`] is the `AudioIo` backend built on it. Its streams (input,
 //! output, a sink's monitor for desktop audio and an application's stream for
 //! application audio) report `Unsupported` until the stream code lands.
@@ -95,7 +95,7 @@ mod backend {
         }
     }
 
-    /// Audio I/O through PipeWire (ADR-0060 §4). Draft: it loads PipeWire; listing
+    /// Audio I/O through PipeWire (ADR-0060 §4). For now it loads PipeWire; listing
     /// devices and opening streams report `Unsupported` until the stream code lands.
     #[derive(Debug)]
     pub struct PipeWireAudio {

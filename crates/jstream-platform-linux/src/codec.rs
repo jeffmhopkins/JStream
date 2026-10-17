@@ -1,8 +1,9 @@
 //! Codecs on Linux (ADR-0060 §6, §7).
 //!
-//! Video encode goes through VA-API. There is no software H.264 encoder (ADR-0060
-//! question 1) and no AAC encoder (question 2) until the maintainer decides those.
-//! Draft: [`VaapiCodecs`] lists the encoders the probe finds and picks one for a
+//! Video encode goes through VA-API. There is no software H.264 encoder until Cisco's
+//! OpenH264 binary lands (ADR-0060 question 1, answered; it follows the ADR superseding
+//! ADR-0031), and no AAC encoder until the Rust AAC-LC encoder exists (question 2).
+//! For now, [`VaapiCodecs`] lists the encoders the probe finds and picks one for a
 //! configuration; opening the session itself reports `Unsupported` until the VA-API
 //! encode path lands.
 
@@ -14,9 +15,10 @@ use crate::VaEncoder;
 /// The VA-API encoder to open for `config`, out of `encoders` (the probe's order).
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] for a codec other than H.264, for
-/// [`HardwarePreference::Avoid`] (Linux has no software encoder, ADR-0060 question 1),
-/// and when no driver encodes H.264.
+/// [`PlatformError::Unsupported`] for a codec other than H.264 and for
+/// [`HardwarePreference::Avoid`] (no software encoder until the OpenH264 download lands);
+/// [`PlatformError::MissingComponent`], with the distributions' remedy, when no driver
+/// encodes H.264 (ADR-0060 §6).
 pub fn choose_encoder<'a>(
     encoders: &'a [VaEncoder],
     config: &VideoEncoderConfig,
@@ -31,16 +33,20 @@ pub fn choose_encoder<'a>(
     }
     if config.hardware == HardwarePreference::Avoid {
         return Err(PlatformError::Unsupported {
-            what: "a software H.264 encoder on Linux (none until ADR-0060 question 1 is \
-                   decided)"
+            what: "a software H.264 encoder on Linux (none until Cisco's OpenH264 download \
+                   lands, ADR-0060 question 1)"
                 .into(),
         });
     }
-    encoders.first().ok_or_else(|| PlatformError::Unsupported {
-        what: "H.264 encoding: no VA-API driver here encodes H.264 (Intel's iHD or Mesa's \
-               radeonsi with H.264 encode enabled is needed)"
-            .into(),
-    })
+    encoders
+        .first()
+        .ok_or_else(|| PlatformError::MissingComponent {
+            component: "a VA-API driver with H.264 encode",
+            remedy: "on Intel, install intel-media-va-driver-non-free (Debian, Ubuntu) or \
+                 intel-media-driver (Fedora); on AMD with Fedora's Mesa, install \
+                 mesa-va-drivers-freeworld from RPM Fusion."
+                .into(),
+        })
 }
 
 #[cfg(target_os = "linux")]
@@ -57,8 +63,8 @@ mod backend {
     use super::choose_encoder;
     use crate::{VaEncoder, probe_encoders};
 
-    /// Codecs through VA-API (ADR-0060 §6). Draft: lists and chooses encoders; sessions
-    /// report `Unsupported`.
+    /// Codecs through VA-API (ADR-0060 §6). For now it lists and chooses encoders;
+    /// sessions report `Unsupported`.
     #[derive(Debug)]
     pub struct VaapiCodecs {
         /// What the probe found, or why it couldn't run (libva missing).
@@ -116,8 +122,8 @@ mod backend {
         ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
             Err(PlatformError::Unsupported {
                 what: format!(
-                    "{:?} encoding on Linux (no AAC encoder until ADR-0060 question 2 is \
-                     decided)",
+                    "{:?} encoding on Linux (no AAC encoder until the Rust AAC-LC encoder \
+                     exists, ADR-0060 question 2)",
                     config.codec
                 ),
             })
@@ -180,15 +186,19 @@ mod tests {
     #[test]
     fn refusals_say_why() {
         let encoders = [intel()];
-        for (codec, hw, list) in [
-            (Codec::Hevc, HardwarePreference::Prefer, &encoders[..]),
-            (Codec::H264, HardwarePreference::Avoid, &encoders[..]),
-            (Codec::H264, HardwarePreference::Prefer, &[][..]),
+        for (codec, hw) in [
+            (Codec::Hevc, HardwarePreference::Prefer),
+            (Codec::H264, HardwarePreference::Avoid),
         ] {
             assert!(matches!(
-                choose_encoder(list, &config(codec, hw)),
+                choose_encoder(&encoders, &config(codec, hw)),
                 Err(PlatformError::Unsupported { .. })
             ));
         }
+        // No H.264 encode driver is something to install (ADR-0060 §6).
+        assert!(matches!(
+            choose_encoder(&[], &config(Codec::H264, HardwarePreference::Prefer)),
+            Err(PlatformError::MissingComponent { .. })
+        ));
     }
 }

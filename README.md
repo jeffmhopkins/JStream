@@ -218,7 +218,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | ⏳ planned |  |
 | MAC1 | macOS platform crate | ⏳ planned |  |
-| LNX1 | Linux codec path and platform crate | 🔍 in review: ADR-0060 proposed (#481); draft crate (#490) | #481, #490 |
+| LNX1 | Linux codec path and platform crate | 🔍 in review: ADR-0060 accepted (#481); crate part 1 (#490) | #481, #490 |
 
 </details>
 <!-- @generated end progress -->

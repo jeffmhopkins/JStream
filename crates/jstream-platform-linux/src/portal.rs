@@ -128,7 +128,7 @@ mod backend {
     use super::PortalPick;
     use crate::{Session, SessionKind};
 
-    /// Display and window capture through the ScreenCast portal (ADR-0060 §3). Draft:
+    /// Display and window capture through the ScreenCast portal (ADR-0060 §3). For now:
     /// lists its targets; starting one reports `Unsupported` until the D-Bus transport
     /// and the PipeWire stream land.
     #[derive(Debug)]

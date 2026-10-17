@@ -57,16 +57,18 @@ This first part has:
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
   is terminated before its node is closed. **`VaapiCodecs`** (`Codecs`) lists those as
   hardware H.264 encoders and picks one for a configuration with `choose_encoder`. That
-  refuses other codecs, a software-only request (Linux has no software encoder until
-  ADR-0060 question 1 is decided) and a machine with no encoding driver. Opening the
-  session reports `Unsupported` for now. Audio encoding reports `Unsupported` until
-  ADR-0060 question 2 settles where AAC comes from, and decoding is out of the ADR's
-  scope.
+  refuses other codecs and a software-only request (no software encoder until Cisco's
+  OpenH264 download lands, ADR-0060 question 1), and reports a machine with no H.264
+  encode driver as a missing component with the distributions' packages (ADR-0060 §6).
+  Opening the session reports `Unsupported` for now. Audio encoding reports
+  `Unsupported` until the Rust AAC-LC encoder exists (ADR-0060 question 2), and decoding
+  is out of the ADR's scope.
 
 Not here yet, in roughly the order they follow:
 - the portal's D-Bus transport and the PipeWire video stream (SHM first, then DMA-BUF
   into Vulkan);
-- PipeWire audio streams;
+- PipeWire audio streams, and the ALSA fallback through libasound (ADR-0060 §4, §8);
+- keeping the portal's restore token in the data folder (ADR-0060 §3);
 - the VA-API H.264 encode session (parameter buffers, NV12 upload, packed headers);
 - V4L2 webcams;
 - the stream-key store.

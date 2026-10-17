@@ -840,4 +840,4 @@ milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
 prs = [481, 490]
-note = "ADR-0060 proposed (#481); draft crate (#490)"
+note = "ADR-0060 accepted (#481); crate part 1 (#490)"

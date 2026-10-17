@@ -1,6 +1,6 @@
 //! VA-API, loaded at run time (ADR-0060 §6, §8).
 //!
-//! Draft: [`probe_encoders`] opens each DRM render node through libva and lists the H.264
+//! For now, [`probe_encoders`] opens each DRM render node through libva and lists the H.264
 //! encode entry points its driver offers. Encode sessions are a follow-up.
 
 /// The H.264 profiles JStream encodes, with libva's `VAProfile` values.
