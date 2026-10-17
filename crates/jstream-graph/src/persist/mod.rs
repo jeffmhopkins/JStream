@@ -517,7 +517,12 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
-/// scenes, empty, in display order and with their roles
+/// scenes, empty, in display order and with their roles; then the buses with their
+/// faders, which a source's settings may refer to; then sources, each after the
+/// sources its settings refer to; then every source's filters; then items, encoder
+/// profiles, video mixes, and outputs, each with its profile and mix; then the sends (the
+/// sources made their default master sends, so when the file lists sends a source without
+/// one has it removed), and each source's audio settings.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {

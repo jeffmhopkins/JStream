@@ -190,8 +190,8 @@ state machine. Contents:
   (renamed into place on stop, refused when the file exists or the path is not
   absolute on this machine, no `.part` file left by a failed start), recording while
   streaming on one shared encoder session (and separate sessions on separate
-  profiles, and on a half-rate video mix held to its rate without being starved), a virtual camera publishing the program as BGRA at the canvas size
-  (fitted into a canvas of another size, started again after a stop, running beside
+  profiles, and on a half-rate video mix held to its rate without being starved), a
+  virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
@@ -923,9 +923,8 @@ error for now, not a session-limit code.
 
 **Video mixes.** The render thread keeps one frame per video mix the running sessions
 are fed from, each at its session's size, and counts base ticks (1/30 s). On a tick it
-composites only the mixes due on it (every `fps_divisor`th tick, counted
-from the last one it drew, so a tick an overrun skips delays it but can't starve
-it), all in one
+composites only the mixes due on it (every `fps_divisor`th tick, counted from the last
+one it drew, so a tick an overrun skips delays a mix but can't starve it), all in one
 GPU frame, and pushes each due frame to that mix's sessions; a tick with nothing due
 draws nothing. A mix's session is opened at the mix's resolution with a frame period
 of `fps_divisor` base ticks, so its timestamps and keyframe interval follow its rate.

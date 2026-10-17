@@ -122,7 +122,8 @@ pub(crate) struct MixFrame {
     pub(crate) mix: Option<VideoMixId>,
     /// Its size in pixels.
     pub(crate) size: FrameSize,
-    /// It is drawn on every `divisor`th base tick.
+    /// It is drawn on every `divisor`th base tick, or on the first one after that when
+    /// the render thread skipped it ([`Frames::schedule`]).
     pub(crate) divisor: u32,
     /// Whether this tick draws it.
     pub(crate) due: bool,

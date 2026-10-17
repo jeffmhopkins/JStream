@@ -4137,13 +4137,15 @@ mod cpu_pipeline {
         let (full, half) = (video_tags(&publish) as u64, recorded(&engine));
         // The pump moves the clock faster than a debug render thread draws, so most
         // base ticks are skipped and both mixes are drawn on nearly every tick that is:
-        // the half-rate mix is held to at most one frame per two base ticks, never more
-        // than the program, and an overrun doesn't starve it. Its rate on ticks that
-        // aren't skipped is checked by `frames_draw_each_feed_once_on_its_ticks`.
+        // the half-rate mix is held to at most one frame per two base ticks and never
+        // more than the program. However many ticks are skipped it gets at least about
+        // one frame for every two of the program's, so an overrun doesn't starve it. Its
+        // rate on ticks that aren't skipped is checked by
+        // `frames_draw_each_feed_once_on_its_ticks`.
         let micros = jstream_platform::MediaClock::now(&fakes.clock).ticks();
         let base = u64::try_from(micros / 33_333).expect("clock after zero");
         assert!(
-            half >= full / 4 && half <= full + 2 && half <= base / 2 + 2,
+            half + 6 >= full / 2 && half <= full + 2 && half <= base / 2 + 2,
             "{half} recorded frames against {full} streamed over {base} base ticks"
         );
 
