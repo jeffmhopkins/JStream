@@ -308,8 +308,9 @@ the explicit step registers it
 an administrators-only copy, never the one in the app's folder (#242). In its one UAC
 prompt, the step creates `%ProgramFiles%\JStream\vcam\` and gives it and the copy a
 protected DACL: SYSTEM and Administrators full control, LOCAL SERVICE and Users read
-and execute, nothing inherited. It then points `InprocServer32` at the copy. So a
-program running as the user can't change the code Frame Server loads. The host
+and execute, nothing inherited. It then points `InprocServer32` at the copy. So, for a
+camera registered by this step, a program running as the user can't change the code
+Frame Server loads from the copy. The host
 compares the copy with the DLL it ships by content and reports an outdated copy;
 registering again is a new opt-in. Unregistering removes the keys and the copy.
 

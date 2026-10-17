@@ -1348,7 +1348,8 @@ mod tests {
     #[test]
     fn a_refused_camera_start_gets_the_hint_that_fits() {
         let unregistered = "action_failed: starting the virtual camera: the virtual camera: its \
-             media source {0B5A3E7C} is not registered (register it with `--register-vcam`)"
+             media source {0B5A3E7C} is not registered (registering it is optional: run \
+             `jstream-daemon --register-vcam`)"
             .to_owned();
         let explained = explain_start_failure(&OutputKind::VirtualCam, unregistered.clone());
         assert!(explained.starts_with(&unregistered), "{explained}");

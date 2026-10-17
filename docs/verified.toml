@@ -1614,7 +1614,7 @@ stamp = { hash = "b3:0163ec2a07050ae4", by = "agent:vcam-optin-561", note = "re-
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:1f3ed444aa2fb0fe", by = "agent:vcam-242", note = "depends_on, the bundler-off note and lib.rs's Docs line now cite ADR-0066 instead of superseded ADR-0020; ADR-0066 keeps the no-installer portable folder, so the design holds" }
+stamp = { hash = "b3:1c302d9592a3c66f", by = "agent:vcam-optin-561", note = "re-read (#565 B1): vcam host value list now says outdated, not moved; the virtual camera bullet says vcam_status compares the admin-only copy by content, warns when outdated and never registers or prompts; the rest is unaffected" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1647,7 +1647,7 @@ stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4b066e60073231fd", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:d50eefc191f0f160", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
+stamp = { hash = "b3:8b4d82cc3197577c", by = "agent:vcam-optin-561", note = "re-read (#565 B1): vcam host value list now says outdated, not moved; the virtual camera bullet says vcam_status compares the admin-only copy by content, warns when outdated and never registers or prompts; the rest is unaffected" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:3e17a8c3ed0c537f", by = "agent:vcam-242", note = "depends_on, the bundler-off note and lib.rs's Docs line now cite ADR-0066 instead of superseded ADR-0020; ADR-0066 keeps the no-installer portable folder, so the design holds" }
@@ -1671,7 +1671,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:0d1409e0a940065d", by = "agent:vcam-242", note = "jstream.exe in the portable folder and lib.rs's module doc now cite ADR-0066, which keeps the portable deliverable; text otherwise unchanged" }
+stamp = { hash = "b3:9e63c0850d1f640c", by = "agent:vcam-optin-561", note = "re-read (#565 B1): host.rs vcam_status now reports outdated as well; purpose says registered and current, and names the optional registration and unregistration modes the daemon provides for now" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. The desktop's purpose says it links core and server, still true, and its contents already list browser sources (browser.rs, cef feature), matching main's sources and jstream-browser links." }
@@ -1689,7 +1689,7 @@ stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4b066e60073231fd", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:d50eefc191f0f160", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
+stamp = { hash = "b3:8b4d82cc3197577c", by = "agent:vcam-optin-561", note = "re-read (#565 B1): host.rs vcam_status now reports outdated as well; purpose says registered and current, and names the optional registration and unregistration modes the daemon provides for now" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:3e17a8c3ed0c537f", by = "agent:vcam-242", note = "jstream.exe in the portable folder and lib.rs's module doc now cite ADR-0066, which keeps the portable deliverable; text otherwise unchanged" }
@@ -2358,7 +2358,7 @@ stamp = { hash = "b3:57ee2cd8b8984db0", by = "agent:claude", note = "Adds the Pl
 stamp = { hash = "b3:518cf8d8efd63e59", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/sink.rs"]
-stamp = { hash = "b3:2fcb7bb950608efc" }
+stamp = { hash = "b3:dd6425b9f0e2ab1b", by = "agent:vcam-optin-561", note = "re-read (#565 N3): WindowsVcam start's refusal now says registering is optional and names jstream-daemon --register-vcam; the start bullet's 'the optional jstream-daemon --register-vcam' still holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam_register.rs"]
 stamp = { hash = "b3:ff9961fc226d739b", by = "agent:vcam-optin-561", note = "re-read: register_vcam/unregister_vcam/vcam_registration bullet rewritten for ADR-0066 (protected COPY_DACL, staging and retire, keys last, Outdated reasons); WindowsVcam start hint says the step is optional" }
@@ -3546,7 +3546,7 @@ stamp = { hash = "b3:c7c695f9d00a1e78", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:ee13ddade946cf6c", by = "agent:vcam-optin-561", note = "re-read: outputs card text now says the registration hint names the step optional and an outdated camera can start with a re-register hint" }
+stamp = { hash = "b3:21be713fd139bb28", by = "agent:vcam-optin-561", note = "re-read (#565 N3): the fixture still contains 'is not registered', which the design says gets the full registration command; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's properties-form text (an audio-restricted source reference offers only sources reporting audio, less scene sources; properties.rs offers(), test an_audio_reference_offers_only_sources_with_audio). Main's filters and opacity reach the UI only as protocol fields filled in fixtures (sources.rs, store.rs, canvas/model.rs), no UI feature to document. Holds, no edit." }
@@ -3609,7 +3609,7 @@ stamp = { hash = "b3:c7c695f9d00a1e78", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:ee13ddade946cf6c", by = "agent:vcam-optin-561", note = "re-read: outputs.rs and host.rs changes (Vcam::Outdated, optional hints) don't change what the purpose lists" }
+stamp = { hash = "b3:21be713fd139bb28", by = "agent:vcam-optin-561", note = "re-read (#565 N3): outputs.rs change is only a test fixture for the engine's new refusal wording; purpose unaffected" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): properties.rs only gained #459's offers() for Media::Audio and main's filters field in a test fixture; contents list (host.rs, store.rs, panels incl. properties, outputs, mixer, confirm, canvas) still matches. Holds, no edit." }
@@ -4245,7 +4245,7 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
 ["THREAT-MODEL#vcam"."body"]
-stamp = { hash = "b3:bab11341290e4e9a", by = "agent:vcam-optin-561", note = "re-read: controls now describe the landed opt-in admin-only copy with its protected DACL and content check (#242 closed); accepted residuals for registration; gaps keep #356 and add the hardware check #563" }
+stamp = { hash = "b3:bbd408ba81b85682", by = "agent:vcam-optin-561", note = "re-read (#565 N2): the controls sentence now limits the guarantee to a camera registered by this step and to the copy; matches the accepted paragraph on pre-ADR-0066 registrations" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:vcam-242", note = "Maintainer accepted ADR-0066: the paragraph is now 'Accepted, not yet on main (#242)' quoting his decision, ADR-0066 marked accepted, depends_on moved from superseded ADR-0020 to ADR-0066. #242 stays in Gaps until #561 lands, since the page counts only merged controls; today's behaviour (HKLM InprocServer32 naming the DLL beside the exe, swappable without a prompt) still matches register.rs and vcam_register.rs" }
@@ -4299,7 +4299,7 @@ stamp = { hash = "b3:128bf552bd7be538", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:claude-ui-features", note = "app.rs: the status bar shows brand, URL, protocol, client, rev and Disconnect with no menus (HD-01 partial, HD-02/03 to build); panels/outputs.rs: go_live_targets starts stopped or failed RTMP outputs with a key and each card starts and stops its own output (HD-09 partial, HD-07 to build). HD-05/06/08 blockers are E2b #317, T1/T1u, A6b." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:ee13ddade946cf6c", by = "agent:vcam-optin-561", note = "re-read: outputs.rs change is the vcam status/hints only; the header's go-live features are unaffected" }
+stamp = { hash = "b3:21be713fd139bb28", by = "agent:vcam-optin-561", note = "re-read (#565 N3): outputs.rs change is a test fixture only; header unaffected" }
 
 ["UI-FEATURES#inspector"."body"]
 stamp = { hash = "b3:d31ba81be56d0df5", by = "agent:claude-ui-features", note = "panels/properties.rs: the settings form from kind.describe with groups, advanced, visible_if and Reset, and no placement, crop, opacity or blend controls, so IN-01/02/04/06 to IN-08 to build; IN-03/05/09/10 locked on source.sizes, X1 and T1 as noted." }
@@ -4335,7 +4335,7 @@ stamp = { hash = "b3:7350b13d63f192ea", by = "agent:t1-studio", note = "UI fixtu
 stamp = { hash = "b3:3cbe7856eda760ab", by = "agent:claude-ui-features", note = "panels/outputs.rs: output cards with status badges, start/stop, keys, encoder profile and health, but no program-output row or FX button (OU-02 partial; OU-01/03 on D8p, OU-04 on A6b and the OAuth client)." }
 
 ["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:ee13ddade946cf6c", by = "agent:vcam-optin-561", note = "re-read: the OU rows don't cover vcam registration; still holds" }
+stamp = { hash = "b3:21be713fd139bb28", by = "agent:vcam-optin-561", note = "re-read (#565 N3): outputs.rs change is a test fixture only; OU rows unaffected" }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:e0fff104df6bbece", by = "agent:claude-ui-features", note = "panels/scenes.rs: rows with a Program badge and a hover Program button, up/down reorder buttons, double-click rename, delete and the New scene name field (SC-02, SC-04, SC-05 partial; SC-10 cut button); folders, labels and keyframes are B11 #323 and K1 as noted." }

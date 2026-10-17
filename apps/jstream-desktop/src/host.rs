@@ -170,13 +170,16 @@ pub fn engine(
 /// What the app tells the UI about its virtual camera.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VcamStatus {
-    /// Registered for the DLL beside the exe: a `virtual_cam` output can start.
+    /// The administrators-only copy is registered and has the content of the DLL
+    /// beside the exe: a `virtual_cam` output can start.
     Registered,
-    /// Not registered, or the registration couldn't be read: `jstream-daemon
-    /// --register-vcam` registers it.
+    /// Not registered, or the registration couldn't be read: the optional
+    /// `jstream-daemon --register-vcam` registers it.
     NotRegistered,
-    /// Registered for another folder, such as one the app was moved from.
-    Moved,
+    /// Registered, but not for a current copy of the DLL beside the exe: an update
+    /// changed it, or an older JStream registered its own folder (ADR-0066).
+    /// Registering again is optional.
+    Outdated,
     /// Turned off with `--no-vcam`: the engine has no camera.
     Off,
     /// No virtual camera on this platform.
@@ -189,7 +192,7 @@ impl VcamStatus {
         match self {
             VcamStatus::Registered => "registered",
             VcamStatus::NotRegistered => "not_registered",
-            VcamStatus::Moved => "moved",
+            VcamStatus::Outdated => "outdated",
             VcamStatus::Off => "off",
             VcamStatus::Unavailable => "unavailable",
         }
@@ -197,8 +200,8 @@ impl VcamStatus {
 }
 
 /// The virtual camera's status: off when `enabled` is false, else on Windows whether
-/// the media source is registered for the DLL beside the exe (`exe_dir`), read from
-/// the registry with no elevation.
+/// the registered copy has the content of the DLL beside the exe (`exe_dir`), read
+/// with no elevation. It only reports: it never registers or prompts (ADR-0066).
 pub fn vcam_status(exe_dir: Option<&Path>, enabled: bool) -> VcamStatus {
     if !enabled {
         return VcamStatus::Off;
@@ -210,14 +213,17 @@ pub fn vcam_status(exe_dir: Option<&Path>, enabled: bool) -> VcamStatus {
             return VcamStatus::NotRegistered;
         };
         match vcam_registration(&dll) {
-            Ok(VcamRegistration::Current) => VcamStatus::Registered,
+            Ok(VcamRegistration::Current { .. }) => VcamStatus::Registered,
             Ok(VcamRegistration::Missing) => VcamStatus::NotRegistered,
-            Ok(VcamRegistration::Moved { registered }) => {
+            Ok(VcamRegistration::Outdated { registered, why }) => {
                 tracing::warn!(
                     registered = %registered.display(),
-                    "the virtual camera is registered for another folder"
+                    ?why,
+                    "the virtual camera's registration is not a current copy of this \
+                     app's DLL; registering again (`jstream-daemon --register-vcam`) is \
+                     optional"
                 );
-                VcamStatus::Moved
+                VcamStatus::Outdated
             }
             Err(error) => {
                 tracing::warn!(%error, "could not read the virtual camera's registration");
@@ -341,7 +347,7 @@ mod tests {
         let names: Vec<&str> = [
             VcamStatus::Registered,
             VcamStatus::NotRegistered,
-            VcamStatus::Moved,
+            VcamStatus::Outdated,
             VcamStatus::Off,
             VcamStatus::Unavailable,
         ]
@@ -353,7 +359,7 @@ mod tests {
             [
                 "registered",
                 "not_registered",
-                "moved",
+                "outdated",
                 "off",
                 "unavailable"
             ]
