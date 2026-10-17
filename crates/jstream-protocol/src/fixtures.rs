@@ -9,11 +9,11 @@ use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
     CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
     EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32, FitMode,
-    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
-    OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
-    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
-    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
-    Vec2, Welcome, json_schema,
+    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo, OutputId,
+    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
+    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -347,7 +347,8 @@ pub(crate) fn edits() -> Vec<Edit> {
     edits
 }
 
-/// The filter edits (ADR-0026), on both chains.
+/// The filter edits (ADR-0026), on both chains of a source, and on the master stage's
+/// and an output's audio chains (ADR-0027).
 fn filter_edits() -> Vec<Edit> {
     let mic = || FilterOwner::Source {
         source_id: SourceId::new("src_mic"),
@@ -394,7 +395,43 @@ fn filter_edits() -> Vec<Edit> {
             owner: mic(),
             filter_id: FilterId::new("flt_gain"),
         },
+        Edit::FilterAdd {
+            owner: FilterOwner::Master,
+            chain: FilterChain::Audio,
+            filter_id: FilterId::new("flt_limit"),
+            kind: "limiter".into(),
+            settings: Settings::new(),
+            enabled: None,
+            index: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Output {
+                output_id: OutputId::new("out_rec"),
+            },
+            chain: FilterChain::Audio,
+            filter_id: FilterId::new("flt_quiet"),
+            kind: "gain".into(),
+            settings: quieter(),
+            enabled: None,
+            index: None,
+        },
     ]
+}
+
+/// A limiter's settings, complete as the engine reports them.
+fn limiter() -> Settings {
+    let mut settings = Settings::new();
+    settings.insert("ceiling_db", serde_json::json!(-1.0));
+    settings.insert("lookahead_ms", serde_json::json!(5.0));
+    settings.insert("release_ms", serde_json::json!(60.0));
+    settings
+}
+
+/// A gain filter's settings, 6 dB down.
+fn quieter() -> Settings {
+    let mut gain = Settings::new();
+    gain.insert("gain_db", serde_json::json!(-6.0));
+    gain
 }
 
 /// One scene at 1280×720 and half the base rate.
@@ -546,12 +583,22 @@ fn output_infos() -> Vec<OutputInfo> {
                 container: RecordContainer::Mp4,
             },
             encoder_profile: Some(EncoderProfileId::new("enc_rec")),
+            filters: FilterChains {
+                video: vec![],
+                audio: vec![FilterInfo {
+                    filter_id: FilterId::new("flt_quiet"),
+                    kind: "gain".into(),
+                    enabled: true,
+                    settings: quieter(),
+                }],
+            },
             video_mix: Some(VideoMixId::new("mix_cam")),
         },
         OutputInfo {
             output_id: OutputId::new("out_yt"),
             kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
             encoder_profile: None,
+            filters: FilterChains::default(),
             video_mix: None,
         },
     ]
@@ -1051,6 +1098,17 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             video_mixes: mix_infos(),
             buses: bus_infos(),
             sends: send_infos(),
+            master: MasterInfo {
+                filters: FilterChains {
+                    video: vec![],
+                    audio: vec![FilterInfo {
+                        filter_id: FilterId::new("flt_limit"),
+                        kind: "limiter".into(),
+                        enabled: true,
+                        settings: limiter(),
+                    }],
+                },
+            },
             hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's

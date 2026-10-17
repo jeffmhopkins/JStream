@@ -3248,7 +3248,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "FilterChains": {
-      "description": "A source's two chains, each first filter first.",
+      "description": "An owner's two chains, each first filter first.",
       "properties": {
         "audio": {
           "description": "The audio chain. Omitted when empty.",
@@ -3272,7 +3272,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "string"
     },
     "FilterInfo": {
-      "description": "One filter, as `source.list` and `state.get` report it.",
+      "description": "One filter, as `source.list`, `output.list` and `state.get` report it.",
       "properties": {
         "enabled": {
           "description": "Whether it runs. A disabled filter is bypassed and keeps its settings.",
@@ -3280,7 +3280,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "filter_id": {
           "$ref": "#/$defs/FilterId",
-          "description": "Its ID, unique within its source."
+          "description": "Its ID, unique within its owner's chains."
         },
         "kind": {
           "description": "Its kind, as `kind.list` reports it.",
@@ -3299,7 +3299,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "FilterOwner": {
-      "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+      "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
       "oneOf": [
         {
           "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -3316,6 +3316,37 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+          "properties": {
+            "type": {
+              "const": "master",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "output",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
           ],
           "type": "object"
         }
@@ -3867,6 +3898,16 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "type": "object"
     },
+    "MasterInfo": {
+      "description": "The master stage, as `state.get` reports it: what applies to everything leaving\nJStream (ADR-0027 §1).",
+      "properties": {
+        "filters": {
+          "$ref": "#/$defs/FilterChains",
+          "description": "Its chains, which `filter.*` edits with the owner `{\"type\":\"master\"}`. Only the\naudio chain holds filters so far. Omitted while both are empty."
+        }
+      },
+      "type": "object"
+    },
     "Media": {
       "description": "What a source produces, for restricting a source reference.",
       "oneOf": [
@@ -3970,6 +4011,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "The encoder profile it uses (`output.set_encoder`). Absent means the engine's\ndefault, as from a server older than 0.13."
+        },
+        "filters": {
+          "$ref": "#/$defs/FilterChains",
+          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0027 §2). Only the audio chain holds filters so far, and a virtual camera,\nwhich has no audio, has none. Omitted while both are empty."
         },
         "kind": {
           "$ref": "#/$defs/OutputKind",
@@ -4941,6 +4986,10 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "$ref": "#/$defs/HotkeyBinding"
               },
               "type": "array"
+            },
+            "master": {
+              "$ref": "#/$defs/MasterInfo",
+              "description": "The master stage. Omitted while it has no filters, so missing (also from a\nserver older than 0.29) parses as empty."
             },
             "outputs": {
               "default": [],
@@ -6447,5 +6496,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.28"
+  "title": "JStream protocol 0.29"
 }

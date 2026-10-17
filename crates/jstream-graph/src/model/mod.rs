@@ -130,13 +130,16 @@ pub struct State {
     /// Each send's gain in dB, keyed by bus, then by source: the order `bus.list`
     /// reports them in.
     pub(crate) sends: BTreeMap<(BusId, SourceId), Finite32>,
+    /// The master stage's chains (ADR-0027 §1).
+    pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
 }
 
 impl Default for State {
-    /// An empty collection: the default canvas and the master bus.
+    /// An empty collection: the default canvas, the master bus, and a master stage
+    /// without filters.
     fn default() -> Self {
-        let master = Bus::new(BusId::master(), MASTER_NAME.to_owned());
+        let master_bus = Bus::new(BusId::master(), MASTER_NAME.to_owned());
         Self {
             canvas: Canvas::default(),
             sources: BTreeMap::new(),
@@ -144,8 +147,9 @@ impl Default for State {
             outputs: BTreeMap::new(),
             encoders: BTreeMap::new(),
             video_mixes: BTreeMap::new(),
-            buses: BTreeMap::from([(master.id.clone(), master)]),
+            buses: BTreeMap::from([(master_bus.id.clone(), master_bus)]),
             sends: BTreeMap::new(),
+            master: Chains::default(),
             hotkeys: BTreeMap::new(),
         }
     }
@@ -168,6 +172,12 @@ impl State {
     /// The source with this ID.
     pub fn source(&self, id: &SourceId) -> Option<&Source> {
         self.sources.get(id)
+    }
+
+    /// The master stage's filter chains, which apply to everything leaving JStream
+    /// (ADR-0027 §1). Only the audio chain holds filters so far.
+    pub fn master(&self) -> &Chains {
+        &self.master
     }
 
     /// Every scene, in display order.
@@ -531,6 +541,8 @@ pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
     pub(crate) encoder_profile: Option<EncoderProfileId>,
+    /// Its own chains, after the master stage (ADR-0027 §2).
+    pub(crate) filters: Chains,
     pub(crate) video_mix: Option<VideoMixId>,
 }
 
@@ -548,6 +560,21 @@ impl Output {
     /// The encoder profile it uses, or `None` for the engine's default.
     pub fn encoder_profile(&self) -> Option<&EncoderProfileId> {
         self.encoder_profile.as_ref()
+    }
+
+    /// Its own filter chains, which run after the master stage (ADR-0027 §2). Only the
+    /// audio chain holds filters so far.
+    pub fn filters(&self) -> &Chains {
+        &self.filters
+    }
+
+    /// Whether it carries audio, and so can have an audio chain: every output kind but
+    /// one that sends video only (a virtual camera).
+    pub fn has_audio(&self) -> bool {
+        matches!(
+            self.kind,
+            OutputKind::Rtmp { .. } | OutputKind::Record { .. }
+        )
     }
 
     /// The video mix it shows, or `None` for the program at the engine's canvas size.

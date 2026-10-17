@@ -147,9 +147,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `item.set_opacity` and `item.set_blend`;
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
     a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
-    `scene` source, a full chain and an index out of range. `source.duplicate` copies
-    the chains and `source.delete`'s inverse re-adds them; a reference in a filter's
-    settings blocks deleting its target, as a source's own does;
+    `scene` source, a full chain and an index out of range. The master stage and
+    outputs ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)) take
+    audio filters only, an output only if it carries audio, and their filters no scene
+    or source reference. `source.duplicate` copies the chains, and `source.delete`'s
+    and `output.delete`'s inverses re-add them; a reference in a filter's settings
+    blocks deleting its target, as a source's own does;
   - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
@@ -221,9 +224,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and sends, a deleted source's audio and sends, and each audio edit back to the values
   it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
-  back with its encoder profile and video mix and the hotkeys its delete removed,
-  hotkey edits undo to the binding as it was, encoder profile and video mix edits undo
-  to the profile or mix as it was,
+  back with its encoder profile, video mix and filters and the hotkeys its delete
+  removed, hotkey edits undo to the binding as it was, encoder profile and video mix
+  edits undo to the profile or mix as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
@@ -270,9 +273,9 @@ The mock re-implements these checks and reads rather than calling
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
-its outputs and a filter chain, the exact answer to every read of it, and the exact
-error for batches rejected against it, RTMP URL, recording path, filter and audio
-rejections included. The mock's
+its outputs and filter chains on a source, the master and an output, the exact answer to
+every read of it, and the exact error for batches rejected against it, RTMP URL,
+recording path, filter and audio rejections included. The mock's
 undo test tears that collection down in one batch and checks that undo gives back
 exactly the fixture's state, which `jstream-graph`'s inverse property test guarantees
 for the graph.

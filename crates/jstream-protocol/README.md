@@ -61,9 +61,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
-  `FilterInfo` and `FilterChains`, the chains `SourceInfo` reports, and
-  `MAX_CHAIN_FILTERS` (8).
+  `FilterOwner` (tagged `type`: `source`, `master` and `output`), `FilterChain`
+  (`video`, `audio`), `FilterInfo` and `FilterChains`, the chains `SourceInfo` and
+  `OutputInfo` report, and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
+  master stage as `state.get` reports it
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo` (with the `video_mix` it shows), and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
@@ -136,9 +138,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.28 because of
-  video mixes (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and
-  the mixes in `state.get` and `output.list`); 0.27 added the `capture.targets` query;
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.29 because of
+  the master stage's and outputs' filter chains (the `master` and `output` filter
+  owners, `OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes
+  (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and the mixes in
+  `state.get` and `output.list`); 0.27 added the `capture.targets` query;
   0.26 added live values ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the
   `live.changed` and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
   hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
@@ -180,12 +184,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   URL, recording path, encoder profile, video mix and hotkey checks, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
-  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a desktop
-  audio source with an audio chain of two gain filters, one disabled, and audio: a
-  microphone with its fader, mute and sends, two buses (one deleted again with its
-  send), a renamed and faded bus, a duplicated microphone with a send removed, and a
-  disabled nested scene. The rejected batches cover the bus limit, the master bus,
-  fader ranges, and sources with no audio or no fader of their own.
+  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a
+  desktop audio source with an audio chain of two gain filters, one disabled, a gain
+  filter each on the master stage's audio chain and on the recording output's, and
+  audio: a microphone with its fader, mute and sends, two buses (one deleted again with
+  its send), a renamed and faded bus, a duplicated microphone with a send removed, and
+  a disabled nested scene. The rejected batches also cover an audio filter on the
+  virtual camera, a reference in a master filter's settings (refused before its
+  index), the bus limit, the master bus, fader ranges, and sources with no audio or no
+  fader of their own.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -220,8 +227,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":28},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":28},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":29},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":29},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -464,6 +471,21 @@ kind for that chain (`invalid_argument` on `edits.N.kind`), and a chain holds at
 8 filters (`edits.N.chain`). A missing filter is `not_found` with entity `filter`.
 `SourceInfo.filters { video, audio }` reports them, each omitted while empty.
 
+From 0.29 the master stage and each output own chains too
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), with the owners
+`{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
+master's audio chain runs on every bus that feeds an output, after that bus's own chain;
+an output's runs after it, for that output only, and gives the output its own audio
+encode from its next start (edits to a chain it started with apply live). Only their
+audio chains hold filters so far: a video filter is `invalid_argument` on
+`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
+carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+`output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
+`invalid_argument` on the parameter), since the delete checks follow only a source's
+references. `output.delete`'s
+inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
+`master { filters }` report them, each omitted while empty.
+
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
 would otherwise narrow an out-of-range JSON number such as `1e39` to infinity, which
@@ -629,10 +651,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty), every video mix (`video_mixes`,
   ordered by ID; missing from a pre-0.28 server, it parses as empty), the `buses` and
-  `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty) and every
+  `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
-  parses as empty). A client reads it on connecting, and again after a
-  `state.changed` it didn't cause.
+  parses as empty) and the master stage (`master`, with its filter chains; omitted
+  while it has none, so missing, also from a pre-0.29 server, parses as empty). A
+  client reads it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
@@ -642,8 +665,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
-  its `OutputKind`, `encoder_profile` (absent for the default) and `video_mix` (absent
-  for the program), at a `rev`.
+  its `OutputKind`, `encoder_profile` (absent for the default), `video_mix` (absent
+  for the program) and its own `filters` (omitted while empty; 0.29), at a `rev`.
 - `encoder.list`: the encoder profiles, ordered by ID, at a `rev` (0.13).
 - `video_mix.list`: the video mixes, ordered by ID, at a `rev` (0.28).
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the

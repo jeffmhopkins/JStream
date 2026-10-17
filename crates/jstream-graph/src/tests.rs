@@ -647,6 +647,7 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
                     target: target("rtmps://a.rtmps.youtube.com:443/live2"),
                 },
                 encoder_profile: None,
+                filters: Default::default(),
                 video_mix: None,
             }],
         }
@@ -753,6 +754,7 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                     container: RecordContainer::Mp4,
                 },
                 encoder_profile: None,
+                filters: Default::default(),
                 video_mix: None,
             }],
         }
@@ -1136,14 +1138,36 @@ mod property {
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
         let mixes: Vec<String> = state.video_mixes().map(|m| m.id().to_string()).collect();
-        let filters: Vec<(String, String)> = state
-            .sources()
-            .flat_map(|s| {
-                s.filters()
+        // Every filter with its owner: sources', outputs' and the master's.
+        let mut filters: Vec<(jstream_protocol::FilterOwner, String)> = Vec::new();
+        for source in state.sources() {
+            let owner = jstream_protocol::FilterOwner::Source {
+                source_id: source.id().clone(),
+            };
+            filters.extend(
+                source
+                    .filters()
                     .all()
-                    .map(|(_, f)| (s.id().to_string(), f.id().to_string()))
-            })
-            .collect();
+                    .map(|(_, f)| (owner.clone(), f.id().to_string())),
+            );
+        }
+        for output in state.outputs() {
+            let owner = jstream_protocol::FilterOwner::Output {
+                output_id: output.id().clone(),
+            };
+            filters.extend(
+                output
+                    .filters()
+                    .all()
+                    .map(|(_, f)| (owner.clone(), f.id().to_string())),
+            );
+        }
+        filters.extend(
+            state
+                .master()
+                .all()
+                .map(|(_, f)| (jstream_protocol::FilterOwner::Master, f.id().to_string())),
+        );
         let buses: Vec<String> = state.buses().map(|b| b.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
@@ -1242,7 +1266,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(48) {
+        match rng.below(49) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1474,11 +1498,10 @@ mod property {
                 index: (rng.below(2) == 0).then(|| index(rng)),
             },
             41 => {
-                let (source, filter) = rng
+                let (owner, filter) = rng
                     .pick(&filters)
-                    .unwrap_or_else(|| (source(rng), pool(rng, "f")));
+                    .unwrap_or_else(|| (owner(source(rng)), pool(rng, "f")));
                 let filter_id = jstream_protocol::FilterId::new(filter);
-                let owner = owner(source);
                 match rng.below(4) {
                     0 => Edit::FilterRemove { owner, filter_id },
                     1 => Edit::FilterSetEnabled {
@@ -1487,9 +1510,14 @@ mod property {
                         enabled: rng.below(2) == 0,
                     },
                     2 => Edit::FilterSetSettings {
+                        patch: match &owner {
+                            jstream_protocol::FilterOwner::Source { .. } => {
+                                super::settings(&[("mask", mask(rng))])
+                            }
+                            _ => super::settings(&[("gain_db", json!(-3.0))]),
+                        },
                         owner,
                         filter_id,
-                        patch: super::settings(&[("mask", mask(rng))]),
                     },
                     _ => Edit::FilterReorder {
                         owner,
@@ -1538,6 +1566,22 @@ mod property {
                     Edit::HotkeySet { chord, action }
                 }
             }
+            // A gain on the master or an output's audio chain (ADR-0027), mostly in
+            // range.
+            47 => Edit::FilterAdd {
+                owner: match rng.below(3) {
+                    0 => jstream_protocol::FilterOwner::Master,
+                    _ => jstream_protocol::FilterOwner::Output {
+                        output_id: OutputId::new(output(rng)),
+                    },
+                },
+                chain: jstream_protocol::FilterChain::Audio,
+                filter_id: jstream_protocol::FilterId::new(pool(rng, "f")),
+                kind: "gain".into(),
+                settings: super::settings(&[("gain_db", json!([-6.0, 0.0, 99.0][rng.below(3)]))]),
+                enabled: (rng.below(3) == 0).then_some(false),
+                index: (rng.below(2) == 0).then(|| index(rng)),
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
