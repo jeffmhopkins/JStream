@@ -8,8 +8,9 @@
 //! `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder, downloaded only
 //! on the user's request and checked against its pin (`OpenH264Store`, `OpenH264Encoder`,
 //! ADR-0061), and AAC encoding on JStream's own AAC-LC encoder (`RustAacEncoder`,
-//! feature `aac-encoder`), which `VaapiCodecs` opens. Audio I/O sessions report
-//! `Unsupported` until their follow-ups land. Layer 2, and one of the crates allowed `unsafe`
+//! feature `aac-encoder`), which `VaapiCodecs` opens. Audio input and output go through
+//! ALSA (`AlsaAudio`, libasound loaded at run time), the fallback ADR-0060 §4 names;
+//! `PipeWireAudio`'s streams report `Unsupported` until they land. Layer 2, and one of the crates allowed `unsafe`
 //! (R-UNSAFE-001): every system call is wrapped here behind safe APIs.
 //!
 //! System libraries are loaded with `dlopen` when first needed, never linked, so the
@@ -21,6 +22,8 @@
 
 #[cfg(feature = "aac-encoder")]
 mod aac;
+#[cfg(any(target_os = "linux", test))]
+mod alsa;
 mod clock;
 mod codec;
 #[cfg(any(target_os = "linux", test))]
@@ -39,6 +42,8 @@ mod vaapi;
 
 #[cfg(feature = "aac-encoder")]
 pub use aac::{AAC_ENCODER_NAME, RustAacEncoder, aac_config, aac_encoder_info};
+#[cfg(target_os = "linux")]
+pub use alsa::AlsaAudio;
 #[cfg(target_os = "linux")]
 pub use clock::MonotonicClock;
 pub use clock::{hns_from_timespec, timebase};
