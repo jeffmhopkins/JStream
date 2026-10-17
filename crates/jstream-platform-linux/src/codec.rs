@@ -1,8 +1,8 @@
 //! Codecs on Linux (ADR-0060 §6, §7).
 //!
-//! Video encode goes through VA-API. There is no software H.264 encoder until Cisco's
-//! OpenH264 binary lands (ADR-0060 question 1, answered; it follows the ADR superseding
-//! ADR-0031), and no AAC encoder until the Rust AAC-LC encoder exists (question 2).
+//! Video encode goes through VA-API. There is no software H.264 encoder until the download
+//! of Cisco's OpenH264 binary lands, and no AAC encoder until the Rust AAC-LC encoder
+//! exists (ADR-0061).
 //! [`VaapiCodecs`] lists the encoders the probe finds, picks one for a configuration
 //! and opens a VA-API H.264 session on it.
 

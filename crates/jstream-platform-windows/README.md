@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -158,7 +158,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     budget, as ARCH step 6 asks.
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
-  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): the **AAC encoder** and
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): the **AAC encoder** and
   the **H.264 encoder**, from CPU frames or from encode targets on the GPU. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
     Windows that is Microsoft's software AAC encoder. It takes 44.1 or 48 kHz; mono or
@@ -229,7 +229,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** video decoders, which report `Unsupported` until then.
 
 - **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
-  Foundation's source reader ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  Foundation's source reader ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)):
   - **Devices:** the video capture devices Media Foundation enumerates. A device's
     `DeviceId` is its symbolic link (its device interface path), which stays the same
     across reboots and replugging into the same port; its name is the friendly name.
@@ -274,7 +274,7 @@ The code is ported from spikes S1 to S3. This first cut has:
 
 - **`MfMediaDecoders`** (`MediaDecoders`), local media files through the Media
   Foundation Source Reader (`decode/`,
-  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)):
   - **Opening:** `MFCreateSourceReaderFromURL` on the file's host path, with the
     `\\?\` prefix `canonicalize` adds removed, since the source resolver would read it
     as a URL scheme. Advanced video processing is on, so the reader converts the
@@ -408,7 +408,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
 - **`check_media_foundation`**, the Media Foundation check
-  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md#consequences)): Windows N and
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md#consequences)): Windows N and
   KN editions ship without Media Foundation until the user installs the Media Feature
   Pack, and Windows Server until it adds the Server Media Foundation feature. The check
   loads `mfplat.dll` from System32 only and looks for `MFStartup`. If that fails, it
