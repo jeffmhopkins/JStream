@@ -7,7 +7,8 @@
 //! `annexb_access_unit`), the AudioToolbox AAC-LC encoder, whose raw access units are
 //! framed and timed by `AacFramer`, and display and window capture through
 //! ScreenCaptureKit (`ScreenCaptureKitCapture`) on CPU frames, behind the Screen Recording
-//! permission. Audio (`CoreAudioIo`) and decoding report `Unsupported` until their
+//! permission, and the Keychain store for stream keys and OAuth tokens (`MacosKeychain`).
+//! Audio (`CoreAudioIo`) and decoding report `Unsupported` until their
 //! follow-ups land. Layer 2, and one of the crates allowed `unsafe` (R-UNSAFE-001): every
 //! system call is wrapped here behind safe APIs.
 //!
@@ -27,6 +28,7 @@ mod capture;
 mod clock;
 mod codec;
 mod fourcc;
+mod keychain;
 mod version;
 #[cfg(target_os = "macos")]
 mod videotoolbox;
@@ -51,4 +53,7 @@ pub use fourcc::{
     CV_420V, CV_BGRA, CV_RGBA, CV_X420, CV_Y420, cv_pixel_format, fourcc, fourcc_str, os_status,
     pixel_format_from_cv,
 };
+pub use keychain::KeychainItem;
+#[cfg(target_os = "macos")]
+pub use keychain::MacosKeychain;
 pub use version::{Arch, Feature, MacosVersion, SupportTier, check_floor, support_tier};
