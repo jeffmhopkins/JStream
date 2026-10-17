@@ -3021,7 +3021,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:9f04c296774de608", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
+stamp = { hash = "b3:2d4999d9e7086731", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "only lib.rs's Docs: line changed, adding the UI-FEATURES sections that now cover this crate; the section's text still holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -3084,7 +3084,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:9f04c296774de608", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
+stamp = { hash = "b3:2d4999d9e7086731", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "only lib.rs's Docs: line changed, adding the UI-FEATURES sections that now cover this crate; the section's text still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -3706,4 +3706,145 @@ stamp = { hash = "b3:22d241d0aeefeac2", by = "agent:claude@session_015aidkizUPGo
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
+
+["UI-FEATURES#beyond"."body"]
+stamp = { hash = "b3:5a0895755e3aae91", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#beyond"."file:crates/jstream-ui/src/host.rs"]
+stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#beyond"."file:crates/jstream-ui/src/pairing.rs"]
+stamp = { hash = "b3:61d5c9e46ca8096c", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#beyond"."file:crates/jstream-ui/src/session.rs"]
+stamp = { hash = "b3:076299ee126c849d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#canvas"."body"]
+stamp = { hash = "b3:7140e275d396fd59", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
+stamp = { hash = "b3:49945f646dfa549c", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
+stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/snap.rs"]
+stamp = { hash = "b3:7e81b19db47fd220", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/transform.rs"]
+stamp = { hash = "b3:3e890dfae55620cc", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#dialogs"."body"]
+stamp = { hash = "b3:b5a3b25e65d5b835", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/confirm.rs"]
+stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#docking"."body"]
+stamp = { hash = "b3:c7ba66a9c1583e72", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#docking"."file:crates/jstream-ui/src/app.rs"]
+stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#header"."body"]
+stamp = { hash = "b3:5267ccc13b0e73bb", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#header"."file:crates/jstream-ui/src/app.rs"]
+stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#inspector"."body"]
+stamp = { hash = "b3:d31ba81be56d0df5", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/properties.rs"]
+stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#keyboard"."body"]
+stamp = { hash = "b3:872e41b35c09693f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
+stamp = { hash = "b3:49945f646dfa549c", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#mixer"."body"]
+stamp = { hash = "b3:a707e4cfd1883767", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#mixer"."file:crates/jstream-ui/src/panels/mixer.rs"]
+stamp = { hash = "b3:f585374f04eb21d5", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#objects"."body"]
+stamp = { hash = "b3:52bd40e60965a10d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/sources.rs"]
+stamp = { hash = "b3:06283688e21c8598", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#outputs"."body"]
+stamp = { hash = "b3:3cbe7856eda760ab", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
+stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#scenes"."body"]
+stamp = { hash = "b3:ec0d3f2d1bda83e6", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/scenes.rs"]
+stamp = { hash = "b3:b24a15b358dcb55b", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#summary"."body"]
+stamp = { hash = "b3:3b4b128c74e47618", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
+stamp = { hash = "b3:7140e275d396fd59", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#dialogs"]
+stamp = { hash = "b3:b5a3b25e65d5b835", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#docking"]
+stamp = { hash = "b3:c7ba66a9c1583e72", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
+stamp = { hash = "b3:82e921f469fe720c", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
+stamp = { hash = "b3:5267ccc13b0e73bb", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#inspector"]
+stamp = { hash = "b3:d31ba81be56d0df5", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#keyboard"]
+stamp = { hash = "b3:872e41b35c09693f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#live-panels"]
+stamp = { hash = "b3:2df5a1f09a82c485", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#menus"]
+stamp = { hash = "b3:97720073fd82e45a", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#mixer"]
+stamp = { hash = "b3:a707e4cfd1883767", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#objects"]
+stamp = { hash = "b3:52bd40e60965a10d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#outputs"]
+stamp = { hash = "b3:3cbe7856eda760ab", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#scenes"]
+stamp = { hash = "b3:ec0d3f2d1bda83e6", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#theme"]
+stamp = { hash = "b3:cc4af357a46dd71f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#transform"]
+stamp = { hash = "b3:ed0a7d035b91ffb9", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#transitions"]
+stamp = { hash = "b3:3c4c5b44803b446d", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "counts recomputed from every area's rows (130 rows: 3 built, 24 partial, 59 to build, 42 need the engine, 2 decisions)" }
+
+["UI-FEATURES#theme"."body"]
+stamp = { hash = "b3:cc4af357a46dd71f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#theme"."file:crates/jstream-ui/index.html"]
+stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
+
+["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
+stamp = { hash = "b3:a3ba61c525d96483", by = "agent:claude@session_01YJRVBggMSERQCtjJJPspKr", note = "new checklist section: each row re-read against the UI on wave/m1-2 (app.rs fixed grid with Properties/Outputs tabs and pairing panel, canvas/ on the program scene, scenes.rs, sources.rs, properties.rs, mixer.rs, outputs.rs, pairing.rs, style.css) and against the prototype specs; statuses and engine blockers match the protocol (filters on sources only, blend normal only, no 3D, no transitions, folders or hotkeys)" }
 

@@ -55,12 +55,12 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 0 | 1 | 6 | 0 | 1 |
-| [Header bar](#header) | 9 | 0 | 2 | 3 | 4 | 0 |
+| [Header bar](#header) | 9 | 0 | 3 | 3 | 3 | 0 |
 | [Docking and layouts](#docking) | 10 | 0 | 0 | 9 | 1 | 0 |
-| [Canvas](#canvas) | 18 | 1 | 6 | 9 | 2 | 0 |
+| [Canvas](#canvas) | 18 | 1 | 6 | 7 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
-| [Scenes panel](#scenes) | 10 | 1 | 2 | 2 | 5 | 0 |
+| [Scenes panel](#scenes) | 10 | 1 | 3 | 1 | 5 | 0 |
 | [Scene objects panel](#objects) | 9 | 0 | 3 | 5 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 0 | 0 | 6 | 4 | 0 |
 | [Transform panel](#transform) | 4 | 0 | 0 | 4 | 0 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **131** | **3** | **22** | **62** | **41** | **3** |
+| **Total** | **130** | **3** | **24** | **59** | **42** | **2** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -123,7 +123,7 @@ covers = ["crates/jstream-ui/src/app.rs"]
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
 Today the shell is one fixed grid: Scenes over Sources on the left, the canvas in the
-middle, an inspector with Properties and Outputs tabs on the right, the mixer along the
+middle, an inspector with Properties and Outputs tabs (and the pairing panel under them) on the right, the mixer along the
 bottom. Nothing moves, resizes or collapses.
 
 | ID | Feature | Requirement | Status | Notes |
@@ -221,7 +221,7 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-02 | "program" badge | The scene on program shows "program" in red after its name. | 🟡 | Built as a "Program" pill; restyle. |
 | SC-03 | Search | "Search scenes" filters by name, keeping parents of matches. | ⬜ | |
 | SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Reordering exists as ▲/▼ buttons. Into a folder is 🔒 with SC-06. |
-| SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | ⬜ | Built today with inline controls (double-click rename, ✕, "New scene name" field); they move to menus and keys. |
+| SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | 🟡 | Built today with inline controls (double-click rename, ✕, "New scene name" field); they move to menus and keys. |
 | SC-06 | Folders | Folders organise scenes; collapsible. | 🔒 | B11 (draft #323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | 🔒 | K1. |
 | SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🔒 | B11 (draft #323). |
@@ -266,7 +266,7 @@ the source's settings move to the Properties dialog (DL-02).
 | IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ⬜ | |
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | 🔒 | The engine refuses non-neutral 3D until X1 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ⬜ | `item.set_crop`. |
-| IN-07 | Blending | Mode (9 modes) and Opacity %. | 🟡 | `item.set_opacity` works; the engine accepts only the `normal` blend mode, so the select offers that until it accepts more. Counted as ⬜ for opacity. |
+| IN-07 | Blending | Mode (9 modes) and Opacity %. | ⬜ | `item.set_opacity` exists. The engine accepts only the `normal` blend mode, so the mode select offers that until it accepts more. |
 | IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ⬜ | Hotkey is 🔒 with K1. |
 | IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | 🔒 | T1. |
 | IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | 🔒 | T1 (`item.set_transition`). |
@@ -400,6 +400,7 @@ handlers; the real UI makes them work.
 <a id="beyond"></a>
 ## Beyond the prototype
 <!-- @section
+covers = ["crates/jstream-ui/src/session.rs", "crates/jstream-ui/src/host.rs", "crates/jstream-ui/src/pairing.rs"]
 -->
 
 The real UI does these and the prototype doesn't show them. Matching the prototype must
@@ -407,8 +408,9 @@ not remove them; they move into the prototype's look.
 
 - Connecting: the connect form, the desktop app's automatic connection, and the
   connection details (engine URL, protocol, client, revision) with Disconnect.
-- Pairing a remote browser ([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)):
-  not built yet in either.
+- Pairing ([ADR-0044](adr/0044-pairing-remote-browsers.md)): the pairing panel shows a
+  one-time code for a remote browser and lists and revokes paired devices. In the
+  workspace it becomes a panel of its own, with the right column as its home zone.
 - Undo and redo, with the engine's history.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs: creating stream, recording and virtual camera outputs, the write-only stream
@@ -424,7 +426,7 @@ not remove them; they move into the prototype's look.
 <!-- @section
 -->
 
-The ⬜ rows land in this order, a few PRs at a time, each into the open M2 wave. A batch
+The ⬜ rows land in this order, a few PRs at a time, each into the earliest open wave ([runbook](runbooks/waves.md#which-wave)). A batch
 starts when the one before it has passed review.
 
 1. **Look and frame:** dark theme, shared controls, header bar, Go Live in the header,
