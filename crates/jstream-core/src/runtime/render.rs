@@ -255,6 +255,11 @@ pub(crate) enum Garbage {
     Video(VideoInput),
     /// The same for the audio input the mixer thread let go of.
     Audio(AudioInput),
+    /// A frame buffer of a video mix the render thread stopped drawing.
+    Pixels(Vec<u8>),
+    /// The emptied list of encoder sessions such a mix fed, dropped here rather than
+    /// on the render thread.
+    Inputs(Vec<VideoInput>),
     /// A virtual camera's tap the render thread let go of. Once its camera thread has
     /// ended, it holds the last reference to its channels and the output's stop flag.
     Vcam(VcamTap),
@@ -307,6 +312,8 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),
             Garbage::Audio(input) => drop(input),
+            Garbage::Pixels(pixels) => drop(pixels),
+            Garbage::Inputs(inputs) => drop(inputs),
             Garbage::Vcam(tap) => drop(tap),
             Garbage::Scopes(taps) => drop(taps),
         }
