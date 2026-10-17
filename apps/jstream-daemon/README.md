@@ -11,7 +11,7 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
+covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**", "apps/jstream-daemon/Info.plist", "apps/jstream-daemon/build.rs"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
 -->
 
@@ -46,7 +46,13 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   registers the media source DLL shipped beside the daemon, and startup logs a warning
   when the registration names another folder ([Design](#design)).
 - **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
-  (MSVC), so that check can run at all.
+  (MSVC), so that check can run at all. On macOS it embeds `Info.plist`, the camera,
+  microphone and system audio recording usage strings, in the binary's
+  `__TEXT,__info_plist` section (ADR-0063 §11), so macOS can show those permission
+  prompts without an app bundle. Its bundle identifier is
+  io.github.jeffmhopkins.jstream.daemon<!--fact:macos-daemon-bundle-id-->, under the
+  app ID io.github.jeffmhopkins.jstream<!--fact:macos-app-id-->. A daemon started from
+  a terminal is attributed to the terminal app, which then needs the grant.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
 - **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
@@ -65,7 +71,10 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   received and the recorded MP4. The binary has no backends off Windows, so it runs
   in process; `tests/delay_load.rs`,
   Windows MSVC only, which reads the built binary's PE headers to check that the
-  backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
+  backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
+  `tests/info_plist.rs`, which checks on every OS that `Info.plist` has each usage
+  string and the bundle identifier `docs/facts.toml` names, and on macOS that the built
+  binary carries it).
 
 Not here yet: YouTube sign-in (the daemon doesn't call `Engine::with_youtube` yet), a default collection file, a
 default port and a default token file
@@ -206,7 +215,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <a id="design"></a>
 ## Design
 <!-- @section
-covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
+covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml", "apps/jstream-daemon/build.rs"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
 -->
 
