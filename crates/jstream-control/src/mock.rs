@@ -52,6 +52,7 @@ use std::task::{Context, Poll, Waker};
 
 mod audio;
 mod filter;
+mod organise;
 
 /// Locks `mutex`, ignoring poisoning: the mock's state stays consistent because every
 /// change is computed first and committed without panicking.
@@ -478,6 +479,10 @@ struct Collection {
     video_mixes: BTreeMap<VideoMixId, (String, VideoMix)>,
     /// The hotkey bindings, ordered by chord.
     hotkeys: BTreeMap<Chord, Action>,
+    /// The scene list's folders, in folder order (ADR-0024 §3).
+    folders: Vec<jstream_protocol::FolderInfo>,
+    /// The labels, in label order (ADR-0024 §4).
+    labels: Vec<jstream_protocol::LabelInfo>,
     /// The buses, ordered by ID, the master among them.
     buses: BTreeMap<BusId, audio::Bus>,
     /// Each send's gain in dB, keyed by bus, then by source.
@@ -506,6 +511,8 @@ impl Default for Collection {
             output_filters: BTreeMap::new(),
             master: jstream_protocol::FilterChains::default(),
             hotkeys: BTreeMap::new(),
+            folders: Vec::new(),
+            labels: Vec::new(),
         }
     }
 }
@@ -523,6 +530,8 @@ struct Source {
     filters: jstream_protocol::FilterChains,
     /// Set exactly for an audio source.
     audio: Option<SourceAudio>,
+    /// Its labels, ordered by ID, and favourite flag (ADR-0024 §4).
+    meta: jstream_protocol::SourceMeta,
 }
 
 #[derive(Clone)]
@@ -532,6 +541,9 @@ struct Scene {
     role: SceneRole,
     /// Bottom to top.
     items: Vec<ItemId>,
+    /// The folder it is filed in, if any.
+    folder: Option<jstream_protocol::FolderId>,
+    meta: jstream_protocol::SceneMeta,
 }
 
 /// An item: the scene that holds it, the source it places, and every property an edit
@@ -926,8 +938,8 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
-                        folder: None,
-                        meta: Default::default(),
+                        folder: scene.folder.clone(),
+                        meta: scene.meta.clone(),
                     })
                     .collect(),
             },
@@ -972,8 +984,8 @@ impl State {
                         items: self.collection.item_infos(scene),
                         transition_in: None,
                         transition_out: None,
-                        folder: None,
-                        meta: Default::default(),
+                        folder: scene.folder.clone(),
+                        meta: scene.meta.clone(),
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
@@ -991,8 +1003,8 @@ impl State {
                     .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
                     .collect(),
                 transitions: Box::new(TransitionsInfo::default()),
-                folders: Vec::new(),
-                labels: Vec::new(),
+                folders: self.collection.folders.clone(),
+                labels: self.collection.labels.clone(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
@@ -1221,6 +1233,9 @@ impl Collection {
         if let Some(applied) = self.apply_audio(&edit, at) {
             return applied;
         }
+        if let Some(applied) = self.apply_organise(&edit, at) {
+            return applied;
+        }
         let inverse = match edit {
             Edit::SceneCreate {
                 scene_id,
@@ -1237,6 +1252,8 @@ impl Collection {
                     name,
                     role: role.unwrap_or_default(),
                     items: Vec::new(),
+                    folder: None,
+                    meta: Default::default(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
             }
@@ -1302,6 +1319,18 @@ impl Collection {
                     inverse.push(Edit::SceneReorder {
                         scene_id: scene.id.clone(),
                         index: wire_index(index)?,
+                    });
+                }
+                if scene.folder.is_some() {
+                    inverse.push(Edit::SceneSetFolder {
+                        scene_id: scene.id.clone(),
+                        folder_id: scene.folder.clone(),
+                    });
+                }
+                if !scene.meta.is_default() {
+                    inverse.push(Edit::SceneSetMeta {
+                        scene_id: scene.id.clone(),
+                        meta: scene.meta.clone(),
                     });
                 }
                 // Re-adding bottom to top puts each item back at its own index.
@@ -1554,11 +1583,14 @@ impl Collection {
                 new_source_id,
                 name,
             } => {
-                let Some((kind, settings, filters)) = self
-                    .sources
-                    .get(&source_id)
-                    .map(|s| (s.kind.clone(), s.settings.clone(), s.filters.clone()))
-                else {
+                let Some((kind, settings, filters, meta)) = self.sources.get(&source_id).map(|s| {
+                    (
+                        s.kind.clone(),
+                        s.settings.clone(),
+                        s.filters.clone(),
+                        s.meta.clone(),
+                    )
+                }) else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
                 check_id(new_source_id.as_str(), at, "new_source_id")?;
@@ -1570,9 +1602,11 @@ impl Collection {
                     settings,
                     Some(source_id.clone()),
                 )?;
-                // A duplicate keeps its original's filter IDs (ADR-0026 §2).
+                // A duplicate keeps its original's filter IDs (ADR-0026 §2), labels and
+                // favourite flag (ADR-0024 §4).
                 if let Some(copy) = self.sources.get_mut(&new_source_id) {
                     copy.filters = filters;
+                    copy.meta = meta;
                 }
                 self.audio_copied(&source_id, &new_source_id);
                 inverse
@@ -1611,8 +1645,16 @@ impl Collection {
                     duplicated_from: source.duplicated_from,
                 }];
                 inverse.extend(restore_audio);
-                let owner = jstream_protocol::FilterOwner::Source { source_id };
+                let owner = jstream_protocol::FilterOwner::Source {
+                    source_id: source_id.clone(),
+                };
                 inverse.extend(filter::restore_all(&owner, source.filters));
+                if !source.meta.is_default() {
+                    inverse.push(Edit::SourceSetMeta {
+                        source_id,
+                        meta: source.meta,
+                    });
+                }
                 inverse
             }
             Edit::OutputCreate { output_id, kind } => {
@@ -1979,6 +2021,7 @@ impl Collection {
                 duplicated_from,
                 filters: jstream_protocol::FilterChains::default(),
                 audio,
+                meta: Default::default(),
             },
         );
         self.audio_created(&id);
@@ -2017,7 +2060,7 @@ impl Collection {
                     .filter(|original| self.sources.contains_key(original)),
                 filters: source.filters.clone(),
                 audio: source.audio,
-                meta: Default::default(),
+                meta: source.meta.clone(),
             })
             .collect()
     }
