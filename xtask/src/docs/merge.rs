@@ -399,6 +399,7 @@ fn resolve_generated(path: &str, text: &str) -> Result<String, String> {
             super::generate::STATUS_BLOCK,
             super::generate::INDEX_BLOCK,
             super::progress::BLOCK,
+            super::summary::BLOCK,
         ];
         let mut inside = Vec::new();
         let mut open = false;

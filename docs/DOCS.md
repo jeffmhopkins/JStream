@@ -48,9 +48,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs for <path>`** ([Code back-references](#back-references)): prints
   what governs a file.
 - **Generated content** ([Generated content](#generated)): `cargo xtask docs generate`
-  writes the ADR status banners, the ADR index and the README's progress block, and
-  `docs check` fails on their drift. `cargo xtask docs progress` lists progress entries
-  the merged history contradicts.
+  writes the ADR status banners, the ADR index, the README's progress block and the UI
+  features summary, and `docs check` fails on their drift. `cargo xtask docs progress`
+  lists progress entries the merged history contradicts.
   The crate map and the other generated references are not generated yet.
 - **Reports (warnings):** crates no section covers, and `applies_to` globs naming an
   unknown crate ([PR gate](#gate)).
@@ -383,7 +383,9 @@ so it never causes merge conflicts.
 3. **Broken references:** see [References](#references).
 4. **Back-reference mismatches:** see [Code back-references](#back-references).
 5. **Generated drift:** regenerated content differs from what is committed, or can't be
-   generated (a `superseded_by` that names no tracked ADR). See [Generated content](#generated).
+   generated (a `superseded_by` that names no tracked ADR, a `docs/progress.toml` that
+   breaks its rules, a UI feature row with an unknown status). See
+   [Generated content](#generated).
 6. **Fact mismatches** for file-sourced facts.
 7. **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
    `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
@@ -540,7 +542,8 @@ covered by the TTLs of their external resources.
 
 Anything derivable is generated, never hand-written: the crate map (from
 `[package.metadata.jstream]`), the protocol reference, the MCP tool list, the index, and
-the ADR status banners and ADR index, and the README's progress table. Generated blocks
+the ADR status banners and ADR index, the README's progress table, and the UI features
+summary. Generated blocks
 in committed docs are fenced as `<!-- @generated begin <name> -->` …
 `<!-- @generated end <name> -->` and are drift-checked.
 
@@ -579,6 +582,16 @@ It also generates one block from data rather than from docs:
   prints, as Markdown, the entries it contradicts, the `planned` and `review` items with
   no `needs` and the `done` items still listing it; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.
+
+And one from the tables of a hand-written doc:
+
+- **The `ui-summary` block** in `docs/UI-FEATURES.md`: a table with one row per area,
+  linking its section by heading and anchor, then the number of its feature rows and
+  how many are in each status (✅ 🟡 ⬜ 🔒 ⏸), then a **Total** row. An area is any
+  other `##` section of that doc with a Markdown table that has a `Status` column,
+  in document order; each row of such a table is counted by its `Status` cell.
+  `docs check` fails on a status that isn't one of the five, and on a block that finds
+  no area. A doc without the block is left alone, so the block is opt-in.
 
 <a id="governance"></a>
 ## Governance: protecting the checks themselves

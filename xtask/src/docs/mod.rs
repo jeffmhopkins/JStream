@@ -12,6 +12,7 @@ pub(crate) mod ledger;
 mod merge;
 pub(crate) mod parse;
 mod progress;
+mod summary;
 
 use std::collections::BTreeMap;
 use std::io::Write as _;
@@ -92,7 +93,7 @@ fn load(root: &Path) -> Result<Loaded> {
 }
 
 /// Rewrites every `@generated` block from its source, as `docs generate` does: the ADR
-/// status banners and index, and the README's progress table. Returns what was written
+/// status banners and index, the README's progress table and the UI features summary. Returns what was written
 /// and the problems that stopped a block.
 pub(crate) fn write_generated(root: &Path) -> Result<generate::Generated> {
     let l = load(root)?;
@@ -100,6 +101,10 @@ pub(crate) fn write_generated(root: &Path) -> Result<generate::Generated> {
     let (readme, problems) = progress::generate(root, &l.docs);
     g.files
         .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
+    g.problems.extend(problems);
+    let (ui, problems) = summary::generate(&l.docs);
+    g.files
+        .extend(ui.map(|(path, line, text)| (path, Some(line), text)));
     g.problems.extend(problems);
     for (path, _, text) in &g.files {
         std::fs::write(root.join(path), text).with_context(|| format!("writing {path}"))?;
@@ -132,6 +137,7 @@ pub(crate) fn check_repo(root: &Path) -> Result<Vec<Diag>> {
     diags.extend(backrefs::check(&repo));
     diags.extend(generate::check(&l.docs));
     diags.extend(progress::check(root, &l.docs));
+    diags.extend(summary::check(&l.docs));
     diags.sort();
     diags.dedup();
     Ok(diags)
