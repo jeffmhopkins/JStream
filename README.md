@@ -317,6 +317,8 @@ depends_on = ["docs/adr/0008-windows-support-policy.md"]
   and the smoke script that checks it
 - [docs/runbooks/waves.md](docs/runbooks/waves.md): which wave branch a PR targets, and
   how a wave lands in `main`
+- [docs/runbooks/windows-hardware-pass.md](docs/runbooks/windows-hardware-pass.md): every
+  open Windows hardware run as one checklist, with the issue each one closes
 - [docs/security/threat-model.md](docs/security/threat-model.md): what JStream protects, from
   whom, the controls at each trust boundary, and the open gaps
 - [CLAUDE.md](CLAUDE.md): the entry point for builder agents
