@@ -4068,7 +4068,7 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#browser"."body"]
-stamp = { hash = "b3:48f170cbe7bd4d5f", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+stamp = { hash = "b3:32918fcef156034c", by = "agent:claude", note = "Gaps now says page permission requests are refused (PagePermissions in helper/handlers.rs cancels media access and answers every prompt DENY via permission.rs) and names the no-prompt class that never reaches the handler; loopback/LAN stance still open for #549; the #347 register row narrowed to match. Threats and the Controls paragraph are untouched by this PR (#539 rewrites Controls)." }
 
 ["THREAT-MODEL#browser"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
