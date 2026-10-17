@@ -14,8 +14,8 @@ use jstream_protocol::{
     Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
     HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindCategory,
     KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings, SourceAudio, SourceId,
-    SourceKind,
+    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings, SourceAudio,
+    SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -154,7 +154,7 @@ pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> Proto
 pub(crate) fn blocked(
     at: usize,
     name: &str,
-    target: &Node,
+    target: &impl std::fmt::Display,
     blockers: Vec<Blocker>,
 ) -> ProtocolError {
     let list: Vec<String> = blockers
@@ -326,6 +326,9 @@ fn apply_edit(
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::mix::apply(state, edit, at) {
+        return applied;
+    }
     if let Some(applied) = crate::filter::apply(state, kinds, edit, at) {
         return applied;
     }
@@ -336,6 +339,9 @@ fn apply_edit(
         return applied;
     }
     if let Some(applied) = crate::hotkey::apply(state, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::organise::apply(state, edit, at) {
         return applied;
     }
     match edit {
@@ -355,6 +361,8 @@ fn apply_edit(
                 role: role.unwrap_or_default(),
                 transition_in: None,
                 transition_out: None,
+                folder: None,
+                meta: SceneMeta::default(),
                 items: Vec::new(),
             });
             Ok(vec![Edit::SceneDelete {
@@ -406,6 +414,18 @@ fn apply_edit(
                     scene_id: scene.id.clone(),
                     transition_in: scene.transition_in.clone(),
                     transition_out: scene.transition_out.clone(),
+                });
+            }
+            if scene.folder.is_some() {
+                inverse.push(Edit::SceneSetFolder {
+                    scene_id: scene.id.clone(),
+                    folder_id: scene.folder.clone(),
+                });
+            }
+            if !scene.meta.is_default() {
+                inverse.push(Edit::SceneSetMeta {
+                    scene_id: scene.id.clone(),
+                    meta: scene.meta.clone(),
                 });
             }
             // Re-adding bottom to top puts each item back at its own index.
@@ -677,6 +697,8 @@ fn apply_edit(
                 .source(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
             let (kind, settings) = (original.kind.clone(), original.settings.clone());
+            // The copy carries the original's labels and favourite flag (ADR-0024 §4).
+            let (labels, favourite) = (original.labels.clone(), original.favourite);
             let filters = original.filters.clone();
             check_id(new_source_id.as_str(), at, "new_source_id")?;
             check_name(name, at)?;
@@ -693,6 +715,8 @@ fn apply_edit(
             )?;
             if let Some(copy) = state.sources.get_mut(new_source_id) {
                 copy.filters = filters;
+                copy.labels = labels;
+                copy.favourite = favourite;
             }
             audio::copied(state, source_id, new_source_id);
             Ok(inverse)
@@ -725,11 +749,12 @@ fn apply_edit(
                 .sources
                 .remove(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+            let meta = crate::organise::source_meta(&source);
             let restore_audio =
                 audio::deleted(state, kinds, &source.id, &source.kind, source.audio);
             let restore_filters = crate::filter::restore_all(&source);
             let mut inverse = vec![Edit::SourceCreate {
-                source_id: source.id,
+                source_id: source.id.clone(),
                 name: source.name,
                 kind: source.kind,
                 settings: source.settings,
@@ -737,6 +762,12 @@ fn apply_edit(
             }];
             inverse.extend(restore_audio);
             inverse.extend(restore_filters);
+            if !meta.is_default() {
+                inverse.push(Edit::SourceSetMeta {
+                    source_id: source.id,
+                    meta,
+                });
+            }
             Ok(inverse)
         }
         Edit::OutputCreate { output_id, kind } => {
@@ -765,6 +796,8 @@ fn apply_edit(
                     id: output_id.clone(),
                     kind: kind.clone(),
                     encoder_profile: None,
+                    filters: Chains::default(),
+                    video_mix: None,
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -800,14 +833,21 @@ fn apply_edit(
                 .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
             let mut inverse = vec![Edit::OutputCreate {
                 output_id: output.id.clone(),
-                kind: output.kind,
+                kind: output.kind.clone(),
             }];
-            if let Some(profile_id) = output.encoder_profile {
+            if let Some(profile_id) = &output.encoder_profile {
                 inverse.push(Edit::OutputSetEncoder {
-                    output_id: output.id,
-                    profile_id: Some(profile_id),
+                    output_id: output.id.clone(),
+                    profile_id: Some(profile_id.clone()),
                 });
             }
+            if let Some(mix_id) = output.video_mix.clone() {
+                inverse.push(Edit::OutputSetVideoMix {
+                    output_id: output.id.clone(),
+                    mix_id: Some(mix_id),
+                });
+            }
+            inverse.extend(crate::filter::restore_output(&output));
             Ok(inverse)
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
@@ -969,6 +1009,8 @@ fn create_source(
             duplicated_from,
             filters: Chains::default(),
             audio,
+            labels: BTreeSet::new(),
+            favourite: false,
         },
     );
     audio::created(state, id);
@@ -1048,7 +1090,8 @@ fn restore_item(
     Ok(edits)
 }
 
-/// The complete settings of a new source (`owner`) or preset (`None`) of kind
+/// The complete settings of a new source (`owner`), or of a preset or a filter of the
+/// master stage or an output (`None`), of kind
 /// `descriptor`: `given`, checked, with every parameter it leaves out (or sends as
 /// `null`, outside reference parameters) at its default. `prefix` names the field
 /// (`settings` or `patch`).
@@ -1162,10 +1205,11 @@ fn set_settings(
     }])
 }
 
-/// Checks one settings value for `param` of source `source_id` (`None` for a preset's):
-/// its type and constraints, that a referenced scene, source or bus exists (`not_found`
-/// if not), and that a referenced source produces what the parameter needs. A source may
-/// name itself here; [`check_reference_cycles`] rejects that as a cycle.
+/// Checks one settings value for `param` of source `source_id` (`None` for a preset's,
+/// or for a filter of the master stage or an output): its type and constraints, that a
+/// referenced scene, source or bus exists (`not_found` if not), and that a referenced
+/// source produces what the parameter needs. A source may name itself here;
+/// [`check_reference_cycles`] rejects that as a cycle.
 pub(crate) fn check_value(
     state: &State,
     kinds: &Kinds,

@@ -14,12 +14,14 @@ use crate::{
     Action, AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Chord, Crop, Edit, EncoderProfile,
     EncoderProfileId, EncoderProfileInfo, EntityKind, FilterChain, FilterChains, FilterId,
     FilterInfo, FilterOwner, Finite32, FitMode, HardwarePreference, HotkeyBinding, ItemGeometry,
-    ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo,
-    OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult,
-    RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
-    Size, SourceId, SourceInfo, SourceKind, TransitionsInfo, Vec2, VideoCodec, VideoEncoding,
+    ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, MasterInfo, OutputId,
+    OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query,
+    QueryResult, RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
+    SceneSummary, Size, SourceId, SourceInfo, SourceKind, TransitionsInfo, Vec2, VideoCodec,
+    VideoEncoding,
 };
 use crate::{AudioFollow, BusId, BusInfo, MAX_BUSES, SendInfo, SourceAudio};
+use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
 /// applied to it: the batch is applied as one batch, so exactly one revision later.
@@ -99,12 +101,14 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// they were made, and `b_src`'s audio turned off. Then the
 /// references and clones of ADR-0023: `cam` is duplicated as `cam_copy` and `i1` is
 /// switched to place the copy, keeping its ID and position; `aux` is created with a
-/// `duplicated_from` naming a source that doesn't exist, which reads as absent. Last, the
+/// `duplicated_from` naming a source that doesn't exist, which reads as absent. Then the
+/// video mixes: `side` shows scene `b` and is shown by `yt`, and `prog` (updated after
+/// it was created) shows the program and is shown by `rec`; `tw` shows none. Last, the
 /// hotkeys of ADR-0024 §5: `F1` switches to scene `a`, and `Ctrl+Digit1`, bound first to
 /// `output.stop` and rebound by a clear and a set, starts output `yt`.
 ///
-/// Sources, outputs and encoder profiles are created in the opposite order of their IDs, so reads that
-/// order them by ID can't pass by echoing creation order.
+/// Sources, outputs, encoder profiles and video mixes are created in the opposite order
+/// of their IDs, so reads that order them by ID can't pass by echoing creation order.
 pub fn collection() -> Batch {
     let source = |s: SourceInfo| Edit::SourceCreate {
         source_id: s.source_id,
@@ -260,6 +264,44 @@ pub fn collection() -> Batch {
                 duplicated_from: Some(SourceId::new("gone")),
                 ..aux()
             }),
+            Edit::VideoMixCreate {
+                mix_id: VideoMixId::new("side"),
+                name: side().name,
+                mix: side().mix,
+            },
+            Edit::VideoMixCreate {
+                mix_id: VideoMixId::new("prog"),
+                name: "Draft".into(),
+                mix: VideoMix {
+                    input: MixInput::Preview,
+                    resolution: MixResolution {
+                        width: 1920,
+                        height: 1080,
+                    },
+                    fps_divisor: 1,
+                },
+            },
+            Edit::VideoMixUpdate {
+                mix_id: VideoMixId::new("prog"),
+                name: prog().name,
+                mix: prog().mix,
+            },
+            Edit::OutputSetVideoMix {
+                output_id: OutputId::new("rec"),
+                mix_id: Some(VideoMixId::new("prog")),
+            },
+            Edit::OutputSetVideoMix {
+                output_id: OutputId::new("yt"),
+                mix_id: Some(VideoMixId::new("side")),
+            },
+            Edit::OutputSetVideoMix {
+                output_id: OutputId::new("tw"),
+                mix_id: Some(VideoMixId::new("side")),
+            },
+            Edit::OutputSetVideoMix {
+                output_id: OutputId::new("tw"),
+                mix_id: None,
+            },
             source(desk()),
             gain("g1", -6.0, None),
             gain("g2", 0.0, Some(0)),
@@ -278,6 +320,8 @@ pub fn collection() -> Batch {
                 filter_id: FilterId::new("g1"),
                 index: 0,
             },
+            gain_on(FilterOwner::Master, "m1", FilterChain::Audio, -1.0),
+            gain_on(rec_owner(), "o1", FilterChain::Audio, -6.0),
             source(mic()),
             Edit::BusCreate {
                 bus_id: BusId::new("vod"),
@@ -382,12 +426,16 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         name: "B".into(),
                         role: SceneRole::Group,
                         item_count: 1,
+                        folder: None,
+                        meta: Default::default(),
                     },
                     SceneSummary {
                         scene_id: scene("a"),
                         name: "A".into(),
                         role: SceneRole::Scene,
                         item_count: 3,
+                        folder: None,
+                        meta: Default::default(),
                     },
                 ],
             }),
@@ -443,6 +491,8 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         transition_in: None,
                         transition_out: None,
                         items: items_of_b(),
+                        folder: None,
+                        meta: Default::default(),
                     },
                     SceneInfo {
                         scene_id: scene("a"),
@@ -451,11 +501,24 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         transition_in: None,
                         transition_out: None,
                         items: items_of_a(),
+                        folder: None,
+                        meta: Default::default(),
                     },
                 ],
                 outputs: outputs(),
+                master: Box::new(MasterInfo {
+                    filters: audio_chain(vec![FilterInfo {
+                        filter_id: FilterId::new("m1"),
+                        kind: "gain".into(),
+                        enabled: true,
+                        settings: gain_db(-1.0),
+                    }]),
+                }),
                 encoders: encoders(),
-                transitions: TransitionsInfo::default(),
+                transitions: Box::new(TransitionsInfo::default()),
+                video_mixes: video_mixes(),
+                folders: Vec::new(),
+                labels: Vec::new(),
                 buses: buses(),
                 sends: sends(),
                 hotkeys: hotkeys(),
@@ -475,6 +538,14 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Ok(QueryResult::EncoderList {
                 rev: COLLECTION_REV,
                 encoders: encoders(),
+            }),
+        ),
+        // And video mixes.
+        (
+            Query::VideoMixList,
+            Ok(QueryResult::VideoMixList {
+                rev: COLLECTION_REV,
+                video_mixes: video_mixes(),
             }),
         ),
         // Buses by ID, the master among them; sends by bus, then by source.
@@ -1072,6 +1143,190 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),
+        // The master stage and outputs (ADR-0027): audio chains only, on an output
+        // that exists.
+        (
+            Batch::single(gain_on(FilterOwner::Master, "v", FilterChain::Video, 0.0)),
+            invalid(
+                "edits.0.chain",
+                "the master stage's and outputs' video chains are not available yet; only \
+                 their audio chains hold filters",
+            ),
+        ),
+        (
+            Batch::single(gain_on(
+                FilterOwner::Output {
+                    output_id: OutputId::new("ghost"),
+                },
+                "g",
+                FilterChain::Audio,
+                0.0,
+            )),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(gain_on(rec_owner(), "o1", FilterChain::Audio, 0.0)),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Filter,
+                id: "o1".into(),
+            },
+        ),
+        (
+            Batch::single(gain_on(
+                FilterOwner::Output {
+                    output_id: OutputId::new("vcam"),
+                },
+                "g",
+                FilterChain::Audio,
+                0.0,
+            )),
+            invalid(
+                "edits.0.chain",
+                "output `vcam` carries no audio, so it has no audio chain",
+            ),
+        ),
+        // A reference is refused before the index is checked.
+        (
+            Batch::single(Edit::FilterAdd {
+                owner: FilterOwner::Master,
+                chain: FilterChain::Audio,
+                filter_id: FilterId::new("k"),
+                kind: "gain".into(),
+                settings: [(
+                    "key".to_owned(),
+                    serde_json::json!({"type": "source", "source_id": "desk"}),
+                )]
+                .into_iter()
+                .collect(),
+                enabled: None,
+                index: Some(5),
+            }),
+            invalid(
+                "edits.0.settings.key",
+                "a master or output filter can't hold a reference yet",
+            ),
+        ),
+        (
+            Batch::single(Edit::VideoMixCreate {
+                mix_id: VideoMixId::new("side"),
+                name: "Again".into(),
+                mix: side().mix,
+            }),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::VideoMix,
+                id: "side".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::VideoMixCreate {
+                mix_id: VideoMixId::new(""),
+                name: "Empty".into(),
+                mix: side().mix,
+            }),
+            invalid("edits.0.mix_id", "must not be empty"),
+        ),
+        (
+            Batch::single(Edit::VideoMixUpdate {
+                mix_id: VideoMixId::new("ghost"),
+                name: "Ghost".into(),
+                mix: side().mix,
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::VideoMix,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::VideoMixCreate {
+                mix_id: VideoMixId::new("new"),
+                name: "Odd".into(),
+                mix: VideoMix {
+                    resolution: MixResolution {
+                        width: 1279,
+                        height: 720,
+                    },
+                    ..prog().mix
+                },
+            }),
+            invalid(
+                "edits.0.mix.resolution.width",
+                "must be an even number from 16 to 8192",
+            ),
+        ),
+        (
+            Batch::single(Edit::VideoMixUpdate {
+                mix_id: VideoMixId::new("prog"),
+                name: "Still".into(),
+                mix: VideoMix {
+                    fps_divisor: 0,
+                    ..prog().mix
+                },
+            }),
+            invalid("edits.0.mix.fps_divisor", "must be from 1 to 60"),
+        ),
+        (
+            Batch::single(Edit::VideoMixCreate {
+                mix_id: VideoMixId::new("new"),
+                name: "Later".into(),
+                mix: VideoMix {
+                    input: MixInput::Unknown,
+                    ..prog().mix
+                },
+            }),
+            invalid(
+                "edits.0.mix.input.type",
+                "is not a mix input this engine knows",
+            ),
+        ),
+        (
+            Batch::single(Edit::VideoMixCreate {
+                mix_id: VideoMixId::new("new"),
+                name: "Ghost scene".into(),
+                mix: VideoMix {
+                    input: MixInput::Scene {
+                        scene_id: SceneId::new("ghost"),
+                    },
+                    ..prog().mix
+                },
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::OutputSetVideoMix {
+                output_id: OutputId::new("tw"),
+                mix_id: Some(VideoMixId::new("ghost")),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::VideoMix,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::OutputSetVideoMix {
+                output_id: OutputId::new("ghost"),
+                mix_id: None,
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
+        ),
+        // A mix an output shows can't be deleted, until the output moves off it.
+        (
+            Batch::single(Edit::VideoMixDelete {
+                mix_id: VideoMixId::new("prog"),
+            }),
+            invalid(
+                "edits.0.mix_id",
+                "video mix `prog` is used by output `rec`; point it elsewhere first",
+            ),
+        ),
         (
             Batch::single(Edit::BusCreate {
                 bus_id: BusId::master(),
@@ -1322,6 +1577,73 @@ fn sends() -> Vec<SendInfo> {
     ]
 }
 
+/// A `gain` filter at `db` on `owner`'s `chain`, last.
+fn gain_on(owner: FilterOwner, id: &str, chain: FilterChain, db: f32) -> Edit {
+    Edit::FilterAdd {
+        owner,
+        chain,
+        filter_id: FilterId::new(id),
+        kind: "gain".into(),
+        settings: gain_db(db),
+        enabled: None,
+        index: None,
+    }
+}
+
+/// The output `rec`, as a filter owner.
+fn rec_owner() -> FilterOwner {
+    FilterOwner::Output {
+        output_id: OutputId::new("rec"),
+    }
+}
+
+/// Chains with `audio` and no video filter.
+fn audio_chain(audio: Vec<FilterInfo>) -> FilterChains {
+    FilterChains {
+        video: vec![],
+        audio,
+    }
+}
+
+/// Mix `side`: scene `b` at 640×360 and half the base rate.
+fn side() -> VideoMixInfo {
+    VideoMixInfo {
+        mix_id: VideoMixId::new("side"),
+        name: "Side".into(),
+        mix: VideoMix {
+            input: MixInput::Scene {
+                scene_id: SceneId::new("b"),
+            },
+            resolution: MixResolution {
+                width: 640,
+                height: 360,
+            },
+            fps_divisor: 2,
+        },
+    }
+}
+
+/// Mix `prog`, as `video_mix.update` left it: the program at 1280×720 and the base rate.
+fn prog() -> VideoMixInfo {
+    VideoMixInfo {
+        mix_id: VideoMixId::new("prog"),
+        name: "Program 720p".into(),
+        mix: VideoMix {
+            input: MixInput::Program,
+            resolution: MixResolution {
+                width: 1280,
+                height: 720,
+            },
+            fps_divisor: 1,
+        },
+    }
+}
+
+/// The collection's video mixes, ordered by ID.
+fn video_mixes() -> Vec<VideoMixInfo> {
+    vec![prog(), side()]
+}
+
 /// A `gain` filter on `source`, at 0 dB.
 fn filter_add(source: &str, id: &str, chain: FilterChain, index: Option<u32>) -> Edit {
     Edit::FilterAdd {
@@ -1442,6 +1764,13 @@ fn recording() -> OutputInfo {
         output_id: OutputId::new("rec"),
         kind: record("/home/me/Videos/show.mp4"),
         encoder_profile: Some(EncoderProfileId::new("hq")),
+        filters: audio_chain(vec![FilterInfo {
+            filter_id: FilterId::new("o1"),
+            kind: "gain".into(),
+            enabled: true,
+            settings: gain_db(-6.0),
+        }]),
+        video_mix: Some(VideoMixId::new("prog")),
     }
 }
 
@@ -1450,6 +1779,8 @@ fn youtube() -> OutputInfo {
         output_id: OutputId::new("yt"),
         kind: rtmp("rtmps://a.rtmps.youtube.com:443/live2"),
         encoder_profile: Some(EncoderProfileId::new("low")),
+        filters: FilterChains::default(),
+        video_mix: Some(VideoMixId::new("side")),
     }
 }
 
@@ -1461,11 +1792,15 @@ fn outputs() -> Vec<OutputInfo> {
             output_id: OutputId::new("tw"),
             kind: rtmp(TWITCH_URL),
             encoder_profile: None,
+            filters: FilterChains::default(),
+            video_mix: None,
         },
         OutputInfo {
             output_id: OutputId::new("vcam"),
             kind: OutputKind::VirtualCam,
             encoder_profile: None,
+            filters: FilterChains::default(),
+            video_mix: None,
         },
         youtube(),
     ]
@@ -1565,6 +1900,7 @@ fn mic() -> SourceInfo {
         duplicated_from: None,
         audio: Some(SourceAudio::new(AudioFollow::Always)),
         filters: Default::default(),
+        meta: Default::default(),
     }
 }
 
@@ -1588,6 +1924,7 @@ fn cam() -> SourceInfo {
         settings: crate::Settings::new(),
         duplicated_from: None,
         filters: Default::default(),
+        meta: Default::default(),
         audio: None,
     }
 }
@@ -1603,6 +1940,7 @@ fn nested_b() -> SourceInfo {
         settings: crate::Settings::new(),
         duplicated_from: None,
         filters: Default::default(),
+        meta: Default::default(),
         audio: Some(SourceAudio::new(AudioFollow::WhenShown)),
     }
 }

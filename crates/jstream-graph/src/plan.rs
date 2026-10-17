@@ -1,5 +1,5 @@
-//! `delete.plan`: the batch that deletes a scene, source or bus together with everything
-//! that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+//! `delete.plan`: the batch that deletes a scene, source, bus, folder or label together
+//! with everything that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
 //!
 //! Rejection stays the only delete: `scene.delete`, `source.delete` and `bus.delete`
 //! refuse while anything refers to their target. The plan spells out the removal as ordinary edits,
@@ -10,8 +10,8 @@
 use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
-    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, ProtocolError,
-    QueryResult, Settings, SourceId, SourceKind,
+    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, MixInput,
+    ProtocolError, QueryResult, Settings, SourceId, SourceKind, VideoMix, VideoMixId,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -29,9 +29,16 @@ impl Graph {
     ///   object, setting each such parameter to `null`;
     /// - one `filter.set_settings` per remaining filter whose settings do, likewise;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
+    /// - `video_mix.update` for each video mix that shows the deleted scene, keeping its
+    ///   name, resolution and rate and showing the program instead;
     /// - the delete of the target.
     ///
     /// It also lists, ordered by chord, the hotkey bindings those deletes remove.
+    ///
+    /// A folder's plan moves the scenes and folders in it up to its parent
+    /// (`scene.set_folder`, then `folder.set_parent`), then deletes it. A label's plan
+    /// takes it off each source carrying it (`source.set_meta`), then deletes it. No
+    /// action names a folder or label, so neither removes a hotkey binding.
     pub fn delete_plan(&self, target: &DeleteTarget) -> Result<QueryResult, ProtocolError> {
         let state = &self.state;
         let (target, last) = match target {
@@ -56,6 +63,20 @@ impl Graph {
                         source_id: source_id.clone(),
                     },
                 )
+            }
+            DeleteTarget::Folder { folder_id } => {
+                return Ok(QueryResult::DeletePlan {
+                    rev: self.rev,
+                    edits: crate::organise::folder_plan(state, folder_id)?,
+                    hotkeys: Vec::new(),
+                });
+            }
+            DeleteTarget::Label { label_id } => {
+                return Ok(QueryResult::DeletePlan {
+                    rev: self.rev,
+                    edits: crate::organise::label_plan(state, label_id)?,
+                    hotkeys: Vec::new(),
+                });
             }
             DeleteTarget::Bus { bus_id } => {
                 if state.bus(bus_id).is_none() {
@@ -95,12 +116,17 @@ impl Graph {
         }
 
         let mut removes: Vec<ItemId> = Vec::new();
+        let mut repoints: Vec<VideoMixId> = Vec::new();
         let mut clears: BTreeMap<SourceId, Settings> = BTreeMap::new();
         let mut filter_clears: BTreeMap<(SourceId, FilterId), Settings> = BTreeMap::new();
         for node in &deleted {
             for blocker in deps::blockers(state, node) {
                 if blocker.entity == EntityKind::Item {
                     removes.push(ItemId::new(blocker.id));
+                    continue;
+                }
+                if blocker.entity == EntityKind::VideoMix {
+                    repoints.push(VideoMixId::new(blocker.id));
                     continue;
                 }
                 let source_id = SourceId::new(blocker.id);
@@ -150,6 +176,17 @@ impl Graph {
                 .into_iter()
                 .map(|source_id| Edit::SourceDelete { source_id }),
         );
+        edits.extend(repoints.into_iter().filter_map(|mix_id| {
+            let current = state.video_mix(&mix_id)?;
+            Some(Edit::VideoMixUpdate {
+                name: current.name.clone(),
+                mix: VideoMix {
+                    input: MixInput::Program,
+                    ..current.mix.clone()
+                },
+                mix_id,
+            })
+        }));
         edits.push(last);
         let hotkeys = state
             .hotkeys()

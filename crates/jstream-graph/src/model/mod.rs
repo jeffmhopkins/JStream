@@ -31,6 +31,8 @@
 //!   credential store, outside the collection.
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
+//! - Every output's video mix exists, every mix passes `VideoMix::problem`, and the
+//!   scene a `scene` mix shows exists.
 //! - Every item's opacity is in [0, 1], and its blend mode is one the compositor draws
 //!   (`normal` so far). Its `effects[]` is empty: per-placement effects are reserved
 //!   (ADR-0023 §1), and [`Effect`] has no values yet.
@@ -48,6 +50,9 @@
 //!   exists. Sends only run from sources into buses, so the audio graph has no cycle.
 //! - Every hotkey binding's chord is valid, its action can be bound, and every object
 //!   its action names exists (ADR-0024 §5, ADR-0040 §3).
+//! - Folder and label IDs are non-empty and unique within their kind. Every scene's
+//!   folder and every folder's parent exists, and no folder sits inside itself. Every
+//!   label a source carries exists (ADR-0024 §3 and §4).
 //!
 //! The structs have private fields so that later additions (the full 3D transform,
 //! chains on buses and outputs) don't break callers.
@@ -56,12 +61,13 @@
 use jstream_protocol::MAX_DURATION_MS;
 use jstream_protocol::{
     Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, EncoderProfile, EncoderProfileId,
-    FilterChain, FilterId, Finite32, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform,
-    ItemTransition, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole,
-    Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId, TransitionPresetInfo,
-    TransitionsInfo, builtin_transition_kinds, initial_preset,
+    FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform,
+    ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind, PlacementForm, Rev, SceneId,
+    SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
+    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    builtin_transition_kinds, initial_preset,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
@@ -145,19 +151,26 @@ pub struct State {
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
     pub(crate) transitions: Transitions,
+    pub(crate) video_mixes: BTreeMap<VideoMixId, VideoMix>,
     /// The master bus among them.
     pub(crate) buses: BTreeMap<BusId, Bus>,
     /// Each send's gain in dB, keyed by bus, then by source: the order `bus.list`
     /// reports them in.
     pub(crate) sends: BTreeMap<(BusId, SourceId), Finite32>,
+    /// The master stage's chains (ADR-0027 §1).
+    pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
+    /// In folder order.
+    pub(crate) folders: Vec<Folder>,
+    /// In label order.
+    pub(crate) labels: Vec<Label>,
 }
 
 impl Default for State {
-    /// An empty collection: the default canvas, the master bus and the one `cut`
-    /// transition preset.
+    /// An empty collection: the default canvas, the master bus, a master stage without
+    /// filters, and the one `cut` transition preset.
     fn default() -> Self {
-        let master = Bus::new(BusId::master(), MASTER_NAME.to_owned());
+        let master_bus = Bus::new(BusId::master(), MASTER_NAME.to_owned());
         Self {
             canvas: Canvas::default(),
             sources: BTreeMap::new(),
@@ -165,9 +178,13 @@ impl Default for State {
             outputs: BTreeMap::new(),
             encoders: BTreeMap::new(),
             transitions: Transitions::default(),
-            buses: BTreeMap::from([(master.id.clone(), master)]),
+            video_mixes: BTreeMap::new(),
+            buses: BTreeMap::from([(master_bus.id.clone(), master_bus)]),
             sends: BTreeMap::new(),
+            master: Chains::default(),
             hotkeys: BTreeMap::new(),
+            folders: Vec::new(),
+            labels: Vec::new(),
         }
     }
 }
@@ -189,6 +206,12 @@ impl State {
     /// The source with this ID.
     pub fn source(&self, id: &SourceId) -> Option<&Source> {
         self.sources.get(id)
+    }
+
+    /// The master stage's filter chains, which apply to everything leaving JStream
+    /// (ADR-0027 §1). Only the audio chain holds filters so far.
+    pub fn master(&self) -> &Chains {
+        &self.master
     }
 
     /// Every scene, in display order.
@@ -269,6 +292,16 @@ impl State {
         })
     }
 
+    /// Every video mix, ordered by ID.
+    pub fn video_mixes(&self) -> impl ExactSizeIterator<Item = &VideoMix> {
+        self.video_mixes.values()
+    }
+
+    /// The video mix with this ID.
+    pub fn video_mix(&self, id: &VideoMixId) -> Option<&VideoMix> {
+        self.video_mixes.get(id)
+    }
+
     /// Every bus, ordered by ID, the master among them.
     pub fn buses(&self) -> impl ExactSizeIterator<Item = &Bus> {
         self.buses.values()
@@ -301,6 +334,26 @@ impl State {
         self.hotkeys.get(chord)
     }
 
+    /// Every folder of the scene list, in folder order.
+    pub fn folders(&self) -> &[Folder] {
+        &self.folders
+    }
+
+    /// The folder with this ID.
+    pub fn folder(&self, id: &FolderId) -> Option<&Folder> {
+        self.folders.iter().find(|f| &f.id == id)
+    }
+
+    /// Every label, in label order.
+    pub fn labels(&self) -> &[Label] {
+        &self.labels
+    }
+
+    /// The label with this ID.
+    pub fn label(&self, id: &LabelId) -> Option<&Label> {
+        self.labels.iter().find(|l| &l.id == id)
+    }
+
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {
         self.scenes.iter().position(|s| &s.id == id)
     }
@@ -325,6 +378,8 @@ pub struct Source {
     pub(crate) filters: Chains,
     /// Set exactly for an audio source.
     pub(crate) audio: Option<SourceAudio>,
+    pub(crate) labels: BTreeSet<LabelId>,
+    pub(crate) favourite: bool,
 }
 
 impl Source {
@@ -359,6 +414,17 @@ impl Source {
     /// a `scene` source.
     pub fn audio(&self) -> Option<&SourceAudio> {
         self.audio.as_ref()
+    }
+
+    /// The labels it carries, ordered by ID (ADR-0024 §4). Every item placing it shares
+    /// them.
+    pub fn labels(&self) -> &BTreeSet<LabelId> {
+        &self.labels
+    }
+
+    /// Whether it is a favourite.
+    pub fn favourite(&self) -> bool {
+        self.favourite
     }
 
     /// Its filter chains (ADR-0026).
@@ -536,6 +602,8 @@ pub struct Scene {
     pub(crate) role: SceneRole,
     pub(crate) transition_in: Option<TransitionPresetId>,
     pub(crate) transition_out: Option<TransitionPresetId>,
+    pub(crate) folder: Option<FolderId>,
+    pub(crate) meta: SceneMeta,
     pub(crate) items: Vec<Item>,
 }
 
@@ -565,9 +633,75 @@ impl Scene {
         self.transition_out.as_ref()
     }
 
+    /// The folder it is filed in, if any. Folders change no engine behaviour.
+    pub fn folder(&self) -> Option<&FolderId> {
+        self.folder.as_ref()
+    }
+
+    /// Its organisation metadata: icon, colour, favourite and multiview flag.
+    pub fn meta(&self) -> &SceneMeta {
+        &self.meta
+    }
+
     /// Its items in stacking order: the first is at the bottom.
     pub fn items(&self) -> &[Item] {
         &self.items
+    }
+}
+
+/// One folder of the scene list (ADR-0024 §3): for organising only.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Folder {
+    pub(crate) id: FolderId,
+    pub(crate) name: String,
+    pub(crate) parent: Option<FolderId>,
+}
+
+impl Folder {
+    /// Its ID.
+    pub fn id(&self) -> &FolderId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The folder it sits in, or `None` at the top level.
+    pub fn parent(&self) -> Option<&FolderId> {
+        self.parent.as_ref()
+    }
+}
+
+/// One label that sources carry (ADR-0024 §4).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Label {
+    pub(crate) id: LabelId,
+    pub(crate) name: String,
+    pub(crate) color: String,
+    pub(crate) icon: Option<String>,
+}
+
+impl Label {
+    /// Its ID.
+    pub fn id(&self) -> &LabelId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Its colour, as `#rrggbb`.
+    pub fn color(&self) -> &str {
+        &self.color
+    }
+
+    /// Its icon name, if any.
+    pub fn icon(&self) -> Option<&str> {
+        self.icon.as_deref()
     }
 }
 
@@ -667,6 +801,9 @@ pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
     pub(crate) encoder_profile: Option<EncoderProfileId>,
+    /// Its own chains, after the master stage (ADR-0027 §2).
+    pub(crate) filters: Chains,
+    pub(crate) video_mix: Option<VideoMixId>,
 }
 
 impl Output {
@@ -683,6 +820,26 @@ impl Output {
     /// The encoder profile it uses, or `None` for the engine's default.
     pub fn encoder_profile(&self) -> Option<&EncoderProfileId> {
         self.encoder_profile.as_ref()
+    }
+
+    /// Its own filter chains, which run after the master stage (ADR-0027 §2). Only the
+    /// audio chain holds filters so far.
+    pub fn filters(&self) -> &Chains {
+        &self.filters
+    }
+
+    /// Whether it carries audio, and so can have an audio chain: every output kind but
+    /// one that sends video only (a virtual camera).
+    pub fn has_audio(&self) -> bool {
+        matches!(
+            self.kind,
+            OutputKind::Rtmp { .. } | OutputKind::Record { .. }
+        )
+    }
+
+    /// The video mix it shows, or `None` for the program at the engine's canvas size.
+    pub fn video_mix(&self) -> Option<&VideoMixId> {
+        self.video_mix.as_ref()
     }
 }
 
@@ -749,5 +906,30 @@ impl Bus {
     /// Whether it is muted.
     pub fn muted(&self) -> bool {
         self.muted
+    }
+}
+
+/// One video mix: a named picture at a size and rate that outputs can show.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VideoMix {
+    pub(crate) id: VideoMixId,
+    pub(crate) name: String,
+    pub(crate) mix: MixSpec,
+}
+
+impl VideoMix {
+    /// Its ID.
+    pub fn id(&self) -> &VideoMixId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// What it shows, and at what size and rate.
+    pub fn mix(&self) -> &MixSpec {
+        &self.mix
     }
 }

@@ -824,6 +824,7 @@ mod tests {
             duplicated_from: None,
             audio,
             filters: Default::default(),
+            meta: Default::default(),
         };
         let mic = source(
             SourceKind::Builtin {

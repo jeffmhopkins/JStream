@@ -34,7 +34,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0017](0017-adr-decision-tiers.md) | Decision tiers: which ADRs need the maintainer | superseded | maintainer | [ADR-0043](0043-narrow-maintainer-tier.md) |
 | [ADR-0018](0018-ci-supply-chain-policy.md) | CI supply-chain policy: pinned actions, Dependabot, current runtimes | superseded | maintainer | [ADR-0056](0056-ci-supply-chain-policy-v2.md) |
 | [ADR-0019](0019-review-gate-v2.md) | Agent review gate v2: owner-only, round-aware verdicts | accepted | maintainer |  |
-| [ADR-0020](0020-portable-windows-distribution.md) | Portable Windows distribution: run the exe, no installer | accepted | maintainer |  |
+| [ADR-0020](0020-portable-windows-distribution.md) | Portable Windows distribution: run the exe, no installer | superseded | maintainer | [ADR-0066](0066-portable-windows-distribution-v2.md) |
 | [ADR-0021](0021-browser-source.md) | Browser (web page) source | accepted | maintainer |  |
 | [ADR-0022](0022-item-transform-and-canvas.md) | Item transform and canvas coordinates | accepted | agent |  |
 | [ADR-0023](0023-placements-references-and-clones.md) | Placements, references and clones | accepted | maintainer |  |
@@ -73,4 +73,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0057](0057-server-answers-credential-calls.md) | The server answers the credential calls, and actions may answer with data | accepted | agent |  |
 | [ADR-0058](0058-youtube-sign-in-with-a-jstream-client.md) | YouTube sign-in with JStream's own OAuth client, for people only | accepted | maintainer |  |
 | [ADR-0059](0059-mcp-annotations-and-remote-text.md) | MCP tool annotations, and third-party text marked as data | accepted | agent |  |
+| [ADR-0064](0064-nested-scene-folders.md) | Nested scene folders | accepted | agent |  |
+| [ADR-0065](0065-scene-chains-and-item-effects.md) | Scene filter chains and item effects | accepted | agent |  |
+| [ADR-0066](0066-portable-windows-distribution-v2.md) | Portable Windows distribution v2: an optional virtual camera, registered from an administrators-only copy | accepted | maintainer |  |
 <!-- @generated end adr-index -->

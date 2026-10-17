@@ -347,7 +347,7 @@ fn state_get_golden() {
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
-            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"#,
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"video_mixes":[],"#,
             r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[],"transitions":{"presets":[{"preset_id":"cut","name":"Cut","kind":"cut","duration_ms":300,"easing":"ease_in_out"}],"default":"cut"}}}}"#,
         ))
     );
@@ -896,6 +896,14 @@ fn program_scene_golden() {
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "studio", "get"]),
         ok("program: none (no scenes)\npreview: none (no scenes)\n")
+    );
+}
+
+#[test]
+fn capture_targets_prints_each_target() {
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "capture", "targets"]),
+        ok("display mock:display (Mock display) 1920x1080, primary\n")
     );
 }
 
@@ -1682,6 +1690,7 @@ fn fitting_reads_the_state_only_when_needed() {
                 duplicated_from: None,
                 audio: None,
                 filters: Default::default(),
+                meta: Default::default(),
             }],
         ))
     })

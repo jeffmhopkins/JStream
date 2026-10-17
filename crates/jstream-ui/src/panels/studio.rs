@@ -111,7 +111,7 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
     Ok(Snapshot {
         rev,
         scenes,
-        transitions,
+        transitions: *transitions,
         program,
         preview,
     })

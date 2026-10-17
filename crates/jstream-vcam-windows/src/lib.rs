@@ -2,7 +2,7 @@
 //! Windows camera Frame Server loads, which serves the frames the engine publishes through
 //! the [`jstream_vcam_proto`] contract. Layer 2, and one of the crates allowed `unsafe`
 //! (R-UNSAFE-001). It depends only on layer-0 crates and Microsoft's `windows` bindings
-//! (ADR-0020).
+//! (ADR-0066).
 //!
 //! Ported from spike S2, a Rust port of VCamSample's design: the registered class is an
 //! `IMFActivate` whose `ActivateObject` creates an `IMFMediaSourceEx` with one
@@ -17,7 +17,7 @@
 //! platform-independent pixel helpers, the sample pacer and the control-block trust rule,
 //! which are tested everywhere.
 //!
-//! Docs: crates/jstream-vcam-windows/README.md#purpose, crates/jstream-vcam-windows/README.md#hardware-check, docs/ARCHITECTURE.md#crate-map, docs/adr/0020-portable-windows-distribution.md
+//! Docs: crates/jstream-vcam-windows/README.md#purpose, crates/jstream-vcam-windows/README.md#hardware-check, docs/ARCHITECTURE.md#crate-map, docs/adr/0066-portable-windows-distribution-v2.md
 
 pub mod pace;
 pub mod pixels;

@@ -174,12 +174,18 @@ pub enum EntityKind {
     Output,
     /// An encoder profile.
     Encoder,
+    /// A video mix.
+    VideoMix,
     /// A filter in a source's chain (0.22, ADR-0026). Its ID is unique within the
     /// source. Only an error answering a filter edit names it, so a client older than
     /// 0.22, which sends none, never reads it.
     Filter,
     /// A transition preset.
     Transition,
+    /// A folder of the scene list.
+    Folder,
+    /// A label.
+    Label,
     /// An audio bus.
     Bus,
     /// A paired device (0.21). Only an error answering `device.revoke` names it, so a
@@ -197,8 +203,11 @@ impl fmt::Display for EntityKind {
             EntityKind::Source => "source",
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
+            EntityKind::VideoMix => "video_mix",
             EntityKind::Filter => "filter",
             EntityKind::Transition => "transition",
+            EntityKind::Folder => "folder",
+            EntityKind::Label => "label",
             EntityKind::Bus => "bus",
             EntityKind::Device => "device",
             EntityKind::Hotkey => "hotkey",
@@ -206,22 +215,27 @@ impl fmt::Display for EntityKind {
     }
 }
 
-/// One reference that stops a `scene.delete` or `source.delete`: the object that refers
-/// to the target, and the field of that object that holds the reference.
+/// One reference that stops a `scene.delete`, `source.delete`, `folder.delete` or
+/// `label.delete`: the object that refers to the target, and the field of that object
+/// that holds the reference.
 ///
 /// ```json
 /// {"entity": "source", "id": "webcam", "field": "settings.mask"}
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Blocker {
-    /// What kind of object refers to the target: an `item` that places a source, or a
-    /// `source` that shows a scene or whose settings refer to the target.
+    /// What kind of object refers to the target: an `item` that places a source, a
+    /// `source` that shows a scene, whose settings refer to the target or that carries
+    /// a label, a `video_mix` that shows a scene, or a `scene` or `folder` that sits in a
+    /// folder.
     pub entity: EntityKind,
     /// That object's ID.
     pub id: String,
     /// The field of that object that refers to the target, as a dotted path into its
-    /// query form: `source_id` for an item, `kind.scene_id` for a `scene` source, and
-    /// `settings.<param>` for a settings reference.
+    /// query form: `source_id` for an item, `kind.scene_id` for a `scene` source,
+    /// `settings.<param>` for a settings reference, `mix.input.scene_id` for a mix,
+    /// `labels` for a source carrying a label, `folder` for a scene in a folder, and
+    /// `parent` for a folder in one.
     pub field: String,
 }
 

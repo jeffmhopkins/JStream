@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -41,7 +41,10 @@ Contents:
   platform. It is `#[non_exhaustive]`.
 - **GPU interop** ([GPU frames](#gpu-frames)): `GpuInterop` (`Send + Sync`) opens the
   engine's `GpuContext` (adapter, device, queue, `AdapterId`, and the platform's own
-  state, which drops first) and allocates NV12 `encode_target`s. A `GpuFrame` holds a
+  state, which drops first) and allocates NV12 `encode_target`s. `GpuContext::key`
+  is a `ContextKey`, equal only for the same context: `wgpu::Device` equality compares
+  IDs each wgpu instance numbers from zero, so it can't tell two instances' devices
+  apart. A `GpuFrame` holds a
   `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
   stages its fence wait and signal around the engine's next submit, and
   `FrameSync::platform` lets the platform that made a hold recognise it (`None` by
@@ -116,7 +119,7 @@ Contents:
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
-  ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)), not this trait's.
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)), not this trait's.
 - **Stream keys** (`keys.rs`): `StreamKeyStore` (`Send + Sync`), the seam to the OS
   credential store ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `clear`
   and `is_set`, one key per output ID. No error may contain a key. `Secret` carries a
@@ -145,7 +148,7 @@ Contents:
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
   capture device, audio, codec, GPU-interop and media-file backends and its optional
   virtual-camera sink.
-- **Data folder** (`paths.rs`, [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)):
+- **Data folder** (`paths.rs`, [ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)):
   `paths::data_dir`, the one folder every host keeps its state in. It is a folder named
   `data` beside the exe when a file named `portable` sits there (so the app can run from
   a USB stick), and otherwise the platform's per-user data folder: `%APPDATA%\JStream`
@@ -206,12 +209,13 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 → NV12 → encoder with no CPU copy). The types below are built in this crate, and the
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
-**Frame lifetime** below describes. `jstream-render` composites the program mix (a
-scene, or a transition between two) on that device when the engine has one, sampling
-capture frames there, and opens its own (hardware adapter first, the software one as the
-fallback) when it does not; it does not write the NV12 encode target.
-Windows' H.264 encoder takes encode targets on the context it reached through
-`Codecs::on_context`; the engine does not write or push them yet.
+**Frame lifetime** below describes. `jstream-render` composites one scene, or a
+transition between two, on that device when the engine has one, sampling capture
+frames there, and the frames a browser source's page paints on it, and opens its own
+(hardware adapter first, the software one as the fallback) when it does not; it does
+not write the NV12 encode target. Windows' H.264 encoder takes encode targets on the
+context it reached through `Codecs::on_context`; the engine does not write or push
+them yet.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -237,8 +241,11 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
     - The media adapter is the one that drives the captured display, with
       `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
       engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, hardware adapter first with the software one as the fallback. On a
-      hybrid-GPU machine where sharing an adapter isn't possible, the platform says so (ARCH step 6).
+      opens its own, hardware adapter first with the software one as the fallback. On a hybrid-GPU machine where sharing an
+      adapter isn't possible, the platform says so (ARCH step 6).
+    - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
+      allocation), so the engine can tell whether a texture is on the context a
+      compositor runs on. wgpu's own `Device` equality is per instance and can't.
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.
