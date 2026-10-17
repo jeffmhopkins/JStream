@@ -17,9 +17,9 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
-ADR is **accepted**; this crate has its first two parts (the platform basics, then screen
-capture), and the rest follows in later PRs. Layer 2, and one of
-the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
+ADR is **accepted**; this crate has its first three parts (the platform basics, screen
+capture, then VA-API H.264 encoding), and the rest follows in later PRs. Layer 2, and one
+of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
 
