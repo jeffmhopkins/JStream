@@ -38,7 +38,9 @@ pub use audio::{
     AudioRenderBuffer, AudioStream,
 };
 pub use backends::Backends;
-pub use capture::{Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo};
+pub use capture::{
+    Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
+};
 pub use clock::MediaClock;
 pub use codec::{
     AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, HardwarePreference,
