@@ -38,16 +38,20 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   creates the file with a new random token, and names the device file beside it
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, which with the `cef`
-  feature also opens browser sources, [Design](#design)), installs the signal
-  handlers that stop it, then binds the server with MCP on and, with `--ui-dir`, the
-  web UI's files.
+  file and the placeholder outputs; on Windows a live one, through `live.rs`, which
+  with the `cef` feature also opens browser sources, [Design](#design)), installs the
+  signal handlers that stop it, then binds the server with MCP on and, with
+  `--ui-dir`, the web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
 - **Virtual camera registration** (`register.rs`, Windows only): `--register-vcam`
   registers the media source DLL shipped beside the daemon, and startup logs a warning
   when the registration names another folder ([Design](#design)).
+- **Live engine wiring** (`live.rs`, in the crate's library target `lib.rs`): the
+  backends, the stream key store and the publish opener that make an engine live
+  ([Design](#design)). It is a library so the integration tests build the daemon's own
+  wiring on the platform fakes; nothing else depends on it.
 - **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
   (MSVC), so that check can run at all.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
@@ -56,7 +60,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   log directory ([Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
   crash hook in a child process; the publish opener and the live engine on the
-  platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
+  platform fakes, in `live.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
   requests, and stopped with
   SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
@@ -66,8 +70,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   loopback sink and a recording, the WebSocket client sets the key and starts the
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
   received and the recorded MP4. The binary has no backends off Windows, so it runs
-  in process; `tests/delay_load.rs`,
-  Windows MSVC only, which reads the built binary's PE headers to check that the
+  in process, on the library's `live` and `rtmp`, the wiring `serve.rs` uses;
+  `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
 Not here yet: YouTube sign-in for users (it waits on JStream's own OAuth client,
@@ -259,8 +263,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   either. The engine stores the opener, so the opener holds only a `Weak` to the
   engine's `Arc`, set once the engine is built: a strong handle would be a cycle that
   keeps the engine and its running pipeline alive after the server lets go. The
-  opener upgrades it only to read the target. `live` is that wiring over any backends,
-  key store and connect function, which is how the tests run it on the platform fakes.
+  opener upgrades it only to read the target. `live` (`live.rs`, in the library
+  target) is that wiring over any backends, key store and connect function, and `rtmp`
+  the `connect_rtmp` connect function: `serve.rs` passes them the Windows backends and
+  Credential Manager, and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
+  fakes, so the end-to-end test runs the daemon's wiring, not a copy of it.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.

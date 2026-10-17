@@ -255,8 +255,8 @@ fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
 /// Makes `engine` live on `backends`, with keys in Credential Manager, a publish
 /// opener that connects RTMP(S) and, when there is one, `browser` for browser sources.
 /// The opener holds the engine weakly, so the engine still drops when the server lets
-/// go of it. The same wiring as the daemon's `serve::live`
-/// (apps/jstream-daemon/src/serve.rs), whose tests cover the opener.
+/// go of it. The same wiring as the daemon's `live::live`
+/// (apps/jstream-daemon/src/live.rs), whose tests cover the opener.
 #[cfg(windows)]
 fn live(
     engine: Engine,
