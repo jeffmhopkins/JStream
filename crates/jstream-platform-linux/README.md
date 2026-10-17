@@ -17,9 +17,9 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
-ADR is **accepted**; this crate has its first two parts (the platform basics, then screen
-capture), and the rest follows in later PRs. Layer 2, and one of
-the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
+ADR is **accepted**; this crate has its first three parts (the platform basics, screen
+capture, then VA-API H.264 encoding), and the rest follows in later PRs. Layer 2, and one
+of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
 
@@ -88,8 +88,22 @@ It has:
   hardware H.264 encoders and picks one for a configuration with `choose_encoder`. That
   refuses other codecs and a software-only request (software H.264 is OpenH264's, below),
   and reports a machine with no H.264 encode driver as a missing component with the
-  distributions' packages (ADR-0060 §6). Opening the session reports `Unsupported` for
-  now. Decoding is out of the ADR's scope.
+  distributions' packages (ADR-0060 §6). Decoding is out of the ADR's scope.
+- **The VA-API H.264 session** (`VideoEncoder`) opens its own display on the chosen
+  node: a config with the rate-control mode (CBR or VBR, refused if the driver lacks it),
+  a context, four input surfaces with a coded buffer each, and three reconstructed
+  surfaces. It takes CPU frames: NV12, or the compositor's RGBA and BGRA converted to
+  BT.709 limited NV12 with the Windows encoder's arithmetic, written through
+  `vaDeriveImage`, or a staging image and `vaPutImage` where the driver can't map its
+  surfaces. The stream is I and P frames with one reference and one slice per picture,
+  so packets are Annex B in presentation order with `dts == pts`. IDR frames come every
+  `keyframe_interval` frames and on `request_keyframe`, which restarts the cadence, and
+  carry the SPS and PPS: JStream's own (packed headers: BT.709 limited range, frame
+  timing, no reordering) when the driver takes them, the driver's otherwise. The level
+  is the lowest that fits the size, frame rate and peak rate. `poll` never blocks; up
+  to four frames are in flight, and a fifth is refused as busy. The libva structs are
+  hand-written and checked against libva 2.20.0's headers, with their sizes and offsets
+  asserted at compile time.
 - **Cisco's OpenH264** is the software H.264 encoder
   ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), last in line:
   `VaapiCodecs` opens it for `HardwarePreference::Avoid`, and for `Prefer` when there is
@@ -136,19 +150,22 @@ Not here yet, in roughly the order they follow:
 - restore tokens kept per source rather than per kind of pick, once the engine names
   the source when it starts a capture;
 - PipeWire audio streams, and the ALSA fallback through libasound (ADR-0060 §4, §8);
-- the VA-API H.264 encode session (parameter buffers, NV12 upload, packed headers);
+- DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
 - V4L2 webcams;
 - the stream-key store.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
-pods and the frame copy are platform-independent. The Linux ones (the clock, loading
-libc through the loader, passing a file descriptor over a socket pair, restore token
-files, the PipeWire and libva probes) pass with or without those libraries installed
-and need no GPU, session or daemon. The OpenH264 tests use a fake download and a fake
-encoder behind the library's vtable, and the bzip2 decoder is tested on files `bzip2`
-wrote (`openh264/testdata`). The one test that downloads from Cisco, which is how the
-pin is recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The `hw-tests` feature holds the tests against a
-real desktop, `#[ignore]`d and run by hand: the session bus (`dbus-run-session` is
-enough), and a portal capture in a GNOME or KDE session with PipeWire.
+pods, the frame copy, and the H.264 parameters, parameter sets, GOP and upload are
+platform-independent. The Linux ones (the clock, loading libc through the loader,
+passing a file descriptor over a socket pair, restore token files, the PipeWire and
+libva probes) pass with or without those libraries installed and need no GPU, session
+or daemon. The OpenH264 tests use a fake download and a fake encoder behind the
+library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
+(`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
+recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
+`hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
+and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
+GNOME or KDE session with PipeWire, and VA-API H.264 encodes on a GPU with an encode
+driver.

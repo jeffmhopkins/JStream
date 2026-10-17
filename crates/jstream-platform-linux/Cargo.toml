@@ -1,7 +1,7 @@
 [package]
 name = "jstream-platform-linux"
 version = "0.0.0"
-description = "Linux platform backends: the CLOCK_MONOTONIC media clock, ScreenCast portal and PipeWire capture, PipeWire audio and VA-API codecs (ADR-0060). First part."
+description = "Linux platform backends: the CLOCK_MONOTONIC media clock, ScreenCast portal and PipeWire capture, PipeWire audio and VA-API codecs (ADR-0060). First three parts."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 2
-summary = "First part of ADR-0060: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal capture targets, PipeWire and VA-API loaded at run time with `dlopen`, VA-API H.264 encoder probing, Cisco's OpenH264 downloaded on request as the software H.264 encoder (ADR-0061), AAC encoding through `jstream-aac` (ADR-0061, ADR-0062)"
+summary = "First three parts of ADR-0060: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal and PipeWire screen capture, PipeWire and VA-API loaded at run time with `dlopen`, VA-API H.264 encoding from CPU frames, Cisco's OpenH264 downloaded on request as the software H.264 encoder (ADR-0061), AAC encoding through `jstream-aac` (ADR-0061, ADR-0062)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
