@@ -41,7 +41,9 @@ pub struct AudioProcess {
     /// The ID of the process that started it, if the OS reports one. It may have
     /// exited, and its ID may have been reused since.
     pub parent_pid: Option<u32>,
-    /// The executable's file name, such as `obs64.exe`, without its folder.
+    /// The executable's file name, such as `obs64.exe`, without its folder. A backend
+    /// that can't read it falls back to another name: on macOS the kernel's short name,
+    /// then the bundle ID, then the PID.
     pub exe: String,
 }
 
