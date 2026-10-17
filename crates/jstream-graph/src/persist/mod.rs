@@ -16,9 +16,10 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    BusId, Canvas, Crop, Easing, Edit, EncoderProfile, EncoderProfileId, Finite32, INITIAL_PRESET,
-    ItemGeometry, ItemId, ItemTransform, ItemTransition, OutputId, OutputKind, ProtocolError, Rev,
-    SceneId, SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
+    Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, Edit, EncoderProfile, EncoderProfileId,
+    FilterChain, FilterId, FilterOwner, Finite32, INITIAL_PRESET, ItemGeometry, ItemId,
+    ItemTransform, ItemTransition, OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole,
+    Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -121,6 +122,10 @@ struct File {
     /// one with no audio), every channel source keeps its default master send.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sends: Option<Vec<FileSend>>,
+    /// Hotkey bindings (ADR-0024 §5), ordered by chord; omitted when there are none, so
+    /// a collection without hotkeys saves as it did before they existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hotkeys: Vec<FileHotkey>,
     /// Transition presets and the default (ADR-0029); omitted while they are the one
     /// `cut` preset a new collection starts with, so such a collection saves as it did
     /// before presets existed.
@@ -180,6 +185,16 @@ struct FileItem {
     geometry: Option<ItemGeometry>,
     crop: Crop,
     visible: bool,
+    /// The alpha multiplier (ADR-0023); omitted at 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    opacity: Option<Finite32>,
+    /// The blend mode; omitted at `normal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    blend: Option<BlendMode>,
+    /// Per-placement effects, reserved (ADR-0023 §1): accepted so that item effects can
+    /// come later without a migration, never written, and refused unless empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    effects: Vec<Value>,
     /// Its transition settings (ADR-0029 §6); omitted while they are the defaults.
     #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
     transition: ItemTransition,
@@ -204,6 +219,47 @@ struct FileSource {
     /// An audio source's audio settings; omitted when they are its kind's defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     audio: Option<SourceAudio>,
+    /// Its filter chains (ADR-0026); omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FileChains::is_empty")]
+    filters: FileChains,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileChains {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    video: Vec<FileFilter>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    audio: Vec<FileFilter>,
+}
+
+impl FileChains {
+    fn is_empty(&self) -> bool {
+        self.video.is_empty() && self.audio.is_empty()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileFilter {
+    id: FilterId,
+    kind: String,
+    /// The kind descriptor's version the settings follow, as for a source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kind_version: Option<u32>,
+    /// Omitted while enabled.
+    #[serde(default = "enabled", skip_serializing_if = "is_enabled")]
+    enabled: bool,
+    #[serde(default, skip_serializing_if = "Settings::is_empty")]
+    settings: Settings,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+fn is_enabled(enabled: &bool) -> bool {
+    *enabled
 }
 
 #[derive(Serialize, Deserialize)]
@@ -235,6 +291,15 @@ struct FileSend {
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct FileHotkey {
+    chord: Chord,
+    /// The action request, as `hotkey.set` takes it. A stream key is never bound, so
+    /// none is saved.
+    action: Action,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FileEncoder {
     id: EncoderProfileId,
     name: String,
@@ -242,6 +307,20 @@ struct FileEncoder {
 }
 
 impl Graph {
+    /// One chain as the file saves it.
+    fn file_filters(&self, filters: &[crate::Filter]) -> Vec<FileFilter> {
+        filters
+            .iter()
+            .map(|filter| FileFilter {
+                id: filter.id.clone(),
+                kind: filter.kind.clone(),
+                kind_version: self.kinds.get(&filter.kind).map(|k| k.version),
+                enabled: filter.enabled,
+                settings: filter.settings.clone(),
+            })
+            .collect()
+    }
+
     /// The collection as the JSON of a collection file at [`SCHEMA_VERSION`]: its
     /// `rev`, scenes in display order with their items bottom first, sources and outputs
     /// ordered by ID. Pretty-printed, ending in a newline. The kinds are not saved: they
@@ -276,6 +355,9 @@ impl Graph {
                                 geometry,
                                 crop: item.crop,
                                 visible: item.visible,
+                                opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
+                                blend: (!item.blend.is_normal()).then_some(item.blend),
+                                effects: Vec::new(),
                                 transition: item.transition,
                             }
                         })
@@ -295,6 +377,10 @@ impl Graph {
                     },
                     settings: source.settings.clone(),
                     duplicated_from: source.duplicated_from.clone(),
+                    filters: FileChains {
+                        video: self.file_filters(&source.filters.video),
+                        audio: self.file_filters(&source.filters.audio),
+                    },
                     audio: source
                         .audio
                         .filter(|a| Some(*a) != audio::default_audio(&source.kind, &self.kinds)),
@@ -339,6 +425,14 @@ impl Graph {
             }),
             buses: file_buses(state),
             sends: file_sends(state),
+            hotkeys: state
+                .hotkeys
+                .iter()
+                .map(|(chord, action)| FileHotkey {
+                    chord: chord.clone(),
+                    action: action.clone(),
+                })
+                .collect(),
         };
         let mut json = serde_json::to_string_pretty(&file).expect(
             "invariant: the file holds only strings, finite numbers, bools, and maps with \
@@ -477,11 +571,14 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
-/// scenes, empty, in display order and with their roles; then sources, each after the
-/// sources its settings refer to; then items, encoder profiles, and outputs, each with
-/// its profile; then the buses, the sends (the sources made their default master sends,
-/// so when the file lists sends a source without one has it removed), and each
-/// source's audio settings.
+/// scenes, empty, in display order and with their roles; then the buses with their
+/// faders, which a source's settings may refer to; then sources, each after the
+/// sources its settings refer to; then every source's filters; then items, encoder
+/// profiles, the transition presets with the default, each scene's transition
+/// overrides, and outputs, each with its profile; then the sends (the sources made
+/// their default master sends, so when the file lists sends a source without one has
+/// it removed), and each source's audio settings; and last the hotkey bindings, whose
+/// actions name scenes, outputs and presets.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -503,11 +600,39 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             },
         ));
     }
+    rebuild_buses(file, &mut edits);
     let sources: BTreeMap<&SourceId, &FileSource> =
         file.sources.iter().map(|s| (&s.id, s)).collect();
     let mut placed = BTreeSet::new();
     for source in &file.sources {
         order_source(graph, &sources, source, &mut placed, &mut edits)?;
+    }
+    // After every source, so a filter's references find what they name.
+    for source in &file.sources {
+        let chains = [
+            (FilterChain::Video, &source.filters.video),
+            (FilterChain::Audio, &source.filters.audio),
+        ];
+        for (chain, filters) in chains {
+            for filter in filters {
+                let object = format!("filter `{}` of source `{}`", filter.id, source.id);
+                check_kind_version(graph, &object, &filter.kind, filter.kind_version)?;
+                edits.push((
+                    object,
+                    Edit::FilterAdd {
+                        owner: FilterOwner::Source {
+                            source_id: source.id.clone(),
+                        },
+                        chain,
+                        filter_id: filter.id.clone(),
+                        kind: filter.kind.clone(),
+                        settings: filter.settings.clone(),
+                        enabled: (!filter.enabled).then_some(false),
+                        index: None,
+                    },
+                ));
+            }
+        }
     }
     for scene in &file.scenes {
         for item in &scene.items {
@@ -515,6 +640,11 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             if item.transform.is_some() == item.geometry.is_some() {
                 return Err(LoadError::Parse(format!(
                     "{object}: exactly one of `transform` and `geometry` must be set"
+                )));
+            }
+            if !item.effects.is_empty() {
+                return Err(LoadError::Parse(format!(
+                    "{object}: `effects` is reserved and must be empty"
                 )));
             }
             edits.push((
@@ -525,6 +655,8 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                     source_id: item.source_id.clone(),
                     transform: item.transform,
                     geometry: item.geometry,
+                    opacity: item.opacity,
+                    blend: item.blend,
                 },
             ));
             if item.crop != Crop::NONE {
@@ -603,7 +735,39 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         }
     }
     rebuild_audio(graph, file, &mut edits);
+    for hotkey in &file.hotkeys {
+        edits.push((
+            format!("hotkey `{}`", hotkey.chord),
+            Edit::HotkeySet {
+                chord: hotkey.chord.clone(),
+                action: hotkey.action.clone(),
+            },
+        ));
+    }
     Ok(edits)
+}
+
+/// Refuses settings saved by another version of `kind`'s descriptor (a missing version
+/// reads as the current one). A kind the graph doesn't describe is left to the edit.
+fn check_kind_version(
+    graph: &Graph,
+    object: &str,
+    kind: &str,
+    saved: Option<u32>,
+) -> Result<(), LoadError> {
+    let Some(descriptor) = graph.kinds.get(kind) else {
+        return Ok(());
+    };
+    let saved = saved.unwrap_or(descriptor.version);
+    if saved != descriptor.version {
+        return Err(LoadError::KindVersion {
+            object: object.to_owned(),
+            kind: kind.to_owned(),
+            saved,
+            current: descriptor.version,
+        });
+    }
+    Ok(())
 }
 
 /// Pushes the edits that turn a new collection's one `cut` preset into the file's
@@ -617,16 +781,7 @@ fn rebuild_transitions(
     let initial = TransitionPresetId::new(INITIAL_PRESET);
     for preset in &file.presets {
         let object = format!("transition `{}`", preset.id);
-        if let Some(descriptor) = graph.kinds.get(&preset.kind)
-            && descriptor.version != preset.kind_version
-        {
-            return Err(LoadError::KindVersion {
-                object,
-                kind: preset.kind.clone(),
-                saved: preset.kind_version,
-                current: descriptor.version,
-            });
-        }
+        check_kind_version(graph, &object, &preset.kind, Some(preset.kind_version))?;
         let edit = if preset.id == initial {
             Edit::TransitionUpdate {
                 preset_id: preset.id.clone(),
@@ -663,9 +818,10 @@ fn rebuild_transitions(
     Ok(())
 }
 
-/// Pushes the edits that give the rebuilt collection `file`'s buses, sends and source
-/// audio settings, after its sources exist.
-fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
+/// Pushes the edits that give the rebuilt collection `file`'s buses and their faders,
+/// before its sources: a bus depends on nothing, and a source's settings may refer to
+/// one (a `waveform`'s `audio`).
+fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
     let default = default_master();
     for bus in &file.buses {
         let object = format!("bus `{}`", bus.id);
@@ -699,6 +855,11 @@ fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
             ));
         }
     }
+}
+
+/// Pushes the edits that give the rebuilt collection `file`'s sends and source audio
+/// settings, after its sources exist.
+fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
     for source in &file.sources {
         let object = format!("source `{}`", source.id);
         let default = audio::default_audio(&source.kind, &graph.kinds);
@@ -766,18 +927,8 @@ fn order_source<'a>(
         }
     }
     let object = format!("source `{}`", source.id);
-    if let SourceKind::Builtin { kind } = &source.kind
-        && let Some(descriptor) = graph.kinds.get(kind)
-    {
-        let saved = source.kind_version.unwrap_or(descriptor.version);
-        if saved != descriptor.version {
-            return Err(LoadError::KindVersion {
-                object,
-                kind: kind.clone(),
-                saved,
-                current: descriptor.version,
-            });
-        }
+    if let SourceKind::Builtin { kind } = &source.kind {
+        check_kind_version(graph, &object, kind, source.kind_version)?;
     }
     edits.push((
         object,

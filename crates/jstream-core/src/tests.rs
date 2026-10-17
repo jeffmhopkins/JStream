@@ -6,9 +6,14 @@
 mod audio;
 mod audio_routing;
 mod collection;
+mod gpu_capture;
 mod history;
+mod preview;
 mod sources;
 mod transitions;
+#[cfg(all(windows, feature = "hw-tests"))]
+mod windows_gpu;
+mod youtube;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
@@ -98,12 +103,14 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         source_id: SourceId::new(source),
         transform: None,
         geometry: None,
+        opacity: None,
+        blend: None,
     }
 }
 
 fn batch(control: &dyn Control, batch: Batch) -> Result<Rev, ControlError> {
     match block_on(control.call(Call::Batch(batch)))?.result {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         other => panic!("not a batch result: {other:?}"),
     }
 }
@@ -489,7 +496,7 @@ fn an_idempotent_retry_gets_the_original_result() {
     let mut events = control.events();
     let keyed = Batch::single(create("a")).with_idempotency_key(IdempotencyKey::new("k1"));
     let first = block_on(control.call(Call::Batch(keyed.clone()))).expect("first");
-    assert_eq!(first.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(first.result, CallResult::batch(Rev(1)));
     assert_eq!(batch(&control, Batch::single(create("b"))), Ok(Rev(2)));
     // The retry answers before the revision check, so a now-stale `expected_rev` is fine.
     let retry =
@@ -529,7 +536,7 @@ fn events_reach_every_subscriber_in_order() {
     let by_agent = block_on(agent.call(Call::Batch(Batch::single(create("a"))))).expect("batch");
     let by_user = block_on(user.call(Call::Batch(Batch::single(create("b"))))).expect("batch");
     let started = block_on(agent.call(output_call("yt", true))).expect("start");
-    assert_eq!(started.result, CallResult::Action {});
+    assert_eq!(started.result, CallResult::action());
 
     let changed = |state| Event::OutputStateChanged {
         output_id: OutputId::new("yt"),
@@ -631,7 +638,7 @@ fn scene_switch_changes_program_without_an_edit() {
     assert_eq!(program(&agent), Some(SceneId::new("a")));
 
     let switch = block_on(agent.call(switch_call("b"))).expect("switch");
-    assert_eq!(switch.result, CallResult::Action {});
+    assert_eq!(switch.result, CallResult::action());
     assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
     assert_eq!(drain(&mut events), vec![switched("b", &agent, switch.id)]);
     assert_eq!(program(&user), Some(SceneId::new("b")));
@@ -1083,7 +1090,8 @@ fn output_start_publishes_fake_audio_and_video() {
     use jstream_mux::flv::TagType;
     use jstream_platform::Backends;
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
     use std::sync::Arc;
 
@@ -1099,6 +1107,7 @@ fn output_start_publishes_fake_audio_and_video() {
         audio: Arc::new(audio.clone()),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let publish = RecordingPublish::new();
@@ -1170,7 +1179,8 @@ fn output_stop_during_start_cancels_the_pipeline() {
 
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
     use jstream_platform::{Backends, Capture, CaptureTarget, PlatformError};
 
@@ -1237,6 +1247,7 @@ fn output_stop_during_start_cancels_the_pipeline() {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -1294,7 +1305,8 @@ fn output_publish_failure_settles_failed() {
     use jstream_mux::flv::FlvTag;
     use jstream_platform::Backends;
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
 
     use crate::{LivePublish, PublishError};
@@ -1336,6 +1348,7 @@ fn output_publish_failure_settles_failed() {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -1399,7 +1412,8 @@ fn output_start_returns_after_a_panicking_teardown() {
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::FlvTag;
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
     use jstream_platform::{
         AudioInputHandler, AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget,
@@ -1513,6 +1527,7 @@ fn output_start_returns_after_a_panicking_teardown() {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -1583,7 +1598,8 @@ fn dropping_the_engine_stops_the_pipeline() {
     use jstream_mux::flv::FlvTag;
     use jstream_platform::Backends;
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
 
     use crate::{LivePublish, PublishError};
@@ -1618,6 +1634,7 @@ fn dropping_the_engine_stops_the_pipeline() {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -2019,6 +2036,8 @@ fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
                     source_id: SourceId::new("webcam"),
                     transform: None,
                     geometry: Some(geometry),
+                    opacity: None,
+                    blend: None,
                 },
             ],
             expected_rev: None,
@@ -2185,7 +2204,8 @@ mod cpu_pipeline {
     use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, PixelFormat, Timebase};
     use jstream_mux::flv::{FlvTag, TagType};
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
     use jstream_platform::{
         AudioDeviceInfo, AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget,
@@ -2224,6 +2244,7 @@ mod cpu_pipeline {
             audio: Arc::new(audio.clone()),
             codecs: Arc::new(FakeCodecs),
             gpu: Arc::new(FakeGpuInterop),
+            media: Arc::new(FakeMediaDecoders::new()),
             vcam: None,
         };
         Fakes {
@@ -2242,6 +2263,7 @@ mod cpu_pipeline {
             audio: Arc::clone(&backends.audio),
             codecs: Arc::clone(&backends.codecs),
             gpu: Arc::clone(&backends.gpu),
+            media: Arc::clone(&backends.media),
             vcam: None,
         }
     }
@@ -2267,9 +2289,9 @@ mod cpu_pipeline {
         let seen: Arc<Mutex<Vec<Option<SceneId>>>> = Arc::default();
         let draw: OpenDraw = {
             let seen = Arc::clone(&seen);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, capture, out, at| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -2535,6 +2557,172 @@ mod cpu_pipeline {
         }
     }
 
+    /// When the credential store refuses to remove the key of an output that moved to
+    /// another server (#343), the output can't start, so the opener never sends the old
+    /// key to the new server; once `output.clear_key` succeeds, it can.
+    #[test]
+    fn an_output_whose_old_key_is_not_removed_does_not_start() {
+        use super::{clear_key, rtmp_output, set_key};
+        use crate::OpenPublish;
+        use jstream_platform::fake::MemoryKeyStore;
+        use jstream_protocol::RtmpTarget;
+
+        let opens = Arc::new(AtomicU64::new(0));
+        let open: OpenPublish = {
+            let opens = Arc::clone(&opens);
+            Arc::new(move |_: &OutputId| {
+                opens.fetch_add(1, Ordering::SeqCst);
+                Err(crate::PublishError::new("no server in this test"))
+            })
+        };
+        let store = MemoryKeyStore::new();
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_key_store(Arc::new(store.clone()))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("yt"),
+                kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+            }]),
+        )
+        .expect("output.create");
+        block_on(control.call(set_key("yt", "yt-key"))).expect("set_key");
+        store.set_failing(true);
+        batch(
+            &control,
+            edits(vec![Edit::OutputSetTarget {
+                output_id: OutputId::new("yt"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://attacker.example/live2".into(),
+                },
+            }]),
+        )
+        .expect("the batch applies even when the store refuses");
+        store.set_failing(false);
+        assert_eq!(store.len(), 1, "the store kept the key");
+
+        let refused = block_on(control.call(output_call("yt", true))).expect_err("refused");
+        assert_eq!(code(&refused), Some("action_failed"));
+        assert!(
+            refused.to_string().contains("output.clear_key"),
+            "{refused}"
+        );
+        assert!(!refused.to_string().contains("yt-key"), "{refused}");
+        assert_eq!(opens.load(Ordering::SeqCst), 0, "the opener never ran");
+
+        block_on(control.call(clear_key("yt"))).expect("clear_key");
+        assert!(store.is_empty());
+        let failed = block_on(control.call(output_call("yt", true))).expect_err("no server");
+        assert!(
+            failed.to_string().contains("opening the publish target"),
+            "{failed}"
+        );
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "the start reached the opener"
+        );
+    }
+
+    /// A retarget that lands after `output.start` checked the key but before the host's
+    /// opener reads the target (#343) doesn't pair the new server with the old key:
+    /// while the start is opening, `Engine::output_kind` answers the kind the start
+    /// checked, so the opener sees the server the key was set for. The store refuses
+    /// the removal here, so the old key is still there when the opener reads it. An
+    /// `output.set_key` sent while the start is opening is refused, so the new server's
+    /// key can't be read with the old server either; once the start settles it is taken.
+    #[test]
+    fn a_retarget_during_the_opener_does_not_send_the_old_key_to_the_new_server() {
+        use super::{rtmp_output, set_key};
+        use crate::OpenPublish;
+        use jstream_platform::StreamKeyStore;
+        use jstream_platform::fake::MemoryKeyStore;
+        use jstream_protocol::{OutputKind, RtmpTarget};
+
+        const OLD: &str = "rtmp://a.rtmp.youtube.com/live2";
+        const NEW: &str = "rtmp://attacker.example/live2";
+        let store = MemoryKeyStore::new();
+        // The engine and a client for the opener to retarget with, set once both exist.
+        type Slot = Mutex<Option<(Engine, InProcessControl)>>;
+        // The kind the opener read, and the key the store held then.
+        type Seen = Mutex<Option<(Option<OutputKind>, Option<String>)>>;
+        let slot: Arc<Slot> = Arc::new(Mutex::new(None));
+        let seen: Arc<Seen> = Arc::new(Mutex::new(None));
+        let open: OpenPublish = {
+            let (slot, seen, store) = (Arc::clone(&slot), Arc::clone(&seen), store.clone());
+            Arc::new(move |output_id: &OutputId| {
+                let guard = slot.lock().expect("slot");
+                let (engine, control) = guard.as_ref().expect("engine set");
+                store.set_failing(true);
+                batch(
+                    control,
+                    edits(vec![Edit::OutputSetTarget {
+                        output_id: output_id.clone(),
+                        target: RtmpTarget::Generic { url: NEW.into() },
+                    }]),
+                )
+                .expect("the retarget applies while the output starts");
+                store.set_failing(false);
+                // A key set for the new server now would be read with the old server.
+                let refused = block_on(control.call(set_key(output_id.as_str(), "new-key")))
+                    .expect_err("set_key is refused while the output starts");
+                assert_eq!(code(&refused), Some("action_failed"), "{refused}");
+                assert!(!refused.to_string().contains("new-key"), "{refused}");
+                let kind = engine.output_kind(output_id);
+                let key = store
+                    .get(output_id.as_str())
+                    .expect("get")
+                    .map(|key| key.expose().to_owned());
+                *seen.lock().expect("seen") = Some((kind, key));
+                Err(crate::PublishError::new("no server in this test"))
+            })
+        };
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_key_store(Arc::new(store.clone()))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("yt"),
+                kind: rtmp_output(OLD),
+            }]),
+        )
+        .expect("output.create");
+        block_on(control.call(set_key("yt", "yt-key"))).expect("set_key");
+        *slot.lock().expect("slot") = Some((engine.clone(), connected(&engine)));
+
+        let failed = block_on(control.call(output_call("yt", true))).expect_err("no server");
+        assert!(!failed.to_string().contains("yt-key"), "{failed}");
+        let (kind, key) = seen.lock().expect("seen").take().expect("the opener ran");
+        assert_eq!(
+            key.as_deref(),
+            Some("yt-key"),
+            "the refused removal left the old key, and the refused set_key stored nothing"
+        );
+        assert_eq!(
+            kind,
+            Some(rtmp_output(OLD)),
+            "the opener saw the server the key was set for"
+        );
+        assert_eq!(
+            engine.output_kind(&OutputId::new("yt")),
+            Some(rtmp_output(NEW)),
+            "once the start settled, the retarget shows"
+        );
+        block_on(control.call(set_key("yt", "new-key"))).expect("set_key once settled");
+        // The opener holds the engine; drop that so the engine isn't kept alive.
+        slot.lock().expect("slot").take();
+    }
+
     // --- Item: an encoder that fails mid-stream fails the output.
 
     struct FailingVideo {
@@ -2719,9 +2907,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out, at)
@@ -3375,8 +3563,12 @@ mod cpu_pipeline {
     // --- Item: a stalled publish target cannot hold `output.stop` past the drain bound.
 
     /// A publish target whose peer has stopped reading: once `stalled`, every send
-    /// blocks for 200 ms, and it ignores [`LivePublish::stop_by`] as a destination that
-    /// cannot cut a write short would. Records the deadline it was given.
+    /// blocks for 50 ms, and it ignores [`LivePublish::stop_by`] as a destination that
+    /// cannot cut a write short would. Records the deadline it was given. A send is
+    /// short next to `OUTPUT_GRACE`, so the output thread, which may still be in one
+    /// when the deadline passes, ends inside the grace even on a slow runner and the
+    /// stop sees what it abandoned; a send that outlasts the grace is
+    /// `a_send_that_ignores_the_stop_deadline_cannot_hold_output_stop`'s case.
     struct StalledPeer {
         stalled: Arc<AtomicBool>,
         sent: Arc<AtomicU64>,
@@ -3386,7 +3578,7 @@ mod cpu_pipeline {
     impl LivePublish for StalledPeer {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
             if self.stalled.load(Ordering::Acquire) {
-                thread::sleep(Duration::from_millis(200));
+                thread::sleep(Duration::from_millis(50));
             }
             self.sent.fetch_add(1, Ordering::AcqRel);
             Ok(())
@@ -3406,7 +3598,7 @@ mod cpu_pipeline {
     }
 
     /// The peer stalls while well over a hundred packets queue up behind it. Draining
-    /// them all at 200 ms a tag would hold `output.stop` for half a minute; the stop
+    /// them all at 50 ms a tag would hold `output.stop` for several seconds; the stop
     /// gives up after `STOP_DRAIN`, drops the rest, counts it in the final
     /// `stats.tick`'s `output_packets`, and passes its deadline to the target.
     #[test]
@@ -3548,6 +3740,115 @@ mod cpu_pipeline {
             "the send returned before the stop did, so nothing was left behind"
         );
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
+    }
+
+    /// A publish target whose send, once `stalled`, blocks until `release` fires (or
+    /// 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
+    /// send has blocked (`blocked`) and when the output thread has finished it
+    /// (`finished`), so the test waits on those instead of on the clock.
+    struct StuckPeer {
+        stalled: Arc<AtomicBool>,
+        sent: Arc<AtomicU64>,
+        blocked: Arc<AtomicBool>,
+        release: mpsc::Receiver<()>,
+        finished: mpsc::Sender<()>,
+    }
+
+    impl LivePublish for StuckPeer {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.stalled.load(Ordering::Acquire) {
+                self.blocked.store(true, Ordering::Release);
+                let _ = self.release.recv_timeout(Duration::from_secs(30));
+            }
+            self.sent.fetch_add(1, Ordering::AcqRel);
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            let _ = self.finished.send(());
+            Ok(())
+        }
+    }
+
+    /// #385: a send that outlasts `OUTPUT_GRACE` leaves the output thread behind with
+    /// packets still queued. The stop counts them itself, so the final `stats.tick`'s
+    /// `output_packets` has them; before, the thread counted them only once the send
+    /// returned, after the latch, and the final tick said 0. The released thread must
+    /// still end.
+    #[test]
+    fn packets_left_behind_a_send_past_the_grace_count_in_the_final_tick() {
+        let fakes = fakes();
+        let stalled = Arc::new(AtomicBool::new(false));
+        let sent = Arc::new(AtomicU64::new(0));
+        let blocked = Arc::new(AtomicBool::new(false));
+        let (release, release_rx) = mpsc::channel();
+        let (finished_tx, finished) = mpsc::channel();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(StuckPeer {
+                stalled: Arc::clone(&stalled),
+                sent: Arc::clone(&sent),
+                blocked: Arc::clone(&blocked),
+                release: release_rx,
+                finished: finished_tx,
+            }),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || sent.load(Ordering::Acquire)
+                >= 5),
+            "nothing was published"
+        );
+
+        stalled.store(true, Ordering::Release);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || blocked
+                .load(Ordering::Acquire)),
+            "no send blocked"
+        );
+        // Encoded behind the blocked send; the stop's encoder finish flushes them into
+        // the output's queues before it waits for the thread.
+        for _ in 0..10 {
+            pump(&fakes.clock, &fakes.audio);
+        }
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        let left_behind = finished.try_recv().is_err();
+        let final_tick = last_stats_tick(&mut events);
+        // Lets the left-behind output thread end, and waits until it has.
+        let _ = release.send(());
+        let ended = finished.recv_timeout(HANG_BOUND).is_ok();
+
+        assert!(
+            left_behind,
+            "the output thread finished before the stop returned, so nothing was left behind"
+        );
+        assert!(
+            final_tick.output_packets > 0,
+            "the packets left behind the stuck send were not counted: {final_tick:?}"
+        );
+        assert!(ended, "the left-behind output thread did not end");
+        assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
+    }
+
+    /// The drops of the last `stats.tick` in `events`.
+    fn last_stats_tick(events: &mut EventStream) -> jstream_protocol::DropCounts {
+        drain(events)
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops),
+                _ => None,
+            })
+            .next_back()
+            .expect("no stats.tick")
     }
 
     // --- Item: a recording output writes fragmented MP4 to the path it names.
@@ -3724,9 +4025,9 @@ mod cpu_pipeline {
         let working = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let working = Arc::clone(&working);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 if working.load(Ordering::Acquire) {
-                    cpu_draw()()
+                    cpu_draw()(context)
                 } else {
                     Err("no adapter".to_owned())
                 }
@@ -3881,9 +4182,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out, at)
@@ -4049,7 +4350,7 @@ mod cpu_pipeline {
     /// A draw that fills the program frame with one RGBA colour, so the test can tell
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
-        Arc::new(move || {
+        Arc::new(move |_| {
             let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>, _| {
                 out.clear();
                 for _ in 0..size.width() as usize * size.height() as usize {
@@ -4129,12 +4430,16 @@ mod cpu_pipeline {
         );
 
         for run in 1..=2u64 {
+            // `readbacks` counts this start's ticks only, and the previous run may have
+            // published any number of frames past its five, so this run waits for five
+            // frames of its own (#415).
+            let before = log.lock().expect("vcam log").pixels.len();
             start_output(&control, &mut events, "cam");
             assert!(
                 pump_until(&fakes.clock, &fakes.audio, || {
-                    log.lock().expect("vcam log").pixels.len() >= 5 * run as usize
+                    log.lock().expect("vcam log").pixels.len() >= before + 5
                 }),
-                "the camera got no frames"
+                "start {run}: the camera got no frames"
             );
             let stats = engine.output_stats().expect("running");
             assert_eq!(
@@ -4142,7 +4447,13 @@ mod cpu_pipeline {
                 "the virtual camera encodes nothing"
             );
             assert_eq!(stats.audio.received, 0, "the virtual camera has no audio");
-            assert!(stats.readbacks >= 5);
+            // Each frame published was read back first, on this start's render thread.
+            assert!(
+                stats.readbacks >= 5,
+                "start {run}: {} readbacks for {} frames published",
+                stats.readbacks,
+                log.lock().expect("vcam log").pixels.len() - before
+            );
 
             block_on(control.call(output_call("cam", false))).expect("output.stop");
             assert_eq!(
@@ -4168,10 +4479,10 @@ mod cpu_pipeline {
         );
     }
 
-    /// A canvas of another size than the program frame gets the frame fitted inside
-    /// it: a 64x36 frame on a 64x64 canvas is letterboxed in black.
+    /// The program is drawn at the canvas, not the display (#433): a 64x64 canvas over a
+    /// 64x36 display gives the camera whole 64x64 frames, with no letterbox.
     #[test]
-    fn a_virtual_camera_fits_the_program_into_the_canvas() {
+    fn a_virtual_camera_gets_the_program_at_the_canvas_size() {
         let fakes = fakes();
         let log = Arc::new(Mutex::new(VcamLog::default()));
         let (_engine, control, mut events) = vcam_engine(
@@ -4188,7 +4499,7 @@ mod cpu_pipeline {
         block_on(control.call(output_call("cam", false))).expect("output.stop");
         let log = log.lock().expect("vcam log");
         assert_eq!(log.starts[0].size, FrameSize::new(64, 64).expect("size"));
-        assert_eq!(log.pixels[0], ([0, 0, 0, 255], [30, 20, 10, 255]));
+        assert_eq!(log.pixels[0], ([30, 20, 10, 255], [30, 20, 10, 255]));
     }
 
     /// A virtual camera shares the program stage with a stream: both run at once, and
@@ -4462,6 +4773,104 @@ fn output_edits_configure_the_collection() {
     assert_eq!(code(&gone), Some("not_found"));
 }
 
+/// A stream key is bound to the server it was set for (#343): `output.set_target` to a
+/// new path on the same server keeps it, a new scheme, host or port removes it from the
+/// credential store, and so does an undo or redo that moves the output to another
+/// server, or deletes it. Before the fix, the key stayed and the next `output.start`
+/// sent it to whatever server the output then named.
+#[test]
+fn a_stream_key_never_follows_its_output_to_another_server() {
+    use jstream_platform::StreamKeyStore;
+    use jstream_platform::fake::MemoryKeyStore;
+    use jstream_protocol::{HistoryCall, HistoryOp, RtmpTarget};
+
+    let store = MemoryKeyStore::new();
+    let engine = Engine::new().with_key_store(Arc::new(store.clone()));
+    let control = connected(&engine);
+    let retarget = |url: &str| {
+        edits(vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("out_yt"),
+            target: RtmpTarget::Generic { url: url.into() },
+        }])
+    };
+    let stored = || {
+        store
+            .get("out_yt")
+            .expect("store reads")
+            .map(|key| key.expose().to_owned())
+    };
+    let history = |op| {
+        block_on(control.call(Call::History(HistoryCall::new(op)))).expect("history step");
+    };
+    batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+        }]),
+    )
+    .expect("output.create");
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+
+    // The same server, written differently and with another path: the key stays.
+    batch(
+        &control,
+        retarget("RTMP://A.rtmp.youtube.com:1935/live2/backup"),
+    )
+    .expect("same server");
+    assert_eq!(stored().as_deref(), Some("yt-key"));
+
+    // Another host: the key is removed, so a start can't send it there.
+    batch(&control, retarget("rtmp://attacker.example/live2")).expect("new host");
+    assert_eq!(stored(), None);
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+    // Undo moves it back, but can't bring the secret back.
+    history(HistoryOp::Undo);
+    assert_eq!(
+        engine.output_kind(&OutputId::new("out_yt")),
+        Some(rtmp_output("RTMP://A.rtmp.youtube.com:1935/live2/backup"))
+    );
+    assert_eq!(stored(), None);
+    // A key set again is removed when a redo moves the output away once more.
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+    history(HistoryOp::Redo);
+    assert_eq!(stored(), None);
+    history(HistoryOp::Undo);
+
+    // Another scheme, or another port, is another server too.
+    for url in [
+        "rtmps://a.rtmp.youtube.com/live2",
+        "rtmps://a.rtmp.youtube.com:8443/live2",
+    ] {
+        block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+        batch(&control, retarget(url)).expect("new server");
+        assert_eq!(stored(), None, "{url}");
+    }
+
+    // Deleting the output removes its key, so an output re-created with its ID starts
+    // with none.
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+    batch(
+        &control,
+        edits(vec![Edit::OutputDelete {
+            output_id: OutputId::new("out_yt"),
+        }]),
+    )
+    .expect("output.delete");
+    assert_eq!(stored(), None);
+    batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://attacker.example/live2"),
+        }]),
+    )
+    .expect("output.create");
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+    // Another output's key is not touched.
+    assert!(store.is_empty());
+}
+
 /// `output.set_key` stores the key and `output.status` reports `key_set`; every error
 /// path answers with a fixed reason that never contains the key.
 #[test]
@@ -4500,6 +4909,9 @@ fn stream_key_actions_report_without_naming_the_key() {
             "live\nSECRET",
             "must not contain whitespace or control characters",
         ),
+        // #441: a leading byte-order mark, and any other non-ASCII character.
+        ("\u{FEFF}live_SECRET", "must contain only ASCII characters"),
+        ("live_S\u{e9}CRET", "must contain only ASCII characters"),
     ] {
         let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
         assert_eq!(

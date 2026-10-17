@@ -236,7 +236,7 @@ pub struct TransitionsInfo {
 
 impl Default for TransitionsInfo {
     /// What every new collection starts with: the one preset [`initial_preset`], which
-    /// is the default. A server older than 0.28 reports no presets, and this is what a
+    /// is the default. A server older than 0.26 reports no presets, and this is what a
     /// switch did there: a cut.
     fn default() -> Self {
         TransitionsInfo {

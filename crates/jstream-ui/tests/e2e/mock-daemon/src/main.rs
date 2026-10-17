@@ -92,6 +92,8 @@ async fn seed(engine: &MockEngine) -> Result<()> {
             source_id: SourceId::new("color"),
             transform: None,
             geometry: Some(geometry),
+            opacity: None,
+            blend: None,
         },
         Edit::EncoderCreate {
             profile_id: EncoderProfileId::new("hq"),

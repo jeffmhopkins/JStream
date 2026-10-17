@@ -12,12 +12,12 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
 -->
 
 Layer-2 client for Google sign-in and the
 [YouTube Live API](https://developers.google.com/youtube/v3/live/getting-started), the
-optional half of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) (the
+optional half of [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) (the
 generic RTMPS output works with a stream key alone). It has no media code and no
 `unsafe`. Its JStream dependency is [`jstream-platform`](../jstream-platform/README.md#purpose),
 for `Secret`. Its third-party ones are `rustls` (with `ring`) and `rustls-native-certs`
@@ -46,12 +46,16 @@ Contents:
   `refresh` gets a new access token and reports a rotated refresh token; `revoke` signs
   out. Access tokens record their expiry (timed from when the request was sent) and the
   scopes granted.
-  - **Scopes** (ADR-0041 §4): `Scope::Readonly` (`youtube.readonly`) for listing and
+  - **The built-in client** (ADR-0058 §1): `BUILT_IN_CLIENT_ID` and
+    `BUILT_IN_CLIENT_SECRET` are the "Desktop app" client JStream ships. Both are empty
+    until the maintainer gives their values, and while the ID is empty a build has no
+    client and the engine keeps YouTube's API features off.
+  - **Scopes** (ADR-0041 §4, kept by ADR-0058): `Scope::Readonly` (`youtube.readonly`) for listing and
     stream health, `Scope::Manage` (`youtube`) for creating, binding and transitioning.
     The Live API reference pages list exactly these: the list methods accept either
     (or `youtube.force-ssl`), the write methods `youtube` or `youtube.force-ssl`. A
     granted `force-ssl` counts as `Manage`. JStream signs in once, asking for
-    `Manage` alone, which the reads accept too (ADR-0041 §4); `Readonly` stays for a
+    `Manage` alone, which the reads accept too (ADR-0041 §4, kept by ADR-0058); `Readonly` stays for a
     grant that holds only it.
   - A refresh refused with `invalid_grant` is `YoutubeError::SignInRequired`.
 - **`LoopbackRedirect`:** the redirect listener, bound to `127.0.0.1` on an OS-chosen
@@ -68,7 +72,9 @@ Contents:
   the access token when less than `REFRESH_MARGIN` (60 s) of it is left, retries a call
   once with a new token after a 401, and reports a second 401 as `SignInRequired`. It
   refuses a call whose scope the grant lacks before sending it. Calls:
-  `list_broadcasts` (mine, by status, or by up to 50 IDs; paged), `broadcast`,
+  `list_broadcasts` (mine, by status, or by up to 50 IDs; paged; `list_broadcasts_of_type`
+  adds the `broadcastType` filter, without which the API leaves the persistent "Stream
+  now" broadcast out), `broadcast`,
   `insert_broadcast`, `bind` (or unbind), `transition` (testing, live, complete),
   `list_streams`, `stream`, `insert_stream` and `stream_health` (`streamStatus`,
   `healthStatus` and its configuration issues).
@@ -79,13 +85,34 @@ Contents:
     broadcast) and the monitor stream on (`testing` needs it). `NewStream::new` asks for
     a reusable RTMP stream with variable resolution and frame rate.
   - A stream's key (`cdn.ingestionInfo.streamName`) parses straight into a `Secret`.
+- **`chat`:** reading a broadcast's live chat (ADR-0041 §2, §5).
+  `LiveClient::chat_messages(live_chat_id, page_token)` reads one page of
+  `liveChatMessages.list` (`part=id,snippet,authorDetails`, up to 2000 messages, oldest
+  first; `Scope::Readonly`, which the method accepts along with `youtube`). A
+  `ChatMessage` keeps its ID, time, author (name, channel, and whether owner,
+  moderator, member or verified), the text YouTube displays for it, and its event:
+  text, Super Chat or Super Sticker (amount as displayed, currency, micros),
+  membership, a deletion (naming the removed message), or `Other` by its `type`. Text
+  and names come from strangers: control characters are replaced and they are cut to
+  1000 and 100 characters, and nothing here interprets them. `ChatPoller` drives one
+  chat: it follows the page token, waits the `pollingIntervalMillis` the API returns
+  (never faster, and at least 1 s), backs off doubling after errors (from 60 s up to
+  30 min for quota and rate-limit errors, from 5 s up to 5 min for others; a change of
+  class starts that ladder at its first step), and stops
+  for good when a page reports `offlineAt` or the API answers `liveChatEnded`,
+  `liveChatNotFound` or `liveChatDisabled`. It takes the time as an argument, starts
+  no thread and never sleeps: the engine's loop calls `poll` and waits until `due`.
+  Every page costs quota from the one daily quota JStream's built-in client shares
+  across its users, so reading chat through the API is opt-in: a per-collection
+  switch, off by default, decides whether the engine polls at all (ADR-0058 §5). The
+  "YouTube chat" browser preset shows chat at no quota cost.
 - **`fake`** (feature `fake`, and in this crate's tests): `FakeTransport` replays
   queued responses and records requests. Tests run on JSON fixtures in `fixtures/`,
   shaped after the API reference's documented responses, so no test uses the network
   ([R-TEST-004](../../docs/RULES.md#R-TEST-004)); the HTTPS tests use a TLS server on
   loopback with certificates made at test time.
 - **Errors:** one `thiserror` enum, `YoutubeError`. `is_quota` recognises quota and
-  rate-limit reasons, which the engine surfaces as protocol errors (ADR-0041 §5).
+  rate-limit reasons, which the engine surfaces as protocol errors (ADR-0041 §5, kept by ADR-0058).
 
 **Secrets** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): tokens, codes, the client
 secret and stream keys are held as `Secret`s. The request head that carries the bearer
@@ -98,7 +125,11 @@ column, never quoted. The refresh token is kept in the OS credential store throu
 `Grant` and through `LiveClient::take_rotated_refresh_token`, and never writes it
 anywhere itself.
 
-**Not yet:** chat (reading, sending as the channel, the featured message) and audience
-stats from ADR-0041, quota accounting, the protocol commands and MCP tools that expose
-all of this, and the engine wiring (including saving the refresh token in the
-`OAuthTokenStore`).
+The engine (`jstream-core`, roadmap Y3) holds one `LiveClient`, keeps its refresh token
+in the `OAuthTokenStore` and exposes these calls as protocol commands for the UI. MCP
+leaves them out: YouTube is for people, not agents (ADR-0058 §3).
+
+**Not yet:** sending chat as the channel, the engine's chat polling with its
+per-collection opt-in switch and its `youtube.chat.feature` action,
+`liveChatMessages.streamList` where the API offers it (ADR-0058 §5), audience stats
+from ADR-0041 (kept by ADR-0058), and quota accounting.

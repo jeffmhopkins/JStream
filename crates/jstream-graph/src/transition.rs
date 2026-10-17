@@ -639,6 +639,8 @@ mod tests {
                         source_id: SourceId::new("nested"),
                         transform: None,
                         geometry: None,
+                        blend: None,
+                        opacity: None,
                     },
                     overrides("a", Some("cut"), None),
                 ],
@@ -672,6 +674,8 @@ mod tests {
                     source_id: SourceId::new("nested"),
                     transform: None,
                     geometry: None,
+                    blend: None,
+                    opacity: None,
                 }],
                 None,
             )

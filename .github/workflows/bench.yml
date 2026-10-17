@@ -8,7 +8,7 @@
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
-# Dependabot proposes updates (ADR-0018). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+# Dependabot proposes updates (ADR-0056). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
 
 name: bench
 

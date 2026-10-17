@@ -179,7 +179,7 @@ pub async fn commit(
         .await?
         .result
     {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         _ => Err(CanvasError::UnexpectedAnswer {
             call: "item.set_geometry",
         }),
@@ -303,6 +303,8 @@ mod tests {
                 source_id: SourceId::new("cam"),
                 transform: Some(ItemTransform::IDENTITY),
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
             Edit::ItemAdd {
                 scene_id: "s2".into(),
@@ -310,6 +312,8 @@ mod tests {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: Some(geometry(960.0, 540.0, 640.0, 360.0)),
+                opacity: None,
+                blend: None,
             },
         ];
         now(control.call(Call::Batch(Batch {

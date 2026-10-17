@@ -101,13 +101,24 @@ impl Image {
         self.sync.as_ref()
     }
 
+    /// Replaces the hold staged on each frame that draws the image. The cache keeps an
+    /// import across frames and attaches each frame's hold only while that frame uses it.
+    pub(crate) fn set_sync(&mut self, sync: Option<Arc<dyn FrameSync>>) {
+        self.sync = sync;
+    }
+
+    /// Whether this is an import ([`import`]), sampled as straight alpha.
+    pub(crate) fn is_import(&self) -> bool {
+        self.alpha == Alpha::Straight
+    }
+
     /// The view a layer is drawn into; `None` unless the image is a layer.
     pub(crate) fn target(&self) -> Option<&wgpu::TextureView> {
         self.target.as_ref()
     }
 
     /// Whether this is an upload, which [`rewrite`] can refill in place.
-    fn is_upload(&self) -> bool {
+    pub(crate) fn is_upload(&self) -> bool {
         self.alpha == Alpha::Premultiplied
             && self.target.is_none()
             && self.texture.format() == UPLOAD_FORMAT
@@ -146,6 +157,62 @@ pub(crate) fn upload(
         view_formats: &[],
     });
     write_texels(maker.gpu, &texture, width, height, rgba)?;
+    Ok(finish(
+        maker,
+        texture,
+        width,
+        height,
+        Alpha::Premultiplied,
+        None,
+    ))
+}
+
+/// Uploads `texels` (RGBA, row-major, `width * height` of them) as `Rgba16Float` exactly
+/// as given, each channel clamped to `0..=1`, and samples them as premultiplied. For data
+/// that is not colour, such as a colour lookup table (`filter::assets`).
+pub(crate) fn upload_unit_f16(
+    maker: &Maker<'_>,
+    width: u32,
+    height: u32,
+    texels: &[[f32; 4]],
+) -> Result<Image, RenderError> {
+    if width == 0 || height == 0 || texels.len() as u64 != u64::from(width) * u64::from(height) {
+        return Err(RenderError::Invalid {
+            what: "image",
+            detail: format!("{} texels for a {width}x{height} image", texels.len()),
+        });
+    }
+    check_dimension(maker.gpu, width, height)?;
+    let texture = maker.gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("jstream-render-data"),
+        size: extent(width, height),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: UPLOAD_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let bytes: Vec<u8> = texels
+        .iter()
+        .flatten()
+        .flat_map(|v| f16_bits(v.clamp(0.0, 1.0)).to_le_bytes())
+        .collect();
+    maker.gpu.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 8),
+            rows_per_image: Some(height),
+        },
+        extent(width, height),
+    );
     Ok(finish(
         maker,
         texture,

@@ -407,7 +407,7 @@ impl Pending {
     ) -> AuditEntry {
         let (rev_before, rev_after, replayed) = match result {
             // Applied now: the rev it produced is newer than any read before it ran.
-            Ok(CallResult::Batch { rev } | CallResult::History { rev, .. })
+            Ok(CallResult::Batch { rev, .. } | CallResult::History { rev, .. })
                 if *rev > self.rev_before =>
             {
                 (Rev(rev.0.saturating_sub(1)), *rev, false)

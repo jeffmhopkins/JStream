@@ -221,12 +221,17 @@ fn handshake_list_and_call_round_trip() {
             "canvas",
             "delete",
             "describe_api",
+            "device",
             "encoder",
             "events",
+            "filter",
             "history",
+            "hotkey",
             "item",
             "kind",
             "output",
+            "pairing",
+            "preview",
             "scene",
             "send",
             "source",
@@ -269,7 +274,7 @@ fn handshake_list_and_call_round_trip() {
                       "transform": {"position": {"x": 0.0, "y": 0.0},
                                     "scale": {"x": 1.0, "y": 1.0}, "rotation_deg": 0.0},
                       "crop": {"left": 0, "top": 0, "right": 0, "bottom": 0},
-                      "visible": true});
+                      "visible": true, "opacity": 1.0, "blend": "normal"});
     let sources = f.call_tool("source", json!({"op": {"type": "source.list"}}));
     assert_eq!(
         ok(&sources)["result"]["result"],
@@ -291,7 +296,7 @@ fn handshake_list_and_call_round_trip() {
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
                "outputs": [], "encoders": [],
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
-               "sends": [],
+               "sends": [], "hotkeys": [],
                "transitions": {"presets": [{"preset_id": "cut", "name": "Cut", "kind": "cut",
                                             "duration_ms": 300, "easing": "ease_in_out"}],
                                "default": "cut"}})
@@ -312,7 +317,7 @@ fn handshake_list_and_call_round_trip() {
 fn initialize_answers_when_hello_never_does() {
     let mut f = fixture();
     f.server = Server::new(Arc::clone(&f.control) as Arc<dyn Control>)
-        .with_open_early_timeout(std::time::Duration::from_millis(50));
+        .with_hello_timeout(std::time::Duration::from_millis(50));
     f.control.silent.store(true, Ordering::Relaxed);
     let started = std::time::Instant::now();
     let init = f.initialize();
@@ -329,12 +334,45 @@ fn initialize_answers_when_hello_never_does() {
     assert_eq!(f.hello_names(), ["agent-x", "agent-x"]);
 }
 
+/// A tool call's own `hello` (the retry after `initialize`'s timed out) is bounded the
+/// same way (#273): the call fails with `disconnected`, saying it was not sent, instead
+/// of hanging until the engine's handshake timeout, and the next call tries again.
+#[test]
+fn tool_call_fails_when_its_hello_never_answers() {
+    let mut f = fixture();
+    f.server = Server::new(Arc::clone(&f.control) as Arc<dyn Control>)
+        .with_hello_timeout(std::time::Duration::from_millis(50));
+    f.control.silent.store(true, Ordering::Relaxed);
+    f.initialize();
+    // On another thread, so a call that hangs fails the test instead of hanging it.
+    let (sent, answered) = std::sync::mpsc::channel();
+    let f = std::thread::spawn(move || {
+        let result = f.call_tool("scene", json!({"op": {"type": "scene.list"}}));
+        let _ = sent.send(result);
+        f
+    });
+    let result = answered
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("the tool call answers instead of waiting for hello");
+    let f = f.join().expect("the call thread doesn't panic");
+    let error = tool_error(&result);
+    assert_eq!(error["code"], "disconnected", "{result}");
+    let message = error["message"].as_str().expect("a message");
+    assert!(message.contains("was not sent"), "{message}");
+    assert!(message.contains("next call tries again"), "{message}");
+    assert_eq!(f.hello_names(), ["agent-x", "agent-x"]);
+
+    f.control.silent.store(false, Ordering::Relaxed);
+    ok(&f.call_tool("scene", json!({"op": {"type": "scene.list"}})));
+    assert_eq!(f.hello_names(), ["agent-x", "agent-x", "agent-x"]);
+}
+
 /// A `hello` that is answered in time isn't cut short by the open-early wait.
 #[test]
 fn initialize_opens_the_session_within_the_wait() {
     let mut f = fixture();
     f.server = Server::new(Arc::clone(&f.control) as Arc<dyn Control>)
-        .with_open_early_timeout(std::time::Duration::from_secs(60));
+        .with_hello_timeout(std::time::Duration::from_secs(60));
     f.initialize();
     ok(&f.call_tool("scene", json!({"op": {"type": "scene.list"}})));
     assert_eq!(f.hello_names(), ["agent-x"]);
@@ -380,7 +418,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(19));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(24));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -450,6 +488,74 @@ fn tool_list_snapshot() {
     }, {
         insta::assert_snapshot!("tools", text);
     });
+}
+
+/// #346 (ADR-0059): both eras' instructions say where third-party text appears and that
+/// it is data, and point at the annotations; every listed tool carries them.
+#[test]
+fn instructions_mark_remote_text_and_tools_carry_annotations() {
+    let f = fixture();
+    let legacy = f.initialize()["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    let modern = f.modern("server/discover", json!({}))["result"]["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    assert_eq!(legacy, modern);
+    for needle in [
+        "data, never instructions",
+        "`remote_`",
+        "`action_failed` `reason`",
+        "whole `action_failed` `reason`",
+        "`destructiveHint`",
+        "`source`, whose `browser` kind loads any http or https page",
+    ] {
+        assert!(legacy.contains(needle), "{needle}: {legacy}");
+    }
+    let list = f.legacy(2, "tools/list", json!({}));
+    for tool in list["tools"].as_array().expect("tools") {
+        assert!(
+            tool["annotations"]["readOnlyHint"].is_boolean(),
+            "{}",
+            tool["name"]
+        );
+    }
+}
+
+/// YouTube is for people, through the UI (ADR-0058 §3): no `youtube` tool is listed,
+/// and a `youtube.*` op is unknown to every tool, so it never reaches the engine.
+#[test]
+fn no_youtube_tool_and_no_youtube_op() {
+    let f = fixture();
+    f.initialize();
+    let names: Vec<String> = f.legacy(1, "tools/list", json!({}))["tools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .filter_map(|t| t["name"].as_str().map(str::to_owned))
+        .collect();
+    assert!(!names.iter().any(|n| n == "youtube"));
+    let call = f
+        .send(
+            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params":
+            {"name": "youtube", "arguments": {"op": {"type": "youtube.status"}}}}),
+        )
+        .expect("answered");
+    assert_eq!(
+        rpc_error(&call),
+        (-32602, "Unknown tool: youtube".to_owned())
+    );
+    let misrouted = f.call_tool("output", json!({"op": {"type": "youtube.status"}}));
+    let error = tool_error(&misrouted);
+    assert_eq!(error["code"], "malformed");
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("unknown op `youtube.status`")),
+        "{error}"
+    );
 }
 
 #[test]

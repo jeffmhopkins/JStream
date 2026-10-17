@@ -5,12 +5,13 @@ use std::mem::ManuallyDrop;
 
 use jstream_platform::PlatformError;
 use windows::Win32::Media::MediaFoundation::{
-    IMFActivate, IMFMediaType, IMFSample, IMFTransform, MF_E_TRANSFORM_NEED_MORE_INPUT,
-    MF_E_TRANSFORM_STREAM_CHANGE, MF_VERSION, MFCreateMemoryBuffer, MFCreateSample,
-    MFSTARTUP_NOSOCKET, MFSampleExtension_CleanPoint, MFShutdown, MFStartup, MFT_ENUM_FLAG,
-    MFT_FRIENDLY_NAME_Attribute, MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_OUTPUT_DATA_BUFFER,
+    IMFActivate, IMFAttributes, IMFMediaType, IMFSample, IMFTransform,
+    MF_E_TRANSFORM_NEED_MORE_INPUT, MF_E_TRANSFORM_STREAM_CHANGE, MF_VERSION, MFCreateAttributes,
+    MFCreateMemoryBuffer, MFCreateSample, MFSTARTUP_NOSOCKET, MFSampleExtension_CleanPoint,
+    MFShutdown, MFStartup, MFT_ENUM_ADAPTER_LUID, MFT_ENUM_FLAG, MFT_FRIENDLY_NAME_Attribute,
+    MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_OUTPUT_DATA_BUFFER,
     MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES,
-    MFT_REGISTER_TYPE_INFO, MFTEnumEx,
+    MFT_REGISTER_TYPE_INFO, MFTEnum2, MFTEnumEx,
 };
 use windows::Win32::System::Com::{
     CO_MTA_USAGE_COOKIE, CoDecrementMTAUsage, CoIncrementMTAUsage, CoTaskMemFree,
@@ -102,6 +103,18 @@ pub(crate) fn enumerate(
     input: (GUID, GUID),
     output: (GUID, GUID),
 ) -> Result<Vec<Found>, PlatformError> {
+    enumerate_on(category, flags, input, output, None)
+}
+
+/// [`enumerate`], keeping only the hardware MFTs on the adapter with LUID `adapter`
+/// when one is given (`MFTEnum2` with `MFT_ENUM_ADAPTER_LUID`).
+pub(crate) fn enumerate_on(
+    category: GUID,
+    flags: MFT_ENUM_FLAG,
+    input: (GUID, GUID),
+    output: (GUID, GUID),
+    adapter: Option<u64>,
+) -> Result<Vec<Found>, PlatformError> {
     let input = MFT_REGISTER_TYPE_INFO {
         guidMajorType: input.0,
         guidSubtype: input.1,
@@ -112,18 +125,48 @@ pub(crate) fn enumerate(
     };
     let mut array: *mut Option<IMFActivate> = std::ptr::null_mut();
     let mut count = 0u32;
-    // SAFETY: the type infos outlive the call; the out-pointers point to valid locals.
-    unsafe {
-        MFTEnumEx(
-            category,
-            flags,
-            Some(&input),
-            Some(&output),
-            &mut array,
-            &mut count,
-        )
+    match adapter {
+        // SAFETY: the type infos outlive the call; the out-pointers point to valid locals.
+        None => unsafe {
+            MFTEnumEx(
+                category,
+                flags,
+                Some(&input),
+                Some(&output),
+                &mut array,
+                &mut count,
+            )
+        }
+        .os("MFTEnumEx")?,
+        Some(luid) => {
+            let mut attributes: Option<IMFAttributes> = None;
+            // SAFETY: valid out-pointer; then plain COM calls on the new store. The LUID
+            // is the blob `{ LowPart: u32, HighPart: i32 }`, little-endian, which is
+            // `luid`'s low then high half.
+            unsafe {
+                MFCreateAttributes(&mut attributes, 1).os("MFCreateAttributes")?;
+                let attributes = attributes.as_ref().ok_or(PlatformError::Os {
+                    call: "MFCreateAttributes",
+                    code: None,
+                    message: "returned no attribute store".into(),
+                })?;
+                attributes
+                    .SetBlob(&MFT_ENUM_ADAPTER_LUID, &luid.to_le_bytes())
+                    .os("IMFAttributes::SetBlob (MFT_ENUM_ADAPTER_LUID)")?;
+                // SAFETY: as for MFTEnumEx; the attribute store outlives the call.
+                MFTEnum2(
+                    category,
+                    flags,
+                    Some(&input),
+                    Some(&output),
+                    attributes,
+                    &mut array,
+                    &mut count,
+                )
+                .os("MFTEnum2")?;
+            }
+        }
     }
-    .os("MFTEnumEx")?;
     if array.is_null() {
         return Ok(Vec::new());
     }

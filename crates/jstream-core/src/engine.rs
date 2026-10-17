@@ -17,6 +17,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
     Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
@@ -26,15 +27,18 @@ use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
 use crate::studio::{self, Studio};
 use crate::transition;
+use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_graph::Graph;
-use jstream_media::FrameSize;
+use jstream_media::{FrameSize, MediaTime};
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
+    Action, ActionResult, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
     EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
-    OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    SceneId, SecretString, SourceId, TransitionPresetId, TransitionStarted,
+    OutputKind, OutputState, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer,
+    RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, TransitionPresetId,
+    TransitionStarted, YoutubeAuth,
 };
+use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -86,10 +90,20 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The latest audio of the program mix and of every bus a source draws: the mixer
+    /// thread pushes each block, and the `waveform` and `spectrum` sources draw it.
+    audio_scopes: Arc<AudioScopes>,
+    /// The YouTube sign-in and Live API client, if the host gave a setup
+    /// ([`Engine::with_youtube`]). On its own lock, taken only to clone the handle: no
+    /// YouTube call runs under the collection lock.
+    youtube: Mutex<Option<Arc<Youtube>>>,
+    /// The preview thread, which draws and encodes every session's preview streams.
+    previews: PreviewHub,
 }
 
 impl Default for Engine {
     fn default() -> Self {
+        let audio_scopes = Arc::new(AudioScopes::new());
         Self {
             shared: Arc::new_cyclic(|shared: &Weak<Shared>| Shared {
                 state: Mutex::new({
@@ -97,12 +111,16 @@ impl Default for Engine {
                     state.graph = Graph::new().with_kinds(crate::kinds::builtin());
                     let host: Weak<dyn LiveHost> = shared.clone();
                     state.live = LiveSources::new(host);
+                    state.live.set_audio_scopes(Arc::clone(&audio_scopes));
                     state
                 }),
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
                 audit: Audit::default(),
                 collection_file: Mutex::new(None),
+                audio_scopes,
+                youtube: Mutex::new(None),
+                previews: PreviewHub::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -165,6 +183,35 @@ impl Engine {
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
         self
+    }
+
+    /// Gives the engine YouTube (ADR-0058): a Google OAuth client, the HTTPS transport
+    /// and the store for the account's refresh token. The host passes
+    /// [`YoutubeSetup::built_in`] when the build has a built-in client (ADR-0058), or a
+    /// developer's override built with [`YoutubeSetup::new`]. The YouTube actions
+    /// and queries then work, and an output with a `youtube` target can start. Without
+    /// it, YouTube's API features are off: `youtube.status` reports `unavailable`, the
+    /// other YouTube calls fail with `action_failed` saying the build has no client, and
+    /// clients hide them. Reads the store once, here: a token kept by an earlier sign-in
+    /// signs the engine in. Configure this before [`connect`](Self::connect).
+    #[must_use]
+    pub fn with_youtube(self, setup: YoutubeSetup) -> Self {
+        let shared = Arc::downgrade(&self.shared);
+        let emit = Arc::new(move |event: Event| {
+            if let Some(shared) = shared.upgrade() {
+                let mut wake = Vec::new();
+                lock(&shared.state).subscribers.emit(&event, &mut wake);
+                wake_all(wake);
+            }
+        });
+        *lock(&self.shared.youtube) = Some(Arc::new(Youtube::new(setup, emit)));
+        self
+    }
+
+    /// The YouTube side, if the host gave one. The handle is cloned so no engine lock
+    /// is held while it calls YouTube.
+    pub(crate) fn youtube(&self) -> Option<Arc<Youtube>> {
+        lock(&self.shared.youtube).clone()
     }
 
     /// Records every batch, undo, redo and action this engine executes in `sink`, after
@@ -260,12 +307,33 @@ impl Engine {
     /// recording output (`OutputKind::Record`) needs no publish target: the engine
     /// opens its file itself. Nor does the virtual camera (`OutputKind::VirtualCam`),
     /// which publishes to the backends' [`VcamSink`](jstream_platform::VcamSink).
+    ///
+    /// While an `output.start` of this output is opening, it answers the kind the start
+    /// saw when it checked the output's key, not the collection's current one (#343). A
+    /// retarget that lands during the opener then can't pair the new server's URL with
+    /// the old server's key: the opener connects to the server the start was checked
+    /// for, and the next start sees the new target.
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
+        if let Some(kind) = self.starting_kind(output_id) {
+            return kind;
+        }
         lock(&self.shared.state)
             .graph
             .state()
             .output(output_id)
             .map(|output| output.kind().clone())
+    }
+
+    /// The kind an `output.start` of this output saw when it checked the output's key,
+    /// while that start is opening (#343); `None` when no start of it is pending. Takes
+    /// the gate lock alone.
+    fn starting_kind(&self, output_id: &OutputId) -> Option<Option<OutputKind>> {
+        let host = self.media.as_ref()?;
+        let gate = lock(&host.gate);
+        gate.pending
+            .as_ref()
+            .filter(|pending| pending.output_id == *output_id)
+            .map(|pending| pending.kind.clone())
     }
 
     /// Injects platform backends. `output.start` then runs the media pipeline
@@ -281,10 +349,16 @@ impl Engine {
     /// life, starting it on each such start and stopping it on the stop.
     #[must_use]
     pub fn with_backends(mut self, mut backends: Backends) -> Self {
-        // Animated sources run on the platform's media clock from here on.
-        lock(&self.shared.state)
-            .live
-            .set_clock(Arc::clone(&backends.clock));
+        // Animated sources run on the platform's media clock from here on, and media
+        // files play through the platform's decoders.
+        {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state.live.set_clock(Arc::clone(&backends.clock));
+            state
+                .live
+                .set_media(Arc::clone(&backends.media), state.graph.state());
+        }
         let host = self.host();
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
@@ -293,8 +367,9 @@ impl Engine {
         self
     }
 
-    /// Gives `browser` sources the browser engine they open their pages in (ADR-0021).
-    /// Without one, a `browser` source shows nothing and logs that no backend is set.
+    /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
+    /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
+    /// that no backend is set; giving one builds the ones already there again.
     /// The host also hands the backend a GPU device (`use_device`): for now one it opens
     /// on the media adapter itself, since the engine doesn't hand out its own yet.
     #[must_use]
@@ -377,6 +452,18 @@ impl Engine {
     /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
     pub(crate) fn drop_ledger(&self) -> Arc<Mutex<DropLedger>> {
         Arc::clone(&self.drops)
+    }
+
+    /// The scopes the mixer thread feeds: the program mix's, and one per bus a source
+    /// draws.
+    pub(crate) fn audio_scopes(&self) -> Arc<AudioScopes> {
+        Arc::clone(&self.shared.audio_scopes)
+    }
+
+    /// The scope the program mix's audio goes to.
+    #[cfg(test)]
+    pub(crate) fn audio_scope(&self) -> Arc<jstream_sources::AudioScope> {
+        Arc::clone(self.shared.audio_scopes.program())
     }
 
     /// A thread that emits `stats.tick` about once a second until `stop` is set.
@@ -490,6 +577,7 @@ impl Engine {
     #[doc(hidden)]
     #[must_use]
     pub fn with_cpu_compositor(self) -> Self {
+        self.shared.previews.set_draw(crate::preview::cpu_draw());
         self.with_draw(crate::runtime::cpu_draw())
     }
 
@@ -578,6 +666,7 @@ impl Engine {
         client_id: &ClientId,
         request_id: &RequestId,
         call: Call,
+        previews: &SessionPreviews,
     ) -> Executed {
         let span = tracing::info_span!(
             "command",
@@ -609,11 +698,18 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if let Call::Action {
+        let result = if let Some(result) = self.youtube_call(&call) {
+            result
+        } else if let Call::Action {
             action: action @ (Action::OutputSetKey { .. } | Action::OutputClearKey { .. }),
         } = call
         {
             self.key_action(action)
+        } else if let Call::Action {
+            action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
+        } = call
+        {
+            self.preview_action(previews, action)
         } else if self.backends_ready()
             && matches!(
                 call,
@@ -625,10 +721,12 @@ impl Engine {
             self.run_media_action(call)
         } else {
             let mut wake = Vec::new();
-            let result = lock(&self.shared.state).execute(client_id, request_id, call, &mut wake);
+            let (result, stale) = lock(&self.shared.state)
+                .execute_and_unbind_keys(client_id, request_id, call, &mut wake);
             for waker in wake {
                 waker.wake();
             }
+            self.remove_stale_keys(stale);
             self.with_key_set(result)
         };
         if matches!(
@@ -638,7 +736,7 @@ impl Engine {
             self.save_collection();
         }
         match (&result, output) {
-            (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
+            (Ok(CallResult::Batch { rev, .. }), _) => tracing::debug!(rev = %rev, "batch applied"),
             (Ok(CallResult::History { rev, step_rev, .. }), _) => {
                 tracing::debug!(rev = %rev, step_rev = %step_rev, "history step applied");
             }
@@ -655,6 +753,129 @@ impl Engine {
             sink.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(result)
+    }
+
+    /// The YouTube actions and queries, or `None` for any other call. They run with no
+    /// engine lock held, since most of them call the Live API.
+    fn youtube_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        let youtube = self.youtube();
+        let unavailable = || ProtocolError::ActionFailed {
+            reason: NO_YOUTUBE_CLIENT.into(),
+        };
+        let action = |result: Result<ActionResult, ProtocolError>| {
+            result.map(|result| CallResult::Action {
+                result: Some(result),
+            })
+        };
+        let query = |result: Result<QueryResult, ProtocolError>| {
+            result.map(|result| CallResult::Query { result })
+        };
+        Some(match call {
+            Call::Action { action: a } => match a {
+                Action::YoutubeSignIn => {
+                    action(youtube.ok_or_else(unavailable).and_then(|y| y.sign_in()))
+                }
+                Action::YoutubeSignOut => youtube
+                    .ok_or_else(unavailable)
+                    .and_then(|y| y.sign_out())
+                    .map(|()| CallResult::action()),
+                Action::YoutubeCreateBroadcast {
+                    title,
+                    description,
+                    scheduled_start_time,
+                    privacy,
+                    made_for_kids,
+                } => action(youtube.ok_or_else(unavailable).and_then(|y| {
+                    y.create_broadcast(
+                        title.clone(),
+                        description.clone(),
+                        scheduled_start_time.clone(),
+                        *privacy,
+                        *made_for_kids,
+                    )
+                })),
+                Action::YoutubeBindBroadcast {
+                    broadcast_id,
+                    stream_id,
+                } => action(
+                    youtube
+                        .ok_or_else(unavailable)
+                        .and_then(|y| y.bind_broadcast(broadcast_id, stream_id.clone())),
+                ),
+                Action::YoutubeTransitionBroadcast { broadcast_id, to } => action(
+                    youtube
+                        .ok_or_else(unavailable)
+                        .and_then(|y| y.transition_broadcast(broadcast_id, *to)),
+                ),
+                _ => return None,
+            },
+            Call::Query { query: q } => {
+                match q {
+                    Query::YoutubeStatus => Ok(CallResult::Query {
+                        result: youtube.map_or(
+                            QueryResult::YoutubeStatus {
+                                auth: YoutubeAuth::Unavailable,
+                            },
+                            |y| y.status(),
+                        ),
+                    }),
+                    Query::YoutubeListBroadcasts {
+                        status,
+                        broadcast_type,
+                        page_token,
+                    } => query(youtube.ok_or_else(unavailable).and_then(|y| {
+                        y.list_broadcasts(*status, *broadcast_type, page_token.clone())
+                    })),
+                    Query::YoutubeListStreams { page_token } => query(
+                        youtube
+                            .ok_or_else(unavailable)
+                            .and_then(|y| y.list_streams(page_token.clone())),
+                    ),
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        })
+    }
+
+    /// `preview.subscribe` and `preview.unsubscribe`, on the calling session's
+    /// previews. Nothing here holds the collection lock past reading `rev`.
+    fn preview_action(
+        &self,
+        previews: &SessionPreviews,
+        action: Action,
+    ) -> Result<CallResult, ProtocolError> {
+        match action {
+            Action::PreviewSubscribe {
+                channel,
+                max_width,
+                max_height,
+                fps,
+                codecs,
+            } => {
+                let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                let rev = lock(&self.shared.state).graph.rev();
+                let codecs = self.media.as_ref().and_then(|host| {
+                    lock(&host.backends)
+                        .as_ref()
+                        .map(|backends| Arc::clone(&backends.codecs))
+                });
+                let shared: Arc<dyn PreviewSource> = self.shared.clone();
+                previews.subscribe(
+                    &self.shared.previews,
+                    Arc::downgrade(&shared),
+                    channel,
+                    settings,
+                    Opening { codecs, rev },
+                )?;
+                Ok(CallResult::Action { result: None })
+            }
+            Action::PreviewUnsubscribe { channel } => {
+                previews.unsubscribe(channel);
+                Ok(CallResult::Action { result: None })
+            }
+            other => Err(not_implemented(other.name())),
+        }
     }
 
     /// The key store, if the host gave one. The handle is cloned so the store is
@@ -682,13 +903,25 @@ impl Engine {
                     });
                 }
                 check_key(&key)?;
+                // The opener of a start that is opening reads the server the start
+                // checked (`output_kind`), which a retarget since may have changed, so
+                // a key set now could be paired with the old server (#343).
+                if self.starting_kind(&output_id).is_some() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!(
+                            "output `{output_id}` is starting: set its key once the start \
+                             has settled"
+                        ),
+                    });
+                }
                 let store = self.key_store().ok_or_else(no_key_store)?;
                 store
                     .set(output_id.as_str(), &Secret::new(key.expose()))
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
-                Ok(CallResult::Action {})
+                lock(&self.shared.state).stale_keys.remove(&output_id);
+                Ok(CallResult::action())
             }
             Action::OutputClearKey { output_id } => {
                 let store = self.key_store().ok_or_else(no_key_store)?;
@@ -697,9 +930,40 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
-                Ok(CallResult::Action {})
+                lock(&self.shared.state).stale_keys.remove(&output_id);
+                Ok(CallResult::action())
             }
             other => Err(not_implemented(other.name())),
+        }
+    }
+
+    /// Removes the stream keys of outputs that an applied batch, undo or redo deleted or
+    /// pointed at another server (`OutputKind::key_server`, #343), after the collection
+    /// lock is released. Each stays in `State::stale_keys`, which refuses its
+    /// `output.start`, until its key is gone: a store that refuses keeps it there until an
+    /// `output.set_key` or `output.clear_key` succeeds. The batch itself has already
+    /// succeeded, so a refusal is logged, never returned. Without a store there is no
+    /// key to remove.
+    fn remove_stale_keys(&self, stale: Vec<OutputId>) {
+        if stale.is_empty() {
+            return;
+        }
+        let store = self.key_store();
+        for output_id in stale {
+            let removed = match &store {
+                Some(store) => store.clear(output_id.as_str()),
+                None => Ok(()),
+            };
+            match removed {
+                Ok(()) => {
+                    lock(&self.shared.state).stale_keys.remove(&output_id);
+                }
+                Err(err) => tracing::warn!(
+                    output_id = %output_id,
+                    "the credential store did not remove the stream key of an output whose \
+                     server changed: {err}"
+                ),
+            }
         }
     }
 
@@ -813,6 +1077,27 @@ impl Engine {
         // One start at a time: a second waits here until the first has settled, so
         // only one ever opens the program stage. A stop never takes this lock.
         let _starting = lock(&host.starts);
+        // A `youtube` output needs a signed-in client. Checked under the start lock,
+        // before the output goes `starting`, and without the collection lock, since it
+        // waits for a YouTube call in flight: the guard is dropped at the end of this
+        // statement, before the match below.
+        let broadcast = youtube_broadcast(&lock(&self.shared.state).graph, &output_id);
+        let youtube = match broadcast {
+            Some(_) => match self.youtube() {
+                Some(youtube) if youtube.signed_in() => Some(youtube),
+                Some(_) => {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: "not signed in to YouTube: send `youtube.sign_in`".into(),
+                    });
+                }
+                None => {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: NO_YOUTUBE_CLIENT.into(),
+                    });
+                }
+            },
+            None => None,
+        };
         let mut wake = Vec::new();
         let (parts, publish, generation, program, key) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
@@ -842,10 +1127,23 @@ impl Engine {
                     reason: "another output is starting".into(),
                 });
             }
+            if state.stale_keys.contains(&output_id) {
+                return Err(ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` changed server and its old stream key is not \
+                         removed yet: send `output.clear_key`, or `output.set_key` with the \
+                         new server's key"
+                    ),
+                });
+            }
             let key = encode_key(&state.graph, &output_id);
-            let publish = match own_target(&state.graph, &output_id) {
-                Some(OwnTarget::Record(path)) => Target::Record(path),
-                Some(OwnTarget::Vcam(canvas)) => {
+            let publish = match (
+                own_target(&state.graph, &output_id),
+                youtube_broadcast(&state.graph, &output_id),
+                &youtube,
+            ) {
+                (Some(OwnTarget::Record(path)), _, _) => Target::Record(path),
+                (Some(OwnTarget::Vcam(canvas)), _, _) => {
                     let sink = lock(&host.vcam).take();
                     let Some(sink) = sink else {
                         let reason = if host.has_vcam.load(Ordering::Acquire) {
@@ -859,7 +1157,17 @@ impl Engine {
                     };
                     Target::Vcam(VcamOut::new(sink, Arc::clone(&host.vcam)), canvas)
                 }
-                None => match lock(&host.publish).take() {
+                (None, Some(broadcast_id), Some(youtube)) => Target::YouTube {
+                    broadcast_id,
+                    youtube: Arc::clone(youtube),
+                },
+                // Retargeted to YouTube since the check above: sign-in wasn't checked.
+                (None, Some(_), None) => {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!("output `{output_id}` changed while starting"),
+                    });
+                }
+                (None, None, _) => match lock(&host.publish).take() {
                     Some(publish) => Target::Ready(publish),
                     None => match lock(&host.open_publish).as_ref() {
                         Some(open) => Target::Open(Arc::clone(open)),
@@ -884,6 +1192,7 @@ impl Engine {
                     *lock(&host.open_timeout),
                     Arc::clone(&state.render),
                     state.audio.wanted(),
+                    canvas_size(&state.graph),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -891,6 +1200,11 @@ impl Engine {
                 output_id: output_id.clone(),
                 generation,
                 cancel: false,
+                kind: state
+                    .graph
+                    .state()
+                    .output(&output_id)
+                    .map(|output| output.kind().clone()),
             });
             match state.outputs.begin(&output_id, true) {
                 Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),
@@ -915,7 +1229,9 @@ impl Engine {
             armed: true,
         };
         let (fail_tx, fail_rx) = mpsc::channel();
-        let launched = publish.open(&output_id).and_then(|opened| {
+        let mut health = None;
+        let launched = publish.open(&output_id).and_then(|(opened, watch)| {
+            health = watch;
             let program = match program {
                 Some(program) => program,
                 None => {
@@ -1058,7 +1374,12 @@ impl Engine {
         };
         wake_all(std::mem::take(&mut wake));
         match outcome {
-            StartOutcome::Active => Ok(CallResult::Action {}),
+            StartOutcome::Active => {
+                if let Some(watch) = health {
+                    self.watch_health(&output_id, watch);
+                }
+                Ok(CallResult::action())
+            }
             StartOutcome::Cancelled(running) => {
                 drop(running);
                 drop(inflight);
@@ -1081,6 +1402,9 @@ impl Engine {
         let Some(host) = &self.media else {
             return Err(not_implemented("output.stop"));
         };
+        if let Some(youtube) = self.youtube() {
+            youtube.unwatch_health(&output_id);
+        }
         let mut wake = Vec::new();
         let (running, watcher, wait_for) = {
             let mut state = lock(&self.shared.state);
@@ -1144,7 +1468,28 @@ impl Engine {
         settle.state = OutputState::Stopped;
         drop(settle);
         drop(clear_drain);
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
+    }
+
+    /// Polls the health of the stream a `youtube` output started on, while the output
+    /// is `active` or `reconnecting`.
+    fn watch_health(&self, output_id: &OutputId, watch: HealthTarget) {
+        let shared = Arc::downgrade(&self.shared);
+        let watched = output_id.clone();
+        let alive = Box::new(move || {
+            shared.upgrade().is_some_and(|shared| {
+                matches!(
+                    lock(&shared.state).outputs.state(&watched),
+                    Ok(OutputState::Active | OutputState::Reconnecting)
+                )
+            })
+        });
+        watch.youtube.watch_health(
+            output_id.clone(),
+            watch.broadcast_id,
+            watch.stream_id,
+            alive,
+        );
     }
 
     fn settle(&self, output_id: &OutputId, state: OutputState) {
@@ -1183,6 +1528,12 @@ impl Engine {
         lock(&self.shared.state).audio.status(source_id)
     }
 
+    /// The packets the mixer input of `source_id` has received, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_packets(&self, source_id: &SourceId) -> Option<u64> {
+        lock(&self.shared.state).audio.packets(source_id)
+    }
+
     /// Waits until the live sources have built everything asked of them, for tests.
     #[cfg(test)]
     pub(crate) fn settle_sources(&self) -> bool {
@@ -1194,6 +1545,14 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn set_source_clock(&self, clock: Arc<dyn jstream_platform::MediaClock>) {
         lock(&self.shared.state).live.set_clock(clock);
+    }
+
+    /// Plays `media` sources through `media`, for tests that give no full backends.
+    #[cfg(test)]
+    pub(crate) fn set_source_media(&self, media: Arc<dyn jstream_platform::MediaDecoders>) {
+        let mut state = lock(&self.shared.state);
+        let state = &mut *state;
+        state.live.set_media(media, state.graph.state());
     }
 
     /// Re-plans the program mix now, as the live sources' thread does when a frame is
@@ -1247,6 +1606,12 @@ enum OwnTarget {
     Vcam(FrameSize),
 }
 
+/// The collection's canvas, width and height.
+fn canvas_size(graph: &Graph) -> (u32, u32) {
+    let canvas = graph.state().canvas();
+    (canvas.width, canvas.height)
+}
+
 /// Where a recording output in the collection records to, or the size a virtual camera
 /// runs at. `None` when the output needs a publish target (or is not in the
 /// collection).
@@ -1267,13 +1632,37 @@ fn own_target(graph: &Graph, output_id: &OutputId) -> Option<OwnTarget> {
     }
 }
 
+/// The broadcast a `youtube` output in the collection sends to, or `None` when the
+/// output has another target (or is not in the collection).
+fn youtube_broadcast(graph: &Graph, output_id: &OutputId) -> Option<String> {
+    match graph.state().output(output_id)?.kind() {
+        OutputKind::Rtmp {
+            target: RtmpTarget::YouTube { broadcast_id },
+        } => Some(broadcast_id.clone()),
+        _ => None,
+    }
+}
+
 /// Where a start sends its output: a one-shot publish target the host set, the opener
-/// it calls once the locks are released, a recording file, or the virtual camera.
+/// it calls once the locks are released, a recording file, the virtual camera, or a
+/// YouTube broadcast.
 enum Target {
     Ready(Box<dyn LivePublish>),
     Open(OpenPublish),
     Record(PathBuf),
     Vcam(VcamOut, FrameSize),
+    /// A `youtube` output: the ingest is read from the Live API when it opens.
+    YouTube {
+        broadcast_id: String,
+        youtube: Arc<Youtube>,
+    },
+}
+
+/// The stream a started `youtube` output sends to, whose health the engine polls.
+struct HealthTarget {
+    youtube: Arc<Youtube>,
+    broadcast_id: String,
+    stream_id: String,
 }
 
 /// A start's opened target: a stream the output thread muxes, or the virtual camera.
@@ -1292,16 +1681,34 @@ impl Target {
         }
     }
 
-    /// Where to send the output. Runs the opener, outside the engine's locks. A
-    /// recording's file is opened by `launch`, once the frame size is known.
-    fn open(self, output_id: &OutputId) -> Result<Opened, String> {
+    /// Where to send the output, and for a `youtube` output the stream to watch. Runs
+    /// the opener, or reads the YouTube ingest and connects, outside the engine's locks.
+    /// A recording's file is opened by `launch`, once the frame size is known.
+    fn open(self, output_id: &OutputId) -> Result<(Opened, Option<HealthTarget>), String> {
         match self {
-            Target::Ready(publish) => Ok(Opened::Muxed(Destination::Publish(publish))),
+            Target::Ready(publish) => Ok((Opened::Muxed(Destination::Publish(publish)), None)),
             Target::Open(open) => open(output_id)
-                .map(|publish| Opened::Muxed(Destination::Publish(publish)))
+                .map(|publish| (Opened::Muxed(Destination::Publish(publish)), None))
                 .map_err(|err| format!("opening the publish target: {err}")),
-            Target::Record(path) => Ok(Opened::Muxed(Destination::Record(path))),
-            Target::Vcam(vcam, canvas) => Ok(Opened::Vcam(vcam, canvas)),
+            Target::Record(path) => Ok((Opened::Muxed(Destination::Record(path)), None)),
+            Target::Vcam(vcam, canvas) => Ok((Opened::Vcam(vcam, canvas), None)),
+            Target::YouTube {
+                broadcast_id,
+                youtube,
+            } => {
+                let ingest = youtube.ingest(&broadcast_id)?;
+                let publish = youtube
+                    .connect(&ingest)
+                    .map_err(|err| format!("connecting to YouTube's ingest: {err}"))?;
+                Ok((
+                    Opened::Muxed(Destination::Publish(publish)),
+                    Some(HealthTarget {
+                        youtube,
+                        broadcast_id,
+                        stream_id: ingest.stream_id,
+                    }),
+                ))
+            }
         }
     }
 }
@@ -1599,11 +2006,55 @@ struct State {
     stats_seq: u64,
     /// The program mixer's controls while it runs: it follows the collection's audio.
     routing: AudioRouting,
+    /// Outputs whose stream key must be removed because an applied change deleted them
+    /// or moved them to another server (#343). Marked under this lock in the same
+    /// critical section as the change, and unmarked once the store has removed the key,
+    /// so `output.start` (which refuses a marked output) never opens the new server with
+    /// the old key.
+    stale_keys: BTreeSet<OutputId>,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
 }
 
 impl State {
+    /// Executes `call`, and when it is a batch, undo or redo that applied, marks in
+    /// `stale_keys` and returns every output whose stream key it made stale: one it
+    /// deleted, or whose `OutputKind::key_server` it changed (#343). The caller removes
+    /// those keys once this lock is released, since the store is never called under it.
+    fn execute_and_unbind_keys(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        call: Call,
+        wake: &mut Vec<Waker>,
+    ) -> (Result<CallResult, ProtocolError>, Vec<OutputId>) {
+        if !matches!(call, Call::Batch(_) | Call::History(_)) {
+            return (self.execute(client_id, request_id, call, wake), Vec::new());
+        }
+        let before: Vec<(OutputId, Option<String>)> = self
+            .graph
+            .state()
+            .outputs()
+            .map(|output| (output.id().clone(), output.kind().key_server()))
+            .collect();
+        let result = self.execute(client_id, request_id, call, wake);
+        if result.is_err() {
+            return (result, Vec::new());
+        }
+        let after = self.graph.state();
+        let stale: Vec<OutputId> = before
+            .into_iter()
+            .filter(|(output_id, server)| {
+                after
+                    .output(output_id)
+                    .is_none_or(|output| output.kind().key_server() != *server)
+            })
+            .map(|(output_id, _)| output_id)
+            .collect();
+        self.stale_keys.extend(stale.iter().cloned());
+        (result, stale)
+    }
+
     fn execute(
         &mut self,
         client_id: &ClientId,
@@ -1654,7 +2105,10 @@ impl State {
             applied.touched,
             applied.inverse.edits,
         );
-        let result = CallResult::Batch { rev: applied.rev };
+        let result = CallResult::Batch {
+            rev: applied.rev,
+            removed_hotkeys: applied.removed_hotkeys,
+        };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
         }
@@ -1831,20 +2285,23 @@ impl State {
             // nothing to restart otherwise, which is no failure.
             Action::AudioResetLoudness {} => {
                 self.routing.reset_loudness();
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::SceneSwitch {
                 scene_id,
                 preset_id,
             } => {
                 self.switch(client_id, request_id, scene_id, preset_id.as_ref(), wake)?;
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::StudioSetPreview { scene_id } => {
                 if self.studio.set_preview(self.graph.state(), &scene_id)? {
                     self.emit_studio(client_id, request_id, None, wake);
                 }
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
+            }
+            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+                return Err(served_by_the_server(other.name()));
             }
             other => return Err(not_implemented(other.name())),
         };
@@ -1857,7 +2314,7 @@ impl State {
                 wake,
             );
         }
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
@@ -1880,6 +2337,7 @@ impl State {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
                 },
+                Query::DeviceList => return Err(served_by_the_server(query.name())),
                 other => return Err(not_implemented(other.name())),
             },
         };
@@ -1985,11 +2443,13 @@ impl State {
             frames,
             frame_versions,
             live,
+            audio,
             render,
             studio,
             ..
         } = self;
         let now = live.now();
+        live.begin_plan();
         let planning = snapshot::plan_with(
             graph,
             studio.program(),
@@ -1999,6 +2459,10 @@ impl State {
                 None => live.frame(id, now, frame_versions),
             },
         );
+        live.end_plan();
+        if let Some(sound) = live.take_audio() {
+            audio.sync_live(sound);
+        }
         if planning.finished {
             studio.finish();
         }
@@ -2042,6 +2506,13 @@ impl State {
     }
 }
 
+impl PreviewSource for Shared {
+    fn current(&self) -> (Arc<crate::runtime::RenderSnapshot>, Rev, MediaTime) {
+        let state = lock(&self.state);
+        (state.render.load(), state.graph.rev(), state.live.now())
+    }
+}
+
 impl LiveHost for Shared {
     fn install(&self, built: Built) {
         let mut state = lock(&self.state);
@@ -2077,6 +2548,9 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
         "must be at most 1024 bytes"
     } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
         "must not contain whitespace or control characters"
+    } else if !key.is_ascii() {
+        // No streaming service issues one; a leading U+FEFF is the usual case (#441).
+        "must contain only ASCII characters"
     } else {
         return Ok(());
     };
@@ -2090,6 +2564,13 @@ fn no_key_store() -> ProtocolError {
 }
 
 /// A protocol variant added after this engine was written.
+/// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
+/// `device.list`, `device.revoke`): the server in front of the engine answers them
+/// (ADR-0044), so one that reaches the engine came from a client with no server between.
+fn served_by_the_server(call: &str) -> ProtocolError {
+    ProtocolError::Unsupported { call: call.into() }
+}
+
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),

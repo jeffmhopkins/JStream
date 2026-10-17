@@ -3,10 +3,14 @@
 
 use crate::audio;
 use crate::browser::BrowserKind;
+use crate::chat::ChatKind;
 use crate::color::ColorKind;
 use crate::describe::described;
 use crate::image::ImageKind;
+use crate::media::MediaKind;
+use crate::scope::{SpectrumKind, WaveformKind};
 use crate::text::TextKind;
+use crate::youtube_chat::YoutubeChatKind;
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_protocol::{KindDescriptor, Settings};
 use std::collections::BTreeMap;
@@ -18,21 +22,27 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
-    /// `browser`, `color`, `image` and `text` produce frames (`browser` through its
-    /// injected backend, on the GPU). `audio_input`, `desktop_audio` and
-    /// `app_audio` are audio-only: the engine records them, and `create` fails with
-    /// [`SourceError::AudioOnly`]. `display`, `media`, `webcam` and `window` are
-    /// described only, so their sources can be created and configured but fail to start
-    /// with [`SourceError::NotBuilt`].
+    /// `browser`, `chat_message`, `color`, `image`, `media`, `text`, `waveform`,
+    /// `spectrum` and `youtube_chat` produce frames (`browser` and its `youtube_chat`
+    /// preset through the injected backend, on the GPU). `audio_input`, `desktop_audio`
+    /// and `app_audio` are audio-only: the engine records them, and `create` fails with
+    /// [`SourceError::AudioOnly`]. `display`, `webcam` and `window` are described only, so
+    /// their sources can be created and configured but fail to start with
+    /// [`SourceError::NotBuilt`].
     pub fn builtin() -> Self {
         let mut kinds: BTreeMap<String, Box<dyn SourceKind>> = BTreeMap::new();
         let mut add = |kind: Box<dyn SourceKind>| {
             kinds.insert(kind.descriptor().kind_id.clone(), kind);
         };
         add(Box::new(BrowserKind::new()));
+        add(Box::new(YoutubeChatKind::new()));
         add(Box::new(ColorKind::new()));
         add(Box::new(ImageKind::new()));
+        add(Box::new(MediaKind::new()));
         add(Box::new(TextKind::new()));
+        add(Box::new(WaveformKind::new()));
+        add(Box::new(SpectrumKind::new()));
+        add(Box::new(ChatKind::new()));
         for kind in audio::kinds() {
             add(Box::new(kind));
         }

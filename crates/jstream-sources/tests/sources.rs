@@ -86,14 +86,18 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "app_audio",
             "audio_input",
             "browser",
+            "chat_message",
             "color",
             "desktop_audio",
             "display",
             "image",
             "media",
+            "spectrum",
             "text",
+            "waveform",
             "webcam",
-            "window"
+            "window",
+            "youtube_chat"
         ]
     );
     for kind in registry.descriptors() {

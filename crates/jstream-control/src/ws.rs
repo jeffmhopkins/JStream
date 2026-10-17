@@ -6,8 +6,10 @@
 //! every future and stream it returns is completed through channels, whatever executor
 //! (or `block_on`) polls it. That thread's task writes the requests, routes each
 //! `response` or `error` to its waiting call by request ID, and fans `event`s out to the
-//! subscriptions. When the socket closes, pending and later calls fail with
-//! [`ControlError::Disconnected`] and every event stream ends.
+//! subscriptions, and binary frames to the binary channel ([`Control::binary`]), which
+//! holds at most [`BINARY_BUFFER`] of them. When the socket closes, pending and later
+//! calls fail with [`ControlError::Disconnected`] and every event and binary stream
+//! ends.
 //!
 //! The control token travels in the upgrade request's `Authorization` header, never in
 //! the URL, and the request carries an `Origin` the server accepts (ADR-0006). Plain
@@ -16,20 +18,21 @@
 //! Docs: crates/jstream-control/README.md#design, docs/adr/0006-mcp-full-access.md
 
 use crate::WS_PATH;
-use crate::control::{BoxFuture, Control, EventStream};
+use crate::control::{BinaryStream, BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use crate::ws_config::{WsConfig, disconnected};
 use futures_core::Stream;
 use futures_util::{SinkExt, StreamExt};
 use jstream_protocol::{
-    Call, ClientMessage, Event, Hello, Request, RequestId, Response, ServerMessage, Welcome,
+    BinaryFrame, Call, ClientMessage, Event, Hello, KeyframeGate, Request, RequestId, Response,
+    ServerMessage, Welcome,
 };
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -60,6 +63,8 @@ impl fmt::Debug for WsControl {
 struct Shared {
     /// The live event subscriptions; `None` once the connection has closed.
     subscribers: Mutex<Option<Vec<mpsc::UnboundedSender<Event>>>>,
+    /// The binary channel, once [`Control::binary`] has opened it.
+    binary: Mutex<Option<Arc<Mutex<BinaryQueue>>>>,
     /// Why the connection closed, once it has.
     closed: Mutex<Option<String>>,
 }
@@ -163,6 +168,82 @@ impl Control for WsControl {
         }
         // Once closed, `tx` is dropped here and the stream ends at once.
         Box::pin(Subscription(rx))
+    }
+
+    fn binary(&self) -> BinaryStream {
+        let queue = Arc::new(Mutex::new(BinaryQueue::default()));
+        let old = {
+            let mut binary = lock(&self.shared.binary);
+            if lock(&self.shared.closed).is_some() {
+                lock(&queue).closed = true;
+                None
+            } else {
+                binary.replace(Arc::clone(&queue))
+            }
+        };
+        if let Some(old) = old {
+            let waker = lock(&old).close();
+            wake(waker);
+        }
+        Box::pin(BinaryChannel(queue))
+    }
+}
+
+/// How many binary frames the binary channel holds for a reader that falls behind. At
+/// a preview's 15 to 30 frames a second that is about half a second to a second.
+pub(crate) const BINARY_BUFFER: usize = 16;
+
+/// The frames waiting in the binary channel.
+#[derive(Default)]
+struct BinaryQueue {
+    frames: VecDeque<BinaryFrame>,
+    gate: KeyframeGate,
+    waker: Option<Waker>,
+    closed: bool,
+}
+
+impl BinaryQueue {
+    /// Queues `frame` unless the gate drops it, and returns the waker to wake.
+    fn push(&mut self, frame: BinaryFrame) -> Option<Waker> {
+        let room = self.frames.len() < BINARY_BUFFER;
+        if self.gate.admit(&frame.header, room) {
+            self.frames.push_back(frame);
+            self.waker.take()
+        } else {
+            None
+        }
+    }
+
+    /// Ends the stream once it has yielded what it holds.
+    fn close(&mut self) -> Option<Waker> {
+        self.closed = true;
+        self.waker.take()
+    }
+}
+
+/// The binary channel's stream.
+struct BinaryChannel(Arc<Mutex<BinaryQueue>>);
+
+impl Stream for BinaryChannel {
+    type Item = BinaryFrame;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<BinaryFrame>> {
+        let mut queue = lock(&self.0);
+        if let Some(frame) = queue.frames.pop_front() {
+            Poll::Ready(Some(frame))
+        } else if queue.closed {
+            Poll::Ready(None)
+        } else {
+            queue.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+/// Wakes `waker`, if there is one, with no lock held.
+fn wake(waker: Option<Waker>) {
+    if let Some(waker) = waker {
+        waker.wake();
     }
 }
 
@@ -329,14 +410,20 @@ async fn run_session(
                         _ => "the engine closed the connection".to_owned(),
                     };
                 }
-                // Pings are answered by tungstenite; binary frames are not designed yet.
+                Some(Ok(Message::Binary(bytes))) => deliver(&bytes, shared),
+                // Pings are answered by tungstenite.
                 Some(Ok(_)) => {}
             },
         }
     };
     *lock(&shared.closed) = Some(reason.clone());
-    // Ends every event stream once it has yielded what it buffered.
+    // Ends every event stream once it has yielded what it buffered, and the binary one.
     lock(&shared.subscribers).take();
+    let binary = lock(&shared.binary).take();
+    if let Some(binary) = binary {
+        let waker = lock(&binary).close();
+        wake(waker);
+    }
     commands.close();
     while let Ok(command) = commands.try_recv() {
         match command {
@@ -350,6 +437,19 @@ async fn run_session(
     }
     for tx in pending.hellos.drain(..) {
         let _ = tx.send(Err(disconnected(reason.clone())));
+    }
+}
+
+/// Queues one binary frame for the binary channel, if it is open. A frame this version
+/// can't read (a newer header version, kind or codec) is skipped, as the protocol asks.
+fn deliver(bytes: &[u8], shared: &Shared) {
+    let Ok(frame) = BinaryFrame::parse(bytes) else {
+        return;
+    };
+    let binary = lock(&shared.binary).clone();
+    if let Some(binary) = binary {
+        let waker = lock(&binary).push(frame);
+        wake(waker);
     }
 }
 

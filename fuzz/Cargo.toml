@@ -1,5 +1,6 @@
 # Fuzz targets for cargo-fuzz (libFuzzer). Not a member of the root workspace: the targets
-# build only with `cargo +nightly fuzz`, so `cargo test --workspace` and CI never see them.
+# build only with `cargo +nightly fuzz`, so `cargo test --workspace` and the PR checks never see
+# them; the nightly `fuzz` workflow builds and runs them.
 # See README.md for how to run them.
 [package]
 name = "jstream-fuzz"
@@ -104,6 +105,20 @@ bench = false
 [[bin]]
 name = "mux"
 path = "fuzz_targets/mux.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "image_decode"
+path = "fuzz_targets/image_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "font_load"
+path = "fuzz_targets/font_load.rs"
 test = false
 doc = false
 bench = false
