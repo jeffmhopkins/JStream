@@ -1544,6 +1544,60 @@ mod tests {
         assert!(!err.contains("merge"), "{err}");
     }
 
+    /// `docs verify --merge` fails when the ledger doesn't parse at the merge base or at
+    /// the merge's first parent, rather than reading it as empty: an empty base would take
+    /// every entry for the branch's own, and an empty first parent would drop them (#551).
+    /// Nothing is written either way.
+    #[test]
+    fn verify_merge_refuses_an_unparsable_base_or_first_parent_ledger() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([("S.md", s), ("src/a.rs", "a\n"), ("src/b.rs", "b\n")]);
+        let refused = |work: &Fixture, what: &str| {
+            let before = std::fs::read(work.0.join(ledger::PATH)).ok();
+            let err = verify_merge(
+                &work.0,
+                "S#a",
+                "agent:work",
+                "main changed b.rs, which the text doesn't describe",
+            )
+            .expect_err("the ledger doesn't parse");
+            let err = format!("{err:#}");
+            assert!(err.contains("doesn't parse"), "{err}");
+            assert!(
+                err.contains(&format!("{} at {what}", ledger::PATH)),
+                "{err}"
+            );
+            let after = std::fs::read(work.0.join(ledger::PATH)).ok();
+            assert_eq!(before, after, "nothing was written");
+        };
+
+        // The merge base's ledger doesn't parse; the branch's own does.
+        let (origin, work) = origin_and_clone("verify-merge-bad-base", &files);
+        origin.write(ledger::PATH, "this is [not a ledger\n");
+        commit_all(&origin, "broken ledger");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        std::fs::remove_file(work.0.join(ledger::PATH)).expect("invariant: pulled");
+        verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies");
+        commit_all(&work, "work: a fresh ledger");
+        origin.write("src/b.rs", "b main\n");
+        commit_all(&origin, "main: b");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        refused(&work, "the merge base");
+
+        // The first parent's ledger doesn't parse; the base's does.
+        let (origin, work) = origin_and_clone("verify-merge-bad-ours", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        work.write(ledger::PATH, "this is [not a ledger\n");
+        commit_all(&work, "work: broken ledger");
+        origin.write("src/b.rs", "b main\n");
+        commit_all(&origin, "main: b");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        refused(&work, "the merge's first parent");
+    }
+
     /// `docs verify --renote` fails when the ledger where the branch left main doesn't
     /// parse, rather than reading it as empty and taking every entry for the branch's own
     /// (#534).

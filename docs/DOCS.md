@@ -64,7 +64,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   has, and lists the sections left stale: each stale input with the note the branch had
   written on it and the merged commits that changed it. `docs verify --merge` then keeps
   those notes and adds what the merge changed ([Verification notes](#notes)), and refuses
-  an input whose file the branch changed after the merge.
+  an input whose file the branch changed after the merge, and a ledger that doesn't parse
+  at the merge base or the merge's first parent.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -350,7 +351,12 @@ plain re-verify after the merge that replaced the branch's notes. It refuses, na
 input, when the file an entry it would rewrite lives in (the doc itself for `body`, the
 covered file, the target doc for `dep:`) differs, committed or not, from what `merge-main`
 left: the merge, or its `docs migrate` commit. The branch's earlier note doesn't cover
-such a later edit, so verify that section with `--note` instead, covering both.
+such a later edit, so verify that section with `--note` instead, covering both. It also
+fails when the ledger doesn't parse at the merge base or at the merge's first parent,
+rather than reading it as empty: an empty base would take every entry for the branch's
+own, and an empty first parent would drop them. A ledger missing there still counts as
+empty. `merge-main` lists no earlier notes in that case rather than failing a merge it has
+already committed.
 
 `docs verify <DOC#anchor> --by <who> --renote "<note>"` replaces the `by` and `note` of a
 section that is already fresh, as when a reviewer asks for a better note, without touching

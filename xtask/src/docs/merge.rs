@@ -207,11 +207,16 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     Ok(report)
 }
 
-/// The ledger as it was at `rev`; empty when the file is missing or doesn't parse there.
-fn ledger_at(root: &Path, rev: &str) -> Result<ledger::Ledger> {
-    Ok(ledger_text_at(root, rev)?
-        .and_then(|text| ledger::Ledger::parse(&text).ok())
-        .unwrap_or_default())
+/// The ledger as it was at `rev`, which is `what` (such as "the merge base"): empty when
+/// the file is missing there, and an error when it doesn't parse. Read as empty, a base
+/// would make every entry look like the branch's own, and a first parent would lose
+/// them all (#551).
+fn ledger_at(root: &Path, rev: &str, what: &str) -> Result<ledger::Ledger> {
+    match ledger_text_at(root, rev)? {
+        None => Ok(ledger::Ledger::default()),
+        Some(text) => ledger::Ledger::parse(&text)
+            .map_err(|e| anyhow::anyhow!("{} at {what} ({rev}) doesn't parse: {e}", ledger::PATH)),
+    }
 }
 
 /// The ledger's text at `rev`; `None` when the file is missing there.
@@ -319,15 +324,7 @@ pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
     let base = git_ok(root, &["merge-base", "HEAD", &upstream])
         .with_context(|| format!("finding where this branch left `{upstream}`"))?;
     let base = String::from_utf8_lossy(&base).trim().to_owned();
-    match ledger_text_at(root, &base)? {
-        None => Ok(ledger::Ledger::default()),
-        Some(text) => ledger::Ledger::parse(&text).map_err(|e| {
-            anyhow::anyhow!(
-                "{} where this branch left `{upstream}` ({base}) doesn't parse: {e}",
-                ledger::PATH
-            )
-        }),
-    }
+    ledger_at(root, &base, &format!("where this branch left `{upstream}`"))
 }
 
 /// Refuses any branch but `main` and `wave/<name>`; `refusal` says what the caller does
@@ -341,11 +338,15 @@ fn check_branch(branch: &str, refusal: &str) -> Result<()> {
 
 /// The ledger entries this branch had written itself before `point`'s merge: those of
 /// the merge's first parent that differ from the merge base's, by section.
+///
+/// # Errors
+/// When the ledger doesn't parse at the first parent or at the merge base (#551).
 pub(crate) fn branch_entries(
     root: &Path,
     point: &MergePoint,
 ) -> Result<BTreeMap<String, ledger::Stamp>> {
-    let (branch, base) = (ledger_at(root, &point.ours)?, ledger_at(root, &point.base)?);
+    let branch = ledger_at(root, &point.ours, "the merge's first parent")?;
+    let base = ledger_at(root, &point.base, "the merge base")?;
     Ok(branch
         .sections
         .into_iter()
@@ -366,8 +367,11 @@ pub(crate) fn branch_entries(
 fn stale_report(root: &Path) -> Result<BTreeMap<String, Vec<StaleInput>>> {
     let stale = stale_map(root)?;
     let point = last_merge(root)?;
+    // The merge is already committed here, so a ledger that doesn't parse at its first
+    // parent or base lists no earlier notes rather than failing the merge; the notes are
+    // only shown. `docs verify --merge`, which writes them, refuses it (#551).
     let own = match &point {
-        Some(p) => branch_entries(root, p)?,
+        Some(p) => branch_entries(root, p).unwrap_or_default(),
         None => BTreeMap::new(),
     };
     let mut out = BTreeMap::new();
