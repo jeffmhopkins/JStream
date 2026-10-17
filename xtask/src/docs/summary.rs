@@ -1,6 +1,7 @@
 //! The `ui-summary` block in `docs/UI-FEATURES.md` (docs/DOCS.md#generated): for each
 //! area section, how many rows its feature table has in each status, counted from the
-//! table's `Status` column. `docs generate` writes it and `docs check` reports drift. A
+//! table's `Status` column. `docs generate` writes it and `docs check` reports drift, a
+//! row whose status is missing or not one of the five, and a block that finds no area. A
 //! doc without the block is left alone.
 
 use std::fmt::Write as _;
