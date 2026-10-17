@@ -16,6 +16,25 @@ pub enum CaptureTarget {
     Window(DeviceId),
 }
 
+/// How [`Capture::start_with`] starts a capture, beyond its target. The default is what
+/// [`Capture::start`] does.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CaptureOptions {
+    /// The source the capture is for (its ID in the collection), or `None` for a capture
+    /// no source owns.
+    pub source: Option<String>,
+}
+
+impl CaptureOptions {
+    /// The default options, for the source with ID `source`.
+    pub fn for_source(source: impl Into<String>) -> Self {
+        Self {
+            source: Some(source.into()),
+        }
+    }
+}
+
 /// A capture target as [`Capture::targets`] lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CaptureTargetInfo {
@@ -49,20 +68,20 @@ pub trait Capture: Send + Sync {
     /// target, and [`PlatformError::Os`] when the OS refuses.
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError>;
 
-    /// Starts capturing `target` for one source, named by `source` (its ID in the
-    /// collection), so a backend that keeps a grant per source keeps each source's apart:
-    /// the ScreenCast portal's restore token, which reopens the screen or window that
-    /// source was given without asking again (ADR-0060 §3). The default ignores `source`
-    /// and calls [`start`](Capture::start).
+    /// Starts capturing `target` as `options` say: for one source, so a backend that
+    /// keeps a grant per source keeps each source's apart (the ScreenCast portal's
+    /// restore token, which reopens the screen or window that source was given without
+    /// asking again, ADR-0060 §3). The default ignores the options and calls
+    /// [`start`](Capture::start); `start` is `start_with` with the default options.
     ///
     /// # Errors
     /// As [`start`](Capture::start).
-    fn start_for(
+    fn start_with(
         &self,
         target: &CaptureTarget,
-        source: &str,
+        options: &CaptureOptions,
     ) -> Result<Box<dyn CaptureStream>, PlatformError> {
-        let _ = source;
+        let _ = options;
         self.start(target)
     }
 

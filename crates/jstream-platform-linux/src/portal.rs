@@ -138,8 +138,8 @@ mod backend {
     use std::time::{Duration, Instant};
 
     use jstream_platform::{
-        Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, DeviceId,
-        PlatformError, VideoSurface,
+        Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
+        DeviceId, PlatformError, VideoSurface,
     };
 
     use super::PortalPick;
@@ -160,7 +160,7 @@ mod backend {
     }
 
     /// Whose grant a token restores: the last pick of a kind, for
-    /// [`Capture::start`], or one source's, for [`Capture::start_for`], so two sources
+    /// [`Capture::start`], or one source's, for [`Capture::start_with`], so two sources
     /// capturing different windows each reopen their own.
     #[derive(Clone, Copy, Debug)]
     enum Grant<'a> {
@@ -523,12 +523,12 @@ mod backend {
             self.open(target, None)
         }
 
-        fn start_for(
+        fn start_with(
             &self,
             target: &CaptureTarget,
-            source: &str,
+            options: &CaptureOptions,
         ) -> Result<Box<dyn CaptureStream>, PlatformError> {
-            self.open(target, Some(source))
+            self.open(target, options.source.as_deref())
         }
 
         fn forget_source(&self, source: &str) {
