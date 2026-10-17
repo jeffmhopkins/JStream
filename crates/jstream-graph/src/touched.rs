@@ -4,7 +4,8 @@
 //! history logs it and checks a step's touched set against other clients' later ones.
 
 use jstream_protocol::{
-    BusId, Edit, EncoderProfileId, ItemId, OutputId, SceneId, SourceId, SourceKind, VideoMixId,
+    BusId, Edit, EncoderProfileId, FilterId, ItemId, OutputId, SceneId, SourceId, SourceKind,
+    VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -17,6 +18,8 @@ enum Object {
     Output(OutputId),
     Encoder(EncoderProfileId),
     VideoMix(VideoMixId),
+    /// A filter, by its owner's source and its ID there (ADR-0026).
+    Filter(SourceId, FilterId),
     /// An audio bus.
     Bus(BusId),
     /// One source's send into one bus.
@@ -34,6 +37,10 @@ enum Prop {
     Placement,
     Crop,
     Visible,
+    /// An item's alpha multiplier (ADR-0023).
+    Opacity,
+    /// An item's blend mode.
+    Blend,
     /// An item's stacking position.
     Index,
     /// Which source an item places (`item.set_source`, ADR-0023).
@@ -50,6 +57,8 @@ enum Prop {
     MixChoice,
     /// A video mix's input, resolution and rate.
     Mix,
+    /// Whether a filter runs.
+    Enabled,
     /// Whether a source's audio is open.
     AudioEnabled,
     /// When a source's audio is heard.
@@ -122,6 +131,12 @@ impl Touched {
             }
             Edit::ItemSetVisible { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Visible);
+            }
+            Edit::ItemSetOpacity { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Opacity);
+            }
+            Edit::ItemSetBlend { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Blend);
             }
             Edit::ItemReorder { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Index);
@@ -213,6 +228,41 @@ impl Touched {
                 if let Some(mix_id) = mix_id {
                     self.uses.insert(Object::VideoMix(mix_id.clone()));
                 }
+            }
+            Edit::FilterAdd {
+                owner, filter_id, ..
+            } => {
+                let source_id = owner.source_id();
+                self.exists
+                    .insert(Object::Filter(source_id.clone(), filter_id.clone()));
+                self.uses.insert(Object::Source(source_id.clone()));
+            }
+            Edit::FilterRemove { owner, filter_id } => {
+                self.exists
+                    .insert(Object::Filter(owner.source_id().clone(), filter_id.clone()));
+            }
+            Edit::FilterSetEnabled {
+                owner, filter_id, ..
+            } => {
+                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                self.prop(filter, Prop::Enabled);
+            }
+            Edit::FilterSetSettings {
+                owner,
+                filter_id,
+                patch,
+            } => {
+                for param in patch.0.keys() {
+                    let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                    self.prop(filter, Prop::Setting(param.clone()));
+                }
+            }
+            // A filter's position in its chain.
+            Edit::FilterReorder {
+                owner, filter_id, ..
+            } => {
+                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                self.prop(filter, Prop::Index);
             }
             Edit::SourceSetAudio {
                 source_id,
@@ -310,8 +360,8 @@ impl Touched {
 mod tests {
     use super::Touched;
     use jstream_protocol::{
-        BusId, Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
-        OutputId, SceneId, SourceId,
+        BlendMode, BusId, Edit, EncoderProfile, EncoderProfileId, Finite32, ItemGeometry, ItemId,
+        ItemTransform, OutputId, SceneId, SourceId,
     };
 
     fn add(scene: &str, item: &str, source: &str) -> Edit {
@@ -321,6 +371,8 @@ mod tests {
             source_id: SourceId::new(source),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         }
     }
 
@@ -471,6 +523,30 @@ mod tests {
             &[point("yt", Some("hq"))]
         )));
         assert!(!pointed.conflicts_with(&Touched::of(&[point("tw", None)], &[point("tw", None)])));
+    }
+
+    /// Opacity and blend are their own properties: each conflicts with itself on the
+    /// same item, and with neither the other nor the placement.
+    #[test]
+    fn opacity_and_blend_are_properties_of_their_own() {
+        let opacity = |item: &str| Edit::ItemSetOpacity {
+            item_id: ItemId::new(item),
+            scene_id: None,
+            opacity: Finite32::ONE,
+        };
+        let blend = |item: &str| Edit::ItemSetBlend {
+            item_id: ItemId::new(item),
+            blend: BlendMode::Normal,
+        };
+        let faded = Touched::of(&[opacity("i")], &[opacity("i")]);
+        let blended = Touched::of(&[blend("i")], &[blend("i")]);
+        assert!(!faded.unknown && !blended.unknown);
+        assert!(faded.conflicts_with(&Touched::of(&[opacity("i")], &[opacity("i")])));
+        assert!(blended.conflicts_with(&Touched::of(&[blend("i")], &[blend("i")])));
+        assert!(!faded.conflicts_with(&blended));
+        assert!(!faded.conflicts_with(&Touched::of(&[transform("i")], &[transform("i")])));
+        assert!(!faded.conflicts_with(&Touched::of(&[opacity("j")], &[opacity("j")])));
+        assert!(faded.conflicts_with(&Touched::of(&[remove("i")], &[add("s", "i", "cam")])));
     }
 
     #[test]

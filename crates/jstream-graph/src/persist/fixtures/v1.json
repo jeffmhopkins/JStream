@@ -35,7 +35,8 @@
             "right": 0,
             "bottom": 0
           },
-          "visible": true
+          "visible": true,
+          "opacity": 0.5
         }
       ]
     },
@@ -63,7 +64,8 @@
             "right": 3,
             "bottom": 4
           },
-          "visible": false
+          "visible": false,
+          "opacity": 0.25
         },
         {
           "id": "i1",
@@ -171,6 +173,36 @@
       },
       "kind_version": 1,
       "duplicated_from": "cam"
+    },
+    {
+      "id": "desk",
+      "name": "Desktop",
+      "kind": {
+        "type": "builtin",
+        "kind": "desktop_audio"
+      },
+      "kind_version": 1,
+      "filters": {
+        "audio": [
+          {
+            "id": "g1",
+            "kind": "gain",
+            "kind_version": 1,
+            "settings": {
+              "gain_db": -3.0
+            }
+          },
+          {
+            "id": "g2",
+            "kind": "gain",
+            "kind_version": 1,
+            "enabled": false,
+            "settings": {
+              "gain_db": 0.0
+            }
+          }
+        ]
+      }
     },
     {
       "id": "mic",
@@ -338,6 +370,11 @@
     }
   ],
   "sends": [
+    {
+      "source_id": "desk",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
     {
       "source_id": "mic",
       "bus_id": "master",

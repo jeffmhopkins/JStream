@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 
 use jstream_graph::{Graph, Placement as GraphPlacement, State};
 use jstream_media::{FrameSize, MediaTime, PixelFormat, VideoFrame};
+use jstream_platform::GpuFrame;
 use jstream_protocol::{
     Canvas, Crop as ProtocolCrop, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
     VideoMixId,
@@ -40,7 +41,7 @@ use crate::runtime::RenderSnapshot;
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
 
-/// Straight opacity. The graph does not store it yet, and the compositor's default is 1.
+/// Straight opacity 1: how the program layer is scaled onto a differently sized output.
 const OPAQUE: f32 = 1.0;
 
 /// How many levels of scene sources the program mix draws below the program scene, on
@@ -214,6 +215,8 @@ struct Placed {
     source: SourceRef,
     placement: Placement,
     crop: Crop,
+    /// The item's straight alpha multiplier (ADR-0023), in [0, 1].
+    opacity: f32,
 }
 
 /// The program mix and every video mix, copied out of the collection so they can be
@@ -276,6 +279,12 @@ impl Shot {
     #[cfg(test)]
     pub(crate) fn uses_capture(&self) -> bool {
         self.uses_capture
+    }
+
+    /// Whether drawing this shows the pipeline's capture: a pass places it, or there is
+    /// no program scene and the capture fills the output.
+    pub(crate) fn shows_capture(&self) -> bool {
+        self.uses_capture || self.passes.is_empty()
     }
 }
 
@@ -407,6 +416,7 @@ impl Planner<'_, '_> {
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
+                    opacity: item.opacity().get(),
                 });
             }
         }
@@ -460,6 +470,7 @@ struct Layer {
     image: GpuKey,
     placement: Placement,
     crop: Crop,
+    opacity: f32,
 }
 
 /// The composites a frame makes for the scene `program`, in order: every nested scene
@@ -514,6 +525,7 @@ fn visit(
             image,
             placement: placed.placement,
             crop: placed.crop,
+            opacity: placed.opacity,
         });
     }
     path.remove(id);
@@ -841,13 +853,22 @@ impl Shot {
 }
 
 /// The pipeline's latest captured display, which `display` sources show on the render
-/// thread: tightly packed straight sRGB RGBA8 at `size`. `version` changes with every new
-/// frame, so an unchanged capture is not uploaded again.
+/// thread. `version` changes with every new frame, so an unchanged CPU capture is not
+/// uploaded again.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CaptureFrame<'a> {
     pub(crate) version: u64,
-    pub(crate) size: FrameSize,
-    pub(crate) rgba: &'a [u8],
+    pub(crate) image: CaptureImage<'a>,
+}
+
+/// Where a [`CaptureFrame`]'s pixels are.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CaptureImage<'a> {
+    /// Tightly packed straight sRGB RGBA8 at `size`, uploaded on a new version.
+    Rgba { size: FrameSize, rgba: &'a [u8] },
+    /// A texture shared with the platform, on the compositor's device: sampled where
+    /// it is, with no CPU copy ([`ResourceCache::import`]).
+    Gpu(&'a GpuFrame),
 }
 
 /// Draws `mix` of `shot` (the program mix for `None`) at `output`, over opaque black,
@@ -862,7 +883,8 @@ pub(crate) struct CaptureFrame<'a> {
 /// it draws nothing. The mix's scene is drawn at the canvas size: straight to the output
 /// when that is the canvas size, else into a layer that the output fits inside itself,
 /// centred, with black bars where the aspect ratios differ (ADR-0022). Without a scene
-/// to draw (no program scene) the output is `capture` fitted the same way, or black.
+/// to draw (no program scene) `capture` is scaled to fill the canvas, which is fitted
+/// the same way, or the output is black.
 ///
 /// # Errors
 /// What the compositor reports for an upload or a pass.
@@ -891,23 +913,44 @@ pub(crate) fn compose(
     let passes = shot.passes_of(mix);
     let capture = match capture {
         Some(capture) if shot.uses_capture || passes.is_empty() => {
-            cache.upload(
-                compositor,
-                &GpuKey::Capture,
-                capture.version,
-                capture.size.width(),
-                capture.size.height(),
-                capture.rgba,
-            )?;
-            Some(capture.size)
+            match capture.image {
+                CaptureImage::Rgba { size, rgba } => cache.upload(
+                    compositor,
+                    &GpuKey::Capture,
+                    capture.version,
+                    size.width(),
+                    size.height(),
+                    rgba,
+                )?,
+                CaptureImage::Gpu(frame) => cache.import(compositor, &GpuKey::Capture, frame)?,
+            };
+            true
         }
-        _ => None,
+        _ => false,
     };
     let Some((root, nested)) = passes.split_last() else {
-        let items: Vec<Item<'_>> = match (cache.get(&GpuKey::Capture), capture) {
-            (Some(image), Some(size)) => vec![fitted(image, size, output)],
-            _ => Vec::new(),
-        };
+        let image = cache.get(&GpuKey::Capture).filter(|_| capture);
+        // Scaled to fill the canvas, which the output follows (not the display), and
+        // fitted inside the output like the canvas layer.
+        let (scale, offset) = fit_inside(canvas, output);
+        let items: Vec<Item<'_>> = image
+            .into_iter()
+            .map(|image| {
+                let sx = canvas.width() as f32 * scale / image.width() as f32;
+                let sy = canvas.height() as f32 * scale / image.height() as f32;
+                Item {
+                    image,
+                    placement: Placement::Legacy(LegacyTransform {
+                        position: offset,
+                        scale: [sx, sy],
+                        ..LegacyTransform::IDENTITY
+                    }),
+                    crop: Crop::NONE,
+                    opacity: OPAQUE,
+                    visible: true,
+                }
+            })
+            .collect();
         return compositor.render(&scene(output, Color::BLACK, &items), readback);
     };
     let direct = output == canvas;
@@ -979,7 +1022,7 @@ fn fill_items<'a>(items: &mut Vec<Item<'a>>, cache: &'a ResourceCache<GpuKey>, p
             image: cache.get(&layer.image)?,
             placement: layer.placement,
             crop: layer.crop,
-            opacity: OPAQUE,
+            opacity: layer.opacity,
             visible: true,
         })
     }));
@@ -1177,9 +1220,9 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        CaptureFrame, FIRST_RETRY, Frame, GpuKey, MAX_NESTING, MAX_RETRY, OpenBackoff, Placed,
-        Shot, SourceFrameError, SourceRef, base64, claim_layers, compose, decode_base64,
-        decode_png, draw, encode_png, fit, is_no_adapter, schedule,
+        CaptureFrame, CaptureImage, FIRST_RETRY, Frame, GpuKey, MAX_NESTING, MAX_RETRY,
+        OpenBackoff, Placed, Shot, SourceFrameError, SourceRef, base64, claim_layers, compose,
+        decode_base64, decode_png, draw, encode_png, fit, is_no_adapter, schedule,
     };
     use jstream_media::FrameSize;
     use jstream_protocol::{Canvas, ProtocolError, QueryResult, Rev, SceneId, SourceId};
@@ -1210,6 +1253,7 @@ pub(crate) mod tests {
             source,
             placement,
             crop: Crop::NONE,
+            opacity: super::OPAQUE,
         }
     }
 
@@ -1477,6 +1521,44 @@ pub(crate) mod tests {
         }
     }
 
+    /// An item's opacity multiplies its alpha, and the result blends in linear light: half
+    /// green over red is 0.5 of each in linear light, sRGB 188. A nested scene's opacity
+    /// applies to the scene as a whole, and an item at 0 draws nothing.
+    #[test]
+    fn opacity_blends_items_and_nested_scenes_in_linear_light() {
+        let faded = |placed: Placed, opacity: f32| Placed { opacity, ..placed };
+        // The 16x9 frames are scaled to the canvas; a nested scene's layer is canvas-sized.
+        let left = Placement::Legacy(LegacyTransform {
+            scale: [60.0, 120.0],
+            ..LegacyTransform::IDENTITY
+        });
+        let right = Placement::Legacy(LegacyTransform {
+            position: [960.0, 0.0],
+            scale: [0.5, 1.0],
+            rotation_deg: 0.0,
+        });
+        let shot = shot(vec![
+            (
+                "program",
+                vec![
+                    fill("red"),
+                    faded(placed(SourceRef::Frame(SourceId::new("green")), left), 0.5),
+                    faded(nest("a", right), 0.5),
+                    faded(fill("green"), 0.0),
+                ],
+            ),
+            ("a", vec![fill("green")]),
+        ]);
+        let Some(rgba) = snap(&shot) else { return };
+        let half = [188, 188, 0, 255];
+        for (x, y) in [(100, 360), (1100, 360)] {
+            let pixel = at(&rgba, x, y);
+            for (got, want) in pixel.iter().zip(half) {
+                assert!(got.abs_diff(want) <= 1, "({x}, {y}): {pixel:?}");
+            }
+        }
+    }
+
     /// At the bound the deepest scene still shows; one level past it, nothing does.
     #[test]
     fn the_depth_bound_holds_on_the_gpu() {
@@ -1559,8 +1641,7 @@ pub(crate) mod tests {
             .collect();
         let capture = CaptureFrame {
             version: 1,
-            size,
-            rgba: &blue,
+            image: CaptureImage::Rgba { size, rgba: &blue },
         };
 
         let empty = Shot::default();
@@ -1637,6 +1718,106 @@ pub(crate) mod tests {
         let cam = draw(Some(&side));
         assert_eq!(cam.pixel(16, 16), Some(RED));
         assert_eq!(cam.pixel(16, 0), Some([0, 0, 0, 255]));
+    }
+
+    /// A GPU capture is sampled where it is: with no program scene it is scaled to fill
+    /// an output of another size, and a `display` source shows it where its item is.
+    #[test]
+    fn a_gpu_capture_fills_the_output_and_shows_in_display_sources() {
+        use jstream_media::{ColorInfo, MediaTime, PixelFormat, Timebase, VideoFrameInfo};
+        use jstream_platform::{FrameSync, GpuFrame, PlatformError, wgpu};
+        use std::sync::Arc;
+
+        #[derive(Debug)]
+        struct Ready;
+        impl FrameSync for Ready {
+            fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+                Ok(())
+            }
+        }
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let extent = wgpu::Extent3d {
+            width: 16,
+            height: 9,
+            depth_or_array_layers: 1,
+        };
+        let texture = compositor
+            .device()
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("jstream-core-test-capture"),
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+        // Blue in BGRA order.
+        let blue: Vec<u8> = std::iter::repeat_n([255, 0, 0, 255], 16 * 9)
+            .flatten()
+            .collect();
+        compositor.queue().write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &blue,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(16 * 4),
+                rows_per_image: Some(9),
+            },
+            extent,
+        );
+        let frame = GpuFrame::new(
+            texture,
+            VideoFrameInfo {
+                size: FrameSize::new(16, 9).expect("invariant: non-zero"),
+                format: PixelFormat::Bgra8,
+                color: ColorInfo::default(),
+                pts: MediaTime::zero(Timebase::NANOS),
+            },
+            Arc::new(Ready),
+        );
+        let capture = CaptureFrame {
+            version: 1,
+            image: CaptureImage::Gpu(&frame),
+        };
+        let size = FrameSize::new(32, 18).expect("invariant: non-zero");
+
+        let empty = Shot::default();
+        let out = frame_at(&mut compositor, &mut cache, &empty, Some(&capture), size);
+        for (x, y) in [(0, 0), (16, 9), (31, 17)] {
+            assert_eq!(out.pixel(x, y), Some([0, 0, 255, 255]), "({x}, {y})");
+        }
+        assert_eq!(
+            Arc::strong_count(frame.sync()),
+            1,
+            "the cache keeps no hold past the frame"
+        );
+
+        // The capture (16x9) scaled by 60 covers the canvas's left half.
+        let half = Placement::Legacy(LegacyTransform {
+            scale: [60.0, 120.0],
+            ..LegacyTransform::IDENTITY
+        });
+        let display = shot(vec![(
+            "program",
+            vec![fill("red"), placed(SourceRef::Capture, half)],
+        )]);
+        let out = frame_at(&mut compositor, &mut cache, &display, Some(&capture), size);
+        assert_eq!(
+            out.pixel(4, 9),
+            Some([0, 0, 255, 255]),
+            "the capture on the left"
+        );
+        assert_eq!(out.pixel(28, 9), Some(RED), "red on the right");
     }
 
     /// Frame after frame of the same shot reuses every texture: the nested-scene layers

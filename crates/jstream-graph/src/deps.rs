@@ -2,22 +2,26 @@
 //! rejection (ADR-0025, docs/adr/0025-typed-settings-kind-descriptors.md).
 //!
 //! The edges are: a scene depends on each source its items place; a `scene` source
-//! depends on the scene it shows; and a source depends on every scene and source its
-//! settings refer to. [`edges`] lists what a node depends on, for the cycle check, and
-//! [`blockers`] lists what depends on a node, for the delete check and `delete.plan`;
-//! both read the same three kinds of edge. Asset references name files, which are
-//! outside the state, so they are not edges.
+//! depends on the scene it shows; and a source depends on every scene, source and bus
+//! its settings, or its filters' settings (ADR-0026), refer to. [`edges`] lists what a
+//! node depends on, for the cycle check, and [`blockers`] lists what depends on a node,
+//! for the delete check and `delete.plan`; both read the same three kinds of edge. A bus
+//! depends on nothing, so an edge into one never closes a cycle; it only blocks the
+//! bus's delete. Asset references name files, which are outside the state, so they are
+//! not edges.
 
 use crate::model::State;
-use jstream_protocol::{Blocker, EntityKind, Reference, SceneId, SourceId, SourceKind};
+use jstream_protocol::{Blocker, BusId, EntityKind, Reference, SceneId, SourceId, SourceKind};
 use std::collections::BTreeSet;
 use std::fmt;
 
-/// A scene or a source: the two kinds of object an edge joins.
+/// A scene, a source or a bus: the kinds of object an edge joins. A bus is only ever
+/// the end of an edge.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Node {
     Scene(SceneId),
     Source(SourceId),
+    Bus(BusId),
 }
 
 impl fmt::Display for Node {
@@ -25,6 +29,7 @@ impl fmt::Display for Node {
         match self {
             Node::Scene(id) => write!(f, "scene `{id}`"),
             Node::Source(id) => write!(f, "source `{id}`"),
+            Node::Bus(id) => write!(f, "bus `{id}`"),
         }
     }
 }
@@ -49,15 +54,17 @@ fn edges(state: &State, node: &Node) -> Vec<Node> {
             if let SourceKind::Scene { scene_id } = &source.kind {
                 out.push(Node::Scene(scene_id.clone()));
             }
-            for (_, reference) in source.settings.references() {
-                match reference {
-                    Reference::Scene { scene_id } => out.push(Node::Scene(scene_id)),
-                    Reference::Source { source_id } => out.push(Node::Source(source_id)),
-                    _ => {}
-                }
+            let filters = source.filters.all().map(|(_, filter)| &filter.settings);
+            for settings in std::iter::once(&source.settings).chain(filters) {
+                out.extend(
+                    settings
+                        .references()
+                        .filter_map(|(_, reference)| reference_node(&reference)),
+                );
             }
             out
         }
+        Node::Bus(_) => Vec::new(),
     }
 }
 
@@ -66,6 +73,7 @@ pub(crate) fn reference_node(reference: &Reference) -> Option<Node> {
     match reference {
         Reference::Scene { scene_id } => Some(Node::Scene(scene_id.clone())),
         Reference::Source { source_id } => Some(Node::Source(source_id.clone())),
+        Reference::Bus { bus_id } => Some(Node::Bus(bus_id.clone())),
         _ => None,
     }
 }
@@ -126,11 +134,8 @@ fn dfs(
 
 /// Everything that stops `target`'s delete, in a stable order: the items that place a
 /// source (scene display order, then stacking order), the `scene` sources that show a
-/// scene (ID order), every settings value that refers to the target (source ID order,
-/// then parameter order), then the video mixes that show a scene (ID order).
-/// `delete.plan` removes exactly these, and points those mixes at the program.
-///
-/// A mix is not a node: nothing depends on it but outputs, so it can't be in a cycle.
+/// scene (ID order), then every settings value that refers to the target (source ID
+/// order
 pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
     let mut out = Vec::new();
     match target {
@@ -155,6 +160,7 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
                     }),
             );
         }
+        Node::Bus(_) => {}
     }
     for source in state.sources() {
         out.extend(
@@ -168,6 +174,19 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
                     field: format!("settings.{param}"),
                 }),
         );
+        for (_, filter) in source.filters.all() {
+            out.extend(
+                filter
+                    .settings
+                    .references()
+                    .filter(|(_, r)| reference_node(r).as_ref() == Some(target))
+                    .map(|(param, _)| Blocker {
+                        entity: EntityKind::Source,
+                        id: source.id.as_str().to_owned(),
+                        field: format!("filters.{}.{param}", filter.id),
+                    }),
+            );
+        }
     }
     if let Node::Scene(scene_id) = target {
         out.extend(

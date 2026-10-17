@@ -19,7 +19,8 @@ use super::shared::{AtomicF32, Counter, GainParam, MAX_GAIN, Meter};
 
 /// Buses a mixer can hold, the master included. Their mix buffers are allocated when
 /// the mixer is built, so adding a bus never allocates on the mixer thread.
-pub(crate) const MAX_BUSES: usize = 16;
+/// `jstream-core` holds this equal to the collection's limit, `jstream_protocol::MAX_BUSES`.
+pub const MAX_BUSES: usize = 16;
 
 /// The master bus's id. It sits in slot 0 and is never removed.
 pub(crate) const MASTER_ID: u64 = 0;

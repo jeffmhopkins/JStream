@@ -1,2 +1,8 @@
 [alias]
 xtask = "run --quiet --package xtask --"
+
+# Windows binaries link the C runtime statically, so the portable zip runs without the
+# Visual C++ redistributable (ADR-0020). A `RUSTFLAGS` variable (CI sets one) replaces these
+# flags instead of adding to them; `cargo xtask dist` adds this one back.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-Ctarget-feature=+crt-static"]

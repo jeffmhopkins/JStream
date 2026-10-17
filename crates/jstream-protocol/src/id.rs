@@ -68,12 +68,22 @@ opaque_id!(
     OutputId
 );
 opaque_id!(
+    /// A filter in one of a source's chains. Unique within its source, not across
+    /// sources, so a duplicated source keeps its filters' IDs (ADR-0026).
+    FilterId
+);
+opaque_id!(
     /// An encoder profile in the collection.
     EncoderProfileId
 );
 opaque_id!(
     /// A video mix in the collection: what an output's video shows.
     VideoMixId
+);
+opaque_id!(
+    /// A paired device: one browser or other client admitted with its own device token
+    /// (ADR-0044). Assigned by the server when the device pairs.
+    DeviceId
 );
 opaque_id!(
     /// An audio bus in the collection (ADR-0028). [`BusId::master`] names the master

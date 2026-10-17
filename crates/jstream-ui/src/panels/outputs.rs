@@ -1,5 +1,6 @@
-//! The outputs panel: create, edit and delete outputs, set or clear their stream keys,
-//! start and stop them, go live, and the pipeline's health from `stats.tick`.
+//! The outputs panel: create, edit and delete outputs (streams, recordings and the
+//! virtual camera), set or clear their stream keys, start and stop them, go live, and
+//! the pipeline's health from `stats.tick`.
 //!
 //! The stream key is write-only (R-SEC-001). It is read from its password field only
 //! when the user saves it, wrapped in a [`SecretString`] at once, sent with
@@ -164,10 +165,21 @@ pub enum NewKind {
     Rtmp,
     /// A recording to a file on the engine's machine.
     Record,
+    /// The virtual camera: the program as a webcam other apps on the engine's machine
+    /// see.
+    VirtualCam,
+}
+
+impl NewKind {
+    /// Whether the form needs a target (a server URL or a path) for this kind.
+    pub fn needs_target(self) -> bool {
+        !matches!(self, NewKind::VirtualCam)
+    }
 }
 
 /// The `output.create` edit for a new output. `target` is the RTMP server URL or the
-/// recording's path, as the form took it; the engine validates it.
+/// recording's path, as the form took it; the engine validates it. A virtual camera
+/// takes none, so `target` is ignored.
 pub fn create_edit(output_id: OutputId, kind: NewKind, target: &str) -> Edit {
     let target = target.trim().to_owned();
     let kind = match kind {
@@ -178,6 +190,7 @@ pub fn create_edit(output_id: OutputId, kind: NewKind, target: &str) -> Edit {
             path: target,
             container: RecordContainer::Mp4,
         },
+        NewKind::VirtualCam => OutputKind::VirtualCam,
     };
     Edit::OutputCreate { output_id, kind }
 }
@@ -209,15 +222,98 @@ pub fn is_running(state: OutputState) -> bool {
     !matches!(state, OutputState::Stopped | OutputState::Failed)
 }
 
-/// Why an output can't be started now, or `None` when it can.
-pub fn start_blocker(row: &OutputRow) -> Option<&'static str> {
+/// What the page knows about the engine's virtual camera. Only the desktop app says
+/// (its `vcam`, see `host.rs`); in a browser it is [`Vcam::Unknown`], and starting the
+/// output is how to find out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Vcam {
+    /// Registered for this install: the camera can be started.
+    Registered,
+    /// Not registered: Windows doesn't list the camera until it is.
+    NotRegistered,
+    /// Registered for another folder, such as one the install was moved from.
+    Moved,
+    /// The app was started with `--no-vcam`, so its engine has no virtual camera.
+    Off,
+    /// The page doesn't know: it isn't running in the desktop app.
+    Unknown,
+}
+
+/// The command that registers the camera. It asks for administrator rights once.
+pub const REGISTER_HINT: &str = "Run `jstream-daemon --register-vcam` from the JStream folder (it asks for administrator rights once), then restart JStream.";
+
+impl Vcam {
+    /// The desktop app's `vcam` value; anything else, or none, is [`Vcam::Unknown`].
+    pub fn from_host(value: Option<&str>) -> Vcam {
+        match value {
+            Some("registered") => Vcam::Registered,
+            Some("not_registered") => Vcam::NotRegistered,
+            Some("moved") => Vcam::Moved,
+            Some("off") => Vcam::Off,
+            _ => Vcam::Unknown,
+        }
+    }
+
+    /// The status line a virtual camera output shows.
+    pub fn status(self) -> &'static str {
+        match self {
+            Vcam::Registered => "Virtual camera: registered",
+            Vcam::NotRegistered => "Virtual camera: not registered",
+            Vcam::Moved => "Virtual camera: registered for another folder",
+            Vcam::Off => "Virtual camera: off in this app",
+            Vcam::Unknown => "Virtual camera: registration not known here",
+        }
+    }
+
+    /// What to do about it, if anything.
+    pub fn hint(self) -> Option<&'static str> {
+        match self {
+            Vcam::Registered => None,
+            Vcam::NotRegistered | Vcam::Moved => Some(REGISTER_HINT),
+            Vcam::Off => Some("Start JStream without `--no-vcam` to use it."),
+            Vcam::Unknown => Some(
+                "The engine checks the camera when it starts: an unregistered one is refused with how to register it.",
+            ),
+        }
+    }
+}
+
+/// Why an output can't be started now, or `None` when it can. `vcam` matters only to
+/// a virtual camera output: one the app says is unregistered or off can't start.
+pub fn start_blocker(row: &OutputRow, vcam: Vcam) -> Option<&'static str> {
     if is_running(row.state) {
         return Some("It is already running.");
     }
     match &row.info.kind {
         OutputKind::Rtmp { .. } if !row.key_set => Some("Set a stream key first."),
         OutputKind::Rtmp { .. } | OutputKind::Record { .. } => None,
+        OutputKind::VirtualCam => match vcam {
+            Vcam::NotRegistered => Some("Register the virtual camera first."),
+            Vcam::Off => Some("The virtual camera is off in this app."),
+            Vcam::Registered | Vcam::Moved | Vcam::Unknown => None,
+        },
         _ => Some("This engine's output kind is newer than this page."),
+    }
+}
+
+/// What a start refused with "no virtual camera" means: the engine was built or started
+/// without a camera, which registering can't change.
+pub const NO_CAMERA_HINT: &str = "This engine has no virtual camera: it runs on Windows 11 only, and the desktop app has none when started with `--no-vcam`.";
+
+/// A failed virtual camera start, for the panel. The engine's two reasons that need
+/// explaining get a hint: an unregistered camera (the platform's "is not registered",
+/// which names only the flag) gets the full registration command, and an engine with
+/// no camera at all ("no virtual camera") gets why. Other reasons, and other kinds,
+/// are shown as they are.
+pub fn explain_start_failure(kind: &OutputKind, reason: String) -> String {
+    if !matches!(kind, OutputKind::VirtualCam) {
+        reason
+    } else if reason.contains("is not registered") {
+        format!("{reason}. {REGISTER_HINT}")
+    } else if reason.contains("no virtual camera") {
+        format!("{reason}. {NO_CAMERA_HINT}")
+    } else {
+        reason
     }
 }
 
@@ -226,7 +322,7 @@ pub fn start_blocker(row: &OutputRow) -> Option<&'static str> {
 pub fn go_live_targets<'a>(rows: impl IntoIterator<Item = &'a OutputRow>) -> Vec<OutputId> {
     rows.into_iter()
         .filter(|row| matches!(row.info.kind, OutputKind::Rtmp { .. }))
-        .filter(|row| start_blocker(row).is_none())
+        .filter(|row| start_blocker(row, Vcam::Unknown).is_none())
         .map(|row| row.info.output_id.clone())
         .collect()
 }
@@ -248,6 +344,7 @@ pub fn describe_kind(kind: &OutputKind) -> String {
         } => format!("Stream to {url}"),
         OutputKind::Rtmp { .. } => "Stream (a target this page doesn't know)".into(),
         OutputKind::Record { path, .. } => format!("Record to {path}"),
+        OutputKind::VirtualCam => "Virtual camera: the program as a webcam".into(),
         _ => "An output kind this page doesn't know".into(),
     }
 }
@@ -380,6 +477,8 @@ struct Panel {
     problem: RwSignal<Option<String>>,
     /// Bumped by each reload, so an older reload that finishes late is dropped.
     loads: StoredValue<u64>,
+    /// What the host says about the virtual camera.
+    vcam: Vcam,
 }
 
 impl Panel {
@@ -470,6 +569,7 @@ pub fn Outputs() -> impl IntoView {
         encoders: RwSignal::new(Vec::new()),
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
+        vcam: Vcam::from_host(crate::host::desktop_vcam().as_deref()),
     };
     let health = RwSignal::new(Health::default());
 
@@ -578,19 +678,32 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
     let id = StoredValue::new(output_id.clone());
 
     let running = move || row.with(|row| row.as_ref().is_some_and(|row| is_running(row.state)));
-    let blocker = move || row.with(|row| row.as_ref().and_then(start_blocker));
+    let blocker =
+        move || row.with(|row| row.as_ref().and_then(|row| start_blocker(row, panel.vcam)));
     let is_rtmp = move || {
         row.with(|row| {
             row.as_ref()
                 .is_some_and(|row| matches!(row.info.kind, OutputKind::Rtmp { .. }))
         })
     };
+    let is_vcam = move || {
+        row.with(|row| {
+            row.as_ref()
+                .is_some_and(|row| matches!(row.info.kind, OutputKind::VirtualCam))
+        })
+    };
     let key_set = move || row.with(|row| row.as_ref().is_some_and(|row| row.key_set));
 
     let start = move |_| {
         let output_id = id.get_value();
+        let kind = row.with_untracked(|row| row.as_ref().map(|row| row.info.kind.clone()));
         panel.run(move |session| async move {
-            action(&*session.control, Action::OutputStart { output_id }).await
+            action(&*session.control, Action::OutputStart { output_id })
+                .await
+                .map_err(|reason| match &kind {
+                    Some(kind) => explain_start_failure(kind, reason),
+                    None => reason,
+                })
         });
     };
     let stop = move |_| {
@@ -715,6 +828,13 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                     </button>
                 </form>
             </Show>
+            <Show when=is_vcam>
+                <p class="vcam-status" class:unregistered=move || panel.vcam.hint().is_some()>
+                    {panel.vcam.status()}
+                </p>
+                {panel.vcam.hint().map(|hint| view! { <p class="hint">{hint}</p> })}
+            </Show>
+            <Show when=move || !is_vcam()>
             <label class="encoder">
                 "Encoder"
                 <select on:change=choose_encoder>
@@ -742,6 +862,7 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                     </For>
                 </select>
             </label>
+            </Show>
             <Show when=is_rtmp>
                 <div class="key">
                     <span class="key-status">
@@ -828,10 +949,10 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
                 "Kind"
                 <select on:change=move |event| {
                     kind.set(
-                        if event_target_value(&event) == "record" {
-                            NewKind::Record
-                        } else {
-                            NewKind::Rtmp
+                        match event_target_value(&event).as_str() {
+                            "record" => NewKind::Record,
+                            "virtual_cam" => NewKind::VirtualCam,
+                            _ => NewKind::Rtmp,
                         },
                     );
                 }>
@@ -841,23 +962,43 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
                     <option value="record" prop:selected=move || kind.get() == NewKind::Record>
                         "Recording (MP4)"
                     </option>
+                    <option
+                        value="virtual_cam"
+                        prop:selected=move || kind.get() == NewKind::VirtualCam
+                    >
+                        "Virtual camera"
+                    </option>
                 </select>
             </label>
-            <label>
-                {move || match kind.get() {
-                    NewKind::Rtmp => "Server URL (without the stream key)",
-                    NewKind::Record => "File path on the engine's machine",
-                }}
-                <input
-                    type="text"
-                    bind:value=target
-                    placeholder=move || match kind.get() {
-                        NewKind::Rtmp => "rtmps://live.example.com/app",
-                        NewKind::Record => "/home/me/Videos/show.mp4",
+            <Show
+                when=move || kind.get().needs_target()
+                fallback=move || {
+                    view! {
+                        <p class="hint">
+                            "Other apps on the engine's machine see the program as a webcam, JStream Virtual Camera."
+                        </p>
                     }
-                />
-            </label>
-            <button type="submit" disabled=move || target.with(|t| t.trim().is_empty())>
+                }
+            >
+                <label>
+                    {move || match kind.get() {
+                        NewKind::Rtmp => "Server URL (without the stream key)",
+                        NewKind::Record | NewKind::VirtualCam => "File path on the engine's machine",
+                    }}
+                    <input
+                        type="text"
+                        bind:value=target
+                        placeholder=move || match kind.get() {
+                            NewKind::Rtmp => "rtmps://live.example.com/app",
+                            NewKind::Record | NewKind::VirtualCam => "/home/me/Videos/show.mp4",
+                        }
+                    />
+                </label>
+            </Show>
+            <button
+                type="submit"
+                disabled=move || kind.get().needs_target() && target.with(|t| t.trim().is_empty())
+            >
                 "Add"
             </button>
         </form>
@@ -867,8 +1008,9 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        Health, NewKind, OutputRow, create_edit, describe_kind, go_live_targets, live_outputs,
-        load, next_output_id, start_blocker, start_or_stop_all, status, take_key,
+        Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, Vcam, create_edit,
+        describe_kind, explain_start_failure, go_live_targets, live_outputs, load, next_output_id,
+        start_blocker, start_or_stop_all, status, take_key,
     };
     use jstream_control::protocol::{
         Action, DropCounts, Edit, OutputId, OutputInfo, OutputKind, OutputState, RtmpTarget,
@@ -930,7 +1072,10 @@ mod tests {
         let row = &loaded.outputs[0];
         assert_eq!(row.state, OutputState::Stopped);
         assert!(!row.key_set);
-        assert_eq!(start_blocker(row), Some("Set a stream key first."));
+        assert_eq!(
+            start_blocker(row, Vcam::Unknown),
+            Some("Set a stream key first.")
+        );
         assert!(go_live_targets(&loaded.outputs).is_empty());
         assert_eq!(
             describe_kind(&row.info.kind),
@@ -1075,6 +1220,141 @@ mod tests {
             }
         }
         assert_eq!(seen, 2, "the stream key and the control token");
+    }
+
+    /// A virtual camera output is added, started and stopped through the panel's calls,
+    /// and neither "Go live" nor "End stream" touches it.
+    #[test]
+    fn the_panel_s_calls_drive_a_virtual_camera() {
+        let engine = MockEngine::new();
+        let control = engine.connect();
+        let hello = jstream_control::protocol::Hello {
+            protocol: jstream_control::protocol::PROTOCOL_VERSION,
+            client_name: "test".into(),
+        };
+        now(control.hello(hello)).expect("hello");
+        assert!(!NewKind::VirtualCam.needs_target());
+        assert!(NewKind::Rtmp.needs_target() && NewKind::Record.needs_target());
+        let id = OutputId::new("output-1");
+        let create = create_edit(id.clone(), NewKind::VirtualCam, "ignored");
+        assert_eq!(
+            create,
+            Edit::OutputCreate {
+                output_id: id.clone(),
+                kind: OutputKind::VirtualCam
+            }
+        );
+        now(super::edit(&control, create)).expect("create");
+
+        let loaded = now(load(&control)).expect("load");
+        let row = &loaded.outputs[0];
+        assert_eq!(row.info.kind, OutputKind::VirtualCam);
+        assert_eq!(
+            describe_kind(&row.info.kind),
+            "Virtual camera: the program as a webcam"
+        );
+        assert_eq!(start_blocker(row, Vcam::Registered), None);
+        assert_eq!(start_blocker(row, Vcam::Unknown), None);
+        assert!(go_live_targets(&loaded.outputs).is_empty());
+
+        now(super::action(
+            &control,
+            Action::OutputStart {
+                output_id: id.clone(),
+            },
+        ))
+        .expect("start");
+        let loaded = now(load(&control)).expect("load");
+        assert_eq!(loaded.outputs[0].state, OutputState::Active);
+        assert!(live_outputs(&loaded.outputs).is_empty(), "not a stream");
+        now(super::action(
+            &control,
+            Action::OutputStop { output_id: id },
+        ))
+        .expect("stop");
+        let loaded = now(load(&control)).expect("load");
+        assert_eq!(loaded.outputs[0].state, OutputState::Stopped);
+    }
+
+    /// The desktop app's word on the camera decides whether it can start and what the
+    /// card says; in a browser the page doesn't know and lets the engine decide.
+    #[test]
+    fn the_host_s_vcam_status_gates_the_start() {
+        let row = OutputRow {
+            info: OutputInfo {
+                output_id: OutputId::new("cam"),
+                kind: OutputKind::VirtualCam,
+                encoder_profile: None,
+                video_mix: None,
+            },
+            state: OutputState::Stopped,
+            key_set: false,
+        };
+        let parse = |value| Vcam::from_host(value);
+        assert_eq!(parse(Some("registered")), Vcam::Registered);
+        assert_eq!(parse(Some("not_registered")), Vcam::NotRegistered);
+        assert_eq!(parse(Some("moved")), Vcam::Moved);
+        assert_eq!(parse(Some("off")), Vcam::Off);
+        assert_eq!(parse(Some("later")), Vcam::Unknown);
+        assert_eq!(parse(None), Vcam::Unknown);
+
+        assert_eq!(
+            start_blocker(&row, Vcam::NotRegistered),
+            Some("Register the virtual camera first.")
+        );
+        assert_eq!(
+            start_blocker(&row, Vcam::Off),
+            Some("The virtual camera is off in this app.")
+        );
+        assert_eq!(start_blocker(&row, Vcam::Moved), None, "the engine decides");
+        assert_eq!(Vcam::Registered.hint(), None);
+        assert_eq!(Vcam::NotRegistered.hint(), Some(REGISTER_HINT));
+        assert_eq!(Vcam::Moved.hint(), Some(REGISTER_HINT));
+        assert!(REGISTER_HINT.contains("jstream-daemon --register-vcam"));
+        assert!(
+            Vcam::Unknown
+                .hint()
+                .is_some_and(|hint| !hint.contains("--register-vcam")),
+            "a browser can't tell whether registering would help"
+        );
+        assert!(
+            Vcam::Off
+                .hint()
+                .is_some_and(|hint| hint.contains("--no-vcam"))
+        );
+        // A stream doesn't care about the camera.
+        let stream = rtmp("a", OutputState::Stopped, true);
+        assert_eq!(start_blocker(&stream, Vcam::Off), None);
+    }
+
+    /// The engine's reasons, as `jstream-core` and `WindowsVcam::start` word them: an
+    /// unregistered camera gets the registration command; an engine with no camera gets
+    /// why, and no registration advice, which couldn't help (#316 B1).
+    #[test]
+    fn a_refused_camera_start_gets_the_hint_that_fits() {
+        let unregistered = "action_failed: starting the virtual camera: the virtual camera: its \
+             media source {0B5A3E7C} is not registered (register it with `--register-vcam`)"
+            .to_owned();
+        let explained = explain_start_failure(&OutputKind::VirtualCam, unregistered.clone());
+        assert!(explained.starts_with(&unregistered), "{explained}");
+        assert!(explained.contains(REGISTER_HINT), "{explained}");
+
+        let reason = "action_failed: this engine has no virtual camera".to_owned();
+        let explained = explain_start_failure(&OutputKind::VirtualCam, reason.clone());
+        assert!(explained.starts_with(&reason), "{explained}");
+        assert!(explained.contains(NO_CAMERA_HINT), "{explained}");
+        assert!(!explained.contains("register-vcam"), "{explained}");
+        let busy = "the virtual camera is in use by another output".to_owned();
+        assert_eq!(
+            explain_start_failure(&OutputKind::VirtualCam, busy.clone()),
+            busy
+        );
+        let stream = OutputKind::Rtmp {
+            target: RtmpTarget::Generic {
+                url: "rtmp://h/app".into(),
+            },
+        };
+        assert_eq!(explain_start_failure(&stream, reason.clone()), reason);
     }
 
     #[test]
