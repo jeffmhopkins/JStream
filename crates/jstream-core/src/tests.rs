@@ -2270,11 +2270,11 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+                let draw: DrawFn = Box::new(move |shot, size, capture, out, to| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push(shot.program().cloned());
-                    inner(shot, size, capture, out)
+                    inner(shot, size, capture, out, to)
                 });
                 Ok(draw)
             })
@@ -2722,9 +2722,9 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, size, rgba, out, to| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, size, rgba, out)
+                    inner(shot, size, rgba, out, to)
                 });
                 Ok(draw)
             })
@@ -3997,9 +3997,9 @@ mod cpu_pipeline {
             Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, size, rgba, out, to| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, size, rgba, out)
+                    inner(shot, size, rgba, out, to)
                 });
                 Ok(draw)
             })
@@ -4163,7 +4163,7 @@ mod cpu_pipeline {
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move |_| {
-            let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>| {
+            let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>, _| {
                 out.clear();
                 for _ in 0..size.width() as usize * size.height() as usize {
                     out.extend_from_slice(&rgba);

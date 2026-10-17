@@ -71,4 +71,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0056](0056-ci-supply-chain-policy-v2.md) | CI supply-chain policy v2: Dependabot also updates the end-to-end tests' npm packages | accepted | agent |  |
 | [ADR-0057](0057-server-answers-credential-calls.md) | The server answers the credential calls, and actions may answer with data | accepted | agent |  |
 | [ADR-0058](0058-youtube-sign-in-with-a-jstream-client.md) | YouTube sign-in with JStream's own OAuth client, for people only | accepted | maintainer |  |
+| [ADR-0060](0060-linux-platform-support.md) | Linux platform support: portal and PipeWire capture, VA-API encode | accepted | maintainer |  |
 <!-- @generated end adr-index -->
