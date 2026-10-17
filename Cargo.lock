@@ -2677,6 +2677,8 @@ dependencies = [
  "jstream-platform-windows",
  "jstream-protocol",
  "jstream-server",
+ "jstream-youtube",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
