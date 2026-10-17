@@ -3360,7 +3360,7 @@ stamp = { hash = "b3:04b853b872d31424" }
 stamp = { hash = "b3:7e663fb4bee1ca49", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "DOCS#gate item 1 now names ledger stamps, inline stamps and ledger form; R-DOC-003 text updated to the per-input stamp; the other R-DOC rules don't depend on where stamps are stored" }
 
 ["RULES#documentation"."dep:docs/DOCS.md#gate"]
-stamp = { hash = "b3:90e90275aabc1875", by = "agent:claude", note = "Re-read the R-DOC rules against the DOCS#gate edit, which only widened failure 5 (generated drift) with examples: a progress.toml that breaks its rules and a UI feature row with an unknown status. R-DOC-006 (derivable content is generated, generated blocks never hand-edited, enforced by ci:docs) covers the new ui-summary block as written; no rule names the list of generators, so none changes." }
+stamp = { hash = "b3:b4832a55e419a317", by = "agent:draft-ci-wording", note = "DOCS#gate now says docs check runs once a PR leaves draft (#386 N1); this section's own text names no timing, still holds" }
 
 ["RULES#governance"."body"]
 stamp = { hash = "b3:d680c65b3862bf89", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read R-GOV-001..005: R-GOV-005 now follows ADR-0043's narrowed maintainer tier; labels, overrides, gate and proxy decisions unchanged" }
@@ -3414,7 +3414,7 @@ stamp = { hash = "b3:f98875aba60e2495", by = "agent:claude", note = "verificatio
 stamp = { hash = "b3:4658abf796c67b1a", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "step 5 now also drops or updates each landed row's needs; the rest of the landing steps are unchanged and match the progress.toml rules" }
 
 ["RUNBOOK-WAVES#landing"."dep:REVIEW.md#gather"]
-stamp = { hash = "b3:8bf3f0afb967b2ae", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
+stamp = { hash = "b3:d87b17731373b1f2", by = "agent:draft-ci-wording", note = "REVIEW#gather gained a note that a draft head has no CI results (#386 N3); landing step 4 only points reviewers at gather for sync merges, still holds" }
 
 ["RUNBOOK-WAVES#landing"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
