@@ -348,7 +348,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:0914895a9593394e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read one-scene compositor paragraph: hold staged on each submit that reads it and handed back in PRESENT still holds; #391 only reorders staging before the submit" }
+stamp = { hash = "b3:a8e03151f6ccb228", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "One-scene compositor and ResourceCache description re-read; #502 changes only a test's accounting, no pipeline or cache behaviour" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:4988f0034f41e2bc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
@@ -2670,7 +2670,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:0914895a9593394e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Passes and submit paragraph: added that staging follows every fallible step (targets, vertex buffer, readback buffer), matching render/render_into/load after #391; resources table unchanged" }
+stamp = { hash = "b3:a8e03151f6ccb228", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "ResourceCache paragraph re-read: end_frame polls without blocking and returns retirees whose frame finished, which is the behaviour the #502 fix now accounts for; no code change" }
 
 ["CRATE-jstream-render#filters"."body"]
 stamp = { hash = "b3:2afc591075b6e7b7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: "Assets and references (V3): not yet" becomes the V3 paragraph. Checked against assets/mod.rs (Reference: pass-through until the setting is non-null and an image is set, foreign compositor refused, its hold recorded through Ctx::hold, deduped by Arc::ptr_eq), cube.rs (parse_cube sizes 2..64, domain keywords and resampling, LutError cases; from_tiled_rgba8 k*k tiles), lut.rs and lut.wgsl (near-square Rgba16Float tiles via image.rs's data upload, clamp 0..1, two-tap trilinear, non-layout passes through; crate-internal until V0), mask.rs and mask.wgsl (alpha, luma, clip, invert; premultiplied scale). pass.rs adds the defaulted Pass::set_reference and Ctx::hold; compositor.rs's apply_filter stages the input's and every held reference's FrameSync after recording and hands each texture back in PRESENT, as the harness bullet now says; the shared-hold test is in mask.rs; holds (after merging the wave with V1, V1a, V2 and X1)""" }
@@ -3024,7 +3024,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:0914895a9593394e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: crate scope, layering and scene definition unchanged by moving FrameSync staging after target/readback allocation (#391)" }
+stamp = { hash = "b3:a8e03151f6ccb228", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Test-only change (#502): the cache-fence test counts what the first end_frame reclaims; the crate's purpose and scope are unchanged" }
 
 ["CRATE-jstream-render#testing"."body"]
 stamp = { hash = "b3:89649d7be2883f70", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "What-is-checked list now names the refused-readback case of a_refused_readback_stages_and_keeps_no_hold; tolerance and golden notes unchanged" }
@@ -3039,7 +3039,7 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:0914895a9593394e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "What-is-checked list now names the refused-readback case of a_refused_readback_stages_and_keeps_no_hold; tolerance and golden notes unchanged" }
+stamp = { hash = "b3:a8e03151f6ccb228", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "'an unused entry is handed back only after the frame fence (not while its frame is still being built)' still holds: the #502 test keeps the pre-end_frame reclaim check and now also counts a texture freed by the first end_frame" }
 
 ["CRATE-jstream-server#design"."body"]
 stamp = { hash = "b3:1e5f097879a6656b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Logging gains the failed-credential limit (10 a minute, global, then one silencing line and a count with the next one), open question 6 narrowed to non-credential refusals; admission table and pairing text still hold" }
