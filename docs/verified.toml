@@ -369,7 +369,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:4f4dc3f3b2a0055f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:c344ad37ce647f1d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "tools.snap against wave/m1-2: #343 changes the output tool's generated descriptions of output.set_target and output.delete (the key is removed when an output moves to another server or is deleted) and output.set_key (action_failed while the output's start is opening). Merge side: #500 changed the Record path doc comment (no two leading separators, i.e. UNC or device paths; no ':' but a drive letter's; no '?' or '*'), and the wave's tools.snap had not been regenerated for it, so this regeneration adds that text to the two record path descriptions. Tool grouping, #482's annotations, describe_api and the snapshot text hold; jstream-mcp tests (tool_list_snapshot) pass." }
+stamp = { hash = "b3:9af4a2a9c9e04924", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against tools.snap: the wave's #506 regeneration carries #500 and #505 record-path text, and this branch adds #343's output.set_target, output.delete and output.set_key descriptions. The section's tool layout, tools/list size and describe_api lines don't depend on those descriptions' wording. Holds." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -465,7 +465,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:178b725c0556dca1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503 changes Record.path's doc text, its snapshot, one parity case, the mock's path check and the protocol README record paragraph; ARCH's protocol section names the record kind and versions only, no path rules, so it still holds" }
+stamp = { hash = "b3:3e2bf9cf953eddf2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against mock.rs, protocol README, protocol.snap and output.rs: the section's key-binding line (#343) and record-path rule (#505's DOS-device refusal) match the code and protocol docs. Holds." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
@@ -486,13 +486,13 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:01160ec4345d7b87", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503 changes Record.path's doc text, its snapshot, one parity case, the mock's path check and the protocol README record paragraph; ARCH's protocol section names the record kind and versions only, no path rules, so it still holds" }
+stamp = { hash = "b3:a806961c2c6caa60", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against mock.rs, protocol README, protocol.snap and output.rs: the section's key-binding line (#343) and record-path rule (#505's DOS-device refusal) match the code and protocol docs. Holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:0a8b1e5c526a5500", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: wave/m2's #460 bus references (delete.plan with a bus target, bus.delete blockers) stay at 0.24, matching version.rs, now beside main's 0.20 preview, 0.21 pairing, 0.22 opacity/blend/filter chains and 0.23 YouTube bullets; the merged protocol, control mock and server sources and both snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:079ac6c2e69e823f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503 changes Record.path's doc text, its snapshot, one parity case, the mock's path check and the protocol README record paragraph; ARCH's protocol section names the record kind and versions only, no path rules, so it still holds" }
+stamp = { hash = "b3:bed6d8d92c7524a0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against mock.rs, protocol README, protocol.snap and output.rs: the section's key-binding line (#343) and record-path rule (#505's DOS-device refusal) match the code and protocol docs. Holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
@@ -537,7 +537,7 @@ stamp = { hash = "b3:059ecca49025c876", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:342a2d300e73e9c9", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: wave/m2's #460 bus references (delete.plan with a bus target, bus.delete blockers) stay at 0.24, matching version.rs, now beside main's 0.20 preview, 0.21 pairing, 0.22 opacity/blend/filter chains and 0.23 YouTube bullets; the merged protocol, control mock and server sources and both snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:b61965a9b8ad3067", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503 changes Record.path's doc text, its snapshot, one parity case, the mock's path check and the protocol README record paragraph; ARCH's protocol section names the record kind and versions only, no path rules, so it still holds" }
+stamp = { hash = "b3:9032b467857fe18f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against mock.rs, protocol README, protocol.snap and output.rs: the section's key-binding line (#343) and record-path rule (#505's DOS-device refusal) match the code and protocol docs. Holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:0470c98362851047", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503 changes Record.path's doc text, its snapshot, one parity case, the mock's path check and the protocol README record paragraph; ARCH's protocol section names the record kind and versions only, no path rules, so it still holds" }
@@ -1113,7 +1113,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:178b725c0556dca1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503: the mock's recording-path check now refuses a DOS device file name with graph's fixed reason, last after the file-name check as in the graph; 'jstream-graph's platform-independent rule and reasons' and the parity paragraph (recording path rejections included) still describe it" }
+stamp = { hash = "b3:3e2bf9cf953eddf2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against mock.rs: the key-store paragraph names #343's removal on delete and server change, and the no-counterpart note for set_key during an opening start; #505's DOS-device refusal is part of the shared record-path rule the design already says the mock mirrors from jstream-graph. Holds." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs refuses bus.delete while a setting holds a bus reference, as the graph does; mock.rs adds a_bus_a_source_draws_cannot_be_deleted. Edited the audio checks bullet to list it. ARCH#protocol's new bus delete.plan/blockers text is consistent: the mock still answers delete.plan with internal and its refusals carry no blockers, as stated here." }
@@ -1146,7 +1146,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:178b725c0556dca1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "mock.rs gains is_dos_device_name and a DOS-device refusal at the end of record_path_problem (#503); the Mock bullet (in-memory implementation, InProcessControl held to its answers) and the crate contents are unchanged" }
+stamp = { hash = "b3:3e2bf9cf953eddf2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against mock.rs: #343 drops an output's key when an applied batch, undo or redo deletes it or changes OutputKind::key_server; #505 adds is_dos_device_name to record_path_problem. The purpose (an in-memory Control that matches the engine) still holds." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs's delete_bus now refuses a bus a source's settings refer to (Reference::Bus), and mock.rs adds the test a_bus_a_source_draws_cannot_be_deleted; the trait, errors, mock, WebSocket client and shared-name contents listed here are unchanged, so the section holds." }
@@ -1170,7 +1170,7 @@ stamp = { hash = "b3:60637a8ba33cd5f4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:a9fca13a2132b3e4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343 whole change against wave/m1-2, re-read against engine.rs and tests.rs. Stream keys: execute_and_unbind_keys snapshots (id, key_server) before a Batch/History call and, under the collection lock, marks every output it deleted or moved to another server in State::stale_keys; remove_stale_keys then clears each key from the store after the lock is released and unmarks it, and a refusing store leaves it marked (batch still succeeds, warning logged) until set_key or clear_key succeeds; output.start refuses a marked output. Round 1 B1: the start keeps the output's kind in its Pending under the same lock as that check, and Engine::output_kind answers it until the start settles (gate lock alone, never nested with the collection lock), so the opener reads the server it checked. Round 2 N4: output.set_key fails with action_failed while that output's start is opening. Tests: a_stream_key_never_follows_its_output_to_another_server, an_output_whose_old_key_is_not_removed_does_not_start, a_retarget_during_the_opener_does_not_send_the_old_key_to_the_new_server (now also the refused set_key). Deps: control README mock bullet (key removal on delete/key_server change, no mid-start refusal in the mock) and protocol README key-binding paragraph plus set_key refusal match this text. Locking and the rest of Design hold." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:8ed3b588261081f3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Dep change is protocol Design's record-path paragraph gaining the DOS device name refusal (#503); core's session, envelope and dev-dependency text (parity fixture) does not describe path rules and still holds" }
+stamp = { hash = "b3:cb15ca58077448b7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against jstream-protocol Design: #343's key binding to its server (removal on delete or retarget, start refused until removed, set_key refused mid-start) matches core's credential paragraph; #505's DOS-device record-path rule is graph's validation, which core's Design defers to. Holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:f354ca038f866cde", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343: Stream keys describes State::stale_keys marking deleted/re-served outputs under the collection lock, removal after release, output.start refusing a marked output, a refusing store leaving it marked. wave/m1-2 added the Video codecs paragraph (HEVC/AV1 enhanced-RTMP tags, runtime/pipeline.rs and sink.rs), which reads no keys and doesn't touch the opener's key lookup; Locking, Undo/redo and Outputs still hold. Tests after merging wave/m1-2: jstream-protocol, jstream-control (ws,mock), jstream-core, jstream-mcp suites all pass." }
@@ -1776,7 +1776,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:ba7c5f041c14ba26", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the Outputs bullet to list the DOS device file-name refusal (#503: NUL, CON, PRN, AUX, COM0-9/COM1-3 superscripts, LPT likewise, CONIN$/CONOUT$, any case, any extension), matching target.rs's new is_dos_device_name mirror of check_asset_path's rule; dep on protocol Design re-read, consistent" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:8ed3b588261081f3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the Outputs bullet to list the DOS device file-name refusal (#503: NUL, CON, PRN, AUX, COM0-9/COM1-3 superscripts, LPT likewise, CONIN$/CONOUT$, any case, any extension), matching target.rs's new is_dos_device_name mirror of check_asset_path's rule; dep on protocol Design re-read, consistent" }
+stamp = { hash = "b3:cb15ca58077448b7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against jstream-protocol Design: #343 changes only stream-key handling, which graph doesn't own; graph's README already lists #505's DOS-device refusal among record-path checks. Purpose holds." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2322,7 +2322,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:8ed3b588261081f3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the record output paragraph: path must not end in a DOS device name, by the asset path last-component rule (#503); protocol.snap's Record.path description and the parity fixture's new nul.mp4 rejection match it; no wire type or version change" }
+stamp = { hash = "b3:cb15ca58077448b7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read the body, output.rs and protocol.snap: the stream-key paragraph describes #343 (key bound to scheme, host and port; removed on delete or retarget; set_key refused mid-start; no PROTOCOL_VERSION change), and the record-path paragraph covers #505's DOS-device rule; both snap descriptions match. Holds." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2343,7 +2343,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:0a8b1e5c526a5500", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: hello/welcome examples at minor 24 as examples.snap; wave/m2's bus references (bus param type, bus reference, not_found for a missing bus, bus.delete blockers, the bus delete.plan target, MAX_BUSES) sit beside main's 0.22 opacity/blend/filters, 0.21 pairing, 0.23 YouTube and 0.20 binary streams; fixed the Audio paragraph, which still said filters are not in the protocol: filter chains (0.22) belong only to sources, so none feeds a bus from another; the rest matches the merged sources and both snapshots" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:079ac6c2e69e823f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the record output paragraph: path must not end in a DOS device name, by the asset path last-component rule (#503); protocol.snap's Record.path description and the parity fixture's new nul.mp4 rejection match it; no wire type or version change" }
+stamp = { hash = "b3:bed6d8d92c7524a0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read the body, output.rs and protocol.snap: the stream-key paragraph describes #343 (key bound to scheme, host and port; removed on delete or retarget; set_key refused mid-start; no PROTOCOL_VERSION change), and the record-path paragraph covers #505's DOS-device rule; both snap descriptions match. Holds." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
@@ -2388,7 +2388,7 @@ stamp = { hash = "b3:059ecca49025c876", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:342a2d300e73e9c9", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: hello/welcome examples at minor 24 as examples.snap; wave/m2's bus references (bus param type, bus reference, not_found for a missing bus, bus.delete blockers, the bus delete.plan target, MAX_BUSES) sit beside main's 0.22 opacity/blend/filters, 0.21 pairing, 0.23 YouTube and 0.20 binary streams; fixed the Audio paragraph, which still said filters are not in the protocol: filter chains (0.22) belong only to sources, so none feeds a bus from another; the rest matches the merged sources and both snapshots" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:b61965a9b8ad3067", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the record output paragraph: path must not end in a DOS device name, by the asset path last-component rule (#503); protocol.snap's Record.path description and the parity fixture's new nul.mp4 rejection match it; no wire type or version change" }
+stamp = { hash = "b3:9032b467857fe18f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read the body, output.rs and protocol.snap: the stream-key paragraph describes #343 (key bound to scheme, host and port; removed on delete or retarget; set_key refused mid-start; no PROTOCOL_VERSION change), and the record-path paragraph covers #505's DOS-device rule; both snap descriptions match. Holds." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:0470c98362851047", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the record output paragraph: path must not end in a DOS device name, by the asset path last-component rule (#503); protocol.snap's Record.path description and the parity fixture's new nul.mp4 rejection match it; no wire type or version change" }
@@ -2460,7 +2460,7 @@ stamp = { hash = "b3:059ecca49025c876", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:342a2d300e73e9c9", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list carries main's ActionResult, opacity/blend and filter.* edits, preview and pairing actions, YouTube types, events and queries, and wave/m2's MAX_BUSES and bus DeleteTarget; the version history reads 0.24 (wave/m2's bus references: ParamType::Bus, Reference::Bus, the bus delete.plan target, bus.delete blockers) above main's 0.23 YouTube, 0.22 filters, 0.21 pairing and 0.20 preview, matching version.rs and the since-0.24 doc comments; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:b61965a9b8ad3067", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "output.rs changes only Record.path's doc comment (DOS device names refused, #503) and parity.rs adds one rejected case; the Outputs and fixtures bullets list types, not path rules, and still hold" }
+stamp = { hash = "b3:9032b467857fe18f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge-only round: wave/m1-2 at 6c2de6f8 (#501, #504, #505, #506) merged into #343. Re-read against output.rs: #343 adds OutputKind::key_server and rtmp_server, listed in the Outputs bullet; #505 changes only the Record path doc comment (DOS device names refused). Purpose holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:0470c98362851047", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "output.rs changes only Record.path's doc comment (DOS device names refused, #503) and parity.rs adds one rejected case; the Outputs and fixtures bullets list types, not path rules, and still hold" }
