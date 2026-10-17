@@ -73,9 +73,13 @@ export async function disconnect(page) {
   await page.getByRole('menuitem', { name: 'Disconnect' }).click();
 }
 
-/** Opens the inspector's page `name` (`Properties`, `Outputs`). */
-export async function inspectorPage(page, name) {
-  await page.getByRole('tab', { name }).click();
+/** Shows the docked panel `name` (`Inspector`, `Outputs`): selects its tab if another
+ * tab of its group is shown. A click on a shown lone panel would collapse it, so a shown
+ * one is left alone. */
+export async function showPanel(page, name) {
+  const tab = page.getByRole('tab', { name, exact: true });
+  if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+  await expect(page.getByRole('tabpanel', { name, exact: true })).toBeVisible();
 }
 
 /** The revision the header last heard of, as a number. */

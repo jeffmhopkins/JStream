@@ -3,7 +3,8 @@
 //! serves it over HTTP and the desktop app shows it in a Tauri webview. Like every client
 //! it never links the engine (R-ARCH-003).
 //!
-//! It holds connecting and the session (`session`), the shell and its routing (`app`),
+//! It holds connecting and the session (`session`), the shell (`app`), the header bar
+//! (`header`), the dock model (`dock`) and the workspace that draws it (`workspace`),
 //! the state the panels share (`store`), the panels (`panels`), the pairing panel
 //! (`pairing`) and the preview canvas (`canvas`).
 //!
@@ -13,12 +14,14 @@
 
 pub mod app;
 pub mod canvas;
+pub mod dock;
 pub mod header;
 pub mod host;
 pub mod pairing;
 pub mod panels;
 pub mod session;
 pub mod store;
+pub mod workspace;
 
 pub use app::{App, SessionContext};
 

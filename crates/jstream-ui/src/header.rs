@@ -1,17 +1,20 @@
 //! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
-//! the File and Edit menus, the dropped-frames readout, Record, and Go Live / End
-//! stream. It keeps its own copy of the outputs, like the outputs panel does, and reports
+//! the File, Edit, View and Layout menus, the dropped-frames readout, Record, and Go
+//! Live / End stream. The View and Layout menus change the workspace's dock
+//! (`workspace.rs`). It keeps its own copy of the outputs, like the outputs panel does, and reports
 //! a failed call in the shell's problem bar.
 //!
-//! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
+//! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking
 
 use crate::app::{SessionContext, SessionInfo};
 use crate::canvas::model::{history, is_history_empty};
+use crate::dock::PanelId;
 use crate::panels::outputs::{
     OutputRow, Vcam, go_live_targets, is_running, live_outputs, load, start_blocker,
     start_or_stop_all,
 };
 use crate::store::Studio;
+use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{DropCounts, Event, HistoryOp, OutputId, OutputKind};
 use leptos::prelude::*;
@@ -112,6 +115,8 @@ fn shrank(now: DropCounts, before: DropCounts) -> bool {
 enum Menu {
     File,
     Edit,
+    View,
+    Layout,
 }
 
 /// The header bar.
@@ -129,6 +134,7 @@ pub fn Header(
     let open = RwSignal::new(None::<Menu>);
     let loads = StoredValue::new(0_u64);
     let disconnect = StoredValue::new_local(disconnect);
+    let dock = use_context::<DockState>().map(|d| d.0);
 
     let reload = move || {
         let Some(session) = session.get() else {
@@ -306,6 +312,94 @@ pub fn Header(
                     </div>
                 </Show>
             </div>
+            {dock.map(|dock| view! {
+                <div class="top-menu">
+                    {menu_button(Menu::View, "View")}
+                    <Show when=move || open.get() == Some(Menu::View)>
+                        <div class="dropdown" role="menu" aria-label="View">
+                            <p class="menu-head">"PANELS"</p>
+                            {PanelId::ALL.into_iter().map(|panel| {
+                                let shown = move || dock.with(|d| d.shown(panel));
+                                view! {
+                                    <button
+                                        class="menuitem"
+                                        role="menuitemcheckbox"
+                                        aria-checked=move || if shown() { "true" } else { "false" }
+                                        on:click=move |_| dock.update(|d| d.toggle(panel))
+                                    >
+                                        <span>{panel.title()}</span>
+                                        <span class="mark" class:add=move || !shown()>
+                                            {move || if shown() { "shown" } else { "add" }}
+                                        </span>
+                                    </button>
+                                }
+                            }).collect_view()}
+                        </div>
+                    </Show>
+                </div>
+                <div class="top-menu">
+                    <button
+                        class="menu-button"
+                        class:open=move || open.get() == Some(Menu::Layout)
+                        aria-haspopup="menu"
+                        aria-expanded=move || if open.get() == Some(Menu::Layout) { "true" } else { "false" }
+                        on:click=move |_| toggle(Menu::Layout)
+                    >
+                        "Layout: "
+                        <span class="layout-name">{move || dock.with(|d| d.current.clone())}</span>
+                        <span class="caret">"▾"</span>
+                    </button>
+                    <Show when=move || open.get() == Some(Menu::Layout)>
+                        <div class="dropdown layouts" role="menu" aria-label="Layout">
+                            <p class="menu-head">"SAVED LAYOUTS"</p>
+                            {move || dock.with(|d| d.saved.iter().map(|l| l.name.clone()).collect::<Vec<_>>())
+                                .into_iter()
+                                .map(|name| {
+                                    let current = {
+                                        let name = name.clone();
+                                        move || dock.with(|d| d.current == name)
+                                    };
+                                    let pick = name.clone();
+                                    view! {
+                                        <button
+                                            class="menuitem"
+                                            role="menuitem"
+                                            on:click=move |_| {
+                                                dock.update(|d| d.apply(&pick));
+                                                open.set(None);
+                                            }
+                                        >
+                                            <span>{name}</span>
+                                            {move || current().then(|| view! { <span class="mark add">"current"</span> })}
+                                        </button>
+                                    }
+                                })
+                                .collect_view()}
+                            <div class="menu-sep"></div>
+                            <button
+                                class="menuitem link"
+                                role="menuitem"
+                                on:click=move |_| {
+                                    dock.update(|d| d.save_as_new());
+                                    open.set(None);
+                                }
+                            >
+                                "Save current layout as new"
+                            </button>
+                            <button
+                                class="menuitem"
+                                role="menuitem"
+                                on:click=move |_| {
+                                    dock.update(|d| d.reset());
+                                    open.set(None);
+                                }
+                            >
+                                "Reset to default"
+                            </button>
+                        </div>
+                    </Show>
+                </div>
+            })}
             <span class="spacer"></span>
             <span class="readout" title="Video frames dropped since this page connected">
                 {move || dropped.with(|d| d.frames()).map(|n| format!("{n} dropped"))}

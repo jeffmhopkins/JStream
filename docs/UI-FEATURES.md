@@ -55,8 +55,8 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
-| [Header bar](#header) | 9 | 2 | 2 | 2 | 3 | 0 |
-| [Docking and layouts](#docking) | 10 | 0 | 0 | 9 | 1 | 0 |
+| [Header bar](#header) | 9 | 4 | 2 | 0 | 3 | 0 |
+| [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 1 | 6 | 7 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **7** | **23** | **59** | **40** | **1** |
+| **Total** | **130** | **17** | **25** | **48** | **39** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -105,9 +105,9 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | 🟡 | Brand, File (connection details, Disconnect) and Edit (Undo, Redo) built; the prototype leaves File and Edit empty. View and Layout come with [docking](#docking) (HD-02, HD-03). |
-| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ⬜ | Needs [docking](#docking). |
-| HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ⬜ | Needs [docking](#docking). |
+| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. |
+| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | 🟡 | Built for the five panels the UI has; the rest join as they are built. |
+| HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
 | HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | 🔒 | T1 (#260) and T1u (#304). |
@@ -118,26 +118,27 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 <a id="docking"></a>
 ## Docking and layouts
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crates/jstream-ui/src/workspace.rs"]
 -->
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
-Today the shell is one fixed grid: Scenes over Sources on the left, the canvas in the
-middle, an inspector with Properties and Outputs tabs (and the pairing panel under them) on the right, the mixer along the
-bottom. Nothing moves, resizes or collapses.
+The dock is built (`dock.rs`, `workspace.rs`) with the five panels the UI has: Scenes,
+Scene objects, Inspector (with the pairing panel under the properties), Audio mixer and
+Outputs. The other prototype panels join the dock, its View menu and its layouts as
+their rows are built.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| DK-01 | Eight dock zones | Outer left and right columns, full-width top and bottom, left and right sidebars, above and below the canvas, nested as the spec says; empty zones hidden. | ⬜ | |
-| DK-02 | Panel groups and tabs | A zone stacks groups; a group holds tabs (uppercase, accent underline on the active tab of a multi-tab group). | ⬜ | |
-| DK-03 | Resize | 5px splitters resize zones within their limits; 6px dividers trade space between groups. | ⬜ | |
-| DK-04 | Collapse | Clicking a lone panel's title collapses it (not in a tab group, not the only group in its zone); in a side-by-side zone it becomes a narrow strip with its title turned. | ⬜ | |
-| DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ⬜ | |
-| DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ⬜ | |
-| DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ⬜ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | ⬜ | |
-| DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ⬜ | |
-| DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🔒 | Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. Until it does, layouts are kept in the browser's storage. |
+| DK-01 | Eight dock zones | Outer left and right columns, full-width top and bottom, left and right sidebars, above and below the canvas, nested as the spec says; empty zones hidden. | ✅ | |
+| DK-02 | Panel groups and tabs | A zone stacks groups; a group holds tabs (uppercase, accent underline on the active tab of a multi-tab group). | ✅ | |
+| DK-03 | Resize | 5px splitters resize zones within their limits; 6px dividers trade space between groups. | ✅ | |
+| DK-04 | Collapse | Clicking a lone panel's title collapses it (not in a tab group, not the only group in its zone); in a side-by-side zone it becomes a narrow strip with its title turned. | ✅ | |
+| DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
+| DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. |
+| DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has; Filters, Transform, Transitions, chat, stats and agent join them as they are built. |
+| DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
+| DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
 
 <a id="canvas"></a>
 ## Canvas
@@ -321,7 +322,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 | MX-01 | Master card | "Master · program output", N channels, Loudness bar against a target marker with "−14.2 LUFS", True peak with "safe" or a warning, "FX N". | 🟡 | Master loudness (M, S, I, dBTP) is shown as a text line on the master bus. |
 | MX-02 | Channels fold under the master | Channels hidden under the master card by default. | ⬜ | |
 | MX-03 | Channel strips | Name, level bar, dB number field. | 🟡 | Built with meters, a tapered fader, mute and routing; restyle around them. |
-| MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | Needs [docking](#docking) for the title bar. |
+| MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | The dock's title bar is built; the toggle comes with the mixer's restyle. |
 | MX-05 | Monitoring | "Hear: after FX" / "before FX". | 🔒 | Decision register D22; no monitor device in the protocol. |
 | MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | 🔒 | E2b (#317). |
 | MX-07 | Real levels | Meters show the engine's levels. | 🟡 | Built (`meters.tick`); the prototype's numbers are simulated. Counted 🟡 until MX-03's restyle. |
@@ -410,7 +411,8 @@ not remove them; they move into the prototype's look.
   connection details (engine URL, protocol, client, revision) with Disconnect.
 - Pairing ([ADR-0044](adr/0044-pairing-remote-browsers.md)): the pairing panel shows a
   one-time code for a remote browser and lists and revokes paired devices. In the
-  workspace it becomes a panel of its own, with the right column as its home zone.
+  workspace it sits under the properties in the Inspector panel, since it hides itself
+  where the server pairs nothing.
 - Undo and redo, with the engine's history.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs: creating stream, recording and virtual camera outputs, the write-only stream
@@ -433,7 +435,8 @@ starts when the one before it has passed review.
    Record (WS-01, WS-03 to WS-08, HD-01, HD-07, HD-09).
 2. **Workspace:** dock zones, tabs, resize, collapse, close twice, drag to dock, View and
    Layout menus, Editing and Live layouts (DK-01 to DK-09, HD-02, HD-03). The panels split
-   into Scenes, Scene objects, Inspector, Filters, Transform, Mixer and Outputs.
+   into Scenes, Scene objects, Inspector, Mixer and Outputs; Filters and Transform join
+   with their batches.
 3. **Canvas:** edits the selected scene with one shared selection, frame and chrome,
    floating toolbar, crop, multi-select, box select, the prototype's modifier keys
    (CV-01, CV-02, CV-04 to CV-14, CV-18, KB-01, KB-02).
