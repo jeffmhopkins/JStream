@@ -2,9 +2,10 @@
 //!
 //! [`PipeWire`] loads libpipewire and checks its version against ADR-0060's floor. The
 //! video stream the ScreenCast portal hands over is [`stream`]. [`PipeWireAudio`] is the
-//! `AudioIo` backend built on it; its streams (input, output, a sink's monitor for
-//! desktop audio and an application's stream for application audio) report
-//! `Unsupported` until the audio stream code lands.
+//! `AudioIo` backend built on it: it lists devices and applications from the registry
+//! ([`graph`]) and records and plays through audio streams ([`audio`]): input, output,
+//! a sink's monitor for desktop audio and an application's stream for application
+//! audio. The C API they share is [`ffi`].
 
 /// The oldest PipeWire ADR-0060 supports: 1.0.
 pub const PIPEWIRE_FLOOR: (u32, u32, u32) = (1, 0, 0);
@@ -29,6 +30,17 @@ pub fn pipewire_version_supported(version: &str) -> bool {
 pub use backend::{PipeWire, PipeWireAudio};
 
 #[cfg(target_os = "linux")]
+mod audio;
+/// Platform tests against a PipeWire daemon (R-TEST-004): behind `hw-tests` and
+/// `#[ignore]`d, because they record and play on the user's default devices. Null
+/// nodes are enough; see the file.
+#[cfg(all(test, target_os = "linux", feature = "hw-tests"))]
+mod audio_tests;
+#[cfg(target_os = "linux")]
+mod ffi;
+#[cfg(any(target_os = "linux", test))]
+mod graph;
+#[cfg(target_os = "linux")]
 pub(crate) mod stream;
 
 #[cfg(target_os = "linux")]
@@ -41,6 +53,7 @@ mod backend {
         AudioOutputTarget, AudioProcess, AudioStream, PlatformError,
     };
 
+    use super::audio::{Connection, Open, PwAudioStream};
     use super::{PIPEWIRE_FLOOR, pipewire_version_supported};
     use crate::dl::SystemLibrary;
 
@@ -104,58 +117,74 @@ mod backend {
         }
     }
 
-    /// Audio I/O through PipeWire (ADR-0060 §4). For now it loads PipeWire; listing
-    /// devices and opening streams report `Unsupported` until the stream code lands.
+    /// Audio I/O through PipeWire (ADR-0060 §4), on the user's PipeWire daemon.
+    ///
+    /// Each call reads the registry on a new connection, and each stream has its own
+    /// connection and thread. A stream asks for interleaved `f32` at the graph's clock
+    /// rate (`default.clock.rate`, usually 48 kHz) in the device's channel layout
+    /// (mono, stereo or 5.1; any other count as stereo), and PipeWire's stream adapter
+    /// converts to it. Desktop audio records the default sink's monitor, and
+    /// application audio the process's first playback stream.
     #[derive(Debug)]
     pub struct PipeWireAudio {
-        _pw: PipeWire,
+        pub(super) pw: PipeWire,
     }
 
     impl PipeWireAudio {
-        /// Loads PipeWire.
+        /// Loads PipeWire. It doesn't connect to the daemon until a call needs it.
         ///
         /// # Errors
         /// As for [`PipeWire::load`].
         pub fn new() -> Result<Self, PlatformError> {
             Ok(Self {
-                _pw: PipeWire::load()?,
+                pw: PipeWire::load()?,
             })
         }
-    }
 
-    fn not_built(what: &str) -> PlatformError {
-        PlatformError::Unsupported {
-            what: format!("{what} through PipeWire (not built yet, ADR-0060)"),
+        fn connect(&self) -> Result<Connection, PlatformError> {
+            Connection::open(self.pw.library())
         }
     }
 
     impl AudioIo for PipeWireAudio {
         fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
-            Err(not_built("listing audio devices"))
+            Ok(self.connect()?.graph().devices())
         }
 
         fn processes(&self) -> Result<Vec<AudioProcess>, PlatformError> {
-            Err(not_built("listing applications playing audio"))
+            Ok(self.connect()?.graph().processes())
         }
 
-        fn input_format(&self, _target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {
-            Err(not_built("querying an input's format"))
+        fn input_format(&self, target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {
+            self.connect()?.graph().input(target)?.format()
         }
 
         fn open_input(
             &self,
-            _target: &AudioInputTarget,
-            _handler: Box<dyn AudioInputHandler>,
+            target: &AudioInputTarget,
+            handler: Box<dyn AudioInputHandler>,
         ) -> Result<Box<dyn AudioStream>, PlatformError> {
-            Err(not_built("recording audio"))
+            let conn = self.connect()?;
+            let plan = conn.graph().input(target)?;
+            Ok(Box::new(PwAudioStream::open(
+                conn,
+                &plan,
+                Open::Input(handler),
+            )?))
         }
 
         fn open_output(
             &self,
-            _target: &AudioOutputTarget,
-            _handler: Box<dyn AudioOutputHandler>,
+            target: &AudioOutputTarget,
+            handler: Box<dyn AudioOutputHandler>,
         ) -> Result<Box<dyn AudioStream>, PlatformError> {
-            Err(not_built("playing audio"))
+            let conn = self.connect()?;
+            let plan = conn.graph().output(target)?;
+            Ok(Box::new(PwAudioStream::open(
+                conn,
+                &plan,
+                Open::Output(handler),
+            )?))
         }
     }
 }
@@ -190,6 +219,31 @@ mod tests {
                 assert!(remedy.contains("PipeWire") || remedy.contains("libpipewire"));
             }
             Err(e) => panic!("unexpected error: {e}"),
+        }
+    }
+
+    /// No daemon on the socket is a missing component whose remedy starts one. Only a
+    /// socket name nothing listens on is tried, so no daemon is ever reached.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn no_daemon_is_a_missing_component_with_a_remedy() {
+        use jstream_platform::PlatformError;
+
+        let Ok(pw) = super::PipeWire::load() else {
+            return;
+        };
+        let missing =
+            super::audio::Connection::open_to(pw.library(), Some(c"jstream-test-no-such-daemon"));
+        match missing {
+            Err(PlatformError::MissingComponent { component, remedy }) => {
+                assert_eq!(component, "PipeWire daemon");
+                assert!(
+                    remedy.contains("systemctl --user start pipewire"),
+                    "{remedy}"
+                );
+            }
+            Err(e) => panic!("unexpected error: {e}"),
+            Ok(_) => panic!("connected to a daemon that doesn't exist"),
         }
     }
 }

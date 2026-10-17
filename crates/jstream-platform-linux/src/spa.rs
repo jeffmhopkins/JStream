@@ -1,6 +1,6 @@
 //! SPA pods for the PipeWire video stream: the parameters JStream offers (formats,
 //! buffer types, metadata), the format PipeWire settles on, and turning a mapped
-//! buffer into a CPU frame (ADR-0060 §3).
+//! buffer into a CPU frame (ADR-0060 §3). The audio streams' pods are in [`audio`].
 //!
 //! libspa builds and parses pods with inline header functions, which no library
 //! exports, so these are written here against the pod layout in `<spa/pod/pod.h>`:
@@ -11,6 +11,8 @@ use jstream_platform::media::{
     ColorInfo, FrameSize, MediaError, MediaTime, PixelFormat, Plane, Timebase, VideoFrame,
     VideoFrameInfo,
 };
+
+pub(crate) mod audio;
 
 // `enum spa_type` in <spa/utils/type.h>.
 const TYPE_ID: u32 = 3;

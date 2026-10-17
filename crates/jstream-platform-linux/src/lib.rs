@@ -2,14 +2,14 @@
 //! as ADR-0060 lays them out. It has the `CLOCK_MONOTONIC` media clock
 //! (`MonotonicClock`), session and support-tier detection (`Session`), display and window
 //! capture through the ScreenCast portal and a PipeWire video stream (`PortalCapture`, on
-//! the crate's own minimal D-Bus client), run-time loading of libpipewire (`PipeWire`,
-//! behind `PipeWireAudio`) and libva, VA-API H.264 encoding from CPU frames behind
-//! `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder, downloaded only
-//! on the user's request and checked against its pin (`OpenH264Store`, `OpenH264Encoder`,
-//! ADR-0061), and AAC encoding on JStream's own AAC-LC encoder (`RustAacEncoder`,
-//! feature `aac-encoder`), which `VaapiCodecs` opens. Audio I/O sessions report
-//! `Unsupported` until their follow-ups land. Layer 2, and one of the crates allowed `unsafe`
-//! (R-UNSAFE-001): every system call is wrapped here behind safe APIs.
+//! the crate's own minimal D-Bus client), run-time loading of libpipewire (`PipeWire`)
+//! with audio input, output and loopback through it (`PipeWireAudio`), libva, VA-API
+//! H.264 encoding from CPU frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the
+//! software H.264 encoder, downloaded only on the user's request and checked against its
+//! pin (`OpenH264Store`, `OpenH264Encoder`, ADR-0061), and AAC encoding on JStream's own
+//! AAC-LC encoder (`RustAacEncoder`, feature `aac-encoder`), which `VaapiCodecs` opens.
+//! Layer 2, and one of the crates allowed `unsafe` (R-UNSAFE-001): every system call is
+//! wrapped here behind safe APIs.
 //!
 //! System libraries are loaded with `dlopen` when first needed, never linked, so the
 //! crate builds and tests on any machine without their headers. The backends exist only

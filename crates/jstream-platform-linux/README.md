@@ -17,8 +17,9 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
-ADR is **accepted**; this crate has its first three parts (the platform basics, screen
-capture, then VA-API H.264 encoding), and the rest follows in later PRs. Layer 2, and one
+ADR is **accepted**; this crate has the platform basics, screen capture, VA-API H.264
+encoding, the software H.264 and AAC encoders, and PipeWire audio, and the rest follows
+in later PRs. Layer 2, and one
 of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
@@ -80,8 +81,27 @@ It has:
   The portal protocol's option values are here too: source types, cursor modes,
   `persist_mode`, request handle tokens and request object paths.
 - **`PipeWire`** loads `libpipewire-0.3.so.0` and checks it is at least ADR-0060's floor
-  (1.0). **`PipeWireAudio`** (`AudioIo`) is built on it; listing devices and opening
-  streams report `Unsupported` for now.
+  (1.0). **`PipeWireAudio`** (`AudioIo`, ADR-0060 §4) is built on it. Each call
+  connects to the user's daemon on its own `pw_thread_loop` (`pipewire/audio.rs`) and
+  reads the registry with two core round trips: nodes, clients, the core's
+  `default.clock.rate` and the `default` metadata's `default.audio.source` and
+  `default.audio.sink`. No daemon is a missing component whose remedy starts it.
+  `pipewire/graph.rs` turns that into devices (`Audio/Source`, `Audio/Source/Virtual`,
+  `Audio/Sink` and `Audio/Duplex` nodes, with `node.name` as the stable id), the
+  processes playing audio (`Stream/Output/Audio` nodes, with the pid from the node or
+  else its client's `pipewire.sec.pid`), and which node each target connects to:
+  `target.object`, with `stream.capture.sink` for an output's loopback, and a process's
+  loopback recording its first playback stream. A stream is fixed to interleaved `f32`
+  at the graph's rate in the device's layout (mono, stereo or 5.1; `spa/audio.rs`
+  builds and parses the format pods), so PipeWire converts and the handler never sees a
+  format change. `process` runs on the stream's own loop thread: input packets carry
+  their device position and a media-clock time from `pw_stream_get_time_n` (the
+  capture time, before the device's delay), a skipped buffer marks a discontinuity, and
+  output asks the handler to fill each buffer. A named device or process whose node is
+  removed is `DeviceLost`; a default follows the session manager. The callbacks catch
+  panics (R-UNSAFE-005), and a panicking handler isn't called again. Dropping the stream
+  stops its callbacks before it returns, without telling the handler it failed. Choosing between PipeWire and the ALSA fallback
+  (ADR-0060 §8) isn't wired yet.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
@@ -153,7 +173,7 @@ Not here yet, in roughly the order they follow:
   "show cursor" setting (it is drawn into the frames for now);
 - restore tokens kept per source rather than per kind of pick, once the engine names
   the source when it starts a capture;
-- PipeWire audio streams, and the ALSA fallback through libasound (ADR-0060 §4, §8);
+- the ALSA fallback through libasound when no PipeWire daemon runs (ADR-0060 §8);
 - DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
 - V4L2 webcams;
 - the stream-key store.
@@ -165,11 +185,14 @@ pods, the frame copy, and the H.264 parameters, parameter sets, GOP and upload a
 platform-independent. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes) pass with or without those libraries installed and need no GPU, session
-or daemon. The OpenH264 tests use a fake download and a fake encoder behind the
-library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
+or daemon; a missing daemon is tried on a socket name nothing listens on. The registry
+reading and stream planning (`pipewire/graph.rs`) and the audio format pods are
+platform-independent too. The OpenH264 tests use a fake download and a fake encoder
+behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
-GNOME or KDE session with PipeWire, and VA-API H.264 encodes on a GPU with an encode
-driver.
+GNOME or KDE session with PipeWire, VA-API H.264 encodes on a GPU with an encode
+driver, and `PipeWireAudio` recording, playing and looping back on a PipeWire daemon
+(`pipewire/audio_tests.rs`; null nodes are enough, no sound card).
