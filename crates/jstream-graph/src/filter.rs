@@ -188,8 +188,8 @@ fn check_chain(
     }
 }
 
-/// Refuses a scene or source reference in the settings of a master or output filter,
-/// naming the parameter as `field_prefix.<id>`. Only a source's filters may refer to
+/// Refuses any reference (a scene, source, bus or asset) in the settings of a master
+/// or output filter, naming the parameter as `field_prefix.<id>`. Only a source's filters may refer to
 /// something: the delete checks follow a source's edges, not the master's or an
 /// output's.
 fn check_no_references(
@@ -208,7 +208,7 @@ fn check_no_references(
         Some((id, _)) => Err(invalid(
             at,
             &format!("{field_prefix}.{id}"),
-            "a master or output filter can't refer to a scene or source yet",
+            "a master or output filter can't hold a reference yet",
         )),
         None => Ok(()),
     }

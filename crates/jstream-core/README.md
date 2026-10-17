@@ -861,7 +861,8 @@ brings the mixer in line with the collection under the collection lock:
   which runs on every bus that feeds an output, and each running output tap's chain
   (below), with `filters::Chain::apply`: a filter whose kind and position are
   unchanged is updated in place, anything else rebuilds the chain. A filter the mixer
-  refuses is logged and bypassed.
+  refuses to add is bypassed, and new settings it refuses leave the filter on its old
+  ones until the next routing sync tries again; each refusal is logged at `warn`.
 
 An output whose audio chain holds a filter, even a disabled one
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), gets an output

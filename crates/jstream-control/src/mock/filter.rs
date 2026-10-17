@@ -4,7 +4,7 @@
 //! kinds, so it doesn't check a filter's kind, or whether a builtin source has the chain
 //! (a `scene` source has no audio chain, and that it does check), and stores settings as
 //! given. The master stage and each output that carries audio have an audio chain only,
-//! whose filters can't refer to a scene or source (ADR-0027); those it checks too.
+//! whose filters can't hold a reference (ADR-0027); those it checks too.
 
 use super::{
     Collection, already_exists, check_id, check_index, invalid, not_found, unimplemented_by_mock,
@@ -252,8 +252,8 @@ pub(super) fn restore_all(owner: &FilterOwner, chains: FilterChains) -> Vec<Edit
     video.chain(audio).collect()
 }
 
-/// Refuses a scene or source reference in a master or output filter's settings, as the
-/// graph does.
+/// Refuses any reference (a scene, source, bus or asset) in a master or output
+/// filter's settings, as the graph does.
 fn check_no_references(
     owner: &FilterOwner,
     settings: &Settings,
@@ -270,7 +270,7 @@ fn check_no_references(
         Some((id, _)) => Err(invalid(
             at,
             &format!("{field_prefix}.{id}"),
-            "a master or output filter can't refer to a scene or source yet",
+            "a master or output filter can't hold a reference yet",
         )),
         None => Ok(()),
     }

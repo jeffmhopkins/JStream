@@ -274,7 +274,7 @@ impl AudioRouting {
         let mut chain = Chain::default();
         if let Some(output) = state.output(output_id) {
             for reason in chain.apply(&control, &chain_of(output.filters())) {
-                tracing::warn!(output_id = %output_id, reason, "output filter bypassed");
+                tracing::warn!(output_id = %output_id, reason, "output filter not applied");
             }
         }
         if let Some(old) = attached.output_taps.insert(
@@ -328,7 +328,7 @@ impl AudioRouting {
             .master_chain
             .apply(&attached.control.master(), &chain_of(state.master()))
         {
-            tracing::warn!(reason, "master filter bypassed");
+            tracing::warn!(reason, "master filter not applied");
         }
         for (output_id, tap) in &mut attached.output_taps {
             // The output may be gone while its failed pipeline drains; its release
@@ -337,7 +337,7 @@ impl AudioRouting {
                 continue;
             };
             for reason in tap.chain.apply(&tap.control, &chain_of(output.filters())) {
-                tracing::warn!(output_id = %output_id, reason, "output filter bypassed");
+                tracing::warn!(output_id = %output_id, reason, "output filter not applied");
             }
         }
         let gone: Vec<BusId> = attached

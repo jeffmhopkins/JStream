@@ -279,8 +279,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   stage and each output own `filters { video, audio }` too, edited with the same
   `filter.*` edits under the owners `master` and `output`
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)); only their audio chains
-  hold filters until video mixes run the video ones, and their filters can't refer to a
-  scene or source yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  hold filters until video mixes run the video ones, and their filters can't hold a
+  reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.

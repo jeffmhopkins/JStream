@@ -551,7 +551,7 @@ fn the_master_and_outputs_have_audio_chains() {
 }
 
 /// The master's and outputs' video chains wait for video mixes, an output must exist,
-/// and their filters can't refer to a scene or source yet.
+/// and their filters can't hold a reference yet.
 #[test]
 fn master_and_output_chains_are_validated() {
     let mut kinds = kinds();
@@ -599,7 +599,7 @@ fn master_and_output_chains_are_validated() {
     };
     let (field, reason) = field_of(&mut g, duck(FilterOwner::Master));
     assert_eq!(field, "edits.0.settings.key");
-    assert!(reason.contains("can't refer"), "{reason}");
+    assert!(reason.contains("can't hold a reference"), "{reason}");
     // Without the reference it applies; setting one later is refused too.
     apply_ok(
         &mut g,

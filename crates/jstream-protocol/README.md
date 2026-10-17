@@ -447,8 +447,9 @@ encode from its next start (edits to a chain it started with apply live). Only t
 audio chains hold filters so far: a video filter is `invalid_argument` on
 `edits.N.chain` until video mixes run them, and so is an audio filter on an output that
 carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
-`output`. Their filters can't refer to a scene or source yet (`invalid_argument` on the
-parameter), since the delete checks follow only a source's references. `output.delete`'s
+`output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
+`invalid_argument` on the parameter), since the delete checks follow only a source's
+references. `output.delete`'s
 inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
 `master { filters }` report them, each omitted while empty.
 
