@@ -2841,6 +2841,7 @@ dependencies = [
  "getrandom 0.4.3",
  "jstream-control",
  "jstream-mcp",
+ "jstream-platform-windows",
  "jstream-protocol",
  "serde_json",
  "thiserror 2.0.21",
