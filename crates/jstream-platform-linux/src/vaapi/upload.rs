@@ -1,92 +1,16 @@
 //! Writing CPU frames into a mapped VA image as NV12, the encoder's input.
 //!
 //! NV12 frames are copied row by row. RGBA (the compositor's output, which the engine
-//! hands the encoder) and BGRA are converted on the way, straight into the image:
-//! BT.709 limited range with left-sited chroma, the same fixed-point arithmetic as the
-//! Windows encoder's CPU path (`jstream-platform-windows`' `capture::convert`), so both
-//! platforms encode the same pixels.
+//! hands the encoder) and BGRA are converted on the way, straight into the image, by
+//! `jstream_platform::nv12`: BT.709 limited range with left-sited chroma, the converter
+//! Windows' encoder CPU path uses too, so both platforms encode the same pixels.
 //!
 //! Platform-independent, so it is tested everywhere.
 
 use jstream_platform::PlatformError;
 use jstream_platform::media::{PixelFormat, VideoFrame};
-
-/// BT.709 limited-range coefficients in 16.16 fixed point, as on Windows: `Kr`, `Kg`,
-/// `Kb` scaled by 219/255 for luma, and the colour-difference weights by 224/255 for
-/// chroma. Each chroma row sums to zero, so grey gets exactly 128.
-const Y_R: i32 = 11_966;
-const Y_G: i32 = 40_254;
-const Y_B: i32 = 4_064;
-const U_R: i32 = -6_596;
-const U_G: i32 = -22_188;
-const U_B: i32 = 28_784;
-const V_R: i32 = 28_784;
-const V_G: i32 = -26_145;
-const V_B: i32 = -2_639;
-
-/// An NV12 image in mapped memory: the luma and interleaved chroma planes at their
-/// offsets, rows `pitch` bytes apart, as `vaDeriveImage` or `vaCreateImage` lays it out.
-#[derive(Debug)]
-pub(crate) struct Nv12Image<'a> {
-    data: &'a mut [u8],
-    offsets: [usize; 2],
-    pitches: [usize; 2],
-    width: usize,
-    height: usize,
-}
-
-impl<'a> Nv12Image<'a> {
-    /// Wraps `data` as a `width` x `height` NV12 image (both even).
-    ///
-    /// # Errors
-    /// [`PlatformError::InvalidState`] when a plane doesn't fit `data` or a pitch is
-    /// narrower than the image.
-    pub(crate) fn new(
-        data: &'a mut [u8],
-        offsets: [usize; 2],
-        pitches: [usize; 2],
-        width: usize,
-        height: usize,
-    ) -> Result<Self, PlatformError> {
-        let fits = |plane: usize, rows: usize| {
-            let (offset, pitch) = (offsets[plane], pitches[plane]);
-            pitch >= width
-                && rows
-                    .checked_sub(1)
-                    .and_then(|r| r.checked_mul(pitch))
-                    .and_then(|b| b.checked_add(offset))
-                    .and_then(|b| b.checked_add(width))
-                    .is_some_and(|end| end <= data.len())
-        };
-        if !fits(0, height) || !fits(1, height / 2) {
-            return Err(PlatformError::InvalidState {
-                what: "VA-API NV12 upload",
-                state: "the image's planes don't fit its buffer",
-            });
-        }
-        Ok(Self {
-            data,
-            offsets,
-            pitches,
-            width,
-            height,
-        })
-    }
-
-    /// Row `y` of `plane` (0 luma, 1 chroma), `width` bytes. The constructor checked
-    /// that it is in bounds.
-    fn row(&mut self, plane: usize, y: usize) -> &mut [u8] {
-        let start = self.offsets[plane] + y * self.pitches[plane];
-        &mut self.data[start..start + self.width]
-    }
-}
-
-/// Where red, green and blue sit in a packed 8-bit pixel.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum RgbOrder {
-    Rgba,
-    Bgra,
-}
+pub(crate) use jstream_platform::nv12::Nv12Image;
+use jstream_platform::nv12::{RgbOrder, rgb_to_nv12_image};
 
 /// Writes `frame` into `dst` as NV12: copied when it is NV12, converted when it is RGBA
 /// or BGRA. The frame must be the image's size.
@@ -96,7 +20,8 @@ enum RgbOrder {
 /// [`PlatformError::InvalidState`] when the frame's size isn't the image's.
 pub(crate) fn write_nv12(frame: &VideoFrame, dst: &mut Nv12Image<'_>) -> Result<(), PlatformError> {
     let info = frame.info();
-    if info.size.width() as usize != dst.width || info.size.height() as usize != dst.height {
+    let (width, height) = (dst.width(), dst.height());
+    if info.size.width() as usize != width || info.size.height() as usize != height {
         return Err(PlatformError::InvalidState {
             what: "VA-API NV12 upload",
             state: "the frame isn't the encoder's size",
@@ -104,13 +29,14 @@ pub(crate) fn write_nv12(frame: &VideoFrame, dst: &mut Nv12Image<'_>) -> Result<
     }
     let order = match info.format {
         PixelFormat::Nv12 => {
-            for (plane, rows) in [(0, dst.height), (1, dst.height / 2)] {
+            for (plane, rows) in [(0, height), (1, height / 2)] {
                 for y in 0..rows {
-                    let w = dst.width;
                     // `VideoFrame` checks its NV12 planes hold `height` and `height / 2`
-                    // rows of at least `width` bytes.
-                    if let Some(src) = u32::try_from(y).ok().and_then(|y| frame.row(plane, y)) {
-                        dst.row(plane, y).copy_from_slice(&src[..w]);
+                    // rows of at least `width` bytes, and `Nv12Image` that its rows are
+                    // in its buffer and `width` bytes long.
+                    let src = u32::try_from(y).ok().and_then(|y| frame.row(plane, y));
+                    if let (Some(src), Some(row)) = (src, dst.row_mut(plane, y)) {
+                        row.copy_from_slice(&src[..width]);
                     }
                 }
             }
@@ -131,66 +57,7 @@ pub(crate) fn write_nv12(frame: &VideoFrame, dst: &mut Nv12Image<'_>) -> Result<
             state: "the RGB frame has no plane",
         });
     };
-    rgb_to_nv12(plane.data(), plane.stride(), order, dst)
-}
-
-/// Converts a packed 8-bit RGB image, rows `stride` bytes apart, into `dst`. Chroma is
-/// left-sited: each sample filters its block's two rows with a `[1 2 1]` tap centred on
-/// the block's left column (the image's edge repeats column 0), and averages the rows.
-fn rgb_to_nv12(
-    src: &[u8],
-    stride: usize,
-    order: RgbOrder,
-    dst: &mut Nv12Image<'_>,
-) -> Result<(), PlatformError> {
-    let [ri, gi, bi] = match order {
-        RgbOrder::Rgba => [0, 1, 2],
-        RgbOrder::Bgra => [2, 1, 0],
-    };
-    let (w, h) = (dst.width, dst.height);
-    let row_bytes = w * 4;
-    let needed = h
-        .checked_sub(1)
-        .and_then(|r| r.checked_mul(stride))
-        .and_then(|b| b.checked_add(row_bytes));
-    if stride < row_bytes || needed.is_none_or(|n| src.len() < n) {
-        return Err(PlatformError::InvalidState {
-            what: "RGB to NV12",
-            state: "the source is smaller than the frame",
-        });
-    }
-    let src_row = |y: usize| &src[y * stride..y * stride + row_bytes];
-    for y in 0..h {
-        let s = src_row(y);
-        for (d, p) in dst.row(0, y).iter_mut().zip(s.chunks_exact(4)) {
-            let (r, g, b) = (i32::from(p[ri]), i32::from(p[gi]), i32::from(p[bi]));
-            let v = 16 + ((Y_R * r + Y_G * g + Y_B * b + (1 << 15)) >> 16);
-            *d = v.clamp(16, 235) as u8;
-        }
-    }
-    for y in 0..h / 2 {
-        let (top, bottom) = (src_row(2 * y), src_row(2 * y + 1));
-        for (x, d) in dst.row(1, y).chunks_exact_mut(2).enumerate() {
-            // Byte offsets of the pixels left of, on and right of the sample's column
-            // (2x); the left one repeats column 0. 2x + 1 < w because w is even.
-            let centre = 8 * x;
-            let left = centre.saturating_sub(4);
-            let right = centre + 4;
-            // The [1 2 1] sums of both rows weigh 8 in all: three more bits of shift.
-            let sum = |c: usize| {
-                let row = |r: &[u8]| {
-                    i32::from(r[left + c]) + 2 * i32::from(r[centre + c]) + i32::from(r[right + c])
-                };
-                row(top) + row(bottom)
-            };
-            let (sr, sg, sb) = (sum(ri), sum(gi), sum(bi));
-            let u = 128 + ((U_R * sr + U_G * sg + U_B * sb + (1 << 18)) >> 19);
-            let v = 128 + ((V_R * sr + V_G * sg + V_B * sb + (1 << 18)) >> 19);
-            d[0] = u.clamp(16, 240) as u8;
-            d[1] = v.clamp(16, 240) as u8;
-        }
-    }
-    Ok(())
+    rgb_to_nv12_image(plane.data(), plane.stride(), order, dst)
 }
 
 #[cfg(test)]
