@@ -456,7 +456,9 @@ application name, so it is stored as given. A `record` output (0.9) records to a
 on the engine's machine: `path` must be absolute (`/…`, `\…`, `C:\…` or `C:/…`), have
 no `..` segment and end in a file name. As for an `absolute` asset path, it must not
 start with a second separator (a UNC share or device, `\\host\share\…`, `\\.\…`,
-`\\?\…`), nor contain `:` but the drive letter's, `?` or `*` (`\??\UNC\…`). And
+`\\?\…`), nor contain `:` but the drive letter's, `?` or `*` (`\??\UNC\…`), nor
+end in a DOS device name (`NUL`, `nul.mp4`, `CON`, `COM1`, `LPT1`, …), by the same rule
+as an asset path's last component. And
 `container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,

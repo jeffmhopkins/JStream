@@ -786,6 +786,13 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             invalid("edits.0.kind.path", "must end in a file name"),
         ),
         (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("C:\\Videos\\nul.mp4"),
+            }),
+            invalid("edits.0.kind.path", "must not end in a DOS device name"),
+        ),
+        (
             Batch::single(Edit::OutputSetTarget {
                 output_id: OutputId::new("rec"),
                 target: RtmpTarget::Generic {
