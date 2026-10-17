@@ -805,7 +805,8 @@ id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
-prs = [359]
+prs = [359, 611]
+note = "3D transforms part 1, the drawn polygon and unplace (#611), in review into wave/m3-2; the compositor draw and lifting the rejection to build"
 
 [[item]]
 id = "3D1"
