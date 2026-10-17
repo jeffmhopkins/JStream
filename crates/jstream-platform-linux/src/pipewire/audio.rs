@@ -1,18 +1,25 @@
 //! PipeWire audio (ADR-0060 §4): a connection to the user's PipeWire daemon that reads
 //! the registry into a [`Graph`], and the audio streams that run on it.
 //!
-//! Each [`Connection`] has its own `pw_thread_loop`, PipeWire's own thread, and every
-//! callback (the core's, the registry's, the default metadata's and the stream's) runs
-//! there, with the loop's lock held, on the one [`State`] the connection owns. So the
-//! state has a single user at a time: the loop's thread, or this crate's thread while it
-//! holds the lock. A stream is a connection plus one `pw_stream`, so it is also the
-//! "one audio thread per stream" of docs/ARCHITECTURE.md#threading. Its `process`
-//! callback runs the engine's handler there and doesn't allocate, lock or wait
-//! (R-RT-001); the callbacks catch panics (R-UNSAFE-005).
+//! Each [`Connection`] has its own `pw_thread_loop`, PipeWire's own thread, and its
+//! callbacks (the core's, the registry's, the default metadata's, the nodes' and the
+//! stream's state and format) run there, with the loop's lock held, on the one
+//! [`State`] the connection owns. So the state has a single user at a time: the loop's
+//! thread, or this crate's thread while it holds the lock.
+//!
+//! A stream is a connection plus one `pw_stream`, connected with `RT_PROCESS`: its
+//! `process` callback runs on the connection's context's data loop, PipeWire's
+//! real-time thread (given real-time priority by `module-rt`, when the system allows),
+//! which is the "one audio thread per stream" of docs/ARCHITECTURE.md#threading. It
+//! never touches [`State`]: it uses the stream's [`Realtime`], which it shares with the
+//! thread loop through atomics, and runs the engine's handler without allocating,
+//! locking or waiting (R-RT-001). Every callback catches panics (R-UNSAFE-005).
 
+use std::cell::UnsafeCell;
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use jstream_platform::media::{AudioFormat, MediaTime};
@@ -22,7 +29,7 @@ use jstream_platform::{
 };
 
 use super::ffi::{
-    self, CHUNK_SKIP, FLAG_AUTOCONNECT, FLAG_MAP_BUFFERS, Fns, PW_DIRECTION_INPUT,
+    self, CHUNK_SKIP, FLAG_AUTOCONNECT, FLAG_MAP_BUFFERS, FLAG_RT_PROCESS, Fns, PW_DIRECTION_INPUT,
     PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_ID_CORE, PW_VERSION_CORE_EVENTS, PW_VERSION_METADATA,
     PW_VERSION_METADATA_EVENTS, PW_VERSION_NODE, PW_VERSION_NODE_EVENTS, PW_VERSION_REGISTRY,
     PW_VERSION_REGISTRY_EVENTS, PW_VERSION_STREAM_EVENTS, Ptr, PwBuffer, PwCoreEvents, PwCoreInfo,
@@ -378,15 +385,11 @@ unsafe fn with(data: *mut c_void, f: impl FnOnce(&mut State)) {
     // SAFETY: the function's contract.
     let state = unsafe { &mut *data.cast::<State>() };
     if catch_unwind(AssertUnwindSafe(|| f(&mut *state))).is_err()
-        && let Some(stream) = state.stream.as_mut()
+        && let Some(stream) = state.stream.as_ref()
     {
-        let _ = catch_unwind(AssertUnwindSafe(|| {
-            stream.fail(PlatformError::InvalidState {
-                what: "the audio stream",
-                state: "its audio callback panicked, so it was stopped",
-            });
-        }));
-        stream.failed = true;
+        // `fail` marks the stream failed before it calls the handler, so a panic in
+        // `on_error` still leaves it stopped.
+        let _ = catch_unwind(AssertUnwindSafe(|| stream.fail(&panicked())));
     }
 }
 
@@ -432,9 +435,9 @@ unsafe extern "C" fn on_core_error(
                 "PipeWire: {message} ({})",
                 std::io::Error::from_raw_os_error(-res)
             );
-            if let Some(stream) = s.stream.as_mut() {
-                stream.fail(PlatformError::DeviceLost {
-                    what: stream.what.clone(),
+            if let Some(stream) = s.stream.as_ref() {
+                stream.fail(&PlatformError::DeviceLost {
+                    what: stream.rt().what.clone(),
                     reason: message.clone(),
                 });
             }
@@ -494,11 +497,11 @@ unsafe extern "C" fn on_global_remove(data: *mut c_void, id: u32) {
     unsafe {
         with(data, |s| {
             s.graph.remove(id);
-            if let Some(stream) = s.stream.as_mut()
+            if let Some(stream) = s.stream.as_ref()
                 && stream.watch == Some(id)
             {
-                stream.fail(PlatformError::DeviceLost {
-                    what: stream.what.clone(),
+                stream.fail(&PlatformError::DeviceLost {
+                    what: stream.rt().what.clone(),
                     reason: "it was removed".into(),
                 });
             }
@@ -641,83 +644,112 @@ enum Handler {
     Output(Box<dyn AudioOutputHandler>),
 }
 
-/// A stream's state, in the connection's [`State`].
-struct StreamState {
+impl Handler {
+    fn on_error(&mut self, error: &PlatformError) {
+        match self {
+            Handler::Input(h) => h.on_error(error),
+            Handler::Output(h) => h.on_error(error),
+        }
+    }
+}
+
+/// Who may use a stream's [`Exclusive`]: `process` on the data loop, between
+/// [`Gate::enter`] and [`Gate::leave`], until the stream fails; then, once, whichever
+/// thread failed it (to tell the handler).
+#[derive(Debug, Default)]
+struct Gate(AtomicU8);
+
+impl Gate {
+    /// A `process` call is between `enter` and `leave`.
+    const IN_PROCESS: u8 = 1 << 0;
+    /// The stream failed, or is being dropped. The handler has been (or is being) told,
+    /// and `enter` refuses from now on.
+    const FAILED: u8 = 1 << 1;
+
+    /// From `process`: true when the stream hasn't failed, and `process` now has
+    /// [`Exclusive`] until it calls [`Gate::leave`]. Never waits.
+    fn enter(&self) -> bool {
+        self.0
+            .compare_exchange(0, Self::IN_PROCESS, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+    }
+
+    /// From `process`, after a true [`Gate::enter`]: gives [`Exclusive`] back.
+    fn leave(&self) {
+        self.0.fetch_and(!Self::IN_PROCESS, Ordering::Release);
+    }
+
+    /// Marks the stream failed. True when this call is the one that did. From
+    /// `process` (between `enter` and `leave`, so it keeps [`Exclusive`]), or through
+    /// [`Gate::stop`].
+    fn fail(&self) -> bool {
+        self.0.fetch_or(Self::FAILED, Ordering::AcqRel) & Self::FAILED == 0
+    }
+
+    /// Off the data loop: marks the stream failed and waits for a running `process`
+    /// call to leave. True when this call marked it, so the caller now has
+    /// [`Exclusive`] to itself and is the one to tell the handler. The wait is at most
+    /// one handler callback, which doesn't block (R-RT-001).
+    fn stop(&self) -> bool {
+        let first = self.fail();
+        while self.0.load(Ordering::Acquire) & Self::IN_PROCESS != 0 {
+            std::thread::yield_now();
+        }
+        first
+    }
+}
+
+/// The error a handler is told when one of its callbacks panicked.
+fn panicked() -> PlatformError {
+    PlatformError::InvalidState {
+        what: "the audio stream",
+        state: "its audio callback panicked, so it was stopped",
+    }
+}
+
+/// What a stream's `process` callback uses. The stream is connected with
+/// `PW_STREAM_FLAG_RT_PROCESS`, so `process` runs on PipeWire's real-time data loop
+/// while the stream's other callbacks run on the connection's thread loop, at the same
+/// time. They share this, and only through `&`: the fields are read-only or atomic, and
+/// [`Exclusive`] is used by one thread at a time, as its [`Gate`] says.
+struct Realtime {
     stream: Ptr,
-    handler: Handler,
+    output: bool,
     rate: u32,
     channels: usize,
+    what: String,
+    clock: MonotonicClock,
+    fns: Fns,
+    gate: Gate,
+    /// Set once PipeWire settled on the requested format.
+    settled: AtomicBool,
+    exclusive: UnsafeCell<Exclusive>,
+}
+
+/// The part of [`Realtime`] one thread at a time uses (see [`Gate`]).
+struct Exclusive {
+    handler: Handler,
     /// Frames delivered or rendered so far.
     position: u64,
     /// For buffers whose samples aren't `f32`-aligned; allocated before the stream
     /// starts, so `process` never allocates.
     scratch: Vec<f32>,
-    /// Set once PipeWire settled on the requested format.
-    settled: bool,
-    streaming: bool,
-    /// Set once the handler has been told the stream failed, after a panic, or when the
-    /// stream is being dropped: it isn't called again.
-    failed: bool,
     /// The next packet follows a gap (a corrupted or empty buffer).
     discontinuity: bool,
-    /// The node whose removal ends the stream.
-    watch: Option<u32>,
-    what: String,
-    clock: MonotonicClock,
-    fns: Fns,
 }
 
-impl StreamState {
-    /// Tells the handler the stream failed, once.
-    fn fail(&mut self, error: PlatformError) {
-        if self.failed {
-            return;
-        }
-        self.failed = true;
-        match &mut self.handler {
-            Handler::Input(h) => h.on_error(&error),
-            Handler::Output(h) => h.on_error(&error),
-        }
+impl Realtime {
+    /// Stops the stream without telling the handler: `process` won't call it again.
+    fn stop(&self) {
+        self.gate.stop();
     }
 
-    fn param_changed(&mut self, id: u32, param: *const SpaPod) {
-        if id != crate::spa::PARAM_FORMAT || param.is_null() {
-            return;
-        }
-        // SAFETY: PipeWire passes a valid pod for the call's duration: a header, then
-        // `size` body bytes.
-        let pod = unsafe {
-            let size = (*param).size as usize;
-            std::slice::from_raw_parts(param.cast::<u8>(), 8 + size)
-        };
-        let layout = spa_audio::layout_for(u32::try_from(self.channels).ok());
-        match spa_audio::parse_format(pod) {
-            Some(f) if spa_audio::is_requested(f, self.rate, layout) => self.settled = true,
-            other => self.fail(PlatformError::Unsupported {
-                what: format!(
-                    "PipeWire's format for {} ({other:?}), not the f32 at {} Hz asked for",
-                    self.what, self.rate
-                ),
-            }),
-        }
-    }
-
-    fn state_changed(&mut self, state: c_int, error: *const c_char) {
-        match state {
-            STATE_STREAMING => self.streaming = true,
-            STATE_ERROR => {
-                // SAFETY: null or a C string valid for the call.
-                let reason = unsafe { ffi::string(error) }.unwrap_or_default();
-                self.fail(PlatformError::DeviceLost {
-                    what: self.what.clone(),
-                    reason: format!("PipeWire stream error: {reason}"),
-                });
-            }
-            STATE_UNCONNECTED if self.streaming => self.fail(PlatformError::DeviceLost {
-                what: self.what.clone(),
-                reason: "the PipeWire stream disconnected".into(),
-            }),
-            _ => {}
+    /// Tells the handler the stream failed, once. Off the data loop.
+    fn fail(&self, error: &PlatformError) {
+        if self.gate.stop() {
+            // SAFETY: this call failed the stream and `process` has left, so nothing
+            // else uses `exclusive` (see `Gate`).
+            unsafe { (*self.exclusive.get()).handler.on_error(error) };
         }
     }
 
@@ -726,7 +758,7 @@ impl StreamState {
     fn time(&self) -> (i64, i64, (u32, u32)) {
         let mut t = PwTime::default();
         // SAFETY: `pw_stream_get_time_n` fills at most `size_of::<PwTime>()` bytes of
-        // `t`, on this stream, from its loop's thread.
+        // `t`, on this stream; it is real-time safe and may be called from `process`.
         let rc =
             unsafe { (self.fns.stream_get_time_n)(self.stream, &raw mut t, size_of::<PwTime>()) };
         if rc < 0 || t.now <= 0 {
@@ -736,22 +768,38 @@ impl StreamState {
         (t.now, t.delay, (t.rate.num, t.rate.denom))
     }
 
-    fn process(&mut self) {
-        // SAFETY: `pw_stream_dequeue_buffer` on this stream, on its loop's thread.
+    /// The `process` callback, on the data loop.
+    fn process(&self) {
+        // SAFETY: `pw_stream_dequeue_buffer` on this stream, from `process`.
         let b = unsafe { (self.fns.stream_dequeue_buffer)(self.stream) };
         if b.is_null() {
             return;
         }
-        if self.settled && !self.failed {
-            // SAFETY: a dequeued `pw_buffer` and the `spa_buffer`, datas and chunk it
-            // points to stay valid until it is queued back, below.
-            unsafe {
-                match self.handler {
-                    Handler::Input(_) => self.record(b),
-                    Handler::Output(_) => self.play(b),
+        let mut filled = false;
+        if self.settled.load(Ordering::Acquire) && self.gate.enter() {
+            // SAFETY: entered, so `exclusive` is ours until `leave` (see `Gate`).
+            let ex = unsafe { &mut *self.exclusive.get() };
+            let run = catch_unwind(AssertUnwindSafe(|| {
+                // SAFETY: a dequeued `pw_buffer` and the `spa_buffer`, datas and chunk
+                // it points to stay valid until it is queued back, below.
+                unsafe {
+                    if self.output {
+                        self.play(ex, b);
+                    } else {
+                        self.record(ex, b);
+                    }
                 }
+            }));
+            filled = run.is_ok();
+            // A panic fails the stream (R-UNSAFE-005). We haven't left, so the handler
+            // is still ours; if another thread failed the stream meanwhile, it waits for
+            // us to leave and tells the handler itself.
+            if run.is_err() && self.gate.fail() {
+                let _ = catch_unwind(AssertUnwindSafe(|| ex.handler.on_error(&panicked())));
             }
-        } else if matches!(self.handler, Handler::Output(_)) {
+            self.gate.leave();
+        }
+        if !filled && self.output {
             // SAFETY: as above.
             unsafe { silence(b) };
         }
@@ -763,7 +811,7 @@ impl StreamState {
     ///
     /// # Safety
     /// `b` is a dequeued buffer of this stream, not yet queued back.
-    unsafe fn record(&mut self, b: *mut PwBuffer) {
+    unsafe fn record(&self, ex: &mut Exclusive, b: *mut PwBuffer) {
         // SAFETY: the caller's contract; each pointer is checked before it is read.
         let Some((data, maxsize, chunk)) = (unsafe { first_data(b) }) else {
             return;
@@ -774,8 +822,8 @@ impl StreamState {
         if c.flags & CHUNK_SKIP != 0 {
             // The frames are lost but still count, so the next packet's position jumps
             // (when the chunk says how many there were).
-            self.position += (c.size as usize / stride) as u64;
-            self.discontinuity = true;
+            ex.position += (c.size as usize / stride) as u64;
+            ex.discontinuity = true;
             return;
         }
         let offset = (c.offset as usize).min(maxsize);
@@ -796,33 +844,33 @@ impl StreamState {
             // SAFETY: `n * 4` bytes are in bounds at `start` (above) and fit `scratch`
             // (`SCRATCH_FRAMES` frames); the two don't overlap.
             unsafe {
-                ptr::copy_nonoverlapping(start, self.scratch.as_mut_ptr().cast::<u8>(), n * 4);
+                ptr::copy_nonoverlapping(start, ex.scratch.as_mut_ptr().cast::<u8>(), n * 4);
             }
-            &self.scratch[..n]
+            &ex.scratch[..n]
         };
         let (now, delay, rate) = self.time();
         let time = packet_hns(now, delay, rate, frames as u64, self.rate, true)
             .map(|t| MediaTime::new(t, self.clock.timebase()));
         let packet = AudioPacket {
             samples,
-            device_position: self.position,
+            device_position: ex.position,
             time,
             flags: AudioPacketFlags {
-                discontinuity: std::mem::take(&mut self.discontinuity),
+                discontinuity: std::mem::take(&mut ex.discontinuity),
                 silent: false,
             },
         };
-        if let Handler::Input(h) = &mut self.handler {
+        if let Handler::Input(h) = &mut ex.handler {
             h.on_packet(&packet);
         }
-        self.position += frames as u64;
+        ex.position += frames as u64;
     }
 
     /// Fills `b` from the output handler.
     ///
     /// # Safety
     /// `b` is a dequeued buffer of this stream, not yet queued back.
-    unsafe fn play(&mut self, b: *mut PwBuffer) {
+    unsafe fn play(&self, ex: &mut Exclusive, b: *mut PwBuffer) {
         // SAFETY: the caller's contract; each pointer is checked before it is read.
         let Some((data, maxsize, chunk)) = (unsafe { first_data(b) }) else {
             return;
@@ -845,14 +893,14 @@ impl StreamState {
             // until it is queued back; any `f32` may be written.
             unsafe { std::slice::from_raw_parts_mut(data.cast::<f32>(), n) }
         } else {
-            &mut self.scratch[..n]
+            &mut ex.scratch[..n]
         };
         let mut buffer = AudioRenderBuffer {
             samples,
-            device_position: self.position,
+            device_position: ex.position,
             time,
         };
-        if let Handler::Output(h) = &mut self.handler {
+        if let Handler::Output(h) = &mut ex.handler {
             h.render(&mut buffer);
         }
         if !aligned {
@@ -860,7 +908,7 @@ impl StreamState {
             // not overlapping.
             unsafe {
                 ptr::copy_nonoverlapping(
-                    self.scratch.as_ptr().cast::<u8>(),
+                    ex.scratch.as_ptr().cast::<u8>(),
                     data.cast::<u8>(),
                     n * 4,
                 );
@@ -874,7 +922,82 @@ impl StreamState {
             c.size = u32::try_from(n * 4).unwrap_or(0);
             (*b).size = frames as u64;
         }
-        self.position += frames as u64;
+        ex.position += frames as u64;
+    }
+}
+
+/// A stream's state on the connection's thread loop, in its [`State`].
+struct StreamState {
+    /// From `Box::into_raw`, freed on drop: the data loop uses it through a raw pointer
+    /// too, so no `Box` (which would claim it is unaliased) holds it.
+    rt: *mut Realtime,
+    streaming: bool,
+    /// The node whose removal ends the stream.
+    watch: Option<u32>,
+}
+
+impl Drop for StreamState {
+    fn drop(&mut self) {
+        // SAFETY: from `Box::into_raw`, freed once. The state is dropped after the
+        // context, and with it the data loop that ran `process`, was destroyed, so
+        // nothing else uses it.
+        drop(unsafe { Box::from_raw(self.rt) });
+    }
+}
+
+impl StreamState {
+    fn rt(&self) -> &Realtime {
+        // SAFETY: alive until `self` drops, and only ever used through `&`.
+        unsafe { &*self.rt }
+    }
+
+    /// Tells the handler the stream failed, once.
+    fn fail(&self, error: &PlatformError) {
+        self.rt().fail(error);
+    }
+
+    fn param_changed(&mut self, id: u32, param: *const SpaPod) {
+        if id != crate::spa::PARAM_FORMAT || param.is_null() {
+            return;
+        }
+        // SAFETY: PipeWire passes a valid pod for the call's duration: a header, then
+        // `size` body bytes.
+        let pod = unsafe {
+            let size = (*param).size as usize;
+            std::slice::from_raw_parts(param.cast::<u8>(), 8 + size)
+        };
+        let rt = self.rt();
+        let layout = spa_audio::layout_for(u32::try_from(rt.channels).ok());
+        match spa_audio::parse_format(pod) {
+            Some(f) if spa_audio::is_requested(f, rt.rate, layout) => {
+                rt.settled.store(true, Ordering::Release);
+            }
+            other => self.fail(&PlatformError::Unsupported {
+                what: format!(
+                    "PipeWire's format for {} ({other:?}), not the f32 at {} Hz asked for",
+                    rt.what, rt.rate
+                ),
+            }),
+        }
+    }
+
+    fn state_changed(&mut self, state: c_int, error: *const c_char) {
+        match state {
+            STATE_STREAMING => self.streaming = true,
+            STATE_ERROR => {
+                // SAFETY: null or a C string valid for the call.
+                let reason = unsafe { ffi::string(error) }.unwrap_or_default();
+                self.fail(&PlatformError::DeviceLost {
+                    what: self.rt().what.clone(),
+                    reason: format!("PipeWire stream error: {reason}"),
+                });
+            }
+            STATE_UNCONNECTED if self.streaming => self.fail(&PlatformError::DeviceLost {
+                what: self.rt().what.clone(),
+                reason: "the PipeWire stream disconnected".into(),
+            }),
+            _ => {}
+        }
     }
 }
 
@@ -934,20 +1057,16 @@ unsafe extern "C" fn on_stream_state(
     state: c_int,
     error: *const c_char,
 ) {
-    // SAFETY: registered with the state (see `with`).
+    // SAFETY: registered with the state (see `with`), on the thread loop.
     unsafe { with_stream(data, |s| s.state_changed(state, error)) };
 }
 
 unsafe extern "C" fn on_stream_param(data: *mut c_void, id: u32, param: *const SpaPod) {
-    // SAFETY: registered with the state (see `with`).
+    // SAFETY: registered with the state (see `with`), on the thread loop.
     unsafe { with_stream(data, |s| s.param_changed(id, param)) };
 }
 
-unsafe extern "C" fn on_stream_process(data: *mut c_void) {
-    // SAFETY: registered with the state (see `with`).
-    unsafe { with_stream(data, StreamState::process) };
-}
-
+/// The stream's events on the connection's thread loop: everything but `process`.
 static STREAM_EVENTS: PwStreamEvents = PwStreamEvents {
     version: PW_VERSION_STREAM_EVENTS,
     destroy: None,
@@ -955,6 +1074,30 @@ static STREAM_EVENTS: PwStreamEvents = PwStreamEvents {
     control_info: None,
     io_changed: None,
     param_changed: Some(on_stream_param),
+    add_buffer: None,
+    remove_buffer: None,
+    process: None,
+    drained: None,
+    command: None,
+    trigger_done: None,
+};
+
+unsafe extern "C" fn on_stream_process(data: *mut c_void) {
+    // SAFETY: registered with the stream's `Realtime`, which outlives the stream, and
+    // only used through `&` (see `Realtime`). `process` catches the handler's panics;
+    // this catches the rest (R-UNSAFE-005).
+    let rt = unsafe { &*data.cast::<Realtime>() };
+    let _ = catch_unwind(AssertUnwindSafe(|| rt.process()));
+}
+
+/// The stream's `process` event alone, on PipeWire's data loop (`RT_PROCESS`).
+static PROCESS_EVENTS: PwStreamEvents = PwStreamEvents {
+    version: PW_VERSION_STREAM_EVENTS,
+    destroy: None,
+    state_changed: None,
+    control_info: None,
+    io_changed: None,
+    param_changed: None,
     add_buffer: None,
     remove_buffer: None,
     process: Some(on_stream_process),
@@ -969,6 +1112,8 @@ pub(crate) struct PwAudioStream {
     conn: Connection,
     stream: Ptr,
     hook: Box<SpaHook>,
+    /// The `process` listener's hook (its data is the stream's `Realtime`).
+    rt_hook: Box<SpaHook>,
     format: AudioFormat,
 }
 
@@ -1010,6 +1155,7 @@ impl PwAudioStream {
             conn,
             stream: ptr::null_mut(),
             hook: SpaHook::boxed(),
+            rt_hook: SpaHook::boxed(),
             format,
         };
         let locked = this.conn.lock();
@@ -1020,18 +1166,20 @@ impl PwAudioStream {
 
     fn connect_locked(&mut self, plan: &Plan, handler: Open) -> Result<(), PlatformError> {
         let fns = self.conn.fns;
-        let (direction, category, name, handler) = match handler {
+        let (direction, category, name, handler, output) = match handler {
             Open::Input(h) => (
                 PW_DIRECTION_INPUT,
                 "Capture",
                 c"JStream input",
                 Handler::Input(h),
+                false,
             ),
             Open::Output(h) => (
                 PW_DIRECTION_OUTPUT,
                 "Playback",
                 c"JStream output",
                 Handler::Output(h),
+                true,
             ),
         };
         let mut props: Vec<(&str, String)> = vec![
@@ -1074,35 +1222,50 @@ impl PwAudioStream {
         }
         let channels = plan.layout.channel_count();
         let clock = MonotonicClock::new()?;
-        // SAFETY: the lock is held, so the loop's thread isn't using the state.
-        unsafe {
-            (*self.conn.state).stream = Some(StreamState {
-                stream: self.stream,
+        let rt = Box::into_raw(Box::new(Realtime {
+            stream: self.stream,
+            output,
+            rate: plan.rate,
+            channels,
+            what: plan.what.clone(),
+            clock,
+            fns,
+            gate: Gate::default(),
+            settled: AtomicBool::new(false),
+            exclusive: UnsafeCell::new(Exclusive {
                 handler,
-                rate: plan.rate,
-                channels,
                 position: 0,
                 scratch: vec![0.0; SCRATCH_FRAMES * channels],
-                settled: false,
-                streaming: false,
-                failed: false,
                 discontinuity: false,
+            }),
+        }));
+        // SAFETY: the lock is held, so the loop's thread isn't using the state; the
+        // stream state owns `rt` from here.
+        unsafe {
+            (*self.conn.state).stream = Some(StreamState {
+                rt,
+                streaming: false,
                 watch: plan.watch,
-                what: plan.what.clone(),
-                clock,
-                fns,
             });
         }
         let data: *mut c_void = self.conn.state.cast();
         // SAFETY: links `hook` (boxed, outlives the stream, which `Drop` destroys first)
-        // to the static `STREAM_EVENTS`, called with the state.
+        // to the static `STREAM_EVENTS`, called with the state on the thread loop; and
+        // `rt_hook` to `PROCESS_EVENTS`, called with `rt` (freed only with the state,
+        // after the stream is destroyed) on the data loop.
         unsafe {
             (fns.stream_add_listener)(
                 self.stream,
                 &raw mut *self.hook,
                 &raw const STREAM_EVENTS,
                 data,
-            )
+            );
+            (fns.stream_add_listener)(
+                self.stream,
+                &raw mut *self.rt_hook,
+                &raw const PROCESS_EVENTS,
+                rt.cast(),
+            );
         };
         let offer = spa_audio::enum_format(plan.rate, plan.layout).ok_or_else(|| {
             PlatformError::Unsupported {
@@ -1117,7 +1280,7 @@ impl PwAudioStream {
                 self.stream,
                 direction,
                 PW_ID_ANY,
-                FLAG_AUTOCONNECT | FLAG_MAP_BUFFERS,
+                FLAG_AUTOCONNECT | FLAG_MAP_BUFFERS | FLAG_RT_PROCESS,
                 params.as_mut_ptr(),
                 1,
             )
@@ -1140,16 +1303,73 @@ impl Drop for PwAudioStream {
         }
         let fns = self.conn.fns;
         let _locked = self.conn.lock();
-        // SAFETY: under the loop's lock: destroying the stream removes its listener, so
-        // its callbacks never run again. The handler stays in the state until the
-        // connection, dropped next, has stopped the loop. Disconnecting reports a state
-        // change, which isn't the stream failing: the handler isn't told.
+        // SAFETY: under the loop's lock, so the thread loop isn't using the state.
+        // Stopping first means `process` won't call the handler again, and that
+        // disconnecting (a state change, not the stream failing) doesn't tell it.
+        // Destroying the stream removes its listeners. The handler and the stream's
+        // `Realtime` stay in the state until the connection, dropped next, has stopped
+        // the thread loop and destroyed the context, which stops its data loop.
         unsafe {
-            if let Some(stream) = (*self.conn.state).stream.as_mut() {
-                stream.failed = true;
+            if let Some(stream) = (*self.conn.state).stream.as_ref() {
+                stream.rt().stop();
             }
             (fns.stream_disconnect)(self.stream);
             (fns.stream_destroy)(self.stream);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    use super::Gate;
+
+    #[test]
+    fn process_enters_until_the_stream_fails() {
+        let gate = Gate::default();
+        assert!(gate.enter());
+        gate.leave();
+        assert!(gate.enter());
+        gate.leave();
+        assert!(gate.stop(), "the first to fail it tells the handler");
+        assert!(!gate.enter());
+        assert!(!gate.stop() && !gate.fail(), "only once");
+    }
+
+    #[test]
+    fn a_panicking_process_fails_the_stream_from_inside() {
+        let gate = Gate::default();
+        assert!(gate.enter());
+        assert!(gate.fail(), "process tells the handler itself");
+        gate.leave();
+        assert!(!gate.stop(), "and nobody else does");
+        assert!(!gate.enter());
+    }
+
+    #[test]
+    fn stopping_waits_for_a_running_process_to_leave() {
+        let gate = Arc::new(Gate::default());
+        let left = Arc::new(AtomicBool::new(false));
+        assert!(gate.enter());
+        let stopper = {
+            let (gate, left) = (Arc::clone(&gate), Arc::clone(&left));
+            std::thread::spawn(move || {
+                let first = gate.stop();
+                (first, left.load(Ordering::SeqCst))
+            })
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(
+            !stopper.is_finished(),
+            "stop returned while process was inside"
+        );
+        left.store(true, Ordering::SeqCst);
+        gate.leave();
+        let (first, saw_leave) = stopper.join().expect("the stopping thread");
+        assert!(first && saw_leave);
+        assert!(!gate.enter());
     }
 }
