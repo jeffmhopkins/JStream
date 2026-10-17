@@ -1944,8 +1944,9 @@ const MAX_PATH_LEN: usize = 4096;
 
 /// Why `path` is not an acceptable recording path, or `None` when it is: the checks and
 /// fixed reasons of `jstream-graph`'s path validation, in the same order. The rule is
-/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, no `..` segment, and a
-/// file name last.
+/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, not two leading
+/// separators (a UNC or device path), no `:` but a drive letter's, no `?` or `*`, no
+/// `..` segment, and a file name last.
 fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
         return Some("must not be empty");
@@ -1963,6 +1964,16 @@ fn record_path_problem(path: &str) -> Option<&'static str> {
         && matches!(bytes[2], b'/' | b'\\');
     if !(path.starts_with(['/', '\\']) || drive) {
         return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
+    }
+    let rest = if drive { &path[2..] } else { path };
+    if rest[1..].starts_with(['/', '\\']) {
+        return Some("must not start with two separators");
+    }
+    if rest.contains(':') {
+        return Some("must not contain `:` but a drive letter's");
+    }
+    if rest.contains(['?', '*']) {
+        return Some("must not contain `?` or `*`");
     }
     let mut segments = path.split(['/', '\\']);
     if segments.clone().any(|segment| segment == "..") {
