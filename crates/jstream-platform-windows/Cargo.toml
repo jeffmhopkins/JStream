@@ -36,6 +36,8 @@ hw-tests = []
 
 [dependencies]
 jstream-platform.workspace = true
+# The CLAP filter's shared block, which `PluginBlock` maps (ADR-0035).
+jstream-plugin-proto.workspace = true
 jstream-vcam-proto.workspace = true
 
 [target.'cfg(windows)'.dependencies]
@@ -67,6 +69,7 @@ windows = { workspace = true, features = [
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_Ole",

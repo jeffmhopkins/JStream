@@ -940,7 +940,6 @@ mod tests {
                 "events",
                 "kind",
                 "state",
-                "studio",
                 "video"
             ]
         );

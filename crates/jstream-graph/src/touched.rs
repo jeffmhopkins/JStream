@@ -4,8 +4,8 @@
 //! history logs it and checks a step's touched set against other clients' later ones.
 
 use jstream_protocol::{
-    BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, ItemId, OutputId, SceneId,
-    SourceId, SourceKind, VideoMixId,
+    BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, FilterOwner, ItemId, OutputId,
+    SceneId, SourceId, SourceKind, TransitionPresetId, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -18,8 +18,10 @@ enum Object {
     Output(OutputId),
     Encoder(EncoderProfileId),
     VideoMix(VideoMixId),
-    /// A filter, by its owner's source and its ID there (ADR-0026).
-    Filter(SourceId, FilterId),
+    /// A filter, by its owner and its ID there (ADR-0026).
+    Filter(FilterOwner, FilterId),
+    /// A transition preset.
+    Transition(TransitionPresetId),
     /// An audio bus.
     Bus(BusId),
     /// One source's send into one bus.
@@ -61,6 +63,10 @@ enum Prop {
     Mix,
     /// Whether a filter runs.
     Enabled,
+    /// A transition preset's kind, timing and settings: what a switch with it runs.
+    Run,
+    /// A scene's `transition_in` and `transition_out`, or an item's transition settings.
+    Transitions,
     /// Whether a source's audio is open.
     AudioEnabled,
     /// When a source's audio is heard.
@@ -85,6 +91,8 @@ pub struct Touched {
     scene_order: bool,
     /// Whether the canvas size was set.
     canvas: bool,
+    /// Whether the default transition preset was set.
+    default_preset: bool,
     /// An edit this module doesn't know: it conflicts with everything.
     unknown: bool,
 }
@@ -234,19 +242,27 @@ impl Touched {
             Edit::FilterAdd {
                 owner, filter_id, ..
             } => {
-                let source_id = owner.source_id();
                 self.exists
-                    .insert(Object::Filter(source_id.clone(), filter_id.clone()));
-                self.uses.insert(Object::Source(source_id.clone()));
+                    .insert(Object::Filter(owner.clone(), filter_id.clone()));
+                match owner {
+                    FilterOwner::Source { source_id } => {
+                        self.uses.insert(Object::Source(source_id.clone()));
+                    }
+                    FilterOwner::Output { output_id } => {
+                        self.uses.insert(Object::Output(output_id.clone()));
+                    }
+                    // The master stage always exists.
+                    _ => {}
+                }
             }
             Edit::FilterRemove { owner, filter_id } => {
                 self.exists
-                    .insert(Object::Filter(owner.source_id().clone(), filter_id.clone()));
+                    .insert(Object::Filter(owner.clone(), filter_id.clone()));
             }
             Edit::FilterSetEnabled {
                 owner, filter_id, ..
             } => {
-                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                let filter = Object::Filter(owner.clone(), filter_id.clone());
                 self.prop(filter, Prop::Enabled);
             }
             Edit::FilterSetSettings {
@@ -255,7 +271,7 @@ impl Touched {
                 patch,
             } => {
                 for param in patch.0.keys() {
-                    let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                    let filter = Object::Filter(owner.clone(), filter_id.clone());
                     self.prop(filter, Prop::Setting(param.clone()));
                 }
             }
@@ -263,8 +279,37 @@ impl Touched {
             Edit::FilterReorder {
                 owner, filter_id, ..
             } => {
-                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                let filter = Object::Filter(owner.clone(), filter_id.clone());
                 self.prop(filter, Prop::Index);
+            }
+            Edit::TransitionCreate { preset_id, .. } | Edit::TransitionDelete { preset_id } => {
+                self.exists.insert(Object::Transition(preset_id.clone()));
+            }
+            Edit::TransitionUpdate {
+                preset_id, name, ..
+            } => {
+                let preset = Object::Transition(preset_id.clone());
+                if name.is_some() {
+                    self.prop(preset.clone(), Prop::Name);
+                }
+                self.prop(preset, Prop::Run);
+            }
+            Edit::TransitionSetDefault { preset_id } => {
+                self.default_preset = true;
+                self.uses.insert(Object::Transition(preset_id.clone()));
+            }
+            Edit::SceneSetTransitions {
+                scene_id,
+                transition_in,
+                transition_out,
+            } => {
+                self.prop(Object::Scene(scene_id.clone()), Prop::Transitions);
+                for id in [transition_in, transition_out].into_iter().flatten() {
+                    self.uses.insert(Object::Transition(id.clone()));
+                }
+            }
+            Edit::ItemSetTransition { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Transitions);
             }
             Edit::SourceSetAudio {
                 source_id,
@@ -327,6 +372,7 @@ impl Touched {
                         EntityKind::Scene => Object::Scene(SceneId::new(id)),
                         EntityKind::Source => Object::Source(SourceId::new(id)),
                         EntityKind::Output => Object::Output(OutputId::new(id)),
+                        EntityKind::Transition => Object::Transition(TransitionPresetId::new(id)),
                         _ => {
                             self.unknown = true;
                             continue;
@@ -349,6 +395,7 @@ impl Touched {
         self.props.extend(other.props.iter().cloned());
         self.scene_order |= other.scene_order;
         self.canvas |= other.canvas;
+        self.default_preset |= other.default_preset;
         self.unknown |= other.unknown;
     }
 
@@ -366,12 +413,13 @@ impl Touched {
 
     /// Whether undoing or redoing one of these would overwrite the other: one creates or
     /// deletes an object the other touches at all, both set the same property, or both
-    /// set the scenes' order, or both set the canvas size.
+    /// set the scenes' order, the canvas size or the default transition preset.
     pub fn conflicts_with(&self, other: &Touched) -> bool {
         self.unknown
             || other.unknown
             || (self.scene_order && other.scene_order)
             || (self.canvas && other.canvas)
+            || (self.default_preset && other.default_preset)
             || other.objects().any(|o| self.exists.contains(o))
             || self.objects().any(|o| other.exists.contains(o))
             || !self.props.is_disjoint(&other.props)

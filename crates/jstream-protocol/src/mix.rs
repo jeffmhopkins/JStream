@@ -42,7 +42,7 @@ pub struct MixResolution {
 pub enum MixInput {
     /// The scene on program (ADR-0030): it follows `scene.switch`.
     Program,
-    /// The scene on preview. Until studio mode exists there is no preview scene, and a
+    /// The scene on preview. No mix draws studio mode's preview scene yet, so a
     /// `preview` mix shows the program.
     Preview,
     /// One scene, whatever is on program. `scene.delete` is refused while a mix shows

@@ -522,7 +522,9 @@ fn action_output(action: &Action) -> Option<OutputId> {
 
 fn action_scene(action: &Action) -> Option<SceneId> {
     match action {
-        Action::SceneSwitch { scene_id } => Some(scene_id.clone()),
+        Action::SceneSwitch { scene_id, .. } | Action::StudioSetPreview { scene_id } => {
+            Some(scene_id.clone())
+        }
         _ => None,
     }
 }

@@ -9,14 +9,16 @@
 //!
 //! Docs: crates/jstream-protocol/README.md#purpose
 
+use crate::ItemTransition;
 use crate::{
     Action, AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Chord, Crop, Edit, EncoderProfile,
     EncoderProfileId, EncoderProfileInfo, EntityKind, FilterChain, FilterChains, FilterId,
     FilterInfo, FilterOwner, Finite32, FitMode, HardwarePreference, HotkeyBinding, ItemGeometry,
-    ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo,
-    OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult,
-    RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
-    Size, SourceId, SourceInfo, SourceKind, Vec2, VideoCodec, VideoEncoding,
+    ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, MasterInfo, OutputId,
+    OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query,
+    QueryResult, RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
+    SceneSummary, Size, SourceId, SourceInfo, SourceKind, TransitionsInfo, Vec2, VideoCodec,
+    VideoEncoding,
 };
 use crate::{AudioFollow, BusId, BusInfo, MAX_BUSES, SendInfo, SourceAudio};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
@@ -318,6 +320,8 @@ pub fn collection() -> Batch {
                 filter_id: FilterId::new("g1"),
                 index: 0,
             },
+            gain_on(FilterOwner::Master, "m1", FilterChain::Audio, -1.0),
+            gain_on(rec_owner(), "o1", FilterChain::Audio, -6.0),
             source(mic()),
             Edit::BusCreate {
                 bus_id: BusId::new("vod"),
@@ -480,17 +484,30 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         scene_id: scene("b"),
                         name: "B".into(),
                         role: SceneRole::Group,
+                        transition_in: None,
+                        transition_out: None,
                         items: items_of_b(),
                     },
                     SceneInfo {
                         scene_id: scene("a"),
                         name: "A".into(),
                         role: SceneRole::Scene,
+                        transition_in: None,
+                        transition_out: None,
                         items: items_of_a(),
                     },
                 ],
                 outputs: outputs(),
+                master: MasterInfo {
+                    filters: audio_chain(vec![FilterInfo {
+                        filter_id: FilterId::new("m1"),
+                        kind: "gain".into(),
+                        enabled: true,
+                        settings: gain_db(-1.0),
+                    }]),
+                },
                 encoders: encoders(),
+                transitions: TransitionsInfo::default(),
                 video_mixes: video_mixes(),
                 buses: buses(),
                 sends: sends(),
@@ -1116,6 +1133,72 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),
+        // The master stage and outputs (ADR-0027): audio chains only, on an output
+        // that exists.
+        (
+            Batch::single(gain_on(FilterOwner::Master, "v", FilterChain::Video, 0.0)),
+            invalid(
+                "edits.0.chain",
+                "the master stage's and outputs' video chains are not available yet; only \
+                 their audio chains hold filters",
+            ),
+        ),
+        (
+            Batch::single(gain_on(
+                FilterOwner::Output {
+                    output_id: OutputId::new("ghost"),
+                },
+                "g",
+                FilterChain::Audio,
+                0.0,
+            )),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(gain_on(rec_owner(), "o1", FilterChain::Audio, 0.0)),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Filter,
+                id: "o1".into(),
+            },
+        ),
+        (
+            Batch::single(gain_on(
+                FilterOwner::Output {
+                    output_id: OutputId::new("vcam"),
+                },
+                "g",
+                FilterChain::Audio,
+                0.0,
+            )),
+            invalid(
+                "edits.0.chain",
+                "output `vcam` carries no audio, so it has no audio chain",
+            ),
+        ),
+        // A reference is refused before the index is checked.
+        (
+            Batch::single(Edit::FilterAdd {
+                owner: FilterOwner::Master,
+                chain: FilterChain::Audio,
+                filter_id: FilterId::new("k"),
+                kind: "gain".into(),
+                settings: [(
+                    "key".to_owned(),
+                    serde_json::json!({"type": "source", "source_id": "desk"}),
+                )]
+                .into_iter()
+                .collect(),
+                enabled: None,
+                index: Some(5),
+            }),
+            invalid(
+                "edits.0.settings.key",
+                "a master or output filter can't hold a reference yet",
+            ),
+        ),
         (
             Batch::single(Edit::VideoMixCreate {
                 mix_id: VideoMixId::new("side"),
@@ -1311,6 +1394,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 chord: Chord::new("F2"),
                 action: Action::SceneSwitch {
                     scene_id: SceneId::new("ghost"),
+                    preset_id: None,
                 },
             }),
             ProtocolError::NotFound {
@@ -1483,6 +1567,34 @@ fn sends() -> Vec<SendInfo> {
     ]
 }
 
+/// A `gain` filter at `db` on `owner`'s `chain`, last.
+fn gain_on(owner: FilterOwner, id: &str, chain: FilterChain, db: f32) -> Edit {
+    Edit::FilterAdd {
+        owner,
+        chain,
+        filter_id: FilterId::new(id),
+        kind: "gain".into(),
+        settings: gain_db(db),
+        enabled: None,
+        index: None,
+    }
+}
+
+/// The output `rec`, as a filter owner.
+fn rec_owner() -> FilterOwner {
+    FilterOwner::Output {
+        output_id: OutputId::new("rec"),
+    }
+}
+
+/// Chains with `audio` and no video filter.
+fn audio_chain(audio: Vec<FilterInfo>) -> FilterChains {
+    FilterChains {
+        video: vec![],
+        audio,
+    }
+}
+
 /// Mix `side`: scene `b` at 640×360 and half the base rate.
 fn side() -> VideoMixInfo {
     VideoMixInfo {
@@ -1541,6 +1653,7 @@ fn filter_add(source: &str, id: &str, chain: FilterChain, index: Option<u32>) ->
 fn switch_to_a() -> Action {
     Action::SceneSwitch {
         scene_id: SceneId::new("a"),
+        preset_id: None,
     }
 }
 
@@ -1641,6 +1754,12 @@ fn recording() -> OutputInfo {
         output_id: OutputId::new("rec"),
         kind: record("/home/me/Videos/show.mp4"),
         encoder_profile: Some(EncoderProfileId::new("hq")),
+        filters: audio_chain(vec![FilterInfo {
+            filter_id: FilterId::new("o1"),
+            kind: "gain".into(),
+            enabled: true,
+            settings: gain_db(-6.0),
+        }]),
         video_mix: Some(VideoMixId::new("prog")),
     }
 }
@@ -1650,6 +1769,7 @@ fn youtube() -> OutputInfo {
         output_id: OutputId::new("yt"),
         kind: rtmp("rtmps://a.rtmps.youtube.com:443/live2"),
         encoder_profile: Some(EncoderProfileId::new("low")),
+        filters: FilterChains::default(),
         video_mix: Some(VideoMixId::new("side")),
     }
 }
@@ -1662,12 +1782,14 @@ fn outputs() -> Vec<OutputInfo> {
             output_id: OutputId::new("tw"),
             kind: rtmp(TWITCH_URL),
             encoder_profile: None,
+            filters: FilterChains::default(),
             video_mix: None,
         },
         OutputInfo {
             output_id: OutputId::new("vcam"),
             kind: OutputKind::VirtualCam,
             encoder_profile: None,
+            filters: FilterChains::default(),
             video_mix: None,
         },
         youtube(),
@@ -1892,6 +2014,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         visible: true,
         opacity: Finite32::ONE,
         blend: BlendMode::Normal,
+        transition: ItemTransition::default(),
     };
     vec![
         ItemInfo {
@@ -1904,6 +2027,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             visible: false,
             opacity: QUARTER,
             blend: BlendMode::Normal,
+            transition: ItemTransition::default(),
         },
         plain("i1", "cam_copy"),
         plain("i2", "b_src"),
@@ -1922,5 +2046,6 @@ fn items_of_b() -> Vec<ItemInfo> {
         visible: true,
         opacity: HALF,
         blend: BlendMode::Normal,
+        transition: ItemTransition::default(),
     }]
 }

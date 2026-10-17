@@ -198,6 +198,11 @@ impl InputControl {
     /// parameters travel through the block's parameter ring, not
     /// [`FilterControl::set`].
     ///
+    /// One filter per block, and a freshly initialised one: the filter numbers blocks
+    /// from 0 and fixes its latency from the host's ready latency when it is built. A
+    /// host restarted on a re-initialised block (or reporting a new latency) needs the
+    /// filter removed and added again.
+    ///
     /// # Errors
     /// As [`Self::add_filter`], and [`AudioError::InvalidConfig`] for a block that isn't
     /// initialised for this mixer or whose host isn't ready.

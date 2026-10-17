@@ -24,6 +24,11 @@ fn main() -> ExitCode {
         .and_then(|exe| exe.parent().map(Path::to_owned));
     let data =
         jstream_platform::paths::data_dir_for(exe_dir.as_deref(), |name| std::env::var_os(name));
+    // Local crash reports beside the log file, as early as the folder is known
+    // (R-SEC-004).
+    if let Some(data) = data.as_deref() {
+        jstream_desktop::crash::install(data.join("logs"));
+    }
     let log = app::init_logging(data.as_deref());
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),

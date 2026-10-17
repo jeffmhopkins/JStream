@@ -460,6 +460,8 @@ fn a_batch_a_query_and_events_round_trip() {
         next_event(&harness, &mut events),
         Some(Event::StudioChanged {
             program_scene: Some(SceneId::new("main")),
+            preview_scene: Some(SceneId::new("main")),
+            transition: None,
             client_id: client_id.clone(),
             request_id: Some(RequestId::new("req_1")),
         })

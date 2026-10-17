@@ -88,36 +88,38 @@ const PACKET_WAIT: Duration = Duration::from_millis(20);
 /// What the hub reads from the engine on every pass.
 pub(crate) trait PreviewSource: Send + Sync {
     /// The render snapshot published now, the live values (ADR-0032) on the render
-    /// parameter channel now, and the `rev` the snapshot was published at.
-    fn current(&self) -> (Arc<RenderSnapshot>, Arc<LiveParams>, Rev);
+    /// parameter channel now, the `rev` the snapshot was published at, and the media
+    /// clock now.
+    fn current(&self) -> (Arc<RenderSnapshot>, Arc<LiveParams>, Rev, MediaTime);
 }
 
-/// Draws one picture for the hub: `shot` with `live` applied at `size`, read back as
-/// straight RGBA8 into `out` (replacing what it held). Opened on the hub thread and kept
-/// there.
+/// Draws one picture for the hub: `shot` with `live` applied at `size` and media time
+/// `at` (a running transition samples it), read back as straight RGBA8 into `out`
+/// (replacing what it held). Opened on the hub thread and kept there.
 pub(crate) type PreviewDraw =
-    Box<dyn FnMut(&Shot, &LiveParams, FrameSize, &mut Vec<u8>) -> Result<(), String>>;
+    Box<dyn FnMut(&Shot, &LiveParams, FrameSize, MediaTime, &mut Vec<u8>) -> Result<(), String>>;
 
 /// Opens the hub's [`PreviewDraw`], on the hub thread.
 pub(crate) type OpenPreviewDraw = Arc<dyn Fn() -> Result<PreviewDraw, String> + Send + Sync>;
 
-/// The hub's draw: its own wgpu compositor on the headless adapter, drawing the program
-/// mix with [`snapshot::compose`] and no capture.
+/// The hub's draw: its own wgpu compositor, hardware adapter first with the software one
+/// as the fallback (`OpenOptions::hardware`), drawing the program mix with
+/// [`snapshot::compose`] and no capture.
 pub(crate) fn gpu_draw() -> OpenPreviewDraw {
     Arc::new(|| {
         let mut compositor =
-            Compositor::open(OpenOptions::headless()).map_err(|err| err.to_string())?;
+            Compositor::open(OpenOptions::hardware()).map_err(|err| err.to_string())?;
         tracing::info!(
             adapter = %compositor.adapter_description(),
             "preview compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
-        let draw: PreviewDraw = Box::new(move |shot, live, size, out| {
+        let draw: PreviewDraw = Box::new(move |shot, live, size, at, out| {
             cache.begin_frame();
             let output = snapshot::compose(
                 &mut compositor,
                 &mut cache,
-                shot,
+                (shot, at),
                 // A preview stream shows the program mix, never a video mix.
                 snapshot::View::default(),
                 live,
@@ -142,7 +144,7 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
 /// machine with no adapter ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenPreviewDraw {
     Arc::new(|| {
-        let draw: PreviewDraw = Box::new(|_, _, size, out| {
+        let draw: PreviewDraw = Box::new(|_, _, size, _, out| {
             out.clear();
             out.resize(size.width() as usize * size.height() as usize * 4, 0);
             Ok(())
@@ -586,7 +588,8 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
             }
             live
         };
-        let Some((snapshot, live, rev)) = source.upgrade().map(|source| source.current()) else {
+        let Some((snapshot, live, rev, at)) = source.upgrade().map(|source| source.current())
+        else {
             lock(&inner.state).running = false;
             return;
         };
@@ -599,7 +602,14 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
                 .entry(stream.id)
                 .or_insert_with(|| Work::new(stream, now));
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                serve(stream, work, (&snapshot, &live), rev, now, &mut canvas)
+                serve(
+                    stream,
+                    work,
+                    (&snapshot, &live),
+                    rev,
+                    (now, at),
+                    &mut canvas,
+                )
             }));
             match result {
                 Ok(Some(next)) => wake_at = wake_at.min(next),
@@ -643,7 +653,7 @@ fn serve(
     work: &mut Work,
     (snapshot, live): (&Arc<RenderSnapshot>, &Arc<LiveParams>),
     rev: Rev,
-    now: Instant,
+    (now, at): (Instant, MediaTime),
     canvas: &mut Canvas<'_>,
 ) -> Option<Instant> {
     let Canvas {
@@ -660,10 +670,12 @@ fn serve(
     if now < work.next_at {
         return Some(work.next_at);
     }
-    let changed = !work
-        .shown
-        .as_ref()
-        .is_some_and(|(shot, values)| Arc::ptr_eq(shot, snapshot) && Arc::ptr_eq(values, live));
+    // A running transition changes the picture with time, not with the snapshot.
+    let changed = snapshot.shot().transitioning()
+        || !work
+            .shown
+            .as_ref()
+            .is_some_and(|(shot, values)| Arc::ptr_eq(shot, snapshot) && Arc::ptr_eq(values, live));
     let stale = work
         .last_key
         .is_none_or(|at| now.saturating_duration_since(at) >= KEYFRAME_EVERY);
@@ -690,7 +702,7 @@ fn serve(
         }
     }
     let drawing = draw.as_mut()?;
-    if let Err(reason) = drawing(shot, live, size, rgba) {
+    if let Err(reason) = drawing(shot, live, size, at, rgba) {
         work.draw_errors += 1;
         tracing::debug!(channel = stream.channel, error = %reason, "preview picture skipped");
         if work.draw_errors > MAX_DRAW_ERRORS {
