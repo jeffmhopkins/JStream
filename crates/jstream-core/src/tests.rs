@@ -500,6 +500,7 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect_err("a CLAP filter can't be added yet");

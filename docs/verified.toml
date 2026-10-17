@@ -375,7 +375,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:e5a04b8f94d4bef3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the MCP section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the tool list now has hotkey and live; the schema size line is about 484 KB (tools.snap 484,266 bytes), and says live and hotkey each carry most of the edit schemas because live.set takes edits and hotkey.set takes any action; annotations bullet holds. Holds." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:29cce450e402dd17", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the MCP section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the tool list now has hotkey and live; the schema size line is about 484 KB (tools.snap 484,266 bytes), and says live and hotkey each carry most of the edit schemas because live.set takes edits and hotkey.set takes any action; annotations bullet holds. Holds." }
+stamp = { hash = "b3:9bdb65cfe95e2fac", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: tools.snap regenerated (the merge had #244's copy without #437's EncoderProfile and hardware preference descriptions); tool_list_snapshot passes" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -492,13 +492,13 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:e7c971a43c235cf7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the protocol section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Live values bullet now names protocol 0.26; the wave's hotkey bullet (0.25), the stream-key binding (#343) and delete.plan hotkeys sit beside it; hotkey.set refuses live actions. Snaps regenerated for 0.26. Holds." }
+stamp = { hash = "b3:839e0a5c4039f880", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: protocol README, protocol.snap and fixtures.rs carry #437's encoder wording and #244's live values; the protocol section's claims hold" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:1d5b111ab493205d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the protocol section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Live values bullet now names protocol 0.26; the wave's hotkey bullet (0.25), the stream-key binding (#343) and delete.plan hotkeys sit beside it; hotkey.set refuses live actions. Snaps regenerated for 0.26. Holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:35ad936180a88628", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the protocol section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Live values bullet now names protocol 0.26; the wave's hotkey bullet (0.25), the stream-key binding (#343) and delete.plan hotkeys sit beside it; hotkey.set refuses live actions. Snaps regenerated for 0.26. Holds." }
+stamp = { hash = "b3:1bf9e33b09288e37", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: protocol README, protocol.snap and fixtures.rs carry #437's encoder wording and #244's live values; the protocol section's claims hold" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
@@ -525,7 +525,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:88acc1cdeedb7042", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the protocol section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Live values bullet now names protocol 0.26; the wave's hotkey bullet (0.25), the stream-key binding (#343) and delete.plan hotkeys sit beside it; hotkey.set refuses live actions. Snaps regenerated for 0.26. Holds." }
+stamp = { hash = "b3:1ede5ca4e3964eb3", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: protocol README, protocol.snap and fixtures.rs carry #437's encoder wording and #244's live values; the protocol section's claims hold" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -666,7 +666,7 @@ stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "Adds the js
 stamp = { hash = "b3:70eb73efd430e77a", by = "agent:claude", note = "Adds the jstream-plugin-host row (not an engine host; one process per CLAP filter instance, shared block and control channel only, no protocol connection), matching apps/jstream-plugin-host's Cargo metadata and main.rs" }
 
 ["ARCH#threading"."body"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: preview row and render-snapshot paragraph now say the preview and video.snapshot load the live values with the snapshot and rev and draw them over it (preview/mod.rs current, engine.rs PreviewSource); collector row lists live values; live-value handover status matches gesture.rs and render.rs." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's CLAP plugin hosts paragraph (host process, Windows launcher and HostSupervisor built; running filters and stats.tick not yet; quarter-block sleep for now) beside #244's live-values jstream-live thread; both hold" }
 
 ["ARCH#threading"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
@@ -783,7 +783,7 @@ stamp = { hash = "b3:3d8ccf2a75f92aed", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:308082ece28cb86f" }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read against ARCH#threading's change (the preview thread and video.snapshot now load live values with the render snapshot; collector takes replaced live values): nothing here concerns the render side, and the mixer still has no parameter channel for live values, as this section implies." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "re-read against ARCH#threading now carries main's CLAP progress (host process, launcher and HostSupervisor built; filters not run; the host sleeps a quarter block until its media-clock timer) beside #244's jstream-live thread; the mixer's CLAP filter side is unchanged" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/error.rs"]
 stamp = { hash = "b3:d8e9ac73d567425f" }
@@ -888,7 +888,7 @@ stamp = { hash = "b3:e5a6edbd7802a068" }
 stamp = { hash = "b3:4c4707b7e310f3be", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's Mixer paragraph (input's own block allocated in Command::Add, freed via Retired::Block, QUEUE_CAP 7 per input), no-alloc and Cost text beside main's #449 Drift fit (first stamp after a discontinuity restarts the segment) and the off-line discontinuity in the no-alloc list; checked against mixer.rs, cmd.rs, retire.rs, input.rs. Holds, no edit. Not run here: cargo test." }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the ring, mixer, buses, chains and compensation parts against ARCH#threading's change (preview/video.snapshot load live values; collector row): the audio and mixer threads still share only rings and atomics, and none of the live-value work touches src/rt." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "re-read against ARCH#threading now carries main's CLAP progress (host process, launcher and HostSupervisor built; filters not run; the host sleeps a quarter block until its media-clock timer) beside #244's jstream-live thread; the real-time rules for the mixer thread and its CLAP block exchange are unchanged" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/RULES.md#R-RT-001"]
 stamp = { hash = "b3:3221ab22f6747616" }
@@ -1182,13 +1182,13 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:b42de4aae0fe4fad", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Batches paragraph's removed_hotkeys and the Stream keys paragraph (#343, stale_keys under the lock, removal after) sit beside the Live values subsection, Calls, render-snapshot and preview text; engine.rs call() takes ended gestures and stale keys from the same locked step and handles both after the lock (merged resolution). Live values still don't touch hotkeys: hotkey.set refuses live actions (bind_problem). Holds." }
+stamp = { hash = "b3:306a3b6860cff76b", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: batch order in engine.rs is idempotency key, then ends_gesture (the Commit bullet's order, matching the mock), then main's clap/ filter.add refusal, then the graph, so the refusal is still before expected_rev as written; hardware-first snapshot and preview; protocol#design's encoder default text holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:de0aceab2621cbc7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Batches paragraph's removed_hotkeys and the Stream keys paragraph (#343, stale_keys under the lock, removal after) sit beside the Live values subsection, Calls, render-snapshot and preview text; engine.rs call() takes ended gestures and stale keys from the same locked step and handles both after the lock (merged resolution). Live values still don't touch hotkeys: hotkey.set refuses live actions (bind_problem). Holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:471b464b1adf3f63", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Batches paragraph's removed_hotkeys and the Stream keys paragraph (#343, stale_keys under the lock, removal after) sit beside the Live values subsection, Calls, render-snapshot and preview text; engine.rs call() takes ended gestures and stale keys from the same locked step and handles both after the lock (merged resolution). Live values still don't touch hotkeys: hotkey.set refuses live actions (bind_problem). Holds." }
+stamp = { hash = "b3:91356390c787efff", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: batch order in engine.rs is idempotency key, then ends_gesture (the Commit bullet's order, matching the mock), then main's clap/ filter.add refusal, then the graph, so the refusal is still before expected_rev as written; hardware-first snapshot and preview; protocol#design's encoder default text holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:c471845769be342f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Batches paragraph's removed_hotkeys and the Stream keys paragraph (#343, stale_keys under the lock, removal after) sit beside the Live values subsection, Calls, render-snapshot and preview text; engine.rs call() takes ended gestures and stale keys from the same locked step and handles both after the lock (merged resolution). Live values still don't touch hotkeys: hotkey.set refuses live actions (bind_problem). Holds." }
@@ -1221,7 +1221,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:fd4abe9d55b1ca80", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Batches paragraph's removed_hotkeys and the Stream keys paragraph (#343, stale_keys under the lock, removal after) sit beside the Live values subsection, Calls, render-snapshot and preview text; engine.rs call() takes ended gestures and stale keys from the same locked step and handles both after the lock (merged resolution). Live values still don't touch hotkeys: hotkey.set refuses live actions (bind_problem). Holds." }
+stamp = { hash = "b3:7a99be7ad809e3ef", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: batch order in engine.rs is idempotency key, then ends_gesture (the Commit bullet's order, matching the mock), then main's clap/ filter.add refusal, then the graph, so the refusal is still before expected_rev as written; hardware-first snapshot and preview; protocol#design's encoder default text holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1239,7 +1239,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:1b3b880f3438dd5e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: live values, calls, undo, snapshots, preview streams, locking, audit and not-yet hold with the wave's youtube, filters, preview and scopes. Edited Calls, the render-snapshot and compose paragraphs and the live channel bullet so video.snapshot and the preview thread both load the live values with the snapshot and draw them (engine.rs PreviewSource::current, preview/mod.rs serve/gpu_draw), and a preview stream is due on a live change." }
+stamp = { hash = "b3:9840ebaecba1026b", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: batch order in engine.rs is idempotency key, then ends_gesture (the Commit bullet's order, matching the mock), then main's clap/ filter.add refusal, then the graph, so the refusal is still before expected_rev as written; hardware-first snapshot and preview; protocol#design's encoder default text holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:b7854ccd83c4a362", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1260,13 +1260,13 @@ stamp = { hash = "b3:58eafa4460718214", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/preview/mod.rs"]
-stamp = { hash = "b3:e7aa8c7d4b493d33", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: live values, calls, undo, snapshots, preview streams, locking, audit and not-yet hold with the wave's youtube, filters, preview and scopes. Edited Calls, the render-snapshot and compose paragraphs and the live channel bullet so video.snapshot and the preview thread both load the live values with the snapshot and draw them (engine.rs PreviewSource::current, preview/mod.rs serve/gpu_draw), and a preview stream is due on a live change." }
+stamp = { hash = "b3:cd7bcb70752e3431", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: batch order in engine.rs is idempotency key, then ends_gesture (the Commit bullet's order, matching the mock), then main's clap/ filter.add refusal, then the graph, so the refusal is still before expected_rev as written; hardware-first snapshot and preview; protocol#design's encoder default text holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/mod.rs"]
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:564e5831400cd9cd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Batches paragraph's removed_hotkeys and the Stream keys paragraph (#343, stale_keys under the lock, removal after) sit beside the Live values subsection, Calls, render-snapshot and preview text; engine.rs call() takes ended gestures and stale keys from the same locked step and handles both after the lock (merged resolution). Live values still don't touch hotkeys: hotkey.set refuses live actions (bind_problem). Holds." }
+stamp = { hash = "b3:39da3feeca7280e4", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: batch order in engine.rs is idempotency key, then ends_gesture (the Commit bullet's order, matching the mock), then main's clap/ filter.add refusal, then the graph, so the refusal is still before expected_rev as written; hardware-first snapshot and preview; protocol#design's encoder default text holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1284,13 +1284,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:592c3b9f41754a4c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:74dcf7c320d5fce8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: live values, calls, undo, snapshots, preview streams, locking, audit and not-yet hold with the wave's youtube, filters, preview and scopes. Edited Calls, the render-snapshot and compose paragraphs and the live channel bullet so video.snapshot and the preview thread both load the live values with the snapshot and draw them (engine.rs PreviewSource::current, preview/mod.rs serve/gpu_draw), and a preview stream is due on a live change." }
+stamp = { hash = "b3:e31aea2a7ca88b07", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: batch order in engine.rs is idempotency key, then ends_gesture (the Commit bullet's order, matching the mock), then main's clap/ filter.add refusal, then the graph, so the refusal is still before expected_rev as written; hardware-first snapshot and preview; protocol#design's encoder default text holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:3a8c70bdf372a58a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Batches paragraph's removed_hotkeys and the Stream keys paragraph (#343, stale_keys under the lock, removal after) sit beside the Live values subsection, Calls, render-snapshot and preview text; engine.rs call() takes ended gestures and stale keys from the same locked step and handles both after the lock (merged resolution). Live values still don't touch hotkeys: hotkey.set refuses live actions (bind_problem). Holds." }
+stamp = { hash = "b3:e77825019c48dec9", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: batch order in engine.rs is idempotency key, then ends_gesture (the Commit bullet's order, matching the mock), then main's clap/ filter.add refusal, then the graph, so the refusal is still before expected_rev as written; hardware-first snapshot and preview; protocol#design's encoder default text holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:e0d246a939cb51a2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "Whole PR to src/tests/audio.rs: the wave/m2 merge (#466) kept #459's Audio routing source-scopes bullet (retain_sources, fed from Mixer::input_block while unmuted/on/open, else a preallocated zero block) and Live sources (audio_source else audio), beside main's browser/with_browser and its browser-page tests in src/tests/audio.rs (jstream-browser's fake feature, as Dependencies say), filters in Audio sources (a media file's input runs its source's chain too), opacity in Snapshots, Source::sound vs Source::audio. This push: the media test's verbatim-prefix fix and its new gain-filter check need no design text; Dependencies unchanged (jstream-platform fake, jstream-browser fake). Ran: that test, passing." }
@@ -1326,7 +1326,7 @@ stamp = { hash = "b3:603a3c5ae7785ba3", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:33bc112116782ea4", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): contents keep the wave's hotkeys and stale-key removal beside gestures and live values; engine.rs now runs execute_and_unbind_keys under the lock and then both remove_stale_keys and audit_gestures after it, so the gesture audit still happens outside the lock. Tests list unchanged for live values. Holds." }
+stamp = { hash = "b3:eef21c1380175f50", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's CLAP plugins bullet and hardware-first wording beside #244's live values (live.set, live.cancel, live.list, gestures); engine.rs now checks ends_gesture after the idempotency key and before the CLAP filter.add refusal, as the mock does; tests.rs gives the CLAP test ends_gesture: None" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d7e4bb2db0e1df6d", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
@@ -1350,7 +1350,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:fd4abe9d55b1ca80", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): contents keep the wave's hotkeys and stale-key removal beside gestures and live values; engine.rs now runs execute_and_unbind_keys under the lock and then both remove_stale_keys and audit_gestures after it, so the gesture audit still happens outside the lock. Tests list unchanged for live values. Holds." }
+stamp = { hash = "b3:7a99be7ad809e3ef", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's CLAP plugins bullet and hardware-first wording beside #244's live values (live.set, live.cancel, live.list, gestures); engine.rs now checks ends_gesture after the idempotency key and before the CLAP filter.add refusal, as the mock does; tests.rs gives the CLAP test ends_gesture: None" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1368,7 +1368,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:1b3b880f3438dd5e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section after merging wave/m1-2: contents carry the wave's youtube, filters, preview and scope sources beside gestures and live values; snapshot bullet now names the preview thread among compose's callers with live values (preview/mod.rs gpu_draw), tests list adds the preview live-value test (a_live_value_is_sent_without_waiting_for_a_keyframe)." }
+stamp = { hash = "b3:9840ebaecba1026b", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's CLAP plugins bullet and hardware-first wording beside #244's live values (live.set, live.cancel, live.list, gestures); engine.rs now checks ends_gesture after the idempotency key and before the CLAP filter.add refusal, as the mock does; tests.rs gives the CLAP test ends_gesture: None" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:b7854ccd83c4a362", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents carry main's with_youtube/with_browser, YouTube, audio filters, preview and GPU capture beside wave/m2's media playback (with_backends' media files, sound fed while shown), waveform/spectrum scopes and the bus scopes (#362); audio_sources.rs now holds both main's Recorded::Own page inputs and wave/m2's Want::Live media inputs, each Key::Source input running its filter chain (Wants: targets, live, chains), so I rewrote the Audio sources bullet to list the three kinds of input and say each runs the filters and is routed; added main's browser tests in src/tests/audio.rs to the tests list; the rest matches engine.rs, live.rs, pipeline.rs and the tests" }
@@ -1389,13 +1389,13 @@ stamp = { hash = "b3:58eafa4460718214", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/preview/mod.rs"]
-stamp = { hash = "b3:e7aa8c7d4b493d33", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section after merging wave/m1-2: contents carry the wave's youtube, filters, preview and scope sources beside gestures and live values; snapshot bullet now names the preview thread among compose's callers with live values (preview/mod.rs gpu_draw), tests list adds the preview live-value test (a_live_value_is_sent_without_waiting_for_a_keyframe)." }
+stamp = { hash = "b3:cd7bcb70752e3431", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's CLAP plugins bullet and hardware-first wording beside #244's live values (live.set, live.cancel, live.list, gestures); engine.rs now checks ends_gesture after the idempotency key and before the CLAP filter.add refusal, as the mock does; tests.rs gives the CLAP test ends_gesture: None" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/mod.rs"]
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:564e5831400cd9cd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): contents keep the wave's hotkeys and stale-key removal beside gestures and live values; engine.rs now runs execute_and_unbind_keys under the lock and then both remove_stale_keys and audit_gestures after it, so the gesture audit still happens outside the lock. Tests list unchanged for live values. Holds." }
+stamp = { hash = "b3:39da3feeca7280e4", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's CLAP plugins bullet and hardware-first wording beside #244's live values (live.set, live.cancel, live.list, gestures); engine.rs now checks ends_gesture after the idempotency key and before the CLAP filter.add refusal, as the mock does; tests.rs gives the CLAP test ends_gesture: None" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1413,13 +1413,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:592c3b9f41754a4c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:74dcf7c320d5fce8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section after merging wave/m1-2: contents carry the wave's youtube, filters, preview and scope sources beside gestures and live values; snapshot bullet now names the preview thread among compose's callers with live values (preview/mod.rs gpu_draw), tests list adds the preview live-value test (a_live_value_is_sent_without_waiting_for_a_keyframe)." }
+stamp = { hash = "b3:e31aea2a7ca88b07", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's CLAP plugins bullet and hardware-first wording beside #244's live values (live.set, live.cancel, live.list, gestures); engine.rs now checks ends_gesture after the idempotency key and before the CLAP filter.add refusal, as the mock does; tests.rs gives the CLAP test ends_gesture: None" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:3a8c70bdf372a58a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): contents keep the wave's hotkeys and stale-key removal beside gestures and live values; engine.rs now runs execute_and_unbind_keys under the lock and then both remove_stale_keys and audit_gestures after it, so the gesture audit still happens outside the lock. Tests list unchanged for live values. Holds." }
+stamp = { hash = "b3:e77825019c48dec9", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's CLAP plugins bullet and hardware-first wording beside #244's live values (live.set, live.cancel, live.list, gestures); engine.rs now checks ends_gesture after the idempotency key and before the CLAP filter.add refusal, as the mock does; tests.rs gives the CLAP test ends_gesture: None" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:e0d246a939cb51a2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = '''Whole PR to the body and src/tests/audio.rs: the wave/m2 merge (#466) kept #459's facts (source scopes via TapFeed::Input/Silence and drawn_sources, pipeline.rs pushing input_block or silence; tests a_source_a_source_draws_feeds_its_scope_after_its_fader in tests/audio.rs, a_drawn_source_gets_a_scope_fed_from_its_mixer_input in tests/audio_routing.rs, a_source_drawing_a_source_round_trips in tests/collection.rs) beside main's browser/youtube_chat with_browser and its two browser-page tests in tests/audio.rs, audio filters (filters.rs), item opacity (opacity_blends_items_and_nested_scenes_in_linear_light) and Source::sound for media vs Source::audio for pages; fixed a blank line splitting the Tests bullet. This push: the media-file sound test drops Windows' verbatim \\?\ prefix from its absolute setting, and now adds a -60 dB gain filter on the clip and checks its metered peak falls under 0.001 then recovers once removed; the Tests bullet now says so. Ran: that test 3 times, passing.''' }
@@ -1461,10 +1461,10 @@ stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:268f4293f65828a2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "audit.rs/engine.rs/tests.rs/scenarios.rs only carry the new removed_hotkeys field through CallResult::Batch (engine passes applied.removed_hotkeys; audit and tests use { rev, .. } or CallResult::batch). The engine's purpose is unchanged. Merges since: engine.rs/tests.rs: this PR only carries removed_hotkeys through CallResult::Batch (engine passes applied.removed_hotkeys; tests use CallResult::batch or { rev, .. }). The merge adds #491 (the engine removes a stream key on output.delete and when a target moves to another server) with its tests. The engine's purpose is unchanged by hotkeys." }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:cb11a054137451f6", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the runtime section after merging wave/m1-2: the render tick adopts the snapshot then the live values and draws them (pipeline.rs: reader.adopt(); reader.held(); frames.draw(..., live, size) after the wave's read_capture), and the collector list joins live values with the wave's scope lists; capture path, mixer and output threads unchanged by live values." }
+stamp = { hash = "b3:fd84b500b95e2e96", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: pipeline.rs opens hardware first without a GPU context (#437) and reads #244's live-value channel after the snapshot; threading's CLAP paragraph doesn't touch the runtime text" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the runtime section after merging wave/m1-2: the render tick adopts the snapshot then the live values and draws them (pipeline.rs: reader.adopt(); reader.held(); frames.draw(..., live, size) after the wave's read_capture), and the collector list joins live values with the wave's scope lists; capture path, mixer and output threads unchanged by live values." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: pipeline.rs opens hardware first without a GPU context (#437) and reads #244's live-value channel after the snapshot; threading's CLAP paragraph doesn't touch the runtime text" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/RULES.md#R-RT-006"]
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
@@ -1473,7 +1473,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:564e5831400cd9cd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read runtime after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the wave's pipeline.rs changes since the last stamp (codec selection, staged capture release #498) leave the render tick as described: adopt the snapshot, then the live values, then draw. Holds." }
+stamp = { hash = "b3:39da3feeca7280e4", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: pipeline.rs opens hardware first without a GPU context (#437) and reads #244's live-value channel after the snapshot; threading's CLAP paragraph doesn't touch the runtime text" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1491,7 +1491,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:e7f380a2e0b7cd8b", by = "agent:wave-owner", note = "main into wave/m1-2: main's jstream-clap-scan paragraph sits beside the wave's YouTube sign-in and live.rs text; serve.rs calls scan_clap_plugins after live_redacting, as written; core#design's CLAP and hardware-first changes don't touch the daemon's claims" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:b42de4aae0fe4fad", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against core#design and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the daemon's live.rs (engine wiring, not live values), crash redaction and the server's TCP cap and in-flight bound don't touch gestures; sessions per connection still give each client its own gestures, which expire with the session. Holds." }
+stamp = { hash = "b3:306a3b6860cff76b", by = "agent:wave-owner", note = "re-read against core#design after #244's live values and main's CLAP refusal; the daemon's CLAP scan thread and YouTube text still hold" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against core#design and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the daemon's live.rs (engine wiring, not live values), crash redaction and the server's TCP cap and in-flight bound don't touch gestures; sessions per connection still give each client its own gestures, which expire with the session. Holds." }
@@ -1791,7 +1791,7 @@ stamp = { hash = "b3:984f333744172f87" }
 stamp = { hash = "b3:978a7c1452dc77b3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale only through ARCH data-model, whose merged text adds main's browser kinds and filter chains and wave/m2's media, waveform and spectrum kinds and bus references; the encoder-sharing rule this section cites (no video chain, same mix and profile, one session) is unchanged, and no encode code changed; holds" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section against ARCH#threading's change (the preview thread and video.snapshot load live values with the render snapshot; the collector also takes replaced live values): nothing here describes those threads, and the encode/output/capture/audio threading it cites is unchanged." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "re-read against ARCH#threading now carries main's CLAP progress (host process, launcher and HostSupervisor built; filters not run; the host sleeps a quarter block until its media-clock timer) beside #244's jstream-live thread; nothing about encoder threads changed" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/audio.rs"]
 stamp = { hash = "b3:79b9830d47ed6557" }
@@ -1821,10 +1821,10 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:6c1b99c4b8c63792" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:5f24eebd1a4576f4", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the hotkeys bullet's bind_problem list now says the session-only actions are preview and live (edited; live.set/live.cancel refused in command.rs, tested by the graph hotkey test that now includes LiveCancel). Live values never reach the graph as edits, so the rest holds." }
+stamp = { hash = "b3:5c05dc5824505820", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's filter-kind-as-source refusal beside the wave's hotkeys and #244's ends_gesture batch field; tests.rs keeps both" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:471b464b1adf3f63", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the hotkeys bullet's bind_problem list now says the session-only actions are preview and live (edited; live.set/live.cancel refused in command.rs, tested by the graph hotkey test that now includes LiveCancel). Live values never reach the graph as edits, so the rest holds." }
+stamp = { hash = "b3:91356390c787efff", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's filter-kind-as-source refusal beside the wave's hotkeys and #244's ends_gesture batch field; tests.rs keeps both" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1875,7 +1875,7 @@ stamp = { hash = "b3:11aa74045fc5a27f", by = "agent:claude@session_01PyL6S9Te43D
 stamp = { hash = "b3:8960b4b274aed818", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the Outputs bullet to list the DOS device file-name refusal (#503: NUL, CON, PRN, AUX, COM0-9/COM1-3 superscripts, LPT likewise, CONIN$/CONOUT$, any case, any extension), matching target.rs's new is_dos_device_name mirror of check_asset_path's rule; dep on protocol Design re-read, consistent" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:e401029b322d4482", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the hotkeys bullet's bind_problem list now says the session-only actions are preview and live (edited; live.set/live.cancel refused in command.rs, tested by the graph hotkey test that now includes LiveCancel). Live values never reach the graph as edits, so the rest holds." }
+stamp = { hash = "b3:b8873323d06ce4d2", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: main's filter-kind-as-source refusal beside the wave's hotkeys and #244's ends_gesture batch field; tests.rs keeps both" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/filters.rs"]
 stamp = { hash = "b3:d5931f8e252cd9f7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -2046,7 +2046,7 @@ stamp = { hash = "b3:5826946faa72f5b2", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:13fabd34e2ef41ff", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose still holds against the reworded crate-map row: it says the Output trait comes later and lists jstream-media and jstream-mux as its JStream dependencies, matching the row" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section against ARCH#threading's change (the preview thread and video.snapshot load live values with the render snapshot; the collector also takes replaced live values): nothing here describes those threads, and the encode/output/capture/audio threading it cites is unchanged." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "re-read against ARCH#threading now carries main's CLAP progress (host process, launcher and HostSupervisor built; filters not run; the host sleeps a quarter block until its media-clock timer) beside #244's jstream-live thread; nothing about output threads changed" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
@@ -2130,7 +2130,7 @@ stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:0b0d75fcaf924284", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's FrameSync::platform, Capture::on_context, Codecs::on_context, Media files (MediaDecoders), the Data folder (paths), FakeMediaDecoders and the reworded not-yet line, beside wave/m3's PluginHosts trait and its fake. Inputs: lib.rs's docs name paths, and it gains main's media_file and paths modules and the MediaDecoders re-exports beside plugin_host; Cargo.toml's summary gains paths (ADR-0020); the crate-map row gains MediaDecoders and paths beside PluginHosts; plugin_host.rs is wave/m3's, unchanged. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). This crate's traits touch neither." }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section against ARCH#threading's change (the preview thread and video.snapshot load live values with the render snapshot; the collector also takes replaced live values): nothing here describes those threads, and the encode/output/capture/audio threading it cites is unchanged." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "re-read against ARCH#threading now carries main's CLAP progress (host process, launcher and HostSupervisor built; filters not run; the host sleeps a quarter block until its media-clock timer) beside #244's jstream-live thread; PluginHosts text matches" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2211,7 +2211,7 @@ stamp = { hash = "b3:b28e65141c38887d", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:2214bbe1a9c063d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's WgcCapture through Capture::on_context, the CPU H.264 encoder taking RGBA and BGRA, the GPU H.264 path (Codecs::on_context, encode targets copied into allocator samples, fence sync), MfMediaDecoders (Source Reader, frames, audio with the gapless cut, seeking, threads), WindowsGpu's release fence, mfreadwrite delay-loaded for MfMediaDecoders, the not-yet line naming packet-level video decoders, and the GPU encode and media-file tests, beside wave/m3's CLAP PluginBlock and ProAudioThread section. Inputs: lib.rs's docs list MfMediaDecoders, and it gains the decode module and that re-export, beside the CLAP items. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. This crate implements MediaDecoders and the on_context seams. The crate-map row drops the CEF browser backend (ADR-0021) main moved to jstream-browser and keeps wave/m3's CLAP launcher and shared block. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Neither the preview thread nor the CLAP sentence contradicts this crate's text." }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section against ARCH#threading's change (the preview thread and video.snapshot load live values with the render snapshot; the collector also takes replaced live values): nothing here describes those threads, and the encode/output/capture/audio threading it cites is unchanged." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "re-read against ARCH#threading now carries main's CLAP progress (host process, launcher and HostSupervisor built; filters not run; the host sleeps a quarter block until its media-clock timer) beside #244's jstream-live thread; the WindowsPluginHosts launcher and ProAudioThread text matches the threading section" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/RULES.md#real-time"]
 stamp = { hash = "b3:c60cba487fc0a5e5" }
@@ -2406,7 +2406,7 @@ stamp = { hash = "b3:25a515b8ac8875db", by = "agent:claude", note = "New app REA
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Against wave/m3, session.rs changes only in a test: a_restart_beats_while_it_reactivates waits for three beats (up to 5 s) instead of sleeping 350 ms, after it failed on macOS CI at 6433b1b5. The host README's purpose (one process per CLAP filter, shared block, MMCSS pass, restarts beating) matches all three." }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Against wave/m3, session.rs changes only in a test: a_restart_beats_while_it_reactivates waits for three beats (up to 5 s) instead of sleeping 350 ms, after it failed on macOS CI at 6433b1b5. The host README's purpose (one process per CLAP filter, shared block, MMCSS pass, restarts beating) matches all three." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "re-read against ARCH#threading now carries main's CLAP progress (host process, launcher and HostSupervisor built; filters not run; the host sleeps a quarter block until its media-clock timer) beside #244's jstream-live thread; the host's README already describes the same process and its sleep" }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/RULES.md#R-RT-001"]
 stamp = { hash = "b3:3221ab22f6747616", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
@@ -2454,7 +2454,7 @@ stamp = { hash = "b3:2b8f6e8a57cc2d5a", by = "agent:claude", note = "Adds the co
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:471b464b1adf3f63", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512) and the 0.26 bump: version paragraph now says 0.26 is live values and 0.25 hotkeys; envelope example hello/welcome at minor 26; Live values subsection marked 0.26; 'Not in 0.11 yet' says live geometry arrived in 0.26; hotkey.set's unbindable list adds live.set/live.cancel (their gesture belongs to the sending session), matching bind_problem. Snaps regenerated. Holds." }
+stamp = { hash = "b3:91356390c787efff", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: encoder profiles (omitted hardware means avoid; the default prefers hardware, #437) beside #244's live.* calls at 0.26; protocol.snap and fixtures.rs carry both" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2475,7 +2475,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:1d5b111ab493205d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512) and the 0.26 bump: version paragraph now says 0.26 is live values and 0.25 hotkeys; envelope example hello/welcome at minor 26; Live values subsection marked 0.26; 'Not in 0.11 yet' says live geometry arrived in 0.26; hotkey.set's unbindable list adds live.set/live.cancel (their gesture belongs to the sending session), matching bind_problem. Snaps regenerated. Holds." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:35ad936180a88628", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512) and the 0.26 bump: version paragraph now says 0.26 is live values and 0.25 hotkeys; envelope example hello/welcome at minor 26; Live values subsection marked 0.26; 'Not in 0.11 yet' says live geometry arrived in 0.26; hotkey.set's unbindable list adds live.set/live.cancel (their gesture belongs to the sending session), matching bind_problem. Snaps regenerated. Holds." }
+stamp = { hash = "b3:1bf9e33b09288e37", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: encoder profiles (omitted hardware means avoid; the default prefers hardware, #437) beside #244's live.* calls at 0.26; protocol.snap and fixtures.rs carry both" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
@@ -2502,7 +2502,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:88acc1cdeedb7042", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512) and the 0.26 bump: version paragraph now says 0.26 is live values and 0.25 hotkeys; envelope example hello/welcome at minor 26; Live values subsection marked 0.26; 'Not in 0.11 yet' says live geometry arrived in 0.26; hotkey.set's unbindable list adds live.set/live.cancel (their gesture belongs to the sending session), matching bind_problem. Snaps regenerated. Holds." }
+stamp = { hash = "b3:1ede5ca4e3964eb3", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: encoder profiles (omitted hardware means avoid; the default prefers hardware, #437) beside #244's live.* calls at 0.26; protocol.snap and fixtures.rs carry both" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2580,7 +2580,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:88acc1cdeedb7042", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): contents list the Action variants with live.set/live.cancel and the wave's named_objects/bind_problem (merged line edited), plus Chord/HotkeyBinding; live.rs bullet unchanged; version.rs is now 0.26. Holds." }
+stamp = { hash = "b3:1ede5ca4e3964eb3", by = "agent:wave-owner", note = "main into wave/m1-2 after #244: fixtures.rs keeps main's hardware-avoid encoder fixture and #244's live-value fixtures" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -4065,7 +4065,7 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:c60cba487fc0a5e5", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 
 ["RULES#real-time"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:3e7bf00b0c10a3bb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read against ARCH#threading's change (preview and video.snapshot load live values under the lock, collector takes replaced live values): R-RT-001..006 still hold; the render thread reads live values only from the parameter channel with no lock, and replaced ones go to the collector (R-RT-003)." }
+stamp = { hash = "b3:b8ac49c23cf287a8", by = "agent:wave-owner", note = "re-read against ARCH#threading now carries main's CLAP progress (host process, launcher and HostSupervisor built; filters not run; the host sleeps a quarter block until its media-clock timer) beside #244's jstream-live thread; R-RT-001 already covers the plugin host's rt.rs (from wave/m3) and the threading change adds no real-time code" }
 
 ["RUNBOOK-GO-LIVE#before"."body"]
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
