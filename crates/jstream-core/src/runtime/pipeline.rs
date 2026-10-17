@@ -81,8 +81,8 @@ use crate::runtime::{
 use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
-const FRAME_NUM: u32 = 1;
-const FRAME_DEN: u32 = 30;
+pub(crate) const FRAME_NUM: u32 = 1;
+pub(crate) const FRAME_DEN: u32 = 30;
 const SAMPLE_RATE: u32 = 48_000;
 /// How long `output.start` waits for the render thread to open the compositor, on the
 /// platform's GPU context or, without one, on the software adapter, unless the engine
@@ -389,6 +389,9 @@ pub(crate) struct Program {
     final_tick: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// Stops the engine routing the collection's audio into this program's mixer.
     detach_audio: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    /// Takes the stage's GPU context away from live sources that paint on it, first
+    /// when the stage stops. `None` on the CPU path.
+    gpu_sources: Option<GpuSources>,
 }
 
 impl Program {
@@ -451,6 +454,9 @@ impl Program {
 
 impl Drop for Program {
     fn drop(&mut self) {
+        // The browser engine stops painting on the context before the render thread
+        // lets go of it.
+        self.gpu_sources.take();
         let detach = self
             .detach_audio
             .get_mut()
@@ -481,6 +487,18 @@ impl Drop for Program {
             .take();
         if let Some(tick) = tick {
             tick();
+        }
+    }
+}
+
+/// Live sources painting on the program stage's GPU context ([`Engine::use_gpu`]):
+/// dropping it takes the context away from them.
+struct GpuSources(Option<Box<dyn FnOnce() + Send + Sync>>);
+
+impl Drop for GpuSources {
+    fn drop(&mut self) {
+        if let Some(release) = self.0.take() {
+            release();
         }
     }
 }
@@ -922,6 +940,11 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     // `context` is bound first, so on an early return it drops last, after the stream,
     // as in the render loop.
     let OpenedCapture { context, backends } = open_capture(&parts)?;
+    // Browser pages paint on the context while the stage runs. Bound before anything
+    // else that can fail, so an early return takes the context away again.
+    let gpu_sources = context
+        .as_ref()
+        .map(|context| GpuSources(Some(engine.use_gpu(context))));
     let captures = captures::spawn(backends, parts.clock.timebase())?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
@@ -1047,6 +1070,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         ticker: None,
         final_tick: Mutex::new(None),
         detach_audio: Mutex::new(None),
+        gpu_sources,
     };
     match ready_rx.recv_timeout(parts.open_timeout) {
         Ok(Ok(())) => {
