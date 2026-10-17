@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:f0e8cbc5a816b3b7", by = "agent:wave-owner", note = "main into wave/m1-2: main's CLAP rows (platform PluginHosts, platform-windows launcher, plugin-clap, core supervisor, apps plugin-host) from wave/m3's landing beside the wave's effects row drawing through render's filter harness" }
+stamp = { hash = "b3:7b8b8dd5b177baad", by = "agent:vcam-optin-561", note = "Only the jstream-platform (paths) and jstream-vcam-windows rows' citations moved from superseded ADR-0020 to ADR-0066, which restates the portable data folder and the cdylib media source unchanged; rows otherwise untouched | merge: re-read: the merge brought no text change inside the crate map (its hunks are in data-model and later); the ADR-0066 rows still hold" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -1524,7 +1524,7 @@ stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmE
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:fadc1ade8fc5506d", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
+stamp = { hash = "b3:28ead4aa77305de7", by = "agent:vcam-optin-561", note = '''Data-directory and open-question citations moved from superseded ADR-0020 to ADR-0066, which keeps %APPDATA%\JStream and the portable marker; nothing else changed | merge: re-read: wave/m1-3 brought the CEF bullet's lent program-stage GPU context (Engine::use_gpu); unrelated to this branch's ADR-0066 citations, both hold''' }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:90414bf561410e34", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
@@ -1572,7 +1572,7 @@ stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:b2c1df1a08c66049", by = "agent:wave-owner", note = "main into wave/m1-2: hand-resolved Serving bullet: the wave's live engine through live.rs plus main's CLAP plugin scan; serve.rs keeps the wave's with_youtube and main's scan_clap_plugins thread, both called from engine()" }
+stamp = { hash = "b3:66ad1f97a83dc1ed", by = "agent:vcam-optin-561", note = "Only the citation for shipping jstream-daemon.exe beside the desktop app moved from superseded ADR-0020 to ADR-0066, which keeps that deliverable | merge: re-read: wave/m1-3 only rejoined the Serving bullet's line break; content unchanged" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: the token file now names the device file beside it, live mode with the cef feature opens browser sources, the end-to-end MCP test sets the canvas to the fake display's size, and YouTube sign-in is not here because the daemon doesn't call Engine::with_youtube yet, beside wave/m3's CLAP scan. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. The daemon's own link matches its Cargo.toml (jstream-browser always, cef = jstream-browser/cef). serve.rs, against wave/m3, gains MfMediaDecoders, the CEF wiring (cef_browser, browse) and its test, and passes main.rs's device file to the server through bind's device_file parameter, beside the clap-scan thread." }
@@ -1632,7 +1632,7 @@ stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:af4c8423f73930ba", by = "agent:wave-owner", note = "This builds wave/m1-3's main sync from T1 on wave/m1-2 plus #552. The body now holds both wave/m1-2's C8b5 Browser sources bullet (pages paint on the stage's lent context, taken back at stop) and #552's Crash reports bullet (crash.rs hook, Redacting key store, 10-report pruning). I re-read both against browser.rs, crash.rs, main.rs and host.rs. Neither bullet touches the other, and both hold." }
+stamp = { hash = "b3:a5efef7fc35ff2df", by = "agent:vcam-optin-561", note = "depends_on, the bundler-off note and lib.rs's Docs line now cite ADR-0066 instead of superseded ADR-0020; ADR-0066 keeps the no-installer portable folder, so the design holds | merge: re-read: wave/m1-3 brought the browser-sources bullet's lent stage context; this branch's ADR-0066 citation and bundler-off note still hold" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -2157,7 +2157,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:e6f240cc14ed9d3d", by = "agent:t1-studio", note = "Merged the wave's browser-page frames and hardware-first adapter wording with this branch's note that render composites one scene or a transition between two on the media device; rest of the section unchanged." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:f0e8cbc5a816b3b7", by = "agent:wave-owner", note = "main into wave/m1-2: re-read against ARCH crate map (CLAP rows from wave/m3) and gpu-pipeline (hardware first, #437): this section already says render opens hardware first with the software fallback, and the wave's effect-pack text doesn't touch it" }
+stamp = { hash = "b3:7b8b8dd5b177baad", by = "agent:vcam-optin-561", note = "Re-read: its crate-map dependency only had ADR-0020 citations swapped to ADR-0066 in two rows; the GPU frame design is unaffected | merge: re-read: wave/m1-3 added browser pages to what jstream-render samples and the ContextKey bullet; the crate-map dep text is unchanged by the merge; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:4e05a3682ccc0058", by = "agent:t1-studio", note = "Merged the wave's browser-page frames and hardware-first adapter wording with this branch's note that render composites one scene or a transition between two on the media device; rest of the section unchanged." }
@@ -2169,7 +2169,7 @@ stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:31e736b29ac2b01a", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's PluginHosts and plugin-proto text beside C3's CaptureTarget additions; lib.rs carries both" }
+stamp = { hash = "b3:54d72e265b128a7b", by = "agent:vcam-optin-561", note = "depends_on, the VcamSink 'registering is the app's job' and paths.rs citations and lib.rs's doc now cite ADR-0066, which keeps registration in the app and the data-folder rule; crate-map dep changed only by the same swap | merge: re-read: wave/m1-3 added GpuContext::key and ContextKey to the GPU interop bullet and lib.rs's re-export; unrelated to the ADR-0066 citation swaps, both hold" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes; OAuthTokenStore still holds the Google refresh token" }
@@ -2226,7 +2226,7 @@ stamp = { hash = "b3:8019c83df5cad30a" }
 stamp = { hash = "b3:5e9dc58061f8fffa" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/lib.rs"]
-stamp = { hash = "b3:8eb556b555492962", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: main's PluginHosts and plugin-proto text beside C3's CaptureTarget additions; lib.rs carries both" }
+stamp = { hash = "b3:fa89f56360508132", by = "agent:vcam-optin-561", note = "depends_on, the VcamSink 'registering is the app's job' and paths.rs citations and lib.rs's doc now cite ADR-0066, which keeps registration in the app and the data-folder rule; crate-map dep changed only by the same swap | merge: re-read: wave/m1-3 added GpuContext::key and ContextKey to the GPU interop bullet and lib.rs's re-export; unrelated to the ADR-0066 citation swaps, both hold" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/media_file.rs"]
 stamp = { hash = "b3:3ea7c5d5a47b138c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list carries wave/m2's MediaDecoders (media_file.rs: MediaDecoderConfig, MediaInfo, next_video/next_audio, seek, file timeline), its media field in Backends and FakeMediaDecoders, beside main's FrameSync::platform, Capture and Codecs on_context, paths::data_dir (P1) and the GPU-frame not-yet list; matches lib.rs, backends.rs, media_file.rs, fake.rs and the crate-map row (MediaDecoders and paths); holds" }
@@ -2250,10 +2250,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:f6eb3695c90eeb37", by = "agent:wave-owner", note = "main into wave/m1-2: main's PluginBlock, ProAudioThread and WindowsPluginHosts bullet sits beside the wave's text; nothing in either contradicts the other" }
+stamp = { hash = "b3:4d61e0ed41a75201", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey); the WindowsVcam ADR-0066 citation still holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:31e736b29ac2b01a", by = "agent:wave-owner", note = "re-read against platform#purpose after wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync; the CLAP launcher and capture text hold" }
+stamp = { hash = "b3:54d72e265b128a7b", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey); the WindowsVcam ADR-0066 citation still holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:2214bbe1a9c063d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's WgcCapture through Capture::on_context, the CPU H.264 encoder taking RGBA and BGRA, the GPU H.264 path (Codecs::on_context, encode targets copied into allocator samples, fence sync), MfMediaDecoders (Source Reader, frames, audio with the gapless cut, seeking, threads), WindowsGpu's release fence, mfreadwrite delay-loaded for MfMediaDecoders, the not-yet line naming packet-level video decoders, and the GPU encode and media-file tests, beside wave/m3's CLAP PluginBlock and ProAudioThread section. Inputs: lib.rs's docs list MfMediaDecoders, and it gains the decode module and that re-export, beside the CLAP items. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. This crate implements MediaDecoders and the on_context seams. The crate-map row drops the CEF browser backend (ADR-0021) main moved to jstream-browser and keeps wave/m3's CLAP launcher and shared block. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Neither the preview thread nor the CLAP sentence contradicts this crate's text." }
@@ -3810,7 +3810,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:56ca5965c32db6a2", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 on wave/m1-2: re-read the whole section against the PR's change. chat.rs: the chat bullet (liveChatMessages.list with id,snippet,authorDetails, 2000 a page, Scope::Readonly; ChatMessage fields and events; controls replaced, 1000/100 caps; ChatPoller following the page token, at least 1 s, the 60 s-30 min and 5 s-5 min ladders restarting on a class change, stopping on offlineAt or liveChatEnded/NotFound/Disabled, no thread or sleep; quota cost and the per-collection opt-in, ADR-0058 §5) matches chat.rs and chat/tests.rs with the three fixtures; lib.rs adds pub mod chat, the ChatPoller re-export and the crate doc line; live.rs opens call, non_empty and u64_or_string to pub(crate) for chat.rs; the wave's built-in client and UI-only paragraphs before Not yet are unchanged; Not yet lists sending, the engine polling with its switch and youtube.chat.feature, streamList, audience stats and quota accounting; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:31e736b29ac2b01a", by = "agent:wave-owner", note = "re-read against platform#purpose after wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync; the OAuthTokenStore use is unchanged" }
+stamp = { hash = "b3:54d72e265b128a7b", by = "agent:vcam-optin-561", note = "Re-read: its jstream-platform#purpose dependency only had ADR-0020 citations swapped to ADR-0066; the YouTube client's design and its Secret use are unaffected | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey, GPU interop); the YouTube client's Secret use is unaffected" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:311cefe9eebe1f9a", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
