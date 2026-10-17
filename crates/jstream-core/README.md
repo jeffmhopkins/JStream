@@ -574,8 +574,8 @@ sampler makes each halving a box filter). Those layers live in the frame's
 its other layers, so turning privacy on allocates nothing on the render thread. A
 virtual camera is fed the program frame, so it is covered too. It fails closed: a covered tick whose draw failed blackens the
 frames due on it instead of repeating them, including after a fatal draw error. The
-CPU stand-in draws covered frames black. `video.snapshot` shows the editing view and is
-never covered. Only the default blur exists: the look setting, the slate and muting
+CPU stand-in draws covered frames black. `video.snapshot` and the preview streams show
+the editing view and are never covered. Only the default blur exists: the look setting, the slate and muting
 sources come later.
 
 ### Snapshots

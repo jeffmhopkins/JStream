@@ -653,7 +653,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `false`). While it runs, `encoder` names its session's profile (absent for the
   default), the other running outputs that share the session (`shared_with`, by ID),
   whether the session is a hardware one, and whether it is `dedicated` to this output
-  because the output has its own video chain (0.21; omitted when false), so it can
+  because the output has its own video chain (0.29; omitted when false), so it can
   never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess

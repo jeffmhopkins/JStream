@@ -658,7 +658,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   on gets `privacy.changed { on: true }` as the first event of its subscription, so no
   client shows it as off. Preview streams show the pre-master stage (the editing view) by
   default; a client asks for the post-master stage to see what viewers see, and only
-  that stage is covered by the privacy screen.
+  that stage is covered by the privacy screen. `preview.subscribe` has no post-master
+  stage yet, so every preview stream is uncovered.
 - **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
   its encoder session's profile, the other outputs sharing it and whether the session is
   dedicated to it because of its own video chain (0.29), plus the sessions and hardware
