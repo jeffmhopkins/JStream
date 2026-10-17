@@ -289,8 +289,10 @@ intercepted connection.
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
 the URL, as the target documentation warns.
 
-**Gaps:** `rtmp://` sends the key in cleartext with no warning, crash reports redact
-only the control token, and the redaction test covers the engine only (#353).
+**Gaps:** `rtmp://` sends the key in cleartext with no warning (#353). The daemon's and
+the desktop app's crash reports redact the control token and the keys and refresh
+tokens that pass through their credential stores, but not a YouTube-bound output's key
+or the OAuth access token, which pass through neither (#353).
 
 <a id="vcam"></a>
 ## Virtual camera
@@ -330,7 +332,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #348 | WASM | No CPU, memory or API-scope limits decided | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
-| #353 | Secrets | `rtmp://` cleartext, crash-report redaction, redaction test scope | Low |
+| #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium |

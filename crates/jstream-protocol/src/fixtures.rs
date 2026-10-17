@@ -26,6 +26,10 @@ use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAud
 use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
+    Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
+    TransitionPresetInfo, TransitionStarted, TransitionsInfo,
+};
+use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
@@ -268,6 +272,82 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::EncoderDelete {
             profile_id: EncoderProfileId::new("enc_old"),
         },
+        Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: "Smooth move".into(),
+            kind: "move".into(),
+            duration_ms: 600,
+            easing: Easing::EaseInOut,
+            settings: [("unmatched", json!("slide"))].into_iter().collect(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: Some("Springy move".into()),
+            kind: None,
+            duration_ms: Some(800),
+            easing: Some(Easing::Spring),
+            patch: [("stagger_ms", json!(40))].into_iter().collect(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_fade"),
+            name: None,
+            kind: Some("fade".into()),
+            duration_ms: None,
+            easing: Some(Easing::EaseOut),
+            patch: Settings::new(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_fade"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::Linear),
+            patch: Settings::new(),
+        },
+        Edit::TransitionSetDefault {
+            preset_id: TransitionPresetId::new("tr_move"),
+        },
+        Edit::TransitionDelete {
+            preset_id: TransitionPresetId::new("tr_old"),
+        },
+        Edit::SceneSetTransitions {
+            scene_id: SceneId::new("scn_1"),
+            transition_in: Some(TransitionPresetId::new("tr_fade")),
+            transition_out: None,
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_1"),
+            transition: ItemTransition {
+                delay_ms: 120,
+                easing: ItemEasing::Spring,
+                glide: Glide::Never,
+                appear: TransitionEffect::Scale,
+                disappear: TransitionEffect::None,
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_2"),
+            transition: ItemTransition {
+                easing: ItemEasing::EaseOut,
+                appear: TransitionEffect::Slide,
+                disappear: TransitionEffect::Fade,
+                ..ItemTransition::default()
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_3"),
+            transition: ItemTransition {
+                easing: ItemEasing::Linear,
+                ..ItemTransition::default()
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_4"),
+            transition: ItemTransition {
+                easing: ItemEasing::EaseInOut,
+                ..ItemTransition::default()
+            },
+        },
         Edit::VideoMixCreate {
             mix_id: VideoMixId::new("mix_cam"),
             name: "Camera".into(),
@@ -332,6 +412,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             chord: Chord::new("Ctrl+Digit1"),
             action: Action::SceneSwitch {
                 scene_id: SceneId::new("scn_1"),
+                preset_id: None,
             },
         },
         Edit::HotkeyClear {
@@ -522,6 +603,7 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
             Chord::new("Ctrl+Digit1"),
             &Action::SceneSwitch {
                 scene_id: SceneId::new("scn_1"),
+                preset_id: None,
             },
         ),
         HotkeyBinding::new(
@@ -562,7 +644,14 @@ fn encoder_infos() -> Vec<EncoderProfileInfo> {
         EncoderProfileInfo {
             profile_id: EncoderProfileId::new("enc_stream"),
             name: "Stream".into(),
-            profile: EncoderProfile::DEFAULT,
+            // The default on the software encoder, so a fixture uses `avoid`.
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    hardware: HardwarePreference::Avoid,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
         },
     ]
 }
@@ -666,6 +755,14 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
+            preset_id: None,
+        },
+        Action::SceneSwitch {
+            scene_id: SceneId::new("scn_1"),
+            preset_id: Some(TransitionPresetId::new("tr_move")),
+        },
+        Action::StudioSetPreview {
+            scene_id: SceneId::new("scn_1"),
         },
         Action::PairingStart,
         Action::DeviceRevoke {
@@ -1019,6 +1116,7 @@ fn item_infos() -> Vec<ItemInfo> {
             visible: true,
             opacity: Finite32::new(0.5).expect("finite"),
             blend: BlendMode::Normal,
+            transition: ItemTransition::default(),
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -1039,8 +1137,32 @@ fn item_infos() -> Vec<ItemInfo> {
             visible: false,
             opacity: Finite32::ONE,
             blend: BlendMode::Normal,
+            transition: ItemTransition {
+                delay_ms: 80,
+                glide: Glide::Never,
+                ..ItemTransition::default()
+            },
         },
     ]
+}
+
+fn transitions_info() -> TransitionsInfo {
+    TransitionsInfo {
+        presets: vec![
+            crate::initial_preset(),
+            TransitionPresetInfo {
+                preset_id: TransitionPresetId::new("tr_move"),
+                name: "Smooth move".into(),
+                kind: "move".into(),
+                duration_ms: 600,
+                easing: Easing::EaseInOut,
+                settings: [("stagger_ms", json!(0)), ("unmatched", json!("fade"))]
+                    .into_iter()
+                    .collect(),
+            },
+        ],
+        default: TransitionPresetId::new("tr_move"),
+    }
 }
 
 pub(crate) fn query_results() -> Vec<QueryResult> {
@@ -1084,17 +1206,22 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
                     role: SceneRole::Scene,
+                    transition_in: Some(TransitionPresetId::new("tr_move")),
+                    transition_out: None,
                     items: item_infos(),
                 },
                 SceneInfo {
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),
                     role: SceneRole::Group,
+                    transition_in: None,
+                    transition_out: Some(TransitionPresetId::new("cut")),
                     items: vec![],
                 },
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
+            transitions: transitions_info(),
             video_mixes: mix_infos(),
             buses: bus_infos(),
             sends: send_infos(),
@@ -1134,6 +1261,12 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     name: "Gain".into(),
                     version: 1,
                 },
+                KindSummary {
+                    kind_id: "move".into(),
+                    category: KindCategory::Transition,
+                    name: "Move".into(),
+                    version: 1,
+                },
             ],
         },
         QueryResult::KindDescribe {
@@ -1146,9 +1279,11 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         },
         QueryResult::StudioGet {
             program_scene: Some(SceneId::new("scn_2")),
+            preview_scene: Some(SceneId::new("scn_1")),
         },
         QueryResult::StudioGet {
             program_scene: None,
+            preview_scene: None,
         },
         QueryResult::EncoderList {
             rev: Rev(12),
@@ -1239,6 +1374,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 Chord::new("F5"),
                 &Action::SceneSwitch {
                     scene_id: SceneId::new("scn_mask"),
+                    preset_id: None,
                 },
             )],
         },
@@ -1295,11 +1431,18 @@ pub(crate) fn events() -> Vec<Event> {
     }
     events.push(Event::StudioChanged {
         program_scene: Some(SceneId::new("scn_2")),
+        preview_scene: Some(SceneId::new("scn_1")),
+        transition: Some(TransitionStarted {
+            preset_id: TransitionPresetId::new("tr_move"),
+            duration_ms: 640,
+        }),
         client_id: ClientId::new("cli_7"),
         request_id: Some(RequestId::new("r2")),
     });
     events.push(Event::StudioChanged {
         program_scene: None,
+        preview_scene: None,
+        transition: None,
         client_id: ClientId::new("cli_8"),
         request_id: None,
     });

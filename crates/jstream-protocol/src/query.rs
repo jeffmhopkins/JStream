@@ -8,12 +8,13 @@ use crate::filter::FilterChains;
 use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::hotkey::HotkeyBinding;
-use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId, TransitionPresetId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
 use crate::mix::VideoMixInfo;
 use crate::output::OutputInfo;
 use crate::settings::Settings;
+use crate::transition::{ItemTransition, TransitionsInfo};
 use crate::youtube::{BroadcastInfo, BroadcastListStatus, BroadcastType, StreamInfo, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -76,8 +77,8 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
-    /// Reads the studio state: which scene is on program. It is runtime state, not
-    /// collection state (ADR-0030), so the result carries no `rev`.
+    /// Reads the studio state: which scenes are on program and on preview. It is runtime
+    /// state, not collection state (ADR-0030), so the result carries no `rev`.
     #[serde(rename = "studio.get")]
     StudioGet,
     /// Lists the collection's encoder profiles, ordered by ID.
@@ -300,6 +301,11 @@ pub enum QueryResult {
         /// 0.25) parses as empty.
         #[serde(default)]
         hotkeys: Vec<HotkeyBinding>,
+        /// The transition presets and which one is the default (ADR-0029). Missing
+        /// (from a server older than 0.30) parses as the one `cut` preset every
+        /// collection starts with.
+        #[serde(default)]
+        transitions: TransitionsInfo,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -342,6 +348,10 @@ pub enum QueryResult {
         /// The scene on program. Omitted only while the collection has no scene.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
+        /// The scene on preview, which `studio.set_preview` sets. Omitted only while the
+        /// collection has no scene, and by a server older than 0.30.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preview_scene: Option<SceneId>,
     },
     /// The result of `encoder.list`.
     #[serde(rename = "encoder.list")]
@@ -583,6 +593,14 @@ pub struct SceneInfo {
     /// Omitted for a `scene`.
     #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
     pub role: SceneRole,
+    /// The preset a switch into this scene uses, unless the switch names one. Omitted
+    /// for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_in: Option<TransitionPresetId>,
+    /// The preset a switch out of this scene uses, unless the switch or the next scene
+    /// names one. Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_out: Option<TransitionPresetId>,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<ItemInfo>,
 }
@@ -619,6 +637,10 @@ pub struct ItemInfo {
     /// How it composites onto what is below it. Missing parses as `normal`.
     #[serde(default)]
     pub blend: BlendMode,
+    /// Its transition settings (ADR-0029 §6). Omitted while they are the defaults it
+    /// was added with.
+    #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
+    pub transition: ItemTransition,
 }
 
 fn opaque() -> Finite32 {

@@ -570,9 +570,10 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   taps are driven by `jstream-core`).
 - **The engine side of CLAP filters**
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the mixer's side is
-  here (`insert_host_filter`), but mapping the shared block, starting and watching the
-  host process, reporting `mixer_misses` in `stats.tick` and the degraded event, and the
-  plugin's parameters as the filter's settings come with the host.
+  here (`insert_host_filter`), and starting and watching the host process are built
+  (`jstream-platform`'s `PluginHosts`, `jstream-core`'s `HostSupervisor`), but running a
+  CLAP filter from the graph, reporting `mixer_misses` in `stats.tick` and the degraded
+  event, and live changes to the plugin's parameters are not.
 - **A CPU measurement** of the mixer on Windows hardware, and of resampling
   ([Real-time design](#realtime) has a cloud machine's numbers for the mix).
 - **Feeding the fitted drift forward** into the controller, which would shorten the

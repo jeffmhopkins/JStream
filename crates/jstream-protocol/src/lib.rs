@@ -29,6 +29,7 @@ mod preview;
 mod query;
 mod schema;
 mod settings;
+mod transition;
 mod version;
 mod youtube;
 
@@ -60,7 +61,7 @@ pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId,
-    OutputId, RequestId, Rev, SceneId, SourceId, VideoMixId,
+    OutputId, RequestId, Rev, SceneId, SourceId, TransitionPresetId, VideoMixId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -81,6 +82,12 @@ pub use query::{
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
+pub use transition::{
+    CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
+    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, TransitionEffect, TransitionPresetInfo,
+    TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
+    check_preset_timing, initial_preset,
+};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
 pub use youtube::{
     BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy, BroadcastTransition,

@@ -257,7 +257,7 @@ impl Studio {
         let studio = *self;
         let first = session.clone();
         spawn_local(async move {
-            if let Ok(QueryResult::StudioGet { program_scene }) =
+            if let Ok(QueryResult::StudioGet { program_scene, .. }) =
                 query(&first, Query::StudioGet).await
             {
                 studio.program.set(program_scene);
@@ -622,6 +622,7 @@ mod tests {
         assert!(!c.id_taken("z"));
         let other = QueryResult::StudioGet {
             program_scene: None,
+            preview_scene: None,
         };
         assert_eq!(Collection::from_result(other), None);
     }
