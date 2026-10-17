@@ -11,9 +11,10 @@
 //! subscription and ended when none is left, serves every stream. It owns its own
 //! compositor, like `video.snapshot`'s thread, and never runs on the render thread or
 //! takes part in the program stage, so a preview costs an output nothing. On each pass
-//! it reads the published render snapshot and `rev`, and for each stream that is due
-//! draws the shot at the stream's size, reads it back and encodes it. A stream is due
-//! at most `fps` times a second, when the snapshot changed, when a keyframe was asked
+//! it reads the published render snapshot and `rev` and the live values on the render
+//! parameter channel (ADR-0032), and for each stream that is due draws the shot with
+//! them at the stream's size, reads it back and encodes it. A stream is due at most
+//! `fps` times a second, when the snapshot or the live values changed, when a keyframe was asked
 //! for, or [`KEYFRAME_EVERY`] after its last keyframe, so a reader that lost frames
 //! recovers and a still scene costs almost nothing.
 //!
@@ -62,7 +63,7 @@ use jstream_render::{Compositor, OpenOptions, ResourceCache};
 
 use crate::lock;
 use crate::runtime::RenderSnapshot;
-use crate::snapshot::{self, GpuKey, Shot};
+use crate::snapshot::{self, GpuKey, LiveParams, Shot};
 
 /// How many frames a session's binary channel holds for a reader that falls behind.
 pub(crate) const BINARY_BUFFER: usize = 8;
@@ -86,13 +87,16 @@ const PACKET_WAIT: Duration = Duration::from_millis(20);
 
 /// What the hub reads from the engine on every pass.
 pub(crate) trait PreviewSource: Send + Sync {
-    /// The render snapshot published now, and the `rev` it was published at.
-    fn current(&self) -> (Arc<RenderSnapshot>, Rev);
+    /// The render snapshot published now, the live values (ADR-0032) on the render
+    /// parameter channel now, and the `rev` the snapshot was published at.
+    fn current(&self) -> (Arc<RenderSnapshot>, Arc<LiveParams>, Rev);
 }
 
-/// Draws one picture for the hub: `shot` at `size`, read back as straight RGBA8 into
-/// `out` (replacing what it held). Opened on the hub thread and kept there.
-pub(crate) type PreviewDraw = Box<dyn FnMut(&Shot, FrameSize, &mut Vec<u8>) -> Result<(), String>>;
+/// Draws one picture for the hub: `shot` with `live` applied at `size`, read back as
+/// straight RGBA8 into `out` (replacing what it held). Opened on the hub thread and kept
+/// there.
+pub(crate) type PreviewDraw =
+    Box<dyn FnMut(&Shot, &LiveParams, FrameSize, &mut Vec<u8>) -> Result<(), String>>;
 
 /// Opens the hub's [`PreviewDraw`], on the hub thread.
 pub(crate) type OpenPreviewDraw = Arc<dyn Fn() -> Result<PreviewDraw, String> + Send + Sync>;
@@ -109,9 +113,18 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
             "preview compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
-        let draw: PreviewDraw = Box::new(move |shot, size, out| {
+        let draw: PreviewDraw = Box::new(move |shot, live, size, out| {
             cache.begin_frame();
-            let output = snapshot::compose(&mut compositor, &mut cache, shot, None, size, true);
+            let output = snapshot::compose(
+                &mut compositor,
+                &mut cache,
+                shot,
+                // A preview stream shows the program mix, never a video mix.
+                None,
+                live,
+                &snapshot::NoCaptures,
+                snapshot::DrawAt::read(size),
+            );
             drop(cache.end_frame(&compositor));
             let output = output.map_err(|err| err.to_string())?;
             let pixels = output
@@ -130,7 +143,7 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
 /// machine with no adapter ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenPreviewDraw {
     Arc::new(|| {
-        let draw: PreviewDraw = Box::new(|_, size, out| {
+        let draw: PreviewDraw = Box::new(|_, _, size, out| {
             out.clear();
             out.resize(size.width() as usize * size.height() as usize * 4, 0);
             Ok(())
@@ -391,8 +404,8 @@ struct Work {
     /// The earliest the next picture may be drawn.
     next_at: Instant,
     last_key: Option<Instant>,
-    /// The render snapshot the last picture showed.
-    shown: Option<Arc<RenderSnapshot>>,
+    /// The render snapshot and live values the last picture showed.
+    shown: Option<(Arc<RenderSnapshot>, Arc<LiveParams>)>,
     draw_errors: u32,
 }
 
@@ -574,7 +587,7 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
             }
             live
         };
-        let Some((snapshot, rev)) = source.upgrade().map(|source| source.current()) else {
+        let Some((snapshot, live, rev)) = source.upgrade().map(|source| source.current()) else {
             lock(&inner.state).running = false;
             return;
         };
@@ -587,7 +600,7 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
                 .entry(stream.id)
                 .or_insert_with(|| Work::new(stream, now));
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                serve(stream, work, &snapshot, rev, now, &mut canvas)
+                serve(stream, work, (&snapshot, &live), rev, now, &mut canvas)
             }));
             match result {
                 Ok(Some(next)) => wake_at = wake_at.min(next),
@@ -601,6 +614,7 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
         }
         drop(streams);
         drop(snapshot);
+        drop(live);
         let state = lock(&inner.state);
         if state.stop {
             continue;
@@ -628,7 +642,7 @@ struct Canvas<'a> {
 fn serve(
     stream: &PreviewStream,
     work: &mut Work,
-    snapshot: &Arc<RenderSnapshot>,
+    (snapshot, live): (&Arc<RenderSnapshot>, &Arc<LiveParams>),
     rev: Rev,
     now: Instant,
     canvas: &mut Canvas<'_>,
@@ -650,7 +664,7 @@ fn serve(
     let changed = !work
         .shown
         .as_ref()
-        .is_some_and(|shown| Arc::ptr_eq(shown, snapshot));
+        .is_some_and(|(shot, values)| Arc::ptr_eq(shot, snapshot) && Arc::ptr_eq(values, live));
     let stale = work
         .last_key
         .is_none_or(|at| now.saturating_duration_since(at) >= KEYFRAME_EVERY);
@@ -677,7 +691,7 @@ fn serve(
         }
     }
     let drawing = draw.as_mut()?;
-    if let Err(reason) = drawing(shot, size, rgba) {
+    if let Err(reason) = drawing(shot, live, size, rgba) {
         work.draw_errors += 1;
         tracing::debug!(channel = stream.channel, error = %reason, "preview picture skipped");
         if work.draw_errors > MAX_DRAW_ERRORS {
@@ -687,7 +701,7 @@ fn serve(
         return Some(work.next_at);
     }
     work.draw_errors = 0;
-    work.shown = Some(Arc::clone(snapshot));
+    work.shown = Some((Arc::clone(snapshot), Arc::clone(live)));
     stream.keyframe.store(false, Ordering::Release);
     let pts_us =
         i64::try_from(now.saturating_duration_since(work.started).as_micros()).unwrap_or(i64::MAX);

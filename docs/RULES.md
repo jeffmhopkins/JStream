@@ -614,6 +614,10 @@ applies_to = [".github/workflows/**"]
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
 On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
+A skipped job reports a `skipped` check, which a required check accepts, but a skipped matrix
+job reports under its bare name (`clippy`, `test`), so the required `clippy (…)` and `test (…)`
+contexts never report on a draft head. That is what keeps auto-merge from firing on a draft
+whose checks were all skipped.
 `ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist` and `macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
@@ -639,6 +643,7 @@ every other check runs. The wave's PR into `main` runs every check ([ADR-0055](a
 | `macos` | clippy on `jstream-platform-macos`, then build and unit tests on macOS | yes, from M3 ([ADR-0063](adr/0063-macos-platform-support.md)) | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
+| `fuzz` | nightly scheduled run of every fuzz target for a few minutes; a crashing input opens or updates an issue for its target ([Fuzz targets › In CI](../fuzz/README.md#ci)) | n/a | now |
 
 <a id="R-GIT-004"></a>
 ### R-GIT-004: One logical change per PR

@@ -1,6 +1,7 @@
 //! The server's configuration: where it listens, the control token, which `Host` and
 //! `Origin` values it accepts beyond its own, the connection limits, the MCP transport,
-//! the web UI's directory, and the file that keeps the paired devices.
+//! the web UI's directory, the file that keeps the paired devices, and whether the
+//! listener is reached over TLS.
 
 use crate::error::ServerError;
 use std::fmt;
@@ -11,6 +12,11 @@ use std::time::Duration;
 /// The default [`ServerConfig::max_connections`]: a handful of UIs, CLIs and MCP
 /// proxies, with room to spare.
 const MAX_CONNECTIONS: usize = 32;
+
+/// The default [`ServerConfig::max_tcp_connections`]: room for every WebSocket
+/// connection and MCP session at their defaults, a few browsers loading the UI over
+/// several connections each, and connections not yet authenticated (#354).
+const MAX_TCP_CONNECTIONS: usize = 128;
 
 /// The default [`ServerConfig::handshake_timeout`].
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -95,6 +101,12 @@ pub struct ServerConfig {
     /// The most WebSocket connections open at once. An upgrade beyond it is refused with
     /// HTTP 503 before a session is opened. [`ServerConfig::new`] sets 32.
     pub max_connections: usize,
+    /// The most TCP connections open at once, of every kind: not yet authenticated,
+    /// refused but still open, HTTP keep-alive ones to `/mcp` and the UI, and WebSocket
+    /// connections (which count against [`max_connections`](Self::max_connections) too).
+    /// A connection accepted beyond it is closed at once, unanswered.
+    /// [`ServerConfig::new`] sets 128.
+    pub max_tcp_connections: usize,
     /// How long a connection has, from being accepted, to complete the protocol
     /// handshake (`hello` answered by `welcome`). One that hasn't is closed (close code
     /// 1008). [`ServerConfig::new`] sets 10 s.
@@ -126,6 +138,22 @@ pub struct ServerConfig {
     /// and rewritten user-only on every change. [`ServerConfig::new`] leaves it unset:
     /// devices then live in memory and are gone when the server stops.
     pub device_file: Option<PathBuf>,
+    /// Whether clients reach this listener over TLS (ADR-0047). Only then is the browser
+    /// pairing page served at [`PAIR_PAGE_PATH`](crate::PAIR_PAGE_PATH), may a browser
+    /// pair into the `__Host-jstream_device` cookie and present it, is pairing offered
+    /// beyond loopback, and is the server's own `Origin` `https://`. The server has no
+    /// TLS listener of its own yet, so [`ServerConfig::new`] leaves it off and only tests
+    /// turn it on. Turning it on for a listener reached over plain HTTP would send
+    /// device tokens in the clear.
+    pub tls: bool,
+    /// Whether the server pairs devices at all (ADR-0044, ADR-0047). Off, it answers no
+    /// `pairing.start`, `device.list` or `device.revoke` itself: they reach the session,
+    /// which answers `unsupported`, so a host's UI hides its pairing panel. No code is
+    /// then drawn, and the gate accepts no device token or cookie, even one already in
+    /// `device_file`.
+    /// [`ServerConfig::new`] leaves it on; a host whose engine serves only itself, like
+    /// the desktop app's webview, turns it off.
+    pub pairing: bool,
 }
 
 impl ServerConfig {
@@ -138,6 +166,7 @@ impl ServerConfig {
             extra_hosts: Vec::new(),
             extra_origins: Vec::new(),
             max_connections: MAX_CONNECTIONS,
+            max_tcp_connections: MAX_TCP_CONNECTIONS,
             handshake_timeout: HANDSHAKE_TIMEOUT,
             header_read_timeout: HEADER_READ_TIMEOUT,
             mcp: false,
@@ -145,6 +174,8 @@ impl ServerConfig {
             mcp_idle_timeout: MCP_IDLE_TIMEOUT,
             ui_dir: None,
             device_file: None,
+            tls: false,
+            pairing: true,
         }
     }
 
@@ -154,6 +185,7 @@ impl ServerConfig {
     pub(crate) fn check_limits(&self) -> Result<(), ServerError> {
         let zero = [
             ("max_connections", self.max_connections == 0),
+            ("max_tcp_connections", self.max_tcp_connections == 0),
             ("handshake_timeout", self.handshake_timeout.is_zero()),
             ("header_read_timeout", self.header_read_timeout.is_zero()),
             ("max_mcp_sessions", self.max_mcp_sessions == 0),
@@ -183,8 +215,9 @@ mod tests {
         };
         let config = ServerConfig::new(token);
         assert!(config.check_limits().is_ok(), "the defaults");
-        let cases: [(&str, Zero); 5] = [
+        let cases: [(&str, Zero); 6] = [
             ("max_connections", |c| c.max_connections = 0),
+            ("max_tcp_connections", |c| c.max_tcp_connections = 0),
             ("handshake_timeout", |c| {
                 c.handshake_timeout = Duration::ZERO
             }),

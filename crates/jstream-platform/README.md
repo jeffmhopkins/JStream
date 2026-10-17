@@ -42,7 +42,10 @@ Contents:
   platform. It is `#[non_exhaustive]`.
 - **GPU interop** ([GPU frames](#gpu-frames)): `GpuInterop` (`Send + Sync`) opens the
   engine's `GpuContext` (adapter, device, queue, `AdapterId`, and the platform's own
-  state, which drops first) and allocates NV12 `encode_target`s. A `GpuFrame` holds a
+  state, which drops first) and allocates NV12 `encode_target`s. `GpuContext::key`
+  is a `ContextKey`, equal only for the same context: `wgpu::Device` equality compares
+  IDs each wgpu instance numbers from zero, so it can't tell two instances' devices
+  apart. A `GpuFrame` holds a
   `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
   stages its fence wait and signal around the engine's next submit, and
   `FrameSync::platform` lets the platform that made a hold recognise it (`None` by
@@ -218,12 +221,13 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
-that device when the engine has one, sampling capture frames there, and opens its own
-(hardware adapter first, the software one as the fallback) when it does not. It has the
-NV12 pass that can render into an encode target's plane views (`Nv12Converter`).
-Windows' H.264 encoder takes encode targets on the context it reached through
-`Codecs::on_context`, and the engine's render thread converts each composite into the
-next of a ring of them and pushes it to such a session.
+that device when the engine has one, sampling capture frames there, and the frames a
+browser source's page paints on it, and opens its own (hardware adapter first, the
+software one as the fallback) when it does not. It has the NV12 pass that can render
+into an encode target's plane views (`Nv12Converter`). Windows' video encoders take
+encode targets on the context they reached through `Codecs::on_context`, and the
+engine's render thread converts each composite into the next of a ring of them and
+pushes it to such a session.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -249,8 +253,11 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
     - The media adapter is the one that drives the captured display, with
       `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
       engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, hardware adapter first with the software one as the fallback. On a
-      hybrid-GPU machine where sharing an adapter isn't possible, the platform says so (ARCH step 6).
+      opens its own, hardware adapter first with the software one as the fallback. On a hybrid-GPU machine where sharing an
+      adapter isn't possible, the platform says so (ARCH step 6).
+    - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
+      allocation), so the engine can tell whether a texture is on the context a
+      compositor runs on. wgpu's own `Device` equality is per instance and can't.
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.

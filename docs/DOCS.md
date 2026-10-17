@@ -63,7 +63,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
   has, and lists the sections left stale: each stale input with the note the branch had
   written on it and the merged commits that changed it. `docs verify --merge` then keeps
-  those notes and adds what the merge changed ([Verification notes](#notes)).
+  those notes and adds what the merge changed ([Verification notes](#notes)), and refuses
+  an input whose file the branch changed after the merge.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -306,6 +307,8 @@ cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --note "…"                # re-read (or edited) and it holds: restamp it
 cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --merge "…"               # the same after merge-main: keeps the branch's notes
+cargo xtask docs verify ARCH#gpu-pipeline \
+    --by agent:claude --renote "…"              # fresh section, better note: hashes unchanged
 cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
@@ -343,8 +346,19 @@ changed, gets the branch's note on it, then ` | merge: `, then the text. An earl
 addendum is dropped first, because what it brought in is part of the base by then. An entry
 the branch hadn't written gets `merge: ` and the text alone. Because it rewrites the
 branch's entries whose input the merge changed even when they are fresh, it also repairs a
-plain re-verify after the merge that replaced the branch's notes. Use `--note` instead for
-a section you also changed after the merge: the branch's earlier note doesn't cover that.
+plain re-verify after the merge that replaced the branch's notes. It refuses, naming each
+input, when the file an entry it would rewrite lives in (the doc itself for `body`, the
+covered file, the target doc for `dep:`) differs, committed or not, from what `merge-main`
+left: the merge, or its `docs migrate` commit. The branch's earlier note doesn't cover
+such a later edit, so verify that section with `--note` instead, covering both.
+
+`docs verify <DOC#anchor> --by <who> --renote "<note>"` replaces the `by` and `note` of a
+section that is already fresh, as when a reviewer asks for a better note, without touching
+any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
+at the merge base of `HEAD` and `origin/main`, or of the wave named with
+`--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
+`--merge`, and a section this branch never stamped. It fails when the ledger at that merge
+base doesn't parse, rather than taking every entry for this branch's own.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -387,7 +401,10 @@ so it never causes merge conflicts.
 <!-- @section
 -->
 
-`xtask docs check` runs on every PR (required check `docs`) and fails on:
+`xtask docs check` runs on every PR once it leaves draft: a draft skips it, and marking
+the PR ready for review runs it on the head (required check `docs`,
+[R-GIT-003](RULES.md#R-GIT-003)).
+It fails on:
 
 1. **Stale verifications:** any section whose stamp in `docs/verified.toml` doesn't name
    exactly its current inputs and hashes (the message lists the inputs that differ), any
@@ -443,9 +460,11 @@ holds**. The note says what was checked and why it still holds, e.g.:
   adds the text, and `merge-main` prints the merged commits behind each stale input to
   write it from ([Hash-bound verification](#verification)). The text is still per
   section: one stock text across every stale section, such as "rechecked after merging
-  main", fails review.
+  main", fails review. A section this PR also changed after the merge takes `--note`, and
+  `--merge` refuses it.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
-  `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. Say in
+  `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. To
+  improve the note on a fresh section, use `docs verify --renote`, never a hand edit. Say in
   the PR what you re-read after removing a covered file.
 - The sweep is to report each section's verify-to-edit ratio from git (not built yet,
   see [Time-based review](#ttl)). A section that gets
