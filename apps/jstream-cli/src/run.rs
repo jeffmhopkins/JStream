@@ -514,6 +514,27 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             writeln!(out, "rev {rev}")?;
             write_sources(out, "", sources)?;
         }
+        QueryResult::CaptureTargets { targets } => {
+            if targets.is_empty() {
+                writeln!(out, "nothing to capture")?;
+            }
+            for target in targets {
+                write!(
+                    out,
+                    "{} {} ({})",
+                    wire_name(&target.kind),
+                    target.target,
+                    target.name
+                )?;
+                if let Some(size) = target.size {
+                    write!(out, " {}x{}", size.width, size.height)?;
+                }
+                if target.primary {
+                    write!(out, ", primary")?;
+                }
+                writeln!(out)?;
+            }
+        }
         QueryResult::ItemList {
             rev,
             scene_id,

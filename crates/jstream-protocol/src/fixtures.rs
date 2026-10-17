@@ -23,6 +23,7 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
+use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -605,6 +606,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::CaptureTargets,
         Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
@@ -1030,6 +1032,27 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
+        },
+        QueryResult::CaptureTargets {
+            targets: vec![
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::Display,
+                    target: r"monitor:\\.\DISPLAY1".into(),
+                    name: "DISPLAY1".into(),
+                    size: Some(PixelSize {
+                        width: 2560,
+                        height: 1440,
+                    }),
+                    primary: true,
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::Window,
+                    target: "hwnd:0x1a2b".into(),
+                    name: "Untitled - Notepad".into(),
+                    size: None,
+                    primary: false,
+                },
+            ],
         },
         QueryResult::LiveList {
             gestures: vec![GestureInfo {

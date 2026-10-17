@@ -373,9 +373,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   reference in a filter's settings is an edge of the filter's source. The
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
   whose kind is built (`browser` and its `youtube_chat` preset, through the host's
-  browser backend, and `color`, `image`, `media`, `text`, `waveform` and `spectrum`),
-  rebuilt when its settings change, and the program mix shows its frames, animations
-  and videos advancing on the media clock. The audio-only kinds (`audio_input`,
+  browser backend, and `color`, `display`, `image`, `media`, `text`, `waveform`,
+  `spectrum` and `window`), rebuilt when its settings change, and the program mix shows
+  its frames, animations and videos advancing on the media clock, or for `display` and
+  `window` what the output pipeline captures for its `target`. The audio-only kinds (`audio_input`,
   `desktop_audio`, `app_audio`) have no `Source`: while an output runs, the engine
   records each as a mixer input, routed as its audio and sends say, running the
   source's enabled audio filters of the built-in kinds (`gain`, `noise_gate`,
@@ -656,8 +657,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source (or, from protocol 0.24, a bus) with everything
-  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends; audio levels are
-  the `meters.tick` event, not a query).
+  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
+  `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
+  source's `target` can name; audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
@@ -745,7 +747,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -856,15 +858,17 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
+browser source's page paints on the same context and is imported the same way, read
+as premultiplied sRGB (`import_premultiplied`), CEF's layout. The
 composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
 on D3D11 into a texture of their own, fence-synchronized both ways, and
 `jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
 ([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
 Nothing writes the encode targets yet. Built-in video filters are kinds with
-descriptors whose passes `apply_filter` draws from one premultiplied `Rgba16Float` image
-into another, of the size the filter reports
+descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
+import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
 runtime that runs a source's video chain before placement is not built yet. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, loading effect packs (`jstream-effects`; this
@@ -918,7 +922,9 @@ A browser source is a CEF off-screen browser
 ([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
 ([ADR-0046](adr/0046-browser-crate-and-helper.md),
 [its README](../crates/jstream-browser/README.md)). The desktop app and the daemon wire it
-in behind their off-by-default `cef` features; the program mix doesn't use it yet.
+in behind their off-by-default `cef` features. While a program stage runs on a GPU
+context, the mix draws each page's newest texture there (a premultiplied import, see
+[GPU pipeline](#gpu-pipeline)); otherwise a page shows its transparent stand-in.
 CEF runs in the sandboxed browser helper process, never in the engine's
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), which the engine drives over two named
 pipes. Each `OnAcceleratedPaint`

@@ -933,6 +933,7 @@ mod tests {
         assert_eq!(
             read_only,
             [
+                "capture",
                 "delete",
                 "describe_api",
                 "events",

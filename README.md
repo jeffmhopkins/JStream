@@ -71,7 +71,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A6b | Daemon YouTube wiring | M1a | 🌊 its wave lands, then 👤 maintainer, then 🧪 Windows run | #312 merged into wave/m1-2; sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
 | C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
 | C3 | Display and window capture sources | M1b | 🔨 build, then 🧪 Windows run | draft #365; Windows run #378 |  |
-| C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298 |
+| C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341 | #283, #289, #298, #326 |
 | I2 | Live values | M1b | 🔨 build |  | #244 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
@@ -162,7 +162,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
 | C3 | Display and window capture sources | ⏳ planned: draft #365; Windows run #378 |  |
-| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341, #335, #336 | #283, #289, #298 |
+| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341 | #283, #289, #298, #326 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |

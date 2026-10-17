@@ -412,8 +412,8 @@ id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
-prs = [283, 289, 298]
-note = "#341, #335, #336"
+prs = [283, 289, 298, 326]
+note = "#341"
 
 [[item]]
 id = "D1"

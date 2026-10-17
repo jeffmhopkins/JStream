@@ -251,6 +251,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   (`not_found` for a missing scene, no `rev`), `studio.get`, and `studio.changed` for a
   switch and after a batch, undo or redo that creates the first scene or deletes the
   program scene;
+- `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
+  `MOCK_DISPLAY`;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.

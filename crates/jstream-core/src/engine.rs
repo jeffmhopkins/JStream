@@ -26,18 +26,20 @@ use crate::runtime::{
     parts_from,
 };
 use crate::session::InProcessControl;
-use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
 use crate::studio::Studio;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
-use jstream_platform::{Backends, PluginHosts, Secret, StreamKeyStore};
+use jstream_platform::{
+    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, Secret, StreamKeyStore,
+};
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
-    EncoderSessionInfo, EntityKind, Event, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PreviewSettings, ProtocolError,
-    Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SecretString, SourceId,
-    YoutubeAuth,
+    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
+    EncoderProfile, EncoderSessionInfo, EntityKind, Event, GestureId, HistoryCall,
+    HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
+    PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    RtmpTarget, SecretString, SourceId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -386,8 +388,9 @@ impl Engine {
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
     /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
     /// that no backend is set; giving one builds the ones already there again.
-    /// The host also hands the backend a GPU device (`use_device`): for now one it opens
-    /// on the media adapter itself, since the engine doesn't hand out its own yet.
+    /// The host also hands the backend a GPU device (`use_device`), one it opens on the
+    /// media adapter itself, for paints before a program stage; while a stage runs the
+    /// engine lends the backend the stage's own context instead (`use_gpu`).
     #[must_use]
     pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
         {
@@ -547,6 +550,15 @@ impl Engine {
         let mut state = lock(&self.shared.state);
         state.audio.insert_input(source_id, input);
         state.route_audio();
+    }
+
+    /// Lets live sources that paint on the GPU (`browser`) paint on `context`, the
+    /// program stage's platform GPU context, and re-plans the program mix. The returned
+    /// call takes the context away again; the stage makes it before it stops.
+    pub(crate) fn use_gpu(&self, context: &GpuContext) -> Box<dyn FnOnce() + Send + Sync> {
+        set_gpu(&self.shared, Some(context));
+        let shared = Arc::clone(&self.shared);
+        Box::new(move || set_gpu(&shared, None))
     }
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
@@ -764,6 +776,13 @@ impl Engine {
         } = call
         {
             self.key_action(action)
+        } else if matches!(
+            call,
+            Call::Query {
+                query: Query::CaptureTargets
+            }
+        ) {
+            self.capture_targets()
         } else if let Call::Action {
             action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
         } = call
@@ -1123,6 +1142,33 @@ impl Engine {
     fn host(&mut self) -> Arc<MediaHost> {
         let host = self.media.get_or_insert_with(|| Arc::new(MediaHost::new()));
         Arc::clone(host)
+    }
+
+    /// `capture.targets`: what the platform's capture backend can capture now, listed
+    /// with no engine lock held, since listing windows calls the OS.
+    fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
+        let capture = self.media.as_ref().and_then(|host| {
+            lock(&host.backends)
+                .as_ref()
+                .map(|backends| Arc::clone(&backends.capture))
+        });
+        let Some(capture) = capture else {
+            return Err(ProtocolError::ActionFailed {
+                reason: "the engine has no capture backend".into(),
+            });
+        };
+        let mut targets: Vec<_> = capture
+            .targets()
+            .map_err(|err| ProtocolError::ActionFailed {
+                reason: format!("listing capture targets: {err}"),
+            })?
+            .into_iter()
+            .filter_map(capture_target_info)
+            .collect();
+        targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
+        Ok(CallResult::Query {
+            result: QueryResult::CaptureTargets { targets },
+        })
     }
 
     fn backends_ready(&self) -> bool {
@@ -1999,6 +2045,13 @@ fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake:
     );
 }
 
+/// [`Engine::use_gpu`] and its undo.
+fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
+    let mut state = lock(&shared.state);
+    state.live.use_gpu(context);
+    state.publish_render();
+}
+
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     let sampled = drops::lock_ledger(ledger).sample();
     let mut wake = Vec::new();
@@ -2504,8 +2557,8 @@ impl State {
         live.begin_plan();
         let (shot, wake) =
             snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
-                Some(frame) => Some((frame.clone(), None)),
-                None => live.frame(id, now, frame_versions),
+                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                None => live.look(id, now, frame_versions),
             });
         live.end_plan();
         if let Some(sound) = live.take_audio() {
@@ -2785,6 +2838,26 @@ fn no_key_store() -> ProtocolError {
     ProtocolError::ActionFailed {
         reason: "this engine has no credential store for stream keys".into(),
     }
+}
+
+/// A platform capture target as `capture.targets` reports it, or `None` for a kind of
+/// target no source kind captures.
+fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::CaptureTargetInfo> {
+    let (kind, target) = match info.target {
+        CaptureTarget::Display(id) => (CaptureTargetKind::Display, id),
+        CaptureTarget::Window(id) => (CaptureTargetKind::Window, id),
+        _ => return None,
+    };
+    Some(jstream_protocol::CaptureTargetInfo {
+        kind,
+        target: target.as_str().to_owned(),
+        name: info.name,
+        size: info.size.map(|size| PixelSize {
+            width: size.width(),
+            height: size.height(),
+        }),
+        primary: info.primary,
+    })
 }
 
 /// A protocol variant added after this engine was written.

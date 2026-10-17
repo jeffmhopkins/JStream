@@ -85,9 +85,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus),
-  `studio.get`, `device.list` and `live.list`, with `QueryResult` and the
-  `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo` shapes the
-  reads report. `state.get` carries the `Canvas`, and `ItemInfo`
+  `studio.get`, `device.list`, `live.list` and `capture.targets`, with `QueryResult`
+  and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo` and
+  `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and
+  `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
   mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and `youtube.list_streams`
   read the YouTube account.
@@ -128,8 +129,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.26 because of
-  live values ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.27 because of the
+  `capture.targets` query; 0.26 added live values ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the
   `live.changed` and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
   hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
   `hotkeys` and the batch result's `removed_hotkeys`); 0.24 added bus
@@ -210,8 +211,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":26},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":26},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":27},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":27},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -631,6 +632,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   has no scene). Runtime state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
+- `capture.targets`: the displays and windows the engine can capture now, displays
+  first, each with its `kind` (`display` or `window`, the source kind that captures
+  it), its `target` (the value for that source's `target` setting), a `name` to show,
+  its `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
+  for the display an empty `display` target captures. Runtime state, so no `rev`; a
+  source can still name a window closed since. `action_failed` when the engine has no
+  capture backend or the OS refuses the list. Added in 0.27.
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).

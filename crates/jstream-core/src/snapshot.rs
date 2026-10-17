@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 
 use jstream_graph::{Graph, Placement as GraphPlacement, State};
 use jstream_media::{FrameSize, MediaTime, PixelFormat, VideoFrame};
-use jstream_platform::GpuFrame;
+use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     Canvas, Crop as ProtocolCrop, Edit, ItemId, ProtocolError, QueryResult, Rev, SceneId, SourceId,
     SourceKind,
@@ -34,6 +34,7 @@ use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
 };
+use jstream_sources::CaptureSpec;
 
 use crate::lock;
 use crate::runtime::RenderSnapshot;
@@ -50,9 +51,6 @@ const OPAQUE: f32 = 1.0;
 /// cost, since each level is a canvas-sized FP16 texture. ARCH › Data model states it
 /// for clients.
 pub(crate) const MAX_NESTING: usize = 8;
-
-/// The built-in source kind that shows the output pipeline's captured display.
-const DISPLAY: &str = "display";
 
 /// Why [`crate::Engine::set_source_frame`] refused a frame.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -82,8 +80,9 @@ pub enum SourceFrameError {
     },
 }
 
-/// The latest straight-alpha sRGB RGBA8 frame of one source: one `set_source_frame`
-/// stored, or one its live source produced.
+/// The latest frame of one source: straight-alpha sRGB RGBA8 that `set_source_frame`
+/// stored or its live source produced, or a live source's texture on the program stage's
+/// GPU device (a browser page).
 #[derive(Clone, Debug)]
 pub(crate) struct Frame {
     width: u32,
@@ -102,6 +101,13 @@ enum Pixels {
     Copied(Arc<[u8]>),
     /// A live source's frame, packed `Rgba8` in its first plane.
     Video(Arc<VideoFrame>),
+    /// A live source's texture, premultiplied sRGB code values, on the GPU context
+    /// `context`. Only a compositor on that context imports it ([`compose`]); others draw
+    /// nothing for it.
+    Gpu {
+        frame: GpuFrame,
+        context: ContextKey,
+    },
 }
 
 impl PartialEq for Frame {
@@ -163,12 +169,25 @@ impl Frame {
         })
     }
 
+    /// A live source's texture on `context`, the program stage's GPU context: sRGB code
+    /// values already multiplied by alpha, as a browser page paints (ADR-0021).
+    pub(crate) fn from_gpu(frame: GpuFrame, context: ContextKey, version: u64) -> Self {
+        let size = frame.info().size;
+        Self {
+            width: size.width(),
+            height: size.height(),
+            pixels: Pixels::Gpu { frame, context },
+            version,
+        }
+    }
+
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
     pub(crate) fn with_version(self, version: u64) -> Self {
         Self { version, ..self }
     }
 
-    /// The tightly packed RGBA8 bytes, `width * height * 4` of them.
+    /// The tightly packed RGBA8 bytes, `width * height * 4` of them. Empty for a GPU
+    /// frame, which has none on the CPU.
     fn rgba(&self) -> &[u8] {
         let len = self.width as usize * self.height as usize * 4;
         match &self.pixels {
@@ -177,6 +196,7 @@ impl Frame {
                 .plane(0)
                 .and_then(|plane| plane.data().get(..len))
                 .unwrap_or_default(),
+            Pixels::Gpu { .. } => &[],
         }
     }
 
@@ -205,9 +225,10 @@ enum SourceRef {
     Frame(SourceId),
     /// Another scene, composited first and then placed.
     Scene(SceneId),
-    /// A `display` source with no stored frame: the output pipeline's captured display,
-    /// on the render thread. `video.snapshot` has no capture, so it draws nothing there.
-    Capture,
+    /// A `display` or `window` source with no stored frame: what the output pipeline
+    /// captures for it, on the render thread. Sources that capture the same thing share
+    /// it. `video.snapshot` has no capture, so it draws nothing there.
+    Capture(CaptureSpec),
 }
 
 #[derive(Debug, PartialEq)]
@@ -224,8 +245,8 @@ struct Placed {
 /// The program mix, copied out of the collection so it can be drawn without the
 /// collection lock: what each reachable scene places, the frames they show, and the
 /// passes that draw them. Immutable once [`plan`] returns it; the engine publishes it
-/// to the render thread through `arc-swap`.
-#[derive(Debug, Default)]
+/// to the render thread through `arc-swap`. The default is an empty collection's.
+#[derive(Debug)]
 pub(crate) struct Shot {
     /// The collection's canvas: the size every scene, nested ones included, is drawn at.
     canvas: Canvas,
@@ -240,8 +261,24 @@ pub(crate) struct Shot {
     /// The cache key of each frame in `frames`, built once so a frame's uploads look
     /// them up without allocating.
     uploads: Vec<(GpuKey, SourceId)>,
-    /// Whether a pass places the pipeline's capture.
-    uses_capture: bool,
+    /// What the output pipeline captures for this shot: what its passes place, or the
+    /// primary display, which fills the output, when there is no program scene.
+    captures: BTreeSet<CaptureSpec>,
+}
+
+impl Default for Shot {
+    /// No scene: the primary display's capture fills the output.
+    fn default() -> Self {
+        Self {
+            canvas: Canvas::default(),
+            program: None,
+            scenes: BTreeMap::new(),
+            frames: BTreeMap::new(),
+            passes: Vec::new(),
+            uploads: Vec::new(),
+            captures: captures(&[]),
+        }
+    }
 }
 
 impl Shot {
@@ -257,16 +294,9 @@ impl Shot {
         self.frames.get(source_id)
     }
 
-    /// Whether a pass shows the pipeline's capture, for tests.
-    #[cfg(test)]
-    pub(crate) fn uses_capture(&self) -> bool {
-        self.uses_capture
-    }
-
-    /// Whether drawing this shows the pipeline's capture: a pass places it, or there is
-    /// no program scene and the capture fills the output.
-    pub(crate) fn shows_capture(&self) -> bool {
-        self.uses_capture || self.passes.is_empty()
+    /// What the output pipeline captures for this shot, in order.
+    pub(crate) fn captures(&self) -> &BTreeSet<CaptureSpec> {
+        &self.captures
     }
 }
 
@@ -278,6 +308,7 @@ impl PartialEq for Shot {
             && self.program == other.program
             && self.scenes == other.scenes
             && self.frames == other.frames
+            && self.captures == other.captures
     }
 }
 
@@ -291,19 +322,20 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
         .first()
         .map(|scene| scene.id().clone());
     plan_with(graph, first.as_ref(), &mut |id| {
-        frames.get(id).map(|f| (f.clone(), None))
+        frames.get(id).map(|f| Look::Frame(f.clone(), None))
     })
     .0
 }
 
 /// Copies the program scene `program` (ADR-0030) and the scenes it nests out of
-/// `graph`, and schedules them, asking `frame` for the frame of each source an item it
-/// reaches places and when that frame is next replaced. Returns the shot and the
-/// earliest such time, when it should be planned again.
+/// `graph`, and schedules them, asking `look` what each source an item it reaches
+/// places shows: its frame and when that frame is next replaced, or what the pipeline
+/// captures for it. Returns the shot and the earliest such time, when it should be
+/// planned again.
 pub(crate) fn plan_with(
     graph: &Graph,
     program: Option<&SceneId>,
-    frame: &mut FrameOf<'_>,
+    look: &mut LookUp<'_>,
 ) -> (Shot, Option<MediaTime>) {
     let state = graph.state();
     let program = program.cloned();
@@ -314,7 +346,7 @@ pub(crate) fn plan_with(
     };
     let mut planner = Planner {
         state,
-        frame,
+        look,
         wake: None,
     };
     if let Some(id) = &program {
@@ -327,21 +359,40 @@ pub(crate) fn plan_with(
         .keys()
         .map(|id| (GpuKey::Frame(id.clone()), id.clone()))
         .collect();
-    shot.uses_capture = shot
-        .passes
-        .iter()
-        .flat_map(|pass| &pass.layers)
-        .any(|layer| layer.image == GpuKey::Capture);
+    shot.captures = captures(&shot.passes);
     (shot, planner.wake)
 }
 
-/// What [`plan_with`] asks for each source it reaches: its frame now, and when that
-/// frame is next replaced.
-pub(crate) type FrameOf<'a> = dyn FnMut(&SourceId) -> Option<(Frame, Option<MediaTime>)> + 'a;
+/// What the passes place from the pipeline's capture, or the primary display, which
+/// fills the output, without a program scene.
+fn captures(passes: &[Pass]) -> BTreeSet<CaptureSpec> {
+    if passes.is_empty() {
+        return BTreeSet::from([CaptureSpec::Display(None)]);
+    }
+    passes
+        .iter()
+        .flat_map(|pass| &pass.layers)
+        .filter_map(|layer| match &layer.image {
+            GpuKey::Capture(spec) => Some(spec.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// What a source shows, as [`plan_with`] asks for it.
+pub(crate) enum Look {
+    /// Its frame now, and when that frame is next replaced.
+    Frame(Frame, Option<MediaTime>),
+    /// What the output pipeline captures for it.
+    Capture(CaptureSpec),
+}
+
+/// What [`plan_with`] asks for each source it reaches; `None` shows nothing.
+pub(crate) type LookUp<'a> = dyn FnMut(&SourceId) -> Option<Look> + 'a;
 
 struct Planner<'a, 'f> {
     state: &'a State,
-    frame: &'f mut FrameOf<'f>,
+    look: &'f mut LookUp<'f>,
     /// The earliest time a frame in the shot is replaced.
     wake: Option<MediaTime>,
 }
@@ -366,11 +417,8 @@ impl Planner<'_, '_> {
                         self.collect(scene_id, out, path);
                         SourceRef::Scene(scene_id.clone())
                     }
-                    kind => match self.frame_of(item.source_id(), out) {
-                        Some(()) => SourceRef::Frame(item.source_id().clone()),
-                        None if matches!(kind, SourceKind::Builtin { kind } if kind == DISPLAY) => {
-                            SourceRef::Capture
-                        }
+                    _ => match self.look(item.source_id(), out) {
+                        Some(source) => source,
                         None => continue,
                     },
                 };
@@ -387,17 +435,21 @@ impl Planner<'_, '_> {
         path.remove(id);
     }
 
-    /// Puts the frame of `source_id` in `out`, asking for it once per shot.
-    fn frame_of(&mut self, source_id: &SourceId, out: &mut Shot) -> Option<()> {
+    /// What `source_id` shows. Its frame goes in `out`, asked for once per shot.
+    fn look(&mut self, source_id: &SourceId, out: &mut Shot) -> Option<SourceRef> {
         if out.frames.contains_key(source_id) {
-            return Some(());
+            return Some(SourceRef::Frame(source_id.clone()));
         }
-        let (frame, next) = (self.frame)(source_id)?;
-        if let Some(next) = next {
-            self.wake = Some(self.wake.map_or(next, |wake| wake.min(next)));
+        match (self.look)(source_id)? {
+            Look::Frame(frame, next) => {
+                if let Some(next) = next {
+                    self.wake = Some(self.wake.map_or(next, |wake| wake.min(next)));
+                }
+                out.frames.insert(source_id.clone(), frame);
+                Some(SourceRef::Frame(source_id.clone()))
+            }
+            Look::Capture(spec) => Some(SourceRef::Capture(spec)),
         }
-        out.frames.insert(source_id.clone(), frame);
-        Some(())
     }
 }
 
@@ -406,8 +458,8 @@ impl Planner<'_, '_> {
 pub(crate) enum GpuKey {
     /// The upload of a source's stored frame.
     Frame(SourceId),
-    /// The upload of the pipeline's captured display.
-    Capture,
+    /// The upload or import of what the pipeline captures.
+    Capture(CaptureSpec),
     /// The layer a nested scene is composited into, at its depth.
     Layer(SceneId, usize),
     /// The program scene at the canvas size, when the output is another size.
@@ -470,7 +522,7 @@ fn visit(
     for placed in shot.scenes.get(id).map(Vec::as_slice).unwrap_or(&[]) {
         let image = match &placed.source {
             SourceRef::Frame(source) => GpuKey::Frame(source.clone()),
-            SourceRef::Capture => GpuKey::Capture,
+            SourceRef::Capture(spec) => GpuKey::Capture(spec.clone()),
             SourceRef::Scene(inner) => {
                 if depth >= MAX_NESTING {
                     tracing::debug!(
@@ -860,7 +912,7 @@ fn draw(
         cache,
         shot,
         live,
-        None,
+        &NoCaptures,
         shot.canvas().map_err(from_render)?,
         true,
     );
@@ -894,9 +946,9 @@ impl Shot {
     }
 }
 
-/// The pipeline's latest captured display, which `display` sources show on the render
-/// thread. `version` changes with every new frame, so an unchanged CPU capture is not
-/// uploaded again.
+/// The latest frame of one of the pipeline's captures, which `display` and `window`
+/// sources show on the render thread. `version` changes with every new frame, so an
+/// unchanged CPU capture is not uploaded again.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CaptureFrame<'a> {
     pub(crate) version: u64,
@@ -913,6 +965,22 @@ pub(crate) enum CaptureImage<'a> {
     Gpu(&'a GpuFrame),
 }
 
+/// The latest frame of each capture a shot places ([`Shot::captures`]).
+pub(crate) trait Captures {
+    /// The latest frame of `spec`'s capture; `None` before its first frame, or when it
+    /// isn't running.
+    fn frame(&self, spec: &CaptureSpec) -> Option<CaptureFrame<'_>>;
+}
+
+/// No captures, for `video.snapshot` and tests.
+pub(crate) struct NoCaptures;
+
+impl Captures for NoCaptures {
+    fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+        None
+    }
+}
+
 /// Draws the program mix of `shot` at `output`, over opaque black, between the caller's
 /// [`ResourceCache::begin_frame`] and [`ResourceCache::end_frame`]. An item with a live
 /// value in `live` is drawn with it instead of its placement or crop in `shot`.
@@ -923,7 +991,8 @@ pub(crate) enum CaptureImage<'a> {
 /// scene is premultiplied linear `Rgba16Float` that stays on the GPU, transparent where
 /// it draws nothing. The program scene is drawn at the canvas size: straight to the
 /// output when that is the canvas size, else into a layer that the output scales to
-/// fill. Without a program scene the output is `capture` scaled to fill it, or black.
+/// fill. Without a program scene the output is the primary display's capture scaled to
+/// fill it, or black.
 ///
 /// # Errors
 /// What the compositor reports for an upload or a pass.
@@ -932,42 +1001,56 @@ pub(crate) fn compose(
     cache: &mut ResourceCache<GpuKey>,
     shot: &Shot,
     live: &LiveParams,
-    capture: Option<&CaptureFrame<'_>>,
+    captures: &dyn Captures,
     output: FrameSize,
     readback: bool,
 ) -> Result<Output, RenderError> {
     let canvas = shot.canvas()?;
     for (key, source) in &shot.uploads {
-        if let Some(frame) = shot.frames.get(source) {
-            cache.upload(
-                compositor,
-                key,
-                frame.version,
-                frame.width,
-                frame.height,
-                frame.rgba(),
-            )?;
+        let Some(frame) = shot.frames.get(source) else {
+            continue;
+        };
+        match &frame.pixels {
+            // Sampled where it is, on the context it was painted on. Another compositor
+            // (`video.snapshot`'s, or a program stage opened since) can't read it.
+            Pixels::Gpu { frame, context } => {
+                if compositor.context() == Some(context) {
+                    cache.import_premultiplied(compositor, key, frame)?;
+                }
+            }
+            Pixels::Copied(_) | Pixels::Video(_) => {
+                cache.upload(
+                    compositor,
+                    key,
+                    frame.version,
+                    frame.width,
+                    frame.height,
+                    frame.rgba(),
+                )?;
+            }
         }
     }
-    let capture = match capture {
-        Some(capture) if shot.shows_capture() => {
-            match capture.image {
-                CaptureImage::Rgba { size, rgba } => cache.upload(
-                    compositor,
-                    &GpuKey::Capture,
-                    capture.version,
-                    size.width(),
-                    size.height(),
-                    rgba,
-                )?,
-                CaptureImage::Gpu(frame) => cache.import(compositor, &GpuKey::Capture, frame)?,
-            };
-            true
-        }
-        _ => false,
-    };
+    let mut fallback = None;
+    for spec in &shot.captures {
+        let Some(capture) = captures.frame(spec) else {
+            continue;
+        };
+        let key = GpuKey::Capture(spec.clone());
+        match capture.image {
+            CaptureImage::Rgba { size, rgba } => cache.upload(
+                compositor,
+                &key,
+                capture.version,
+                size.width(),
+                size.height(),
+                rgba,
+            )?,
+            CaptureImage::Gpu(frame) => cache.import(compositor, &key, frame)?,
+        };
+        fallback = Some(key);
+    }
     let Some((program, nested)) = shot.passes.split_last() else {
-        let image = cache.get(&GpuKey::Capture).filter(|_| capture);
+        let image = fallback.as_ref().and_then(|key| cache.get(key));
         // Scaled to fill the output, which follows the canvas, not the display.
         let items: Vec<Item<'_>> = image
             .into_iter()
@@ -1220,9 +1303,9 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        CaptureFrame, CaptureImage, FIRST_RETRY, Frame, GpuKey, LiveParams, MAX_NESTING, MAX_RETRY,
-        OpenBackoff, Placed, Shot, SourceFrameError, SourceRef, base64, compose, decode_base64,
-        decode_png, draw, encode_png, fit, is_no_adapter, schedule,
+        CaptureFrame, CaptureImage, Captures, FIRST_RETRY, Frame, GpuKey, LiveParams, MAX_NESTING,
+        MAX_RETRY, OpenBackoff, Placed, Shot, SourceFrameError, SourceRef, base64, captures,
+        compose, decode_base64, decode_png, draw, encode_png, fit, is_no_adapter, schedule,
     };
     use jstream_media::FrameSize;
     use jstream_protocol::{
@@ -1231,7 +1314,9 @@ pub(crate) mod tests {
     use jstream_render::{
         Compositor, Crop, LegacyTransform, OpenOptions, Placement, ResourceCache,
     };
+    use jstream_sources::CaptureSpec;
     use std::collections::BTreeMap;
+    use std::collections::BTreeSet;
     use std::io::Write;
     use std::time::{Duration, Instant};
 
@@ -1293,12 +1378,22 @@ pub(crate) mod tests {
             .keys()
             .map(|id| (GpuKey::Frame(id.clone()), id.clone()))
             .collect();
-        shot.uses_capture = shot
-            .passes
-            .iter()
-            .flat_map(|pass| &pass.layers)
-            .any(|layer| layer.image == GpuKey::Capture);
+        shot.captures = captures(&shot.passes);
         shot
+    }
+
+    /// What the primary display shows in these tests.
+    fn primary() -> SourceRef {
+        SourceRef::Capture(CaptureSpec::Display(None))
+    }
+
+    /// Every capture shows `frame`.
+    struct Every<'a>(Option<CaptureFrame<'a>>);
+
+    impl Captures for Every<'_> {
+        fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+            self.0
+        }
     }
 
     /// One program scene filled with red: a shot that differs from an empty one.
@@ -1567,6 +1662,15 @@ pub(crate) mod tests {
         }
     }
 
+    /// IEC 61966-2-1 encode, as the output applies it.
+    fn linear_to_srgb(c: f32) -> f32 {
+        if c <= 0.003_130_8 {
+            12.92 * c
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        }
+    }
+
     /// One frame of `shot` at `size`, read back, as the render thread draws it.
     fn frame_at(
         compositor: &mut Compositor,
@@ -1595,7 +1699,9 @@ pub(crate) mod tests {
         size: FrameSize,
     ) -> jstream_render::Snapshot {
         cache.begin_frame();
-        let output = compose(compositor, cache, shot, live, capture, size, true).expect("compose");
+        let captures = Every(capture.copied());
+        let output =
+            compose(compositor, cache, shot, live, &captures, size, true).expect("compose");
         drop(cache.end_frame(compositor));
         output.pixels().expect("invariant: read back").clone()
     }
@@ -1689,9 +1795,12 @@ pub(crate) mod tests {
         });
         let display = shot(vec![(
             "program",
-            vec![fill("red"), placed(SourceRef::Capture, half)],
+            vec![fill("red"), placed(primary(), half)],
         )]);
-        assert!(display.uses_capture);
+        assert_eq!(
+            display.captures,
+            BTreeSet::from([CaptureSpec::Display(None)])
+        );
         let out = frame_at(&mut compositor, &mut cache, &display, Some(&capture), size);
         assert_eq!(
             out.pixel(4, 9),
@@ -1790,7 +1899,7 @@ pub(crate) mod tests {
         });
         let display = shot(vec![(
             "program",
-            vec![fill("red"), placed(SourceRef::Capture, half)],
+            vec![fill("red"), placed(primary(), half)],
         )]);
         let out = frame_at(&mut compositor, &mut cache, &display, Some(&capture), size);
         assert_eq!(
@@ -1799,6 +1908,109 @@ pub(crate) mod tests {
             "the capture on the left"
         );
         assert_eq!(out.pixel(28, 9), Some(RED), "red on the right");
+    }
+
+    /// A live source's GPU frame (a browser page) is sampled as premultiplied sRGB by a
+    /// compositor on its context, and draws nothing in one with a device of its own, such
+    /// as `video.snapshot`'s, even where wgpu's device IDs coincide.
+    #[test]
+    fn a_gpu_source_frame_draws_only_on_its_own_context() {
+        use jstream_media::{ColorInfo, MediaTime, PixelFormat, Timebase, VideoFrameInfo};
+        use jstream_platform::{AdapterId, FrameSync, GpuContext, GpuFrame, PlatformError, wgpu};
+        use std::sync::Arc;
+
+        #[derive(Debug)]
+        struct Ready;
+        impl FrameSync for Ready {
+            fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+                Ok(())
+            }
+        }
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(device) = gpu() else { return };
+        let Some(mut other) = gpu() else { return };
+        let context = GpuContext::new(
+            device.adapter().clone(),
+            device.device().clone(),
+            device.queue().clone(),
+            AdapterId {
+                luid: None,
+                vendor: 0,
+            },
+            None,
+        );
+        let mut own = Compositor::on_context(&context);
+        let extent = wgpu::Extent3d {
+            width: 16,
+            height: 9,
+            depth_or_array_layers: 1,
+        };
+        let texture = own.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-core-test-page"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        // Red at alpha 128, premultiplied in code values, in BGRA order.
+        let page: Vec<u8> = std::iter::repeat_n([0, 0, 128, 128], 16 * 9)
+            .flatten()
+            .collect();
+        own.queue().write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &page,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(16 * 4),
+                rows_per_image: Some(9),
+            },
+            extent,
+        );
+        let frame = GpuFrame::new(
+            texture,
+            VideoFrameInfo {
+                size: FrameSize::new(16, 9).expect("invariant: non-zero"),
+                format: PixelFormat::Bgra8,
+                color: ColorInfo::default(),
+                pts: MediaTime::zero(Timebase::NANOS),
+            },
+            Arc::new(Ready),
+        );
+        let mut page_shot = shot(vec![("program", vec![fill("green"), fill("page")])]);
+        let page_id = SourceId::new("page");
+        page_shot
+            .frames
+            .insert(page_id.clone(), Frame::from_gpu(frame, context.key(), 7));
+        page_shot
+            .uploads
+            .push((GpuKey::Frame(page_id.clone()), page_id));
+        let canvas = page_shot.canvas().expect("canvas");
+
+        // Half the page's red over half the green, in linear light.
+        let mut cache = ResourceCache::new();
+        let out = frame_at(&mut own, &mut cache, &page_shot, None, canvas);
+        let half = (linear_to_srgb(128.0 / 255.0) * 255.0).round() as u8;
+        let rest = (linear_to_srgb(1.0 - 128.0 / 255.0) * 255.0).round() as u8;
+        let [r, g, b, a] = out.pixel(960, 540).expect("inside");
+        assert!(
+            r.abs_diff(half) <= 2 && g.abs_diff(rest) <= 2 && b == 0 && a == 255,
+            "{:?}, expected about {:?}",
+            [r, g, b, a],
+            [half, rest, 0, 255]
+        );
+
+        let mut cache = ResourceCache::new();
+        let out = frame_at(&mut other, &mut cache, &page_shot, None, canvas);
+        assert_eq!(out.pixel(960, 540), Some(GREEN), "the page draws nothing");
     }
 
     /// Frame after frame of the same shot reuses every texture: the nested-scene layers

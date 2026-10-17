@@ -74,7 +74,8 @@ pub use preview::{
     PreviewCodec, PreviewSettings, StreamKind,
 };
 pub use query::{
-    DeleteTarget, DeviceInfo, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo,
+    CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, ItemInfo, PixelSize, Query,
+    QueryResult, SceneInfo, SceneSummary, SourceInfo,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
