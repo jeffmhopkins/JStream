@@ -3327,7 +3327,7 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:17f96763b6619765", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
+stamp = { hash = "b3:070576f4308dd77d", by = "agent:a2656", note = "Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs makes call, first, non_empty and u64_or_string crate-visible (main already has all but first so); lib.rs doc names stats. Review B1: re-read the ChatRate sentence against per_minute: the oldest poll in the window is its start, the rate is the later polls' messages over oldest..newest, None until two polls; the wave merge (MAC1 #570, #583) touched nothing here" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:a085b9a5e185315c", by = "agent:claude", note = "Re-read Purpose after jstream-platform's Purpose gained the shared mailbox and nv12 helpers: this crate uses jstream-platform only for Secret, which is unchanged; the text still holds." }
@@ -3383,6 +3383,12 @@ stamp = { hash = "b3:d388d0682e80ff41" }
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/token_refresh.json"]
 stamp = { hash = "b3:8b26b2ef26103774" }
 
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/video_stats_ended.json"]
+stamp = { hash = "b3:434cfdafb415d3cd", by = "agent:claude-y4-stats", note = "Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs only makes call, first, non_empty and u64_or_string crate-visible, as main's chat does; lib.rs doc names stats" }
+
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/video_stats_live.json"]
+stamp = { hash = "b3:b299ae4697371109", by = "agent:claude-y4-stats", note = "Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs only makes call, first, non_empty and u64_or_string crate-visible, as main's chat does; lib.rs doc names stats" }
+
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/error.rs"]
 stamp = { hash = "b3:fe66665249d71144", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
 
@@ -3399,10 +3405,10 @@ stamp = { hash = "b3:a1b77e31232697af" }
 stamp = { hash = "b3:2a7db87174f1fd6d" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/lib.rs"]
-stamp = { hash = "b3:d6e76127c1f0fc8c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
+stamp = { hash = "b3:c26bce24db585ab8", by = "agent:claude-y4-stats", note = "Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs only makes call, first, non_empty and u64_or_string crate-visible, as main's chat does; lib.rs doc names stats" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live.rs"]
-stamp = { hash = "b3:a973aec7a81ebb2d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
+stamp = { hash = "b3:3af712d98f1a10fb", by = "agent:claude-y4-stats", note = "Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs only makes call, first, non_empty and u64_or_string crate-visible, as main's chat does; lib.rs doc names stats" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live/tests.rs"]
 stamp = { hash = "b3:df2bf7557aa2b67d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
@@ -3418,6 +3424,12 @@ stamp = { hash = "b3:a842476030f67423", by = "agent:claude@session_016BkTSqJ3kAf
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth/tests.rs"]
 stamp = { hash = "b3:b593d1da7528ba61" }
+
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/stats.rs"]
+stamp = { hash = "b3:d4c9b1ac21975967", by = "agent:a2656", note = "Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs makes call, first, non_empty and u64_or_string crate-visible (main already has all but first so); lib.rs doc names stats. Review B1: re-read the ChatRate sentence against per_minute: the oldest poll in the window is its start, the rate is the later polls' messages over oldest..newest, None until two polls; the wave merge (MAC1 #570, #583) touched nothing here" }
+
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/stats/tests.rs"]
+stamp = { hash = "b3:d3e0276005fba3f9", by = "agent:a2656", note = "Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs makes call, first, non_empty and u64_or_string crate-visible (main already has all but first so); lib.rs doc names stats. Review B1: re-read the ChatRate sentence against per_minute: the oldest poll in the window is its start, the rate is the later polls' messages over oldest..newest, None until two polls; the wave merge (MAC1 #570, #583) touched nothing here" }
 
 ["DOCS#bootstrap"."body"]
 stamp = { hash = "b3:bd834bf854c77d39", by = "agent:wave-owner", note = "merge-main bullet now says it lists stale sections with the notes the branch wrote on each, which merge.rs branch_notes and the mod.rs output do; the other bullets are unchanged by this PR" }
