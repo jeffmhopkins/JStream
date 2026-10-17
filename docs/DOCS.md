@@ -677,7 +677,7 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
   lines) among its leading inner attributes: only whitespace, comments and other inner
   attributes may come before it. One inside a comment or later in the file doesn't count.
 - **Native code** ([R-DEP-002](RULES.md#R-DEP-002),
-  [ADR-0031](adr/0031-source-types-and-decoding-scope.md)): every resolved package, members or
+  [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): every resolved package, members or
   not, that has a `links =` key or whose build script compiles C must be on the
   native-code allowlist, with any feature that entry requires enabled. "Compiles C" is a
   heuristic: a build-dependency on `cc`, `cmake`, `autotools` or `nasm-rs`, or on a build

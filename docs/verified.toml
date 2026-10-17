@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:2bb9701cd233b9c9", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "jstream-platform-linux row names ADR-0060 (the edit ADR-0060 lists for acceptance) and the jstream-meta summary reads 'First part of ADR-0060'; layer 2, unsafe yes still match. The wave/m3-2 merge added the jstream-plugin-wasm (WA1) row and E3d's NV12 wording, which this branch doesn't touch; holds" }
+stamp = { hash = "b3:d014feb2720169cc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "The jstream-sources row links ADR-0061 instead of the superseded ADR-0031, and the jstream-platform-linux row names ADR-0060, ADR-0061 and the OpenH264 loader, as ADR-0061's acceptance edits list. The wave/m3-2 merge added the WA1 jstream-plugin-wasm row and E3d's wording; neither cites ADR-0031; holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -93,7 +93,7 @@ stamp = { hash = "b3:45a0daff6f397ade" }
 stamp = { hash = "b3:419939266a782736" }
 
 ["ARCH#crate-map"."file:crates/jstream-sources/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:5874b1d8a3880e50", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the platform row lists wave/m2's MediaDecoders (media files) with main's paths (P1); jstream-sources' jstream-meta summary is main's (YouTube chat cites ADR-0058) and it now depends on both jstream-platform (media decoders, GPU frames, audio, with its fake for tests) and main's jstream-browser (L3, below sources' L4); main's jstream-browser, outputs and apps rows stand; lint-deps passes; holds" }
+stamp = { hash = "b3:e7791416ab01038a", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Re-read the crate map: the jstream-sources row links ADR-0061 instead of the superseded ADR-0031, and the jstream-platform-linux row names ADR-0060, ADR-0061 and the OpenH264 loader as ADR-0061's acceptance edits list" }
 
 ["ARCH#crate-map"."file:crates/jstream-types/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e7dbb93ef26bf6b8" }
@@ -311,8 +311,8 @@ stamp = { hash = "b3:7a1c016d1f87fdaf" }
 ["ARCH#principles"."dep:docs/adr/0013-command-model.md"]
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
-["ARCH#principles"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
+["ARCH#principles"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["ARCH#protocol"."body"]
 stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: wave/m2's #460 bus references (delete.plan with a bus target, bus.delete blockers) stay at 0.24, matching version.rs, now beside main's 0.20 preview, 0.21 pairing, 0.22 opacity/blend/filter chains and 0.23 YouTube bullets; the merged protocol, control mock and server sources and both snapshots match; holds" }
@@ -1032,7 +1032,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:4f3a0d6c2b139c4f", by = "agent:claude-e3d", note = "Drop counts table now lists the encode ring as a render-thread source of encode_frames (review B3), next to the session input drops; render thread paragraph still holds" }
+stamp = { hash = "b3:66b28773c491abf0", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Its ADR-0031 citations moved to ADR-0061, which restates the same source list and decoding scope. The wave/m3-2 merge's E3d/WA1 changes add nothing that cites ADR-0031; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1050,7 +1050,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:54c6a146ed093984", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
+stamp = { hash = "b3:6f6cfdae24c3cc40", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -1311,7 +1311,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:c65c43538952c785", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:4f3a0d6c2b139c4f", by = "agent:claude-e3d", note = "Re-read: no drop-count or encode-path text; the core Design change (drop table row) doesn't affect it" }
+stamp = { hash = "b3:66b28773c491abf0", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Upstream changed only by moving ADR-0031 citations to ADR-0061 and the crate map's Linux row; the wave/m3-2 merge (E3d NV12, WA1) changed nothing this section relies on about ADR-0031; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
@@ -1553,8 +1553,8 @@ stamp = { hash = "b3:5624f57eaa7a6f32" }
 ["CRATE-jstream-encode#design"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
 
-["CRATE-jstream-encode#design"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
+["CRATE-jstream-encode#design"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/audio.rs"]
 stamp = { hash = "b3:79b9830d47ed6557" }
@@ -1569,7 +1569,7 @@ stamp = { hash = "b3:876cc2224e1406f8" }
 stamp = { hash = "b3:3e1983696eb83d1b", by = "agent:claude", note = "gpu_tests.rs changed only its module doc (review N3): it now says a machine with no wgpu adapter skips the tests except on CI, where that fails, matching context()'s assert and this README's test sentence; no code change" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/lib.rs"]
-stamp = { hash = "b3:dca502d9616aae14" }
+stamp = { hash = "b3:dd38220563436bba", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/registry.rs"]
 stamp = { hash = "b3:6a8de9fcad8ead85" }
@@ -1608,7 +1608,7 @@ stamp = { hash = "b3:876cc2224e1406f8" }
 stamp = { hash = "b3:3e1983696eb83d1b", by = "agent:claude", note = "gpu_tests.rs changed only its module doc (review N3): it now says a machine with no wgpu adapter skips the tests except on CI, where that fails, matching context()'s assert and this README's test sentence; no code change" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/lib.rs"]
-stamp = { hash = "b3:dca502d9616aae14" }
+stamp = { hash = "b3:dd38220563436bba", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/registry.rs"]
 stamp = { hash = "b3:6a8de9fcad8ead85" }
@@ -1755,7 +1755,7 @@ stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
 
 ["CRATE-jstream-media#purpose"."body"]
-stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
+stamp = { hash = "b3:f8fe3ef93a3c141d", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-media#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-media"]
 stamp = { hash = "b3:18137b74917731cc" }
@@ -1763,8 +1763,8 @@ stamp = { hash = "b3:18137b74917731cc" }
 ["CRATE-jstream-media#purpose"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
 
-["CRATE-jstream-media#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
+["CRATE-jstream-media#purpose"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/audio.rs"]
 stamp = { hash = "b3:836135152fc57087" }
@@ -1776,10 +1776,10 @@ stamp = { hash = "b3:ce0438eb1859e6fe" }
 stamp = { hash = "b3:1d2c5fbae960d299" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/lib.rs"]
-stamp = { hash = "b3:92a44864b9ef193c" }
+stamp = { hash = "b3:ced8ddd1ca9544ea", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/packet.rs"]
-stamp = { hash = "b3:97729555b0f8a007", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
+stamp = { hash = "b3:70da58b2c743de11", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/pixel.rs"]
 stamp = { hash = "b3:12eb4553ad7e5ab1" }
@@ -1791,19 +1791,19 @@ stamp = { hash = "b3:3969b618c2c6f598" }
 stamp = { hash = "b3:d6dfe064425156bb" }
 
 ["CRATE-jstream-mux#purpose"."body"]
-stamp = { hash = "b3:cbb80fd75d23f43c", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
+stamp = { hash = "b3:7e36816e2f28eaf7", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-mux#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
+stamp = { hash = "b3:f8fe3ef93a3c141d", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-mux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mux"]
 stamp = { hash = "b3:cc699c75167f9edd" }
 
-["CRATE-jstream-mux#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
-
 ["CRATE-jstream-mux#purpose"."dep:docs/adr/0058-youtube-sign-in-with-a-jstream-client.md"]
 stamp = { hash = "b3:32c488609c43c2cd", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
+
+["CRATE-jstream-mux#purpose"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-mux#purpose"."file:crates/jstream-mux/Cargo.toml"]
 stamp = { hash = "b3:1474bbecc72bdf29" }
@@ -1836,10 +1836,10 @@ stamp = { hash = "b3:655a50861b8f8ac2" }
 stamp = { hash = "b3:db7b56b6ec192456" }
 
 ["CRATE-jstream-mux#purpose"."file:crates/jstream-mux/src/lib.rs"]
-stamp = { hash = "b3:7bd3744aad4f0944", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
+stamp = { hash = "b3:2da02999f5e0abf4", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:5826946faa72f5b2", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube; the generic RTMPS output stays agent-controllable under ADR-0058 §3" }
+stamp = { hash = "b3:6d2bf247d685c45f", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:13fabd34e2ef41ff", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose still holds against the reworded crate-map row: it says the Output trait comes later and lists jstream-media and jstream-mux as its JStream dependencies, matching the row" }
@@ -1847,14 +1847,14 @@ stamp = { hash = "b3:13fabd34e2ef41ff", by = "agent:claude@session_01K4N6DrL8C1K
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 (#320 only adds the jstream-outputs crate-map row; merge-main took wave stamps that predate this PR): stale via ARCH#threading's Preview row only (not a real-time thread); section text is main's; holds" }
 
-["CRATE-jstream-outputs#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
-
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0058-youtube-sign-in-with-a-jstream-client.md"]
 stamp = { hash = "b3:32c488609c43c2cd", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube; the generic RTMPS output stays agent-controllable under ADR-0058 §3" }
 
+["CRATE-jstream-outputs#purpose"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
+
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/lib.rs"]
-stamp = { hash = "b3:e98223c05e9c91ba", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube; the generic RTMPS output stays agent-controllable under ADR-0058 §3" }
+stamp = { hash = "b3:9a4b83c9a373a977", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/record/error.rs"]
 stamp = { hash = "b3:5576f34b8fef4acc" }
@@ -1908,7 +1908,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:48aac723c0fe210f", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:2bb9701cd233b9c9", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "The crate map changed only in the Linux row's ADR wording and, from the wave/m3-2 merge, the WA1 plugin-wasm row; gpu-frames says nothing about either; holds" }
+stamp = { hash = "b3:d014feb2720169cc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Upstream changed only by moving ADR-0031 citations to ADR-0061 and the crate map's Linux row; the wave/m3-2 merge (E3d NV12, WA1) changed nothing this section relies on about ADR-0031; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:bb9d34d698b4cea6", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
@@ -1920,10 +1920,10 @@ stamp = { hash = "b3:c66590fe31f34aee", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:1bd5aa9423b56b1b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list carries wave/m2's MediaDecoders (media_file.rs: MediaDecoderConfig, MediaInfo, next_video/next_audio, seek, file timeline), its media field in Backends and FakeMediaDecoders, beside main's FrameSync::platform, Capture and Codecs on_context, paths::data_dir (P1) and the GPU-frame not-yet list; matches lib.rs, backends.rs, media_file.rs, fake.rs and the crate-map row (MediaDecoders and paths); holds" }
+stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes; OAuthTokenStore still holds the Google refresh token" }
+stamp = { hash = "b3:f8fe3ef93a3c141d", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
 stamp = { hash = "b3:6d917570e0138a14", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list carries wave/m2's MediaDecoders (media_file.rs: MediaDecoderConfig, MediaInfo, next_video/next_audio, seek, file timeline), its media field in Backends and FakeMediaDecoders, beside main's FrameSync::platform, Capture and Codecs on_context, paths::data_dir (P1) and the GPU-frame not-yet list; matches lib.rs, backends.rs, media_file.rs, fake.rs and the crate-map row (MediaDecoders and paths); holds" }
@@ -1940,8 +1940,8 @@ stamp = { hash = "b3:68451099d1cf8c6d" }
 ["CRATE-jstream-platform#purpose"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
 
-["CRATE-jstream-platform#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
+["CRATE-jstream-platform#purpose"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/Cargo.toml"]
 stamp = { hash = "b3:4b200778c1e4db39", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
@@ -1959,7 +1959,7 @@ stamp = { hash = "b3:d0428542e93b8a89", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:34c4d1c416af47c3" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/codec.rs"]
-stamp = { hash = "b3:64d00588cf8e082d" }
+stamp = { hash = "b3:3b74685223cb5502", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/error.rs"]
 stamp = { hash = "b3:7d8f9a5250232107" }
@@ -1977,10 +1977,10 @@ stamp = { hash = "b3:8019c83df5cad30a" }
 stamp = { hash = "b3:5e9dc58061f8fffa" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/lib.rs"]
-stamp = { hash = "b3:572ce5b47bfe6860", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list carries wave/m2's MediaDecoders (media_file.rs: MediaDecoderConfig, MediaInfo, next_video/next_audio, seek, file timeline), its media field in Backends and FakeMediaDecoders, beside main's FrameSync::platform, Capture and Codecs on_context, paths::data_dir (P1) and the GPU-frame not-yet list; matches lib.rs, backends.rs, media_file.rs, fake.rs and the crate-map row (MediaDecoders and paths); holds" }
+stamp = { hash = "b3:0211520aa8e81faf", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/media_file.rs"]
-stamp = { hash = "b3:3ea7c5d5a47b138c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list carries wave/m2's MediaDecoders (media_file.rs: MediaDecoderConfig, MediaInfo, next_video/next_audio, seek, file timeline), its media field in Backends and FakeMediaDecoders, beside main's FrameSync::platform, Capture and Codecs on_context, paths::data_dir (P1) and the GPU-frame not-yet list; matches lib.rs, backends.rs, media_file.rs, fake.rs and the crate-map row (MediaDecoders and paths); holds" }
+stamp = { hash = "b3:b673b4e627733995", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/paths.rs"]
 stamp = { hash = "b3:3a503eff8a85882d", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
@@ -1995,7 +1995,7 @@ stamp = { hash = "b3:744085bdb3e7b372", by = "agent:claude@session_01Hc59N2dDiDB
 stamp = { hash = "b3:29fcc9029fafe17d" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/video_device.rs"]
-stamp = { hash = "b3:191ac01e6ea05888" }
+stamp = { hash = "b3:7b2e9b7e7b944c2b", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-linux#purpose"."body"]
 stamp = { hash = "b3:e18bb75c26f9300a", by = "agent:find-idle-work", note = "ADR-0060's questions are answered (§questions): encoder text now says no software H.264 until the OpenH264 download lands and no AAC until the Rust AAC-LC encoder; no-driver case is MissingComponent with distro packages per §6, matching choose_encoder and its test; follow-up list adds ALSA fallback (§4/§8) and the restore token (§3); 'Draft' gone from src docs and the manifest; holds" }
@@ -2049,10 +2049,10 @@ stamp = { hash = "b3:b165e9acd59eb68b", by = "agent:l1-builder", note = "New sec
 stamp = { hash = "b3:049ea2f4a8c9089f", by = "agent:find-idle-work", note = "ADR-0060's questions are answered (§questions): encoder text now says no software H.264 until the OpenH264 download lands and no AAC until the Rust AAC-LC encoder; no-driver case is MissingComponent with distro packages per §6, matching choose_encoder and its test; follow-up list adds ALSA fallback (§4/§8) and the restore token (§3); 'Draft' gone from src docs and the manifest; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:7218055676be610a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the purpose now has wave/m2's MfMediaDecoders bullet (opening, RGB32 frames with the aperture crop, float audio with the gapless.rs cut, seeking, MfStarted threads), its delay-load DLLs and helper tests beside main's GPU capture through Capture::on_context, the H.264 CPU path from NV12/RGBA/BGRA and E3c's GPU path through Codecs::on_context with the release fence; edited the tests to name the gapless helper tests and the audio media-file test (media_file_decodes_audio_in_order_and_seeks_it), and the not-yet line to say the missing decoders are MfCodecs' packet-level ones, since media files now decode; jstream-platform's purpose dep re-read; holds" }
+stamp = { hash = "b3:07f2285ab0aa30d5", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:1bd5aa9423b56b1b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the purpose now has wave/m2's MfMediaDecoders bullet (opening, RGB32 frames with the aperture crop, float audio with the gapless.rs cut, seeking, MfStarted threads), its delay-load DLLs and helper tests beside main's GPU capture through Capture::on_context, the H.264 CPU path from NV12/RGBA/BGRA and E3c's GPU path through Codecs::on_context with the release fence; edited the tests to name the gapless helper tests and the audio media-file test (media_file_decodes_audio_in_order_and_seeks_it), and the not-yet line to say the missing decoders are MfCodecs' packet-level ones, since media files now decode; jstream-platform's purpose dep re-read; holds" }
+stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:43948c5058fe4611", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
@@ -2072,8 +2072,8 @@ stamp = { hash = "b3:68451099d1cf8c6d" }
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
 
-["CRATE-jstream-platform-windows#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
+["CRATE-jstream-platform-windows#purpose"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/audio/device.rs"]
 stamp = { hash = "b3:6e50e93d4063133d" }
@@ -2118,13 +2118,13 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:ed934317c2576158", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: rewrote the CPU path bullet for both sides: the CPU encoder takes NV12, RGBA or BGRA (main's #425 Nv12Packer, now Input::Cpu in h264.rs) beside E3c's GPU path through Codecs::on_context, which still takes only NV12 encode targets; codec/mod.rs's doc says the same; the tests line names both; holds" }
+stamp = { hash = "b3:e346334e0b9b18c6", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
 stamp = { hash = "b3:b132c98638f816bf" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mod.rs"]
-stamp = { hash = "b3:2ce2daeb81aabf91", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: rewrote the CPU path bullet for both sides: the CPU encoder takes NV12, RGBA or BGRA (main's #425 Nv12Packer, now Input::Cpu in h264.rs) beside E3c's GPU path through Codecs::on_context, which still takes only NV12 encode targets; codec/mod.rs's doc says the same; the tests line names both; holds" }
+stamp = { hash = "b3:deec569feb4fdf9f", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/com.rs"]
 stamp = { hash = "b3:c237392a0b5423fa" }
@@ -2139,7 +2139,7 @@ stamp = { hash = "b3:8330b0ef94f35307", by = "agent:claude@session_01Hc59N2dDiDB
 stamp = { hash = "b3:62222074ee38824f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read MfMediaDecoders: audio bullet now describes gapless.rs (encoder delay/padding attributes, AAC 1024 fallback, MF_PD_DURATION cut, frame-counted pts, held last block reset by seeks); seeking and threads bullets still hold" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/decode/mod.rs"]
-stamp = { hash = "b3:01c7a634bd767ac8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read MfMediaDecoders: audio bullet now describes gapless.rs (encoder delay/padding attributes, AAC 1024 fallback, MF_PD_DURATION cut, frame-counted pts, held last block reset by seeks); seeking and threads bullets still hold" }
+stamp = { hash = "b3:572d9c0f7b86d049", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/decode/reader.rs"]
 stamp = { hash = "b3:c476550ab074d9a7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read MfMediaDecoders: audio bullet now describes gapless.rs (encoder delay/padding attributes, AAC 1024 fallback, MF_PD_DURATION cut, frame-counted pts, held last block reset by seeks); seeking and threads bullets still hold" }
@@ -2157,10 +2157,10 @@ stamp = { hash = "b3:a962082ddbf74417" }
 stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
-stamp = { hash = "b3:a83d3efc2c9e8f84", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: body adds the MfMediaDecoders bullet (opening via MFCreateSourceReaderFromURL without the verbatim prefix, hardware preference, RGB32 to RGBA/BGRA through Lock2D with the aperture crop, 100 ns pts, seeking, MfStarted threading, not yet audio or GPU frames), its delay-load DLLs, the cross-platform helper tests and the JSTREAM_TEST_MEDIA hardware tests. decode/mod.rs: MfMediaDecoders' module and its hardware tests (media_file_decodes_frames_in_order_and_seeks, media_file_errors_name_what_is_wrong). decode/reader.rs: open, create_reader, select_video, shape, aperture, frame_period, has_audio, duration, next_video, seek, frame. decode/convert.rs: row conversion, crop, sizes, times and the path prefix, with tests. lib.rs: crate doc names MfMediaDecoders, mod decode, pub use decode::MfMediaDecoders. video_device/mod.rs: source becomes pub(crate) so the reader shares MfStarted. Dep platform#purpose gains the MediaDecoders trait it implements; holds" }
+stamp = { hash = "b3:1ae67eaf9e47fcd0", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/n_edition.rs"]
-stamp = { hash = "b3:ede57dd335c2eec0" }
+stamp = { hash = "b3:11b717f6863c23f7", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/format.rs"]
 stamp = { hash = "b3:04540a625ddb78d5" }
@@ -2184,7 +2184,7 @@ stamp = { hash = "b3:ac51705cb1f0f5e1" }
 stamp = { hash = "b3:e3cbc2c9fd67c624" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/video_device/mjpeg.rs"]
-stamp = { hash = "b3:0c32961c446a2304" }
+stamp = { hash = "b3:33542b2329146d77", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/video_device/mod.rs"]
 stamp = { hash = "b3:2c7ad27069e09472", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: body adds the MfMediaDecoders bullet (opening via MFCreateSourceReaderFromURL without the verbatim prefix, hardware preference, RGB32 to RGBA/BGRA through Lock2D with the aperture crop, 100 ns pts, seeking, MfStarted threading, not yet audio or GPU frames), its delay-load DLLs, the cross-platform helper tests and the JSTREAM_TEST_MEDIA hardware tests. decode/mod.rs: MfMediaDecoders' module and its hardware tests (media_file_decodes_frames_in_order_and_seeks, media_file_errors_name_what_is_wrong). decode/reader.rs: open, create_reader, select_video, shape, aperture, frame_period, has_audio, duration, next_video, seek, frame. decode/convert.rs: row conversion, crop, sizes, times and the path prefix, with tests. lib.rs: crate doc names MfMediaDecoders, mod decode, pub use decode::MfMediaDecoders. video_device/mod.rs: source becomes pub(crate) so the reader shares MfStarted. Dep platform#purpose gains the MediaDecoders trait it implements; holds" }
@@ -2679,16 +2679,16 @@ stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "Pairing: Co
 stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:1af049c182e0afb7", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's audio_source setting, AudioScopes source/retain_sources/sources and drawn_source (scope/mod.rs), and its tests (scope/tests.rs, scope_no_alloc.rs) beside main's browser and youtube_chat kinds, SourceAudio/gpu_frame/opens_browser and Source::sound (MediaAudio) vs Source::audio (pages; only browser.rs overrides it). Edited: removed 'Neither draws a single source yet: that needs a per-input tap in the mixer', which #466 made false; removed a merge-artifact blank line inside lib.rs's //! crate doc. Not run here: cargo test." }
+stamp = { hash = "b3:bd84b988660eff01", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
-stamp = { hash = "b3:9c0564dcd6f7ef05", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes" }
+stamp = { hash = "b3:0bb97280a0b3ee27", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
 
-["CRATE-jstream-sources#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
+["CRATE-jstream-sources#purpose"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/audio.rs"]
 stamp = { hash = "b3:234830343d1d1b94" }
@@ -2706,28 +2706,28 @@ stamp = { hash = "b3:dff9e5be4eae844b", by = "agent:claude@session_01Hc59N2dDiDB
 stamp = { hash = "b3:a5c00ee833693bba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the seams now name both sound paths as source.rs has them: wave/m2's media-file sound renamed Source::sound (Option<MediaAudio>, mixed while the program shows the source) and main's Source::audio (Option<Arc<dyn SourceAudio>>, a browser page's own audio) with gpu_frame and opens_browser; Context carries wave/m2's media decoders and AudioScopes beside main's BrowserBackend; the kinds list has wave/m2's media, waveform and spectrum (bus references, #362) beside main's browser and youtube_chat; dependencies and tests (media.rs, scope_no_alloc.rs, browser.rs, youtube_chat.rs) match the merged crate; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/image/decode.rs"]
-stamp = { hash = "b3:6ae3f673fe0d6d0b" }
+stamp = { hash = "b3:624c3c3d9ebe0493", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/image/mod.rs"]
 stamp = { hash = "b3:c4299f8d4d3cdecb" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/lib.rs"]
-stamp = { hash = "b3:142ca195ca8892af", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's audio_source setting, AudioScopes source/retain_sources/sources and drawn_source (scope/mod.rs), and its tests (scope/tests.rs, scope_no_alloc.rs) beside main's browser and youtube_chat kinds, SourceAudio/gpu_frame/opens_browser and Source::sound (MediaAudio) vs Source::audio (pages; only browser.rs overrides it). Edited: removed 'Neither draws a single source yet: that needs a per-input tap in the mixer', which #466 made false; removed a merge-artifact blank line inside lib.rs's //! crate doc. Not run here: cargo test." }
+stamp = { hash = "b3:9c25fec921eebee3", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/audio.rs"]
 stamp = { hash = "b3:d38089f7c063f4c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the seams now name both sound paths as source.rs has them: wave/m2's media-file sound renamed Source::sound (Option<MediaAudio>, mixed while the program shows the source) and main's Source::audio (Option<Arc<dyn SourceAudio>>, a browser page's own audio) with gpu_frame and opens_browser; Context carries wave/m2's media decoders and AudioScopes beside main's BrowserBackend; the kinds list has wave/m2's media, waveform and spectrum (bus references, #362) beside main's browser and youtube_chat; dependencies and tests (media.rs, scope_no_alloc.rs, browser.rs, youtube_chat.rs) match the merged crate; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/mod.rs"]
-stamp = { hash = "b3:1c609dd4cc52c4b7", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the seams now name both sound paths as source.rs has them: wave/m2's media-file sound renamed Source::sound (Option<MediaAudio>, mixed while the program shows the source) and main's Source::audio (Option<Arc<dyn SourceAudio>>, a browser page's own audio) with gpu_frame and opens_browser; Context carries wave/m2's media decoders and AudioScopes beside main's BrowserBackend; the kinds list has wave/m2's media, waveform and spectrum (bus references, #362) beside main's browser and youtube_chat; dependencies and tests (media.rs, scope_no_alloc.rs, browser.rs, youtube_chat.rs) match the merged crate; holds" }
+stamp = { hash = "b3:432be88821c3307a", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/player.rs"]
 stamp = { hash = "b3:53a185fedda7b428", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the seams now name both sound paths as source.rs has them: wave/m2's media-file sound renamed Source::sound (Option<MediaAudio>, mixed while the program shows the source) and main's Source::audio (Option<Arc<dyn SourceAudio>>, a browser page's own audio) with gpu_frame and opens_browser; Context carries wave/m2's media decoders and AudioScopes beside main's BrowserBackend; the kinds list has wave/m2's media, waveform and spectrum (bus references, #362) beside main's browser and youtube_chat; dependencies and tests (media.rs, scope_no_alloc.rs, browser.rs, youtube_chat.rs) match the merged crate; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/registry.rs"]
-stamp = { hash = "b3:b527884eb59e80c0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the seams now name both sound paths as source.rs has them: wave/m2's media-file sound renamed Source::sound (Option<MediaAudio>, mixed while the program shows the source) and main's Source::audio (Option<Arc<dyn SourceAudio>>, a browser page's own audio) with gpu_frame and opens_browser; Context carries wave/m2's media decoders and AudioScopes beside main's BrowserBackend; the kinds list has wave/m2's media, waveform and spectrum (bus references, #362) beside main's browser and youtube_chat; dependencies and tests (media.rs, scope_no_alloc.rs, browser.rs, youtube_chat.rs) match the merged crate; holds" }
+stamp = { hash = "b3:fbd3113adb34e1d3", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/scope/mod.rs"]
-stamp = { hash = "b3:d501e2ea51a1bd27", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: waveform and spectrum gain an audio_source param (ParamType::Source{media: Audio}, null default, version stays 1) that overrides audio; scope/mod.rs adds AudioScopes::source/retain_sources/sources (shared Keyed map), Drawn and pub drawn_source (lib.rs re-export); tests in scope/tests.rs and scope_no_alloc.rs. Edited the AudioScopes bullet, the waveform/spectrum bullet (incl. why a second setting, per ADR-0025 kind versioning) and the test list. jstream-sources tests pass incl. scope_no_alloc." }
+stamp = { hash = "b3:090b1ea84a2b9a0b", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/scope/spectrum.rs"]
 stamp = { hash = "b3:1d2080b6b93491f5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: waveform and spectrum gain an audio_source param (ParamType::Source{media: Audio}, null default, version stays 1) that overrides audio; scope/mod.rs adds AudioScopes::source/retain_sources/sources (shared Keyed map), Drawn and pub drawn_source (lib.rs re-export); tests in scope/tests.rs and scope_no_alloc.rs. Edited the AudioScopes bullet, the waveform/spectrum bullet (incl. why a second setting, per ADR-0025 kind versioning) and the test list. jstream-sources tests pass incl. scope_no_alloc." }
@@ -2739,13 +2739,13 @@ stamp = { hash = "b3:12d477f7cbd212d3", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:6e8133bdee6d5a62", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: waveform and spectrum gain an audio_source param (ParamType::Source{media: Audio}, null default, version stays 1) that overrides audio; scope/mod.rs adds AudioScopes::source/retain_sources/sources (shared Keyed map), Drawn and pub drawn_source (lib.rs re-export); tests in scope/tests.rs and scope_no_alloc.rs. Edited the AudioScopes bullet, the waveform/spectrum bullet (incl. why a second setting, per ADR-0025 kind versioning) and the test list. jstream-sources tests pass incl. scope_no_alloc." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/source.rs"]
-stamp = { hash = "b3:1a72313df1bf2722", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the seams now name both sound paths as source.rs has them: wave/m2's media-file sound renamed Source::sound (Option<MediaAudio>, mixed while the program shows the source) and main's Source::audio (Option<Arc<dyn SourceAudio>>, a browser page's own audio) with gpu_frame and opens_browser; Context carries wave/m2's media decoders and AudioScopes beside main's BrowserBackend; the kinds list has wave/m2's media, waveform and spectrum (bus references, #362) beside main's browser and youtube_chat; dependencies and tests (media.rs, scope_no_alloc.rs, browser.rs, youtube_chat.rs) match the merged crate; holds" }
+stamp = { hash = "b3:3814ef88085430fc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/mod.rs"]
 stamp = { hash = "b3:34314ba6e93e9e21" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/raster.rs"]
-stamp = { hash = "b3:c3408e030cf73654" }
+stamp = { hash = "b3:f316c0033bf94d29", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/youtube_chat.rs"]
 stamp = { hash = "b3:1f7ea25589d1ce04", by = "agent:youtube-sign-in", note = "Re-read: the youtube_chat preset text (README and youtube_chat.rs module doc, from #375) cited 'ADR-0051, proposed'; ADR-0051 is now superseded and its §1 chat preset is kept by ADR-0058, so both now say 'ADR-0051 §1, kept by ADR-0058'; the preset needs no sign-in and stays a source agents can use; holds" }
@@ -3108,7 +3108,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:17f96763b6619765", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:1bd5aa9423b56b1b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale only via jstream-platform's purpose, which now lists wave/m2's MediaDecoders and FakeMediaDecoders beside main's paths and GPU seams; this crate still takes only Secret and the host's OAuthTokenStore from it, as written, and no youtube code changed; holds" }
+stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Re-read: the upstream section changed only by moving its ADR-0031 citations to ADR-0061 (or the crate-map Linux row); nothing this section states depends on that" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:311cefe9eebe1f9a", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
@@ -3234,7 +3234,7 @@ stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:7de442ed32252572", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1/N3 on #419: merge-main bullet still accurate; resolve_generated now accepts only adr-status, adr-index and progress blocks, and mod.rs says to run docs generate when the merge stays open" }
 
 ["DOCS#dependency-lint"."body"]
-stamp = { hash = "b3:416056ff5f5233ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }
+stamp = { hash = "b3:28d9c5f58cc97e13", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Re-read the lint-deps paragraph and lint_deps.rs messages: only the ADR citation moved from ADR-0031 to ADR-0061; the allowlist mechanics are unchanged and R-DEP-002's new OpenH264 exception adds no crate, since the binary is loaded at run time, not linked" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -3246,7 +3246,7 @@ stamp = { hash = "b3:b35ca6baf4367119" }
 stamp = { hash = "b3:92cb7243a7329a36" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-DEP-002"]
-stamp = { hash = "b3:5a4289040223e5dc" }
+stamp = { hash = "b3:223ae76229bc5ff2", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Re-read the lint-deps paragraph and lint_deps.rs messages: only the ADR citation moved from ADR-0031 to ADR-0061; the allowlist mechanics are unchanged and R-DEP-002's new OpenH264 exception adds no crate, since the binary is loaded at run time, not linked" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-DEP-003"]
 stamp = { hash = "b3:c6836c98530b7bf5" }
@@ -3255,7 +3255,7 @@ stamp = { hash = "b3:c6836c98530b7bf5" }
 stamp = { hash = "b3:8a62a8e5ce8558a7", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }
 
 ["DOCS#dependency-lint"."file:xtask/src/lint_deps.rs"]
-stamp = { hash = "b3:f205d4d9739b29a1", by = "agent:w1-builder", note = "lint_deps.rs only gains three NATIVE_ALLOWLIST entries (wasmtime, wasmtime-internal-fiber, wasmtime-internal-jit-debug); the checks, the allowlist mechanism and the default-features graph described here are unchanged" }
+stamp = { hash = "b3:3d37c44140ddaaba", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Only the ADR citation in the lint-deps paragraph and lint_deps.rs messages moved from ADR-0031 to ADR-0061; the allowlist mechanics are unchanged, and R-DEP-002's OpenH264 exception adds no crate. The wave/m3-2 merge (WA1's wasmtime) added no ADR-0031 citation; re-grepped, holds" }
 
 ["DOCS#governance"."body"]
 stamp = { hash = "b3:8351920c7315d119", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
@@ -3351,16 +3351,16 @@ stamp = { hash = "b3:eafcbe72ac465f3c" }
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["ROADMAP#m1"."body"]
-stamp = { hash = "b3:360ec790b7f94840", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; M1b's source-kinds bullet is ADR-0031's list (display, window, video capture device, image formats, color, text, audio inputs, browser) and still matches it" }
+stamp = { hash = "b3:248b0f0dac3a39ce", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["ROADMAP#m1"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
 
-["ROADMAP#m1"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
+["ROADMAP#m1"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["ROADMAP#m2"."body"]
-stamp = { hash = "b3:66add461f96cc3f3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: M2's first bullet now says Leptos is confirmed by ADR-0045 (which supersedes ADR-0002 and keeps its web-UI decision); depends_on moved to ADR-0045; rest of M2 unchanged" }
+stamp = { hash = "b3:b7f96cbcef62303b", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Re-read M2's source-kinds bullet and M3's Linux line: the ADR-0031 link moved to ADR-0061, and the Linux line now names ADR-0061's OpenH264 download and the Rust AAC-LC encoder gated on its patent-check ADR, matching ADR-0061's Decision" }
 
 ["ROADMAP#m2"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -3375,10 +3375,10 @@ stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale through ARCH#protocol, which carries main's 0.20 to 0.23 additions (preview, pairing, filters, YouTube) and the wave's 0.24 bus references; each is an addition under R-API-001's minor-bump rule, R-API-002 keeps the youtube exception ADR-0058 §3 requires, and the section names no specific version; holds" }
 
 ["RULES#dependencies"."body"]
-stamp = { hash = "b3:efd084f9966f6d2d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: R-DEP-007 now cites ADR-0056, which keeps the SHA-pinning rule (item 1) and Dependabot keeping pins current (item 2); other R-DEP rules untouched." }
+stamp = { hash = "b3:2a9ebfbaa98af88b", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Re-read R-DEP-002 against ADR-0061: the text after the allowlist sentence is ADR-0061's acceptance wording word for word (two media exceptions, CEF and Cisco's downloaded OpenH264 binary; openh264 crates stay banned; JStream's AAC-LC encoder is not a banned codec library), and the section's depends_on now names ADR-0061" }
 
-["RULES#dependencies"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
-stamp = { hash = "b3:04b853b872d31424" }
+["RULES#dependencies"."dep:docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Re-read R-DEP-002 against ADR-0061: the text after the allowlist sentence is ADR-0061's acceptance wording word for word (two media exceptions, CEF and Cisco's downloaded OpenH264 binary; openh264 crates stay banned; JStream's AAC-LC encoder is not a banned codec library), and the section's depends_on now names ADR-0061" }
 
 ["RULES#documentation"."body"]
 stamp = { hash = "b3:7e663fb4bee1ca49", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "DOCS#gate item 1 now names ledger stamps, inline stamps and ledger form; R-DOC-003 text updated to the per-input stamp; the other R-DOC rules don't depend on where stamps are stored" }

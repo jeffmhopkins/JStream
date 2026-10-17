@@ -12,10 +12,10 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**", "crates/jstream-mux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md", "crates/jstream-media/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md", "crates/jstream-media/README.md#purpose"]
 -->
 
-Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):
+Layer-2 pure-Rust container muxers ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md):
 muxers are written in Rust, no FFmpeg). It writes H.264 and AAC into **FLV**, the
 container M1a's RTMP(S) output sends to YouTube
 ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), along with HEVC and

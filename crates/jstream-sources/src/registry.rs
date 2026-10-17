@@ -20,7 +20,7 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
+    /// The built-in kinds (ADR-0061, docs/adr/0061-source-types-and-decoding-scope-v2.md).
     /// `browser`, `color`, `image`, `media`, `text`, `waveform`, `spectrum` and
     /// `youtube_chat` produce frames (`browser` and its `youtube_chat` preset through the
     /// injected backend, on the GPU). `audio_input`, `desktop_audio` and `app_audio` are

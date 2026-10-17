@@ -11,7 +11,7 @@
 //! engine falls back to the CPU path without one (step 6).
 //!
 //! Hardware encoders are tried first and the OS software encoder after them, as
-//! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0031).
+//! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0061).
 //! Hardware MFTs are usually asynchronous: they ask for input and announce output
 //! through events, which `poll` pumps.
 
