@@ -42,6 +42,10 @@ criterion = { version = "~0.7", default-features = false, features = ["cargo_ben
 # Lock-free bounded queues for the audio mixer's commands and the collector (R-RT-003).
 # A send on a bounded channel does not allocate. `std` is the only feature.
 crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
+# The capture backends' latest-frame mailbox (`jstream_platform::mailbox`, ARCH › Threads):
+# `AtomicCell`'s safe single-word swap, so the mailbox needs no `unsafe` in
+# `jstream-platform`. Already in the tree through `crossbeam-channel`; no dependencies.
+crossbeam-utils = { version = "0.8", default-features = false }
 # Deflate and CRC-32 for the portable Windows zip (`cargo xtask dist`, ADR-0020). Already in
 # the tree through `png`, with the same pure-Rust backend (`miniz_oxide`).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
@@ -110,9 +114,45 @@ leptos = { version = "0.8", default-features = false, features = ["csr"] }
 # under wasmtime; no build script and no default features.
 mach2 = { version = "0.6", default-features = false }
 # Foundation through the objc2 framework crates (ADR-0063 §12), for the running macOS
-# version (`NSProcessInfo`). The 0.3 line wgpu's Metal backend already uses; no build
-# script. No default features: only `std` and the classes the macOS crate calls.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSProcessInfo"] }
+# version (`NSProcessInfo`), and the arrays, errors and strings ScreenCaptureKit hands back.
+# The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
+# only `std` and the classes the macOS crate calls.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString"] }
+# Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
+# crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
+# and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
+# `CVPixelBuffer` for its input. The 0.3 line, as `objc2-foundation`; plain C APIs, so
+# no `objc2` feature and no build script. Only the headers the macOS crate calls.
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFDictionary", "CFNumber", "CFString"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "objc2-core-video"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
+objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
+# AudioToolbox and Core Audio's base types through the objc2 framework crates (ADR-0063 §7,
+# §12), for the AAC-LC `AudioConverter`: the converter and its properties, the codec's
+# bit-rate control mode, and `AudioStreamBasicDescription` and `AudioBufferList` for its
+# formats and buffers. The 0.3 line, as above; plain C APIs and no build script. Only the
+# headers the macOS crate calls (no AudioUnit, AudioQueue, blocks or Core MIDI).
+objc2-audio-toolbox = { version = "0.3", default-features = false, features = ["std", "AudioCodec", "AudioConverter", "objc2-core-audio-types"] }
+objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
+# ScreenCaptureKit through the objc2 framework crates (ADR-0063 §3, §12), for display and
+# window capture: `SCShareableContent` lists targets, `SCStream` captures them, and
+# `SCError` has the codes for a refused permission or a stopped stream. The 0.3 line, as
+# above; no build script. No default features: no content-sharing picker, screenshots,
+# recording output, AVFoundation or UTType. `libc` is only for `pid_t`, so JStream's own
+# windows can be left out of the list.
+objc2-screen-capture-kit = { version = "0.3", default-features = false, features = ["std", "SCError", "SCShareableContent", "SCStream", "block2", "dispatch2", "libc", "objc2-core-foundation", "objc2-core-graphics", "objc2-core-media"] }
+# Core Graphics for the Screen Recording permission (`CGPreflightScreenCaptureAccess` and
+# `CGRequestScreenCaptureAccess`), the main display's ID and the sRGB colour space the
+# capture asks for. The 0.3 line, which ScreenCaptureKit's crate already brings in.
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGDirectDisplay", "CGWindow"] }
+# The Objective-C runtime, blocks and dispatch queues that ScreenCaptureKit's API is made
+# of: a class for the stream's output and delegate (`objc2::define_class!`), completion
+# handler blocks (`block2`) and the serial queue frames arrive on (`dispatch2`). All three
+# are already in the tree under wgpu's Metal backend and the objc2 framework crates. No
+# default features, and never `objc2`'s `exception` feature, which compiles C.
+objc2 = { version = "0.6", default-features = false, features = ["std"] }
+block2 = { version = "0.6", default-features = false, features = ["std"] }
+dispatch2 = { version = "0.3", default-features = false, features = ["std", "objc2"] }
 # Property tests with shrinking (`jstream-graph`'s `tests/`), test-only. Held at 1.11:
 # 1.12 moves to `rand` 0.10, a second `rand` beside the 0.9 already in the tree
 # (R-DEP-005). No default features: no `fork`/`timeout` (`rusty-fork`, `tempfile`) and

@@ -13,11 +13,11 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use jstream_platform::mailbox::Mailbox;
 use jstream_platform::{MediaClock, PlatformError, VideoSurface};
 
 use crate::MonotonicClock;
 use crate::dl::SystemLibrary;
-use crate::mailbox::Mailbox;
 use crate::spa::{
     self, Chunk, Crop, META_HEADER, META_HEADER_SIZE, META_REGION_SIZE, META_VIDEO_CROP,
     PARAM_FORMAT, Pod, VideoFormat,

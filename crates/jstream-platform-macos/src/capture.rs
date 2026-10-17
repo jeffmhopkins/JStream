@@ -1,52 +1,23 @@
 //! Screen and window capture through ScreenCaptureKit (ADR-0063 §3).
 //!
-//! Targets will be listed from `SCShareableContent`, with stable IDs, once the Screen
-//! Recording permission is granted, so agents and the UI pick them the same way as on
-//! Windows. For now, [`ScreenCaptureKitCapture`] checks the macOS floor and reports
-//! `Unsupported` for listing and starting.
+//! [`ScreenCaptureKitCapture`] lists displays and windows from `SCShareableContent`, with
+//! stable IDs (`display:<CGDirectDisplayID>` and `window:<CGWindowID>`), so agents and
+//! the UI pick them the same way as on Windows. Each capture is an `SCStream` that
+//! delivers BGRA frames in sRGB on a serial dispatch queue; each frame is converted to
+//! NV12 on the CPU with the converter every platform shares and put in the capture
+//! mailbox.
+//!
+//! Before listing or capturing, the backend checks the Screen Recording permission. When
+//! it isn't granted, it asks macOS once to prompt for it and reports an error naming the
+//! System Settings pane; it never retries on its own.
+//!
+//! `policy` holds the parts that make no system call, so they are tested on every
+//! platform; `sck` is the backend itself.
+
+#[cfg(any(target_os = "macos", test))]
+mod policy;
+#[cfg(target_os = "macos")]
+mod sck;
 
 #[cfg(target_os = "macos")]
-pub use backend::ScreenCaptureKitCapture;
-
-#[cfg(target_os = "macos")]
-mod backend {
-    use jstream_platform::{
-        Capture, CaptureStream, CaptureTarget, CaptureTargetInfo, PlatformError,
-    };
-
-    use crate::{MacosVersion, check_floor};
-
-    fn not_built(what: &str) -> PlatformError {
-        PlatformError::Unsupported {
-            what: format!("{what} through ScreenCaptureKit (not built yet, ADR-0063)"),
-        }
-    }
-
-    /// Video capture through ScreenCaptureKit (ADR-0063 §3). For now listing targets and
-    /// starting a capture report `Unsupported`.
-    #[derive(Debug)]
-    pub struct ScreenCaptureKitCapture {
-        _private: (),
-    }
-
-    impl ScreenCaptureKitCapture {
-        /// The backend, on a release at or above ADR-0063's floor.
-        ///
-        /// # Errors
-        /// [`PlatformError::Unsupported`] below macOS 14.0.
-        pub fn new() -> Result<Self, PlatformError> {
-            check_floor(MacosVersion::current())?;
-            Ok(Self { _private: () })
-        }
-    }
-
-    impl Capture for ScreenCaptureKitCapture {
-        fn targets(&self) -> Result<Vec<CaptureTargetInfo>, PlatformError> {
-            Err(not_built("listing displays and windows"))
-        }
-
-        fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
-            Err(not_built(&format!("capturing {target:?}")))
-        }
-    }
-}
+pub use sck::ScreenCaptureKitCapture;

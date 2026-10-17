@@ -1,9 +1,11 @@
 //! Codecs on macOS: VideoToolbox for video, AudioToolbox for AAC (ADR-0063 §6, §7).
 //!
-//! For now this has the platform-independent part: turning the engine's encoder
-//! configurations into the settings a `VTCompressionSession` and an AAC `AudioConverter`
-//! are opened with, and refusing what they can't do. [`VideoToolboxCodecs`] checks a
-//! configuration and then reports `Unsupported` until the sessions land.
+//! The platform-independent part turns the engine's encoder configurations into the
+//! settings a `VTCompressionSession` and an AAC `AudioConverter` are opened with, and
+//! refuses what they can't do. On macOS, `VideoToolboxCodecs` lists VideoToolbox's H.264
+//! and HEVC encoders and opens their sessions (`crate::videotoolbox`), and lists and
+//! opens AudioToolbox's AAC-LC converter (`crate::audiotoolbox`). Decoding reports
+//! `Unsupported` until it lands.
 
 use jstream_platform::media::{ChannelLayout, Codec, PixelFormat};
 use jstream_platform::{
@@ -177,7 +179,8 @@ mod backend {
         VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
     };
 
-    use super::{aac_settings, vt_encoder_settings};
+    use crate::audiotoolbox::{AtAacEncoder, aac_encoder_info};
+    use crate::videotoolbox::{VtEncoder, list_encoders};
 
     fn not_built(what: &str) -> PlatformError {
         PlatformError::Unsupported {
@@ -185,8 +188,9 @@ mod backend {
         }
     }
 
-    /// Codecs through VideoToolbox and AudioToolbox (ADR-0063 §6, §7). For now it checks
-    /// configurations; listing codecs and opening sessions report `Unsupported`.
+    /// Codecs through VideoToolbox and AudioToolbox (ADR-0063 §6, §7). It lists and opens
+    /// VideoToolbox's H.264 and HEVC encoders, which take CPU frames for now, and
+    /// AudioToolbox's AAC-LC encoder. Decoding reports `Unsupported` until it lands.
     #[derive(Debug, Default)]
     pub struct VideoToolboxCodecs;
 
@@ -199,23 +203,23 @@ mod backend {
 
     impl Codecs for VideoToolboxCodecs {
         fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
-            Err(not_built("listing VideoToolbox encoders"))
+            let mut list = list_encoders()?;
+            list.push(aac_encoder_info());
+            Ok(list)
         }
 
         fn video_encoder(
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-            vt_encoder_settings(config)?;
-            Err(not_built("a VideoToolbox compression session"))
+            Ok(Box::new(VtEncoder::open(config)?))
         }
 
         fn audio_encoder(
             &self,
             config: &AudioEncoderConfig,
         ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
-            aac_settings(config)?;
-            Err(not_built("an AudioToolbox AAC converter"))
+            Ok(Box::new(AtAacEncoder::open(config)?))
         }
 
         fn video_decoder(
@@ -357,27 +361,6 @@ mod tests {
                 matches!(aac_settings(&c), Err(PlatformError::Unsupported { .. })),
                 "{c:?}"
             );
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn sessions_report_not_built_after_checking_the_config() {
-        use jstream_platform::Codecs;
-
-        let codecs = super::VideoToolboxCodecs::new();
-        // A config VideoToolbox can't take is refused for that reason, not "not built".
-        match codecs.video_encoder(&video(Codec::Av1, PixelFormat::Nv12)) {
-            Err(PlatformError::Unsupported { what }) => assert!(what.contains("Av1"), "{what}"),
-            Err(e) => panic!("unexpected error: {e}"),
-            Ok(_) => panic!("no sessions are built yet"),
-        }
-        match codecs.video_encoder(&video(Codec::H264, PixelFormat::Nv12)) {
-            Err(PlatformError::Unsupported { what }) => {
-                assert!(what.contains("not built yet"), "{what}")
-            }
-            Err(e) => panic!("unexpected error: {e}"),
-            Ok(_) => panic!("no sessions are built yet"),
         }
     }
 }

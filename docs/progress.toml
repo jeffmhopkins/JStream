@@ -874,8 +874,8 @@ id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
 status = "review"
-prs = [511, 513]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); these land with wave/m3-2; more of the crate to build"
+prs = [511, 513, 533, 543, 554]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554)"
 needs = ["wave", "build"]
 
 [[item]]
@@ -891,8 +891,10 @@ needs = ["wave", "build"]
 id = "LNX2"
 milestone = "M3"
 title = "Linux OpenH264 download (ADR-0061)"
-status = "planned"
-needs = ["build"]
+status = "review"
+prs = [536]
+note = "store, check, loader and encoder (#536); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come"
+needs = ["wave", "build"]
 
 [[item]]
 id = "LNX3"

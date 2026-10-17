@@ -92,13 +92,15 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Frames:** a free-threaded frame pool of two BGRA buffers. On each `FrameArrived`,
     on a WinRT thread-pool thread, the frame is copied into a staging texture, read back
     and converted to NV12 in BT.709 limited range, which is what the H.264 encoder's CPU
-    path takes. Chroma is left-sited, the H.264 default: each chroma sample filters the
+    path takes, by `jstream_platform::nv12`, the converter Linux's VA-API encoder uses
+    too. Chroma is left-sited, the H.264 default: each chroma sample filters the
     two rows of its block with a `[1 2 1]` tap centred on the block's left column. NV12
     needs even dimensions, so an odd width or height loses its last column or row. When
     the content size changes, the pool is recreated at the new size, and the frames
     after it have that size.
-  - **Mailbox:** frames go to a single-slot mailbox, one atomic pointer that both sides
-    swap, so `latest` never waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
+  - **Mailbox:** frames go to `jstream_platform::mailbox`, the single-slot mailbox every
+    platform's capture shares: one atomic cell that both sides swap, so `latest` never
+    waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
     replaced before `latest` took it counts in `frames_skipped`, and its planes are reused
     for the next frame of the same size. Otherwise each frame allocates its planes, on
     the capture thread, and the mailbox boxes every frame it is given.
@@ -475,8 +477,8 @@ decode through `MfMediaDecoders`), the virtual camera taking
 `VideoSurface::Gpu`, and a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
-packet flags, positions across a device move), the capture helpers (BGRA and RGBA to NV12 with
-known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
+packet flags, positions across a device move), the capture helpers (target IDs; the
+BGRA and RGBA to NV12 converter and the mailbox are `jstream-platform`'s, tested there), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
 helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping), the GPU capture ring's slot
 choice (reuse, drop when full, release on resize), the credential helpers (target names

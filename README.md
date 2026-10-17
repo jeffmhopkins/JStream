@@ -55,12 +55,12 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 2 | 4 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 25% | 3 | 6 | 3 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 25% | 3 | 7 | 2 |
 
 97 of 115 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 25 items, by next step: 🔨 build 12, 🌊 its wave lands 6, 🧪 Windows run 7</summary>
+<summary><b>What's left</b>: 25 items, by next step: 🔨 build 11, 🌊 its wave lands 7, 🧪 Windows run 7</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -87,9 +87,9 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | M3 | 🌊 its wave lands | #486 merged into wave/m3-2; lands with that wave | #486 |
-| MAC1 | macOS platform crate | M3 | 🌊 its wave lands, then 🔨 build | ADR-0063 accepted (#511); crate part 1 (#513); these land with wave/m3-2; more of the crate to build | #511, #513 |
+| MAC1 | macOS platform crate | M3 | 🌊 its wave lands, then 🔨 build | ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554) | #511, #513, #533, #543, #554 |
 | LNX1 | Linux codec path and platform crate | M3 | 🌊 its wave lands, then 🔨 build | ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; the rest of the codec path to build | #481, #490, #509, #510 |
-| LNX2 | Linux OpenH264 download (ADR-0061) | M3 | 🔨 build |  |  |
+| LNX2 | Linux OpenH264 download (ADR-0061) | M3 | 🌊 its wave lands, then 🔨 build | store, check, loader and encoder (#536); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come | #536 |
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | M3 | 🌊 its wave lands, then 🔨 build | patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518 |
 
 </details>
@@ -258,9 +258,9 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | 🔍 in review: #486 merged into wave/m3-2; lands with that wave | #486 |
-| MAC1 | macOS platform crate | 🔍 in review: ADR-0063 accepted (#511); crate part 1 (#513); these land with wave/m3-2; more of the crate to build | #511, #513 |
+| MAC1 | macOS platform crate | 🔍 in review: ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554) | #511, #513, #533, #543, #554 |
 | LNX1 | Linux codec path and platform crate | 🔍 in review: ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; the rest of the codec path to build | #481, #490, #509, #510 |
-| LNX2 | Linux OpenH264 download (ADR-0061) | ⏳ planned |  |
+| LNX2 | Linux OpenH264 download (ADR-0061) | 🔍 in review: store, check, loader and encoder (#536); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come | #536 |
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | 🔍 in review: patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518 |
 
 </details>

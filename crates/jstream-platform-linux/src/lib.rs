@@ -4,7 +4,9 @@
 //! capture through the ScreenCast portal and a PipeWire video stream (`PortalCapture`, on
 //! the crate's own minimal D-Bus client), run-time loading of libpipewire (`PipeWire`,
 //! behind `PipeWireAudio`) and libva, VA-API H.264 encoding from CPU frames behind
-//! `VaapiCodecs`, and AAC encoding on JStream's own AAC-LC encoder (`RustAacEncoder`,
+//! `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder, downloaded only
+//! on the user's request and checked against its pin (`OpenH264Store`, `OpenH264Encoder`,
+//! ADR-0061), and AAC encoding on JStream's own AAC-LC encoder (`RustAacEncoder`,
 //! feature `aac-encoder`), which `VaapiCodecs` opens. Audio I/O sessions report
 //! `Unsupported` until their follow-ups land. Layer 2, and one of the crates allowed `unsafe`
 //! (R-UNSAFE-001): every system call is wrapped here behind safe APIs.
@@ -25,7 +27,7 @@ mod dbus;
 #[cfg(target_os = "linux")]
 mod dl;
 #[cfg(target_os = "linux")]
-mod mailbox;
+mod openh264;
 mod pipewire;
 mod portal;
 mod session;
@@ -41,6 +43,12 @@ pub use clock::{hns_from_timespec, timebase};
 #[cfg(target_os = "linux")]
 pub use codec::VaapiCodecs;
 pub use codec::choose_encoder;
+#[cfg(target_os = "linux")]
+pub use openh264::{
+    Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_ENCODER_NAME,
+    OPENH264_LICENSE_URL, OPENH264_NOTICE, OPENH264_PIN, OpenH264Encoder, OpenH264Pin,
+    OpenH264Store, openh264_encoder_info, wants_software,
+};
 pub use pipewire::{PIPEWIRE_FLOOR, pipewire_version_supported};
 #[cfg(target_os = "linux")]
 pub use pipewire::{PipeWire, PipeWireAudio};
