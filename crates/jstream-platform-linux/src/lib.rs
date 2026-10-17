@@ -27,8 +27,6 @@ mod dbus;
 #[cfg(target_os = "linux")]
 mod dl;
 #[cfg(target_os = "linux")]
-mod mailbox;
-#[cfg(target_os = "linux")]
 mod openh264;
 mod pipewire;
 mod portal;

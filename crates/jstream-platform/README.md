@@ -20,10 +20,11 @@ Layer-1 backend traits: the seam between the engine and the OS. Platform crates
 holds the backends as injected trait objects, so no engine crate names a platform API.
 This crate is the **single owner** of the encoder and decoder traits
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). It depends only on
-[`jstream-media`](../jstream-media/README.md#purpose), `thiserror` and `wgpu` (for the
+[`jstream-media`](../jstream-media/README.md#purpose), `thiserror`, `wgpu` (for the
 GPU-frame types, pinned exactly per
 [ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md) and re-exported as
-`jstream_platform::wgpu`), and has no `unsafe`.
+`jstream_platform::wgpu`) and `crossbeam-utils` (the mailbox's atomic cell), and has no
+`unsafe`.
 
 The shapes follow what spikes S1 (GPU and encode), S2 (virtual camera) and S3 (clock)
 do on Windows. This is a first cut: the traits will change once `jstream-platform-windows`
@@ -140,6 +141,16 @@ Contents:
   variables count, so nothing is written beside the exe without the marker. It reads the
   environment itself: three cases don't pay for `dirs`. A plain function, not a trait:
   no host needs to swap it.
+- **Shared backend helpers** (`mailbox.rs`, `nv12.rs`): safe, platform-independent code
+  the platform crates share, so it is written and tested once. `mailbox::Mailbox` is the
+  capture callbacks' single-slot latest-frame mailbox: `put` swaps a boxed frame in and
+  returns the one it replaced (a skipped frame), `take` swaps it out, and neither waits
+  ([R-RT-002](../../docs/RULES.md#R-RT-002)); it is `crossbeam-utils`' `AtomicCell`
+  around an optional box, one atomic swap. `nv12` converts packed 8-bit BGRA or RGBA to
+  NV12 in BT.709 limited range with left-sited chroma (`rgb_to_nv12` into a
+  `VideoFrame`, `rgb_to_nv12_image` into an `Nv12Image`, NV12 laid out in one mapped
+  buffer), and `even_size` crops an odd source. Windows' capture and H.264 CPU path and
+  Linux's PipeWire capture and VA-API upload use them.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such

@@ -1980,7 +1980,7 @@ stamp = { hash = "b3:c66590fe31f34aee", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
+stamp = { hash = "b3:a085b9a5e185315c", by = "agent:claude", note = "Re-read Purpose against #516: added the shared-helpers bullet (mailbox::Mailbox on crossbeam-utils' AtomicCell, nv12's rgb_to_nv12, rgb_to_nv12_image, Nv12Image, even_size) and crossbeam-utils to the dependency list; still no unsafe (forbid(unsafe_code) kept)." }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:f8fe3ef93a3c141d", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
@@ -2004,7 +2004,7 @@ stamp = { hash = "b3:febfe552adc09d5b" }
 stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/Cargo.toml"]
-stamp = { hash = "b3:4b200778c1e4db39", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
+stamp = { hash = "b3:bacb67a8bfae5af4", by = "agent:claude", note = "Re-read Purpose against #516: added the shared-helpers bullet (mailbox::Mailbox on crossbeam-utils' AtomicCell, nv12's rgb_to_nv12, rgb_to_nv12_image, Nv12Image, even_size) and crossbeam-utils to the dependency list; still no unsafe (forbid(unsafe_code) kept)." }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/audio.rs"]
 stamp = { hash = "b3:f0a2d34cd26f9151" }
@@ -2037,10 +2037,19 @@ stamp = { hash = "b3:8019c83df5cad30a" }
 stamp = { hash = "b3:5e9dc58061f8fffa" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/lib.rs"]
-stamp = { hash = "b3:0211520aa8e81faf", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
+stamp = { hash = "b3:3b9306ad1b582b63", by = "agent:claude", note = "Re-read Purpose against #516: added the shared-helpers bullet (mailbox::Mailbox on crossbeam-utils' AtomicCell, nv12's rgb_to_nv12, rgb_to_nv12_image, Nv12Image, even_size) and crossbeam-utils to the dependency list; still no unsafe (forbid(unsafe_code) kept)." }
+
+["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/mailbox.rs"]
+stamp = { hash = "b3:d7181b93f0f8ebe9", by = "agent:claude", note = "Re-read Purpose against #516: added the shared-helpers bullet (mailbox::Mailbox on crossbeam-utils' AtomicCell, nv12's rgb_to_nv12, rgb_to_nv12_image, Nv12Image, even_size) and crossbeam-utils to the dependency list; still no unsafe (forbid(unsafe_code) kept)." }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/media_file.rs"]
 stamp = { hash = "b3:b673b4e627733995", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
+
+["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/nv12.rs"]
+stamp = { hash = "b3:3cc8439dd9b71bc3", by = "agent:claude", note = "Re-read Purpose against #516: added the shared-helpers bullet (mailbox::Mailbox on crossbeam-utils' AtomicCell, nv12's rgb_to_nv12, rgb_to_nv12_image, Nv12Image, even_size) and crossbeam-utils to the dependency list; still no unsafe (forbid(unsafe_code) kept)." }
+
+["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/nv12/tests.rs"]
+stamp = { hash = "b3:fd40c30ef5b30c93", by = "agent:claude", note = "Re-read Purpose against #516: added the shared-helpers bullet (mailbox::Mailbox on crossbeam-utils' AtomicCell, nv12's rgb_to_nv12, rgb_to_nv12_image, Nv12Image, even_size) and crossbeam-utils to the dependency list; still no unsafe (forbid(unsafe_code) kept)." }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/paths.rs"]
 stamp = { hash = "b3:3a503eff8a85882d", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
@@ -2058,13 +2067,13 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:7b2e9b7e7b944c2b", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-platform-linux#purpose"."body"]
-stamp = { hash = "b3:c45ae52a22d6a3b1", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "LNX2, after merging wave/m3-2 (#510 VA-API session): earlier note still holds (the OpenH264 bullet matches openh264.rs, https.rs and encoder.rs; VaapiCodecs sends Avoid, and Prefer with no VA-API encoder, to OpenH264; the tests paragraph names the fakes and the opt-in openh264-download test, which now reports the hashes in its failure message instead of printing them). The merge kept #510's VA-API session bullet, its 'first three parts' intro, the hw-tests sentence and the not-yet list; codec.rs keeps #510's VaapiH264Encoder video path behind the OpenH264 early return, #518's AAC path, and the list chains VA-API, OpenH264 if installed, then AAC; holds" }
+stamp = { hash = "b3:daa0c82212b293a7", by = "agent:claude", note = "Re-read Purpose against #516: the PipeWire stream now uses jstream_platform::mailbox and the VA-API upload jstream_platform::nv12 (Nv12Image moved there); edited both bullets. write_nv12's NV12 copy and format dispatch stay here and behave as before." }
 
 ["CRATE-jstream-platform-linux#purpose"."dep:crates/jstream-aac/README.md#purpose"]
 stamp = { hash = "b3:6041df9bb58440ea", by = "agent:claude", note = "Earlier note (this PR): the RustAacEncoder bullet matches src/aac.rs and codec.rs, the aac-encoder default feature and its off-switch match Cargo.toml and ADR-0062; the old 'audio encoding reports Unsupported' sentence is gone. Merge of wave/m3-2: took #509/#515's screen-capture text (portal, D-Bus client, PipeWire stream, restore tokens) and kept the AAC bullet in place of the wave's 'Audio encoding reports Unsupported (ADR-0061)' sentence; the crate-root doc in lib.rs now combines both (capture works, AAC works, audio I/O and video encode still Unsupported). Re-read the whole section against the merged code: it holds." }
 
 ["CRATE-jstream-platform-linux#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "After merging wave/m3-2 (ADR-0061 accepted, #494): depends_on and the Docs: line now cite ADR-0061 instead of the superseded ADR-0031, and codec.rs says software H.264 and AAC wait on ADR-0061's OpenH264 download and Rust AAC-LC encoder; the purpose text (clock, session, portal targets, PipeWire load, VA-API probe, refusals) still matches the code; holds" }
+stamp = { hash = "b3:a085b9a5e185315c", by = "agent:claude", note = "Re-read Purpose against #516: the PipeWire stream now uses jstream_platform::mailbox and the VA-API upload jstream_platform::nv12 (Nv12Image moved there); edited both bullets. write_nv12's NV12 copy and format dispatch stay here and behave as before." }
 
 ["CRATE-jstream-platform-linux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-linux"]
 stamp = { hash = "b3:d8f363ec9767acfd", by = "agent:claude", note = "Re-read against this PR: the new RustAacEncoder bullet matches src/aac.rs (aac_config's refusals, raw access units timed from the first buffer like the MF encoder, 1024-frame priming) and codec.rs (VaapiCodecs lists and opens it), and the aac-encoder default feature and its off-switch match Cargo.toml and ADR-0062's re-check clause; the removed 'audio encoding reports Unsupported' sentence was the only stale text; the rest (clock, session, portal, PipeWire, VA-API probing, not-yet list, tests) is unchanged and still holds." }
@@ -2109,10 +2118,7 @@ stamp = { hash = "b3:760fe1a268e9761d", by = "agent:claude-capture", note = "Re-
 stamp = { hash = "b3:667a1fb4c04447e6", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "LNX2: re-read the whole Purpose section; the new OpenH264 bullet matches openh264.rs (store path and modes, install order: fetch, archive SHA-256, in-crate bzip2, library SHA-256, temp file and rename; remove; re-check and version check before dlopen; pin hashes unrecorded so install refuses first), https.rs (rustls, OS roots, no redirects) and encoder.rs (NV12/I420, CBR/VBR, IDR interval, no frame skip, Annex B with dts = pts); the VaapiCodecs bullet now says Avoid goes to OpenH264, matching codec.rs; the tests paragraph names the fakes and the opt-in openh264-download test; the rest is unchanged by this diff and holds" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/lib.rs"]
-stamp = { hash = "b3:3cca17cf911fe115", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "LNX2, after merging wave/m3-2 (#510 VA-API session): earlier note still holds (the OpenH264 bullet matches openh264.rs, https.rs and encoder.rs; VaapiCodecs sends Avoid, and Prefer with no VA-API encoder, to OpenH264; the tests paragraph names the fakes and the opt-in openh264-download test, which now reports the hashes in its failure message instead of printing them). The merge kept #510's VA-API session bullet, its 'first three parts' intro, the hw-tests sentence and the not-yet list; codec.rs keeps #510's VaapiH264Encoder video path behind the OpenH264 early return, #518's AAC path, and the list chains VA-API, OpenH264 if installed, then AAC; holds" }
-
-["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/mailbox.rs"]
-stamp = { hash = "b3:34f0c0c75f8c766f", by = "agent:claude-capture", note = "Re-read against part 2 rebuilt on wave/m3-2 after #490 merged: PortalCapture runs the portal flow (CreateSession, SelectSources with persist_mode 2 and restore token, Start, OpenPipeWireRemote) on the crate's own D-Bus client, keeps restore tokens in memory or 0600 files, watches Session.Closed for DeviceLost; PipeWire video stream with hand-built SPA pods and CPU copy into the mailbox; dlopen and unsafe policy unchanged; not-yet list updated (DMA-BUF, metadata cursor, per-source tokens); software H.264 and AAC now cite ADR-0061 (which supersedes ADR-0031 and answers ADR-0060's questions); test description covers the new hw-tests" }
+stamp = { hash = "b3:e5583f6ed52fdf7b", by = "agent:claude", note = "Re-read Purpose against #516: the PipeWire stream now uses jstream_platform::mailbox and the VA-API upload jstream_platform::nv12 (Nv12Image moved there); edited both bullets. write_nv12's NV12 copy and format dispatch stay here and behave as before." }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/openh264.rs"]
 stamp = { hash = "b3:7f75192244333461", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "LNX2: re-read the whole Purpose section; the new OpenH264 bullet matches openh264.rs (store path and modes, install order: fetch, archive SHA-256, in-crate bzip2, library SHA-256, temp file and rename; remove; re-check and version check before dlopen; pin hashes unrecorded so install refuses first), https.rs (rustls, OS roots, no redirects) and encoder.rs (NV12/I420, CBR/VBR, IDR interval, no frame skip, Annex B with dts = pts); the VaapiCodecs bullet now says Avoid goes to OpenH264, matching codec.rs; the tests paragraph names the fakes and the opt-in openh264-download test; the rest is unchanged by this diff and holds" }
@@ -2145,7 +2151,7 @@ stamp = { hash = "b3:507e09db98f1f704", by = "agent:claude@session_011FozW2QGjNv
 stamp = { hash = "b3:18750afa226a735c", by = "agent:claude-capture", note = "Re-read against part 2 rebuilt on wave/m3-2 after #490 merged: PortalCapture runs the portal flow (CreateSession, SelectSources with persist_mode 2 and restore token, Start, OpenPipeWireRemote) on the crate's own D-Bus client, keeps restore tokens in memory or 0600 files, watches Session.Closed for DeviceLost; PipeWire video stream with hand-built SPA pods and CPU copy into the mailbox; dlopen and unsafe policy unchanged; not-yet list updated (DMA-BUF, metadata cursor, per-source tokens); software H.264 and AAC now cite ADR-0061 (which supersedes ADR-0031 and answers ADR-0060's questions); test description covers the new hw-tests" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/pipewire/stream.rs"]
-stamp = { hash = "b3:0843c7656e921aa0", by = "agent:claude-capture", note = "Re-read against part 2 rebuilt on wave/m3-2 after #490 merged: PortalCapture runs the portal flow (CreateSession, SelectSources with persist_mode 2 and restore token, Start, OpenPipeWireRemote) on the crate's own D-Bus client, keeps restore tokens in memory or 0600 files, watches Session.Closed for DeviceLost; PipeWire video stream with hand-built SPA pods and CPU copy into the mailbox; dlopen and unsafe policy unchanged; not-yet list updated (DMA-BUF, metadata cursor, per-source tokens); software H.264 and AAC now cite ADR-0061 (which supersedes ADR-0031 and answers ADR-0060's questions); test description covers the new hw-tests" }
+stamp = { hash = "b3:63e33ce7f1a7b7c2", by = "agent:claude", note = "Re-read Purpose against #516: the PipeWire stream now uses jstream_platform::mailbox and the VA-API upload jstream_platform::nv12 (Nv12Image moved there); edited both bullets. write_nv12's NV12 copy and format dispatch stay here and behave as before." }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/portal.rs"]
 stamp = { hash = "b3:88787a77231ef8b7", by = "agent:claude-capture", note = "Re-read against the #509 review follow-up (N1, N4), rebuilt on wave/m3-2 after #509 merged: the portal's unique name from GetNameOwner must now send every reply (Bus::call checks the sender) and every Response/Closed signal (handshake predicates), and the match rules carry sender=org.freedesktop.portal.Desktop; restore tokens are written 0600 to a fresh temp file renamed over the old one, and read only from a regular, user-owned file with no group or other bits, never through a symlink; the purpose text now says both, and the rest (flow, D-Bus client scope, stream, not-yet list) is unchanged" }
@@ -2175,13 +2181,13 @@ stamp = { hash = "b3:af05736cfd899c0e", by = "agent:claude-vaapi", note = "Re-re
 stamp = { hash = "b3:8011e2a0da78cf07", by = "agent:claude-vaapi", note = "Re-read Purpose against the VA-API session diff: the new session bullet matches session.rs (4 input surfaces + coded buffers, 3 recon, CBR/VBR refused if unsupported, deriveImage/putImage upload, NV12/RGBA/BGRA, I/P one ref one slice, IDR cadence and request restart, packed SPS/PPS or driver headers, level choice, non-blocking poll, busy at 5, libva 2.20.0 layout asserts); 'not here yet' now lists DMA-BUF import instead of the session; tests paragraph names the platform-independent H.264 tests and the hw-tests encode tests; depends_on cites ADR-0061 from the wave merge" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/vaapi/upload.rs"]
-stamp = { hash = "b3:1ecdad4113627200", by = "agent:claude-vaapi", note = "Re-read Purpose against the VA-API session diff: the new session bullet matches session.rs (4 input surfaces + coded buffers, 3 recon, CBR/VBR refused if unsupported, deriveImage/putImage upload, NV12/RGBA/BGRA, I/P one ref one slice, IDR cadence and request restart, packed SPS/PPS or driver headers, level choice, non-blocking poll, busy at 5, libva 2.20.0 layout asserts); 'not here yet' now lists DMA-BUF import instead of the session; tests paragraph names the platform-independent H.264 tests and the hw-tests encode tests; depends_on cites ADR-0061 from the wave merge" }
+stamp = { hash = "b3:5c91d1782279c741", by = "agent:claude", note = "Re-read Purpose against #516: the PipeWire stream now uses jstream_platform::mailbox and the VA-API upload jstream_platform::nv12 (Nv12Image moved there); edited both bullets. write_nv12's NV12 copy and format dispatch stay here and behave as before." }
 
 ["CRATE-jstream-platform-macos#purpose"."body"]
 stamp = { hash = "b3:3cecb9180f5825ea", by = "agent:claude-mac1", note = "Re-read the whole section against the code and the accepted ADR-0063. Kept from the first stamp: MachClock in 100 ns via mach_timebase_info, MacosVersion from NSProcessInfo, the 14.0 floor and 14.2 process-tap check, fourcc/os_status and the Core Video map, vt_encoder_settings and aac_settings, the Unsupported stubs, the two SAFETY-commented mach2 calls; also checked ADR-0061, ADR-0014, the crate-map row and ARCH threading. Changed for review B1: support_tier now makes macOS 14 best effort on Apple Silicon too, with Supported only from MacosVersion::OLDEST_PATCHED (15, mirroring the macos-security-updated fact), as ADR-0063 decision 2 says; the tier sentence says so. For N2, the crate doc no longer calls ADR-0063 proposed: it is accepted" }
 
 ["CRATE-jstream-platform-macos#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude-mac1", note = "Re-read the whole section against the code and the accepted ADR-0063. Kept from the first stamp: MachClock in 100 ns via mach_timebase_info, MacosVersion from NSProcessInfo, the 14.0 floor and 14.2 process-tap check, fourcc/os_status and the Core Video map, vt_encoder_settings and aac_settings, the Unsupported stubs, the two SAFETY-commented mach2 calls; also checked ADR-0061, ADR-0014, the crate-map row and ARCH threading. Changed for review B1: support_tier now makes macOS 14 best effort on Apple Silicon too, with Supported only from MacosVersion::OLDEST_PATCHED (15, mirroring the macos-security-updated fact), as ADR-0063 decision 2 says; the tier sentence says so. For N2, the crate doc no longer calls ADR-0063 proposed: it is accepted" }
+stamp = { hash = "b3:a085b9a5e185315c", by = "agent:claude", note = "Re-read Purpose after jstream-platform's Purpose gained the shared mailbox and nv12 helpers and the crossbeam-utils dependency: nothing here names them yet, and the text still holds." }
 
 ["CRATE-jstream-platform-macos#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-macos"]
 stamp = { hash = "b3:dbde7aa8aade9ff3", by = "agent:claude-mac1", note = "Re-read the whole section against the code and the accepted ADR-0063. Kept from the first stamp: MachClock in 100 ns via mach_timebase_info, MacosVersion from NSProcessInfo, the 14.0 floor and 14.2 process-tap check, fourcc/os_status and the Core Video map, vt_encoder_settings and aac_settings, the Unsupported stubs, the two SAFETY-commented mach2 calls; also checked ADR-0061, ADR-0014, the crate-map row and ARCH threading. Changed for review B1: support_tier now makes macOS 14 best effort on Apple Silicon too, with Supported only from MacosVersion::OLDEST_PATCHED (15, mirroring the macos-security-updated fact), as ADR-0063 decision 2 says; the tier sentence says so. For N2, the crate doc no longer calls ADR-0063 proposed: it is accepted" }
@@ -2226,10 +2232,10 @@ stamp = { hash = "b3:3e3755ad6e8d527b", by = "agent:claude-mac1", note = "Re-rea
 stamp = { hash = "b3:ff6c79ca816d3b4d", by = "agent:claude-mac1", note = "Re-read the whole section against the code and the accepted ADR-0063. Kept from the first stamp: MachClock in 100 ns via mach_timebase_info, MacosVersion from NSProcessInfo, the 14.0 floor and 14.2 process-tap check, fourcc/os_status and the Core Video map, vt_encoder_settings and aac_settings, the Unsupported stubs, the two SAFETY-commented mach2 calls; also checked ADR-0061, ADR-0014, the crate-map row and ARCH threading. Changed for review B1: support_tier now makes macOS 14 best effort on Apple Silicon too, with Supported only from MacosVersion::OLDEST_PATCHED (15, mirroring the macos-security-updated fact), as ADR-0063 decision 2 says; the tier sentence says so. For N2, the crate doc no longer calls ADR-0063 proposed: it is accepted" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:07f2285ab0aa30d5", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
+stamp = { hash = "b3:020a1e0bc9355964", by = "agent:claude", note = "Re-read Purpose against #516: capture's convert and mailbox modules moved to jstream_platform::nv12 and ::mailbox; edited the Frames, Mailbox and Tests text to say so. Frame handling, plane reuse and the H.264 CPU path are unchanged; the converter's #424 reference vectors now run in jstream-platform." }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
+stamp = { hash = "b3:a085b9a5e185315c", by = "agent:claude", note = "Re-read Purpose against #516: capture's convert and mailbox modules moved to jstream_platform::nv12 and ::mailbox; edited the Frames, Mailbox and Tests text to say so. Frame handling, plane reuse and the H.264 CPU path are unchanged; the converter's #424 reference vectors now run in jstream-platform." }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:43948c5058fe4611", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
@@ -2267,17 +2273,11 @@ stamp = { hash = "b3:d47d64ab0a716fca" }
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/audio/stream.rs"]
 stamp = { hash = "b3:3294ae8699585eea" }
 
-["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/convert.rs"]
-stamp = { hash = "b3:96e21a6b605c08a9", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
-
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/id.rs"]
 stamp = { hash = "b3:a5976c69be087903" }
 
-["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/mailbox.rs"]
-stamp = { hash = "b3:a15cf56d9898996a" }
-
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/mod.rs"]
-stamp = { hash = "b3:f70081c751fc7074", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
+stamp = { hash = "b3:6758ae7346f0f170", by = "agent:claude", note = "Re-read Purpose against #516: capture's convert and mailbox modules moved to jstream_platform::nv12 and ::mailbox; edited the Frames, Mailbox and Tests text to say so. Frame handling, plane reuse and the H.264 CPU path are unchanged; the converter's #424 reference vectors now run in jstream-platform." }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/ring.rs"]
 stamp = { hash = "b3:bc308dcc158e28d4" }
@@ -2286,7 +2286,7 @@ stamp = { hash = "b3:bc308dcc158e28d4" }
 stamp = { hash = "b3:2843d6ac31fa1d3a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/wgc.rs"]
-stamp = { hash = "b3:3c32bd9bae965208", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU path bullet's Capture::on_context answered by on_gpu matches wgc.rs, open-questions text on encoders still open for E3c; holds" }
+stamp = { hash = "b3:7b53aee246a8a16e", by = "agent:claude", note = "Re-read Purpose against #516: capture's convert and mailbox modules moved to jstream_platform::nv12 and ::mailbox; edited the Frames, Mailbox and Tests text to say so. Frame handling, plane reuse and the H.264 CPU path are unchanged; the converter's #424 reference vectors now run in jstream-platform." }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/clock.rs"]
 stamp = { hash = "b3:bcbc90e406de91b4" }
@@ -2295,7 +2295,7 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:e346334e0b9b18c6", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
+stamp = { hash = "b3:87898a4052b8e8f3", by = "agent:claude", note = "Re-read Purpose against #516: capture's convert and mailbox modules moved to jstream_platform::nv12 and ::mailbox; edited the Frames, Mailbox and Tests text to say so. Frame handling, plane reuse and the H.264 CPU path are unchanged; the converter's #424 reference vectors now run in jstream-platform." }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
 stamp = { hash = "b3:b132c98638f816bf" }
@@ -2373,7 +2373,7 @@ stamp = { hash = "b3:0d06445d4e435a5b" }
 stamp = { hash = "b3:25518dc134afe9b2" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/video_device/stream.rs"]
-stamp = { hash = "b3:ae38f30acfef5995" }
+stamp = { hash = "b3:0cec265014f6d95b", by = "agent:claude", note = "Re-read Purpose against #516: capture's convert and mailbox modules moved to jstream_platform::nv12 and ::mailbox; edited the Frames, Mailbox and Tests text to say so. Frame handling, plane reuse and the H.264 CPU path are unchanged; the converter's #424 reference vectors now run in jstream-platform." }
 
 ["CRATE-jstream-plugin-proto#purpose"."body"]
 stamp = { hash = "b3:db731ccc24b25277", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: new crate; re-read every bullet against lib.rs, status.rs, ring.rs, params.rs and shared.rs: field list and writers, init/config/publish_ready/ready_latency, slot seqlock, SLOTS 8, MAX_BLOCK_FRAMES 2048, MAX_DEPTH 6, DEFAULT_DEPTH 2, first_useful, 256-event param rings with corrupt counts, trust checks, tests list" }
@@ -3285,7 +3285,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:17f96763b6619765", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:7df70ddb8e02fbfc", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Re-read: the upstream section changed only by moving its ADR-0031 citations to ADR-0061 (or the crate-map Linux row); nothing this section states depends on that" }
+stamp = { hash = "b3:a085b9a5e185315c", by = "agent:claude", note = "Re-read Purpose after jstream-platform's Purpose gained the shared mailbox and nv12 helpers: this crate uses jstream-platform only for Secret, which is unchanged; the text still holds." }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:311cefe9eebe1f9a", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }

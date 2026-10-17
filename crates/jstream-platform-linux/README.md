@@ -73,7 +73,8 @@ It has:
   any size and rate (`spa.rs` builds and parses the SPA pods by hand, since libspa's
   builder is inline C), asks for mappable shared-memory buffers with header and crop
   metadata, and copies each frame into a CPU `VideoSurface` (`Bgra8` or `Rgba8`,
-  padding bytes made opaque, the crop applied) in a single-slot mailbox. Its `pts` is
+  padding bytes made opaque, the crop applied) in `jstream_platform::mailbox`, the
+  single-slot mailbox Windows' capture uses too. Its `pts` is
   the buffer header's `CLOCK_MONOTONIC` time when that is plausible, else the clock's
   `now`. The callbacks catch panics (R-UNSAFE-005); a stream error is `DeviceLost`.
   The portal protocol's option values are here too: source types, cursor modes,
@@ -93,8 +94,9 @@ It has:
   node: a config with the rate-control mode (CBR or VBR, refused if the driver lacks it),
   a context, four input surfaces with a coded buffer each, and three reconstructed
   surfaces. It takes CPU frames: NV12, or the compositor's RGBA and BGRA converted to
-  BT.709 limited NV12 with the Windows encoder's arithmetic, written through
-  `vaDeriveImage`, or a staging image and `vaPutImage` where the driver can't map its
+  BT.709 limited NV12 by `jstream_platform::nv12`, the Windows encoder's converter,
+  written through `vaDeriveImage`, or a staging image and `vaPutImage` where the driver
+  can't map its
   surfaces. The stream is I and P frames with one reference and one slice per picture,
   so packets are Annex B in presentation order with `dts == pts`. IDR frames come every
   `keyframe_interval` frames and on `request_keyframe`, which restarts the cadence, and
