@@ -553,6 +553,10 @@ the result back through a 1:1 scene on a transparent canvas, so each kind's gold
 test is a pixel or grid check like the ones below. A two-pass copy covers the harness
 itself, including a half-transparent texel round-tripping, and copies a premultiplied
 browser-page import through unchanged (read as premultiplied linear, it would brighten).
+`tests/kinds.rs` snapshots every built-in video filter kind's descriptor
+(`schema/kinds.snap`, an `insta` snapshot, as `jstream-sources` does for source kinds),
+so a change to a filter's settings is reviewed like an API diff (ADR-0025, #369).
+`INSTA_UPDATE=always cargo test -p jstream-render --test kinds` rewrites it.
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1

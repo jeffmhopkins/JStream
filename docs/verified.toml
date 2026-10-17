@@ -171,13 +171,16 @@ stamp = { hash = "b3:a962082ddbf74417" }
 stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:607e3762dcc42bd5", by = "agent:claude-553", note = "Re-read the one-scene compositor and filter text against the ContentBox addition: apply_filter still draws one Rgba16Float image into another of the reported size; the content box is a query beside it, described in the render README's Filters; holds. | merge: The merge brings C8b5 and #545: browser pages composited from premultiplied imports (import_premultiplied) and the Frame uniform's alpha mode in pass.rs; the one-scene compositor and filter text, and this branch's content box (a query beside apply_filter), still hold." }
+stamp = { hash = "b3:e5a5d038f42d384c", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:84ad0a8f8034bc13", by = "agent:claude", note = "body: own device hardware first (D3D12 first on Windows) with the software fallback, next to main's context/import text. render README: device selection (headless software first; hardware: a D3D12 hardware adapter first on Windows, its device failure logged and WARP skipped, then high-performance, then software, NoAdapter; device-open fallback naming both errors; single try for a Cpu pick), engine render/snapshot/preview threads, tests and benches on hardware(), WARP 720p ~10 fps cited (#433). benches/composite.rs opens hardware(). gpu.rs: DX12 instance first taking only a non-Cpu adapter, warn on device failure, pick_adapter, or_software, Cpu skip, fallback unit test. tests.rs: Opened via hardware(). holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/schema/kinds.snap"]
+stamp = { hash = "b3:3463dcdc6cba720f", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:7d97395b0baa2222", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: merged the wave's step-5 encoder sentence with browser pages imported on the same context as premultiplied sRGB; steps 1-6 otherwise unchanged; holds" }
@@ -361,6 +364,9 @@ stamp = { hash = "b3:a4d298341deb1517", by = "agent:wave-owner", note = "wave/m1
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/transition.rs"]
 stamp = { hash = "b3:dcf2271ab55bc206", by = "agent:t1-studio", note = "Transitions paragraph matches render/transition.rs and the shot's transitioning()" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/tests/kinds.rs"]
+stamp = { hash = "b3:483e5e6198b00fad", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:4700d39010a1be50", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 (folders, labels, ADR-0064) plus the merge of wave/m1-3 (T1 transitions, video mixes, master stage at 0.30) into B11; noun list has the wave's transition and video_mix plus folder and label; tools.snap regenerated at 0.31 is 658624 bytes, figure updated to about 659 KB; holds" }
@@ -3069,7 +3075,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:af178dd41ff64ab0" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "Only adds insta as a dev-dependency for the video filter kinds' snapshot test; the section lists no dev-dependencies and the compositor description is unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:7d97395b0baa2222", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: import_premultiplied (Rgba8Unorm/Bgra8Unorm) and Compositor::context match image.rs and compositor.rs; holds" }
@@ -3255,7 +3261,7 @@ stamp = { hash = "b3:a4d298341deb1517", by = "agent:wave-owner", note = "wave/m1
 stamp = { hash = "b3:dcf2271ab55bc206", by = "agent:t1-studio", note = "Opacity bullet: core passes stored opacity or a track's sampled one; Transitions bullet matches transition.rs" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:4133929305dc3962", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: render tests still open hardware first (tests.rs) and benchmarks take the GPU when there is one; C8b5's browser-frame tests are unaffected" }
+stamp = { hash = "b3:99d87a0523212060", by = "agent:claude", note = "Added the tests/kinds.rs paragraph: an insta snapshot of video_filter_descriptors() in schema/kinds.snap (ADR-0025, #369), and the INSTA_UPDATE command that rewrites it, matching the test file" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -3384,7 +3390,7 @@ stamp = { hash = "b3:4a373899361f588d", by = "agent:t1-studio", note = "T1 chang
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:d13bce3dd43d8222", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.rs adds the display and window kinds with a target setting and CaptureSpec, error.rs adds SourceError::Captured, source.rs adds Source::capture, tests/sources.rs covers both kinds and the setting; wave/m1-2 merge: registry.rs builds them beside browser, chat, media, waveform and spectrum, describe.rs leaves webcam the only described kind, lib.rs and the README list the union; capture() sentence rewrapped. Text matches; latest merge changes nothing in jstream-sources; holds" }
+stamp = { hash = "b3:869b892231d7adbe", by = "agent:claude", note = "Added tests/kinds.rs to the Tests paragraph: an insta snapshot of Registry::builtin().descriptors() in schema/kinds.snap, reviewed like an API diff per ADR-0025, with the command that rewrites it" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:9c0564dcd6f7ef05", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes" }
@@ -3481,6 +3487,9 @@ stamp = { hash = "b3:dbb67160c5d2f421" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/data/text/styled.png"]
 stamp = { hash = "b3:fc3b1214b3ce4e96" }
+
+["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/kinds.rs"]
+stamp = { hash = "b3:13290f678976ddbc", by = "agent:claude", note = "Added tests/kinds.rs to the Tests paragraph: an insta snapshot of Registry::builtin().descriptors() in schema/kinds.snap, reviewed like an API diff per ADR-0025, with the command that rewrites it" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/media.rs"]
 stamp = { hash = "b3:ad2e9d52866d75f3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 (#363, through round 6 B6): re-read the whole section against the PR's whole change. chat_message bullet: the featured message (ADR-0041 §2 kept by ADR-0058; built-in client §1, per-collection API chat switch off by default §5), runtime state in Context::chat (a ChatFeature slot set/cleared by the host), a header line (badge, author, Super Chat amount) in author_color over the text in text_color, wrapped at max_width less padding (0 doesn't wrap), on background with padding; the text renderer's font and outline rules, each block counted against the limits and stack() counting frame plus blocks; an undrawable message shows the blank pixel; frame and the painter never fail; create/update fail only on settings (show()); bundled font Latin only; plain text, controls become spaces, 1000/100 caps; one transparent pixel when nothing is featured; 100 ms next_change; ChatPainter redraws (and allocates) only on a new revision and frame hands out the frame drawn last; every setting but font live. Elsewhere: the frame bullet lists chat_message as a Painter kind; the Painter bullet now scopes pool-only allocation to waveform/spectrum and says chat_message's painter allocates on a redraw; the Context line names chat. Inputs: chat.rs (kind, ChatSource, ChatPainter, show/draw/blank), source.rs (trait doc Painter kinds and allocation, Context::chat and Debug), lib.rs (mod chat, ChatFeature/FeaturedMessage/MAX_CHAT_* re-exports, crate doc), registry.rs (ChatKind registered and listed), text/mod.rs (helpers pub(crate)), text/raster.rs (stack), tests/chat.rs (painting like a host, B1-B4 regressions), tests/sources.rs (kind list), tests/media.rs (..Context::default()); all match; holds" }

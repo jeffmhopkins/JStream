@@ -373,7 +373,10 @@ asset checks refuse a file swapped in from outside the root (Unix) and a junctio
 symbolic link inside the root that leads outside it (Windows, both when the path is
 resolved and in the walk on its own, as a link swapped in after resolving would meet
 it; a symbolic link is skipped, with a note, where the test may not create one).
-`tests/sources.rs` checks
+`tests/kinds.rs` snapshots every built-in kind's descriptor (`schema/kinds.snap`, an
+`insta` snapshot): adding or changing a kind changes no protocol schema, so this diff is
+where a kind's settings are reviewed like an API diff (ADR-0025). `INSTA_UPDATE=always
+cargo test -p jstream-sources --test kinds` rewrites it. `tests/sources.rs` checks
 the registry and runs the colour and image kinds through the public API on files in a
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
