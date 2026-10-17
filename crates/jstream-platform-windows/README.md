@@ -468,7 +468,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     first control message (`Block`), before `Start`. It keeps the stdin and stdout
     pipes as the control channel; a thread decodes stdout into messages and stops on a
     frame that doesn't decode. The host's block is an `EngineBlock`, so the mixer's miss
-    counts stay in the engine's memory. Dropping a host kills it. `scan` runs `scan <file>` and kills the
+    counts stay in the engine's memory, where the host can't reset them. Dropping a host kills it. `scan` runs `scan <file>` and kills the
     host after its answer, or after 20 s. `search_paths` is CLAP's order on Windows:
     `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and
     `%LOCALAPPDATA%\Programs\Common\CLAP`, keeping the ones that exist, without

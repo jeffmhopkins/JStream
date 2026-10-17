@@ -29,8 +29,8 @@ Contents:
 - `Status`: the engine's configuration (rate, block size, pipeline depth, channels),
   the host's state (`STATE_*`), error (`ERROR_*`) and plugin latency, the engine's
   `stop` and `reset_seq` requests, and the host's heartbeat and counters. Each field
-  has one writer. The mixer's miss counters aren't here (`VERSION` 2): the host could
-  reset them.
+  has one writer. The mixer's miss counters aren't here (`VERSION` 2), since the host
+  could reset them there; they are in `EngineBlock` (below).
 - `Shared::init` (engine): unpublishes the block, clears it, writes the `Config` and
   publishes it with `MAGIC` and `VERSION`. `Shared::config` (host): the configuration
   only when both match and every field is in range. `Shared::publish_ready` (host) and
