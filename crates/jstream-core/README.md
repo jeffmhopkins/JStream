@@ -656,7 +656,8 @@ returns the earliest time one of its frames changes (`Source::next_change`), and
 thread re-plans then, so an animated image or a video advances on the clock and a
 still one is never re-planned. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
-FFT each 1/30 s) is painted by that thread just before each re-plan, holding no engine
+FFT each 1/30 s, and `chat_message`, which redraws when another message is featured)
+is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time
 zeros. Every other built kind makes its frames when built, or (a `media` file) decodes

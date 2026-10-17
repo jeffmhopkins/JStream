@@ -774,9 +774,23 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         (
             Batch::single(Edit::OutputCreate {
                 output_id: OutputId::new("new"),
+                kind: record("\\\\host\\share\\show.mp4"),
+            }),
+            invalid("edits.0.kind.path", "must not start with two separators"),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
                 kind: record("/home/me/Videos/"),
             }),
             invalid("edits.0.kind.path", "must end in a file name"),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("C:\\Videos\\nul.mp4"),
+            }),
+            invalid("edits.0.kind.path", "must not end in a DOS device name"),
         ),
         (
             Batch::single(Edit::OutputSetTarget {

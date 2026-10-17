@@ -1944,8 +1944,9 @@ const MAX_PATH_LEN: usize = 4096;
 
 /// Why `path` is not an acceptable recording path, or `None` when it is: the checks and
 /// fixed reasons of `jstream-graph`'s path validation, in the same order. The rule is
-/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, no `..` segment, and a
-/// file name last.
+/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, not two leading
+/// separators (a UNC or device path), no `:` but a drive letter's, no `?` or `*`, no
+/// `..` segment, and a file name last that is not a DOS device name.
 fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
         return Some("must not be empty");
@@ -1964,13 +1965,41 @@ fn record_path_problem(path: &str) -> Option<&'static str> {
     if !(path.starts_with(['/', '\\']) || drive) {
         return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
     }
+    let rest = if drive { &path[2..] } else { path };
+    if rest[1..].starts_with(['/', '\\']) {
+        return Some("must not start with two separators");
+    }
+    if rest.contains(':') {
+        return Some("must not contain `:` but a drive letter's");
+    }
+    if rest.contains(['?', '*']) {
+        return Some("must not contain `?` or `*`");
+    }
     let mut segments = path.split(['/', '\\']);
     if segments.clone().any(|segment| segment == "..") {
         return Some("must not contain a `..` segment");
     }
     match segments.next_back() {
         Some("" | ".") | None => Some("must end in a file name"),
+        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
         Some(_) => None,
+    }
+}
+
+/// Whether Win32 opens the path component `name` as a DOS device, as in `jstream-graph`:
+/// a stem (the name before its first `.`, without trailing spaces, in any ASCII case) of
+/// `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`,
+/// `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`.
+fn is_dos_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    match upper.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        _ => ["COM", "LPT"].iter().any(|port| {
+            upper.strip_prefix(port).is_some_and(|n| {
+                matches!(n.as_bytes(), [b'0'..=b'9']) || matches!(n, "\u{b9}" | "\u{b2}" | "\u{b3}")
+            })
+        }),
     }
 }
 

@@ -33,10 +33,14 @@ pub enum OutputKind {
         /// `<path>.part` and renamed to `path` when the output stops. A recording never
         /// overwrites: `output.start` fails with `action_failed` when `path` or its
         /// `.part` name exists. The engine rejects, with `invalid_argument`, an empty or
-        /// relative path (absolute is `/…`, `\…`, `C:\…` or `C:/…`), one with control
-        /// characters or a `..` segment, and one that ends in a separator or names no
-        /// file. `output.start` also fails when the path is not absolute on the
-        /// engine's own machine.
+        /// relative path (absolute is `/…`, `\…`, `C:\…` or `C:/…`), one that starts
+        /// with two separators (a Windows UNC or device path, `\\host\share\…`,
+        /// `\\.\…` or `\\?\…`), one with `:` other than a drive letter's, `?`, `*`,
+        /// control characters or a `..` segment, one that ends in a separator or names
+        /// no file, and one whose file name is a DOS device name, in any case and with
+        /// or without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,
+        /// `LPT1`, …), which Windows opens in place of a file. `output.start` also fails
+        /// when the path is not absolute on the engine's own machine.
         path: String,
         /// The file format.
         container: RecordContainer,
