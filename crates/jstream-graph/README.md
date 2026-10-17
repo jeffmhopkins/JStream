@@ -101,7 +101,9 @@ the batch **touched**.
   clients' later batches: one set creates or deletes an object the other touches, both
   set the same property, both set the scenes' order, or both set the canvas size.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
-  `source.create` of a `builtin` source needs a kind the graph describes, checks each
+  `source.create` of a `builtin` source needs a source kind the graph describes (a
+  filter kind, such as a scanned CLAP plugin's, is `invalid_argument` on
+  `kind.kind`), checks each
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
   with defaults filled in. `source.set_settings` checks and applies a patch (`null`
   resets a parameter to its default) and its inverse is the patch of the old values.

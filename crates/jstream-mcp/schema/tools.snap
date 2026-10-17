@@ -1795,7 +1795,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "EncoderProfile": {
-            "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,\nand AAC at 160 kbit/s.",
+            "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
             "properties": {
               "audio": {
                 "$ref": "#/$defs/AudioEncoding",
@@ -1888,7 +1888,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "prefer",
-                "description": "Hardware if there is one, else software.",
+                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
                 "type": "string"
               },
               {
@@ -1898,7 +1898,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "avoid",
-                "description": "Software only.",
+                "description": "Software only. What an omitted `hardware` field means.",
                 "type": "string"
               }
             ]
@@ -2857,7 +2857,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "EncoderProfile": {
-            "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,\nand AAC at 160 kbit/s.",
+            "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
             "properties": {
               "audio": {
                 "$ref": "#/$defs/AudioEncoding",
@@ -2883,7 +2883,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "prefer",
-                "description": "Hardware if there is one, else software.",
+                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
                 "type": "string"
               },
               {
@@ -2893,7 +2893,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "avoid",
-                "description": "Software only.",
+                "description": "Software only. What an omitted `hardware` field means.",
                 "type": "string"
               }
             ]

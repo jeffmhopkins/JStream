@@ -48,9 +48,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs for <path>`** ([Code back-references](#back-references)): prints
   what governs a file.
 - **Generated content** ([Generated content](#generated)): `cargo xtask docs generate`
-  writes the ADR status banners, the ADR index and the README's progress block, and
-  `docs check` fails on their drift. `cargo xtask docs progress` lists progress entries
-  the merged history contradicts.
+  writes the ADR status banners, the ADR index, the README's progress block and the UI
+  features summary, and `docs check` fails on their drift. `cargo xtask docs progress`
+  lists progress entries the merged history contradicts.
   The crate map and the other generated references are not generated yet.
 - **Reports (warnings):** crates no section covers, and `applies_to` globs naming an
   unknown crate ([PR gate](#gate)).
@@ -383,7 +383,9 @@ so it never causes merge conflicts.
 3. **Broken references:** see [References](#references).
 4. **Back-reference mismatches:** see [Code back-references](#back-references).
 5. **Generated drift:** regenerated content differs from what is committed, or can't be
-   generated (a `superseded_by` that names no tracked ADR). See [Generated content](#generated).
+   generated (a `superseded_by` that names no tracked ADR, a `docs/progress.toml` that
+   breaks its rules, a UI feature row with an unknown status). See
+   [Generated content](#generated).
 6. **Fact mismatches** for file-sourced facts.
 7. **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
    `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
@@ -463,8 +465,9 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     `review_every` has passed), and any `cargo xtask docs check` failure on `main`;
   - reports `cargo update --dry-run`: compatible updates, and dependencies held back by a
     version requirement or the toolchain;
-  - lists the entries of `docs/progress.toml` that the merged history contradicts
-    (`cargo xtask docs progress`, [Generated content](#generated));
+  - lists the entries of `docs/progress.toml` that the merged history contradicts, and
+    rows whose `needs` is missing or left over (`cargo xtask docs progress`,
+    [Generated content](#generated));
   - lists every PR merged with `governance-approved` or `review-override` in the past
     eight days (the override audit, [R-GOV-002](RULES.md#R-GOV-002));
   - **rewrites one pinned issue, "Weekly sweep"**, instead of opening new ones, and
@@ -539,7 +542,8 @@ covered by the TTLs of their external resources.
 
 Anything derivable is generated, never hand-written: the crate map (from
 `[package.metadata.jstream]`), the protocol reference, the MCP tool list, the index, and
-the ADR status banners and ADR index, and the README's progress table. Generated blocks
+the ADR status banners and ADR index, the README's progress table, and the UI features
+summary. Generated blocks
 in committed docs are fenced as `<!-- @generated begin <name> -->` …
 `<!-- @generated end <name> -->` and are drift-checked.
 
@@ -566,13 +570,28 @@ It also generates one block from data rather than from docs:
   `docs/progress.toml`. That file lists the milestones and each roadmap item's
   milestone, title, `status` (`done`, `hardware` for merged work still waiting on a run
   on Windows hardware, named by a `note`, `review`, or `planned`) and the PRs that
-  deliver it, and `docs check` fails when it doesn't parse or breaks those rules. A PR
-  that delivers or advances an item updates its entry, so the README changes with the
-  work. `cargo xtask docs progress` compares the file with the merged history (the
-  `(#N)` of each squash commit, the `(#N)` of each `* …` line in a wave's landing squash,
-  which lists the PRs the wave carried, and item IDs that PR titles name in parentheses)
-  and prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
+  deliver it. An item not yet `done` lists in `needs` the steps it still needs, in order
+  (`build`, `wave`, `hardware` or `maintainer`; a `hardware` item without it needs its
+  run), and the block's **What's left** table shows each such item with them, linking
+  the order they land in ([ROADMAP › Endgame](../ROADMAP.md#endgame)). `docs check`
+  fails when the file doesn't parse or breaks those rules. A PR that delivers or advances
+  an item updates its entry, so the README changes with the work.
+  `cargo xtask docs progress` compares the file with the merged history (the `(#N)` of
+  each squash commit, the `(#N)` of each `* …` line in a wave's landing squash, which
+  lists the PRs the wave carried, and item IDs that PR titles name in parentheses) and
+  prints, as Markdown, the entries it contradicts, the `planned` and `review` items with
+  no `needs` and the `done` items still listing it; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.
+
+And one from the tables of a hand-written doc:
+
+- **The `ui-summary` block** in `docs/UI-FEATURES.md`: a table with one row per area,
+  linking its section by heading and anchor, then the number of its feature rows and
+  how many are in each status (✅ 🟡 ⬜ 🔒 ⏸), then a **Total** row. An area is any
+  other `##` section of that doc with a Markdown table that has a `Status` column,
+  in document order; each row of such a table is counted by its `Status` cell.
+  `docs check` fails on a status that isn't one of the five, and on a block that finds
+  no area. A doc without the block is left alone, so the block is opt-in.
 
 <a id="governance"></a>
 ## Governance: protecting the checks themselves
@@ -671,8 +690,11 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
 - **Clients** ([R-ARCH-003](RULES.md#R-ARCH-003)): `jstream-ui`, `jstream-mcp`,
   `jstream-server` and `jstream-cli` never reach `jstream-core`, directly or through other
   members. The finding shows the path.
-- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam, browser and
-  browser-helper crates on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
+- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam, CLAP
+  wrapper, browser and browser-helper crates on the `unsafe` allowlist and `*-sys` crates
+  may declare `unsafe_allowed = true`. No member but `jstream-plugin-host` reaches
+  `jstream-plugin-clap`, directly or through other members
+  ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); the finding shows the path. For a
   member that declares `false`, every library and binary crate root must carry
   `#![forbid(unsafe_code)]` (alone or among other lints, possibly wrapped over several
   lines) among its leading inner attributes: only whitespace, comments and other inner
