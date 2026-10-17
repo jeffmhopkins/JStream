@@ -76,6 +76,17 @@ impl ChannelMap {
             && self.buffers.iter().all(|&c| channels.next() == Some(c))
     }
 
+    /// The frames a cycle holds: the fewest that any buffer the map reads holds, where
+    /// `frames_of(i)` is buffer `i`'s. Buffers it doesn't read (an empty or zero-channel
+    /// one included) don't limit it. Zero when it reads none.
+    pub(crate) fn frames(&self, frames_of: impl Fn(usize) -> usize) -> usize {
+        self.sources
+            .iter()
+            .map(|s| frames_of(s.buffer))
+            .min()
+            .unwrap_or(0)
+    }
+
     /// Interleaves `frames` frames, starting at frame `start` of each buffer, into `out`,
     /// which holds `frames * channels()` samples; `buffer(i)` is the device's buffer `i`.
     /// A sample a short or missing buffer doesn't hold is silence. It doesn't allocate,
@@ -117,9 +128,10 @@ pub(crate) struct InputPlan {
 /// multichannel interface, a microphone array) is recorded as stereo from the device's
 /// preferred stereo pair (`kAudioDevicePropertyPreferredChannelsForStereo`, 1-based
 /// channel numbers across all its buffers), or its first two channels when it names no
-/// valid pair: the "downmix any other layout to stereo" default of the `jstream-platform`
-/// README, done as the pair Core Audio itself plays and records stereo on. Nothing is
-/// resampled (ADR-0014 leaves that to the engine).
+/// valid pair. The other channels are not mixed in, so this is a selection, not the
+/// downmix the `jstream-platform` README proposes for other layouts, and a 5.1 input is
+/// recorded as its preferred pair too: the pair Core Audio itself records stereo on.
+/// Nothing is resampled (ADR-0014 leaves that to the engine).
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for a device without input channels.
@@ -347,6 +359,18 @@ mod tests {
             Err(PlatformError::Unsupported { .. })
         ));
         assert!(plan_input(0, &[2], None).is_err(), "a zero rate");
+    }
+
+    #[test]
+    fn unread_buffers_do_not_limit_the_frames() {
+        // An empty, zero-channel buffer in front of the stereo one.
+        let p = plan_input(48_000, &[0, 2], None).expect("plannable");
+        let sizes = [0, 512];
+        assert_eq!(p.map.frames(|i| sizes[i]), 512);
+        // Among the buffers it reads, the shortest wins.
+        let q = plan_input(48_000, &[1, 1], None).expect("plannable");
+        let sizes = [512, 256];
+        assert_eq!(q.map.frames(|i| sizes[i]), 256);
     }
 
     #[test]

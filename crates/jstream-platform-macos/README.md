@@ -127,9 +127,10 @@ It has:
   native-endian `f32` PCM and the nominal rate a whole number of hertz, or it reports
   `Unsupported`. One channel is mono and two are stereo; any other count is recorded as
   stereo from the device's preferred stereo pair
-  (`kAudioDevicePropertyPreferredChannelsForStereo`, else its first two channels), the
-  "downmix to stereo" default in [jstream-platform](../jstream-platform/README.md#open-questions).
-  It never resamples. An IOProc on the device (`AudioDeviceCreateIOProcID`) runs on Core
+  (`kAudioDevicePropertyPreferredChannelsForStereo`, else its first two channels), 5.1
+  included. The other channels are not mixed in: this selects a pair, unlike the downmix
+  [jstream-platform](../jstream-platform/README.md#open-questions) proposes for other
+  layouts. It never resamples. An IOProc on the device (`AudioDeviceCreateIOProcID`) runs on Core
   Audio's real-time IO thread: it interleaves each cycle's buffers into a buffer
   allocated before the start, in chunks of that buffer (at least 512 frames, or the
   device's IO buffer size), and hands each chunk to the handler without allocating,

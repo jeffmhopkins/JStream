@@ -136,11 +136,11 @@ impl Rt {
             // for the duration of the call and not written by anyone during it.
             Some(unsafe { std::slice::from_raw_parts(data.as_ptr(), b.mDataByteSize as usize / 4) })
         };
-        let frames = buffers
-            .iter()
-            .map(|b| b.mDataByteSize as usize / 4 / (b.mNumberChannels as usize).max(1))
-            .min()
-            .unwrap_or(0);
+        let frames = self.map.frames(|i| {
+            buffers.get(i).map_or(0, |b| {
+                b.mDataByteSize as usize / 4 / (b.mNumberChannels as usize).max(1)
+            })
+        });
         let channels = self.map.channels();
         let chunk = (self.scratch.len() / channels.max(1)).max(1);
         let sample_time = time
