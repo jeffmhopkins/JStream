@@ -1,0 +1,6 @@
+{
+  "kind": "youtube#liveChatMessageListResponse",
+  "pollingIntervalMillis": 0,
+  "offlineAt": "2026-10-15T16:00:00.000Z",
+  "items": []
+}
