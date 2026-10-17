@@ -94,8 +94,10 @@ It has:
   DMA-BUF polls readable, the implicit-sync fences), and drawn on the context's queue
   into one of four `Rgba8UnormSrgb` frame textures of the stream's own, cropped and
   with padding made opaque; the buffer goes back to PipeWire once that copy is done,
-  so the compositor never writes a buffer the GPU reads, and render samples only the
-  stream's textures. They are on the context's one queue, so the frames' `FrameSync`
+  so render samples only the stream's textures. A copy still running after one second
+  (`COPY_WAIT`) ends the GPU path, and that buffer goes back while the GPU may still
+  read it, so the last frame can tear; a producer whose writes aren't done after
+  100 ms (`PRODUCER_WAIT`) costs a skipped frame. They are on the context's one queue, so the frames' `FrameSync`
   only checks the queue. A frame that doesn't import or copy ends the GPU path: the
   stream offers shared memory only, PipeWire renegotiates, and the capture goes on
   with CPU frames. Its `pts` is

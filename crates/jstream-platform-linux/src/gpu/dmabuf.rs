@@ -207,9 +207,11 @@ pub(crate) fn import(
     };
     // SAFETY: the hal texture was created on this device from the descriptor below
     // (one 2D mip and sample, this format and size, sampled only). Its contents are
-    // the producer's: it is declared in the GENERAL layout (wgpu's storage-read state),
-    // the layout an image shared with another process is in, so the first sample
-    // transitions it from there without discarding them.
+    // the producer's. It is declared in GENERAL (wgpu's storage-read state) so that
+    // wgpu doesn't treat it as uninitialized. Vulkan created it UNDEFINED, though, and
+    // there is no acquire from the foreign queue family, so whether the first sample
+    // keeps the producer's contents is driver-defined (Mesa usually keeps them for one-plane
+    // layouts). The hardware test is meant to run with the validation layer for this.
     let texture = unsafe {
         device.create_texture_from_hal::<Vulkan>(
             hal_texture,

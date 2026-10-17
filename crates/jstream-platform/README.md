@@ -229,11 +229,15 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
 - **`GpuInterop`** (`Send + Sync`), one per platform, in `Backends`:
   - `open_device()` returns a **`GpuContext`**: the `wgpu::Adapter`, `Device` and `Queue`,
     opened on the **media adapter**, plus an `AdapterId` (the LUID on Windows).
-    - The media adapter is the one that drives the captured display, with
-      `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
-      engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, software adapter first. On a hybrid-GPU machine where sharing an
-      adapter isn't possible, the platform says so (ARCH step 6).
+    - On Windows the media adapter is the one that drives the captured display, with
+      `TEXTURE_FORMAT_NV12`, as S1 chose it, and on a hybrid-GPU machine where sharing
+      an adapter isn't possible, the platform says so (ARCH step 6). On Linux
+      (`LinuxGpu`) it is a guess: a hardware Vulkan adapter, DMA-BUF importers first,
+      then integrated before discrete, opened without NV12. A capture whose frames
+      don't import on it falls back to CPU frames, so a hybrid machine is not reported.
+    - `jstream-render` uses this device when the engine has one, so capture, render and
+      encode share one adapter. With no interop it opens its own, software adapter
+      first.
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.

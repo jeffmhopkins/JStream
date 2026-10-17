@@ -11,8 +11,9 @@
 //!   stream offers those modifiers, imports each DMA-BUF it gets as a Vulkan image
 //!   ([`dmabuf::import`]), and copies it on the context's queue into a texture of its
 //!   own ([`blit::Ring`]), which is the frame render samples. The PipeWire buffer goes
-//!   back to the compositor once that copy is done, so the compositor never writes a
-//!   buffer the GPU still reads, and render never holds one.
+//!   back to the compositor once that copy is done, so render never holds one. A copy
+//!   that hasn't finished after `COPY_WAIT` ends the GPU path, and that one buffer goes
+//!   back while the GPU may still read it, so the last frame can tear.
 //! - Everything runs on the context's one queue, so a frame needs no fence: wgpu orders
 //!   the copy before every later submit that samples the texture. [`QueueOrder`] is the
 //!   frames' [`FrameSync`], whose `stage` only checks the queue.

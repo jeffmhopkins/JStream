@@ -605,6 +605,9 @@ impl Callbacks {
             ),
         };
         if !writes_done(fd, PRODUCER_WAIT) {
+            // The producer's writes didn't finish in time: drop the frame, counted, as
+            // a full ring does below.
+            self.shared.skipped.fetch_add(1, Ordering::Relaxed);
             return Ok(None);
         }
         let pts = spa::frame_pts(header_pts, self.clock.now(), self.clock.timebase());
