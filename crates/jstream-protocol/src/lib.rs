@@ -17,6 +17,7 @@ mod filter;
 mod finite;
 mod geometry;
 mod history;
+mod hotkey;
 mod id;
 mod kind;
 mod output;
@@ -54,6 +55,7 @@ pub use geometry::{
     Placed, PlacementForm, ProjectedQuad, Size, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
+pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId,
     RequestId, Rev, SceneId, SourceId,

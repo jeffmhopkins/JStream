@@ -347,7 +347,7 @@ fn state_get_golden() {
             item("cam_2"),
             item("cam_1"),
             r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"#,
-            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[]}}}"#,
+            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[]}}}"#,
         ))
     );
     assert_eq!(

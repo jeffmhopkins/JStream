@@ -366,7 +366,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
   edits in order on a working copy, the first failure aborting with `not_found`,
   `already_exists` or `invalid_argument` (`edits.<n>.<field>`) and nothing applied; on
-  success `rev` goes up by exactly one. The engine adds the per-client **idempotency
+  success `rev` goes up by exactly one, and the batch result lists the hotkey bindings
+  the batch's deletes removed (`removed_hotkeys`). The engine adds the per-client **idempotency
   keys** ([R-API-004](../../docs/RULES.md#R-API-004)): a batch whose key this client
   already used is not applied again and gets the `rev` it produced, even after `rev`
   moved on (the key check comes first) and without an event. Only applied batches

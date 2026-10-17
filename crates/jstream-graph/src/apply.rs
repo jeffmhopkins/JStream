@@ -12,9 +12,9 @@ use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem}
 use crate::touched::Touched;
 use jstream_protocol::{
     Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
-    ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
-    ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget,
-    SceneId, Settings, SourceAudio, SourceId, SourceKind,
+    HotkeyBinding, ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media,
+    OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference,
+    Rev, RtmpTarget, SceneId, Settings, SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -35,6 +35,9 @@ pub struct Applied {
     /// What the batch touched, from its edits and the inverse's: what the engine's undo
     /// history checks other clients' later batches against (ADR-0032).
     pub touched: Touched,
+    /// The hotkey bindings the batch removed because their action named an object it
+    /// deleted (ADR-0040 §3), in the order it removed them. The inverse restores them.
+    pub removed_hotkeys: Vec<HotkeyBinding>,
 }
 
 impl Graph {
@@ -85,14 +88,29 @@ impl Graph {
         })?;
         let mut work = self.state.clone();
         let mut undo: Vec<Vec<Edit>> = Vec::with_capacity(edits.len());
+        let mut removed_hotkeys = Vec::new();
         for (at, edit) in edits.iter().enumerate() {
-            undo.push(apply_edit(&mut work, &self.kinds, edit, at, running)?);
+            let mut removed = Vec::new();
+            let mut inverse = apply_edit(&mut work, &self.kinds, edit, at, running)?;
+            // A delete takes the bindings that name its target with it (ADR-0040 §3);
+            // they come back after the target does.
+            if let Some((entity, id)) = deleted_object(edit) {
+                inverse.extend(crate::hotkey::remove_naming(
+                    &mut work,
+                    entity,
+                    id,
+                    &mut removed,
+                ));
+            }
+            removed_hotkeys.append(&mut removed);
+            undo.push(inverse);
         }
         self.state = work;
         self.rev = rev;
         let inverse: Vec<Edit> = undo.into_iter().rev().flatten().collect();
         Ok(Applied {
             rev,
+            removed_hotkeys,
             touched: Touched::of(edits, &inverse),
             inverse: Batch {
                 edits: inverse,
@@ -106,6 +124,17 @@ impl Graph {
     /// engine's concern and is ignored here.
     pub fn apply_batch(&mut self, batch: &Batch) -> Result<Applied, ProtocolError> {
         self.apply(&batch.edits, batch.expected_rev)
+    }
+}
+
+/// The object a delete edit removes, by kind and ID, or `None` for any other edit.
+fn deleted_object(edit: &Edit) -> Option<(EntityKind, &str)> {
+    match edit {
+        Edit::SceneDelete { scene_id } => Some((EntityKind::Scene, scene_id.as_str())),
+        Edit::SourceDelete { source_id } => Some((EntityKind::Source, source_id.as_str())),
+        Edit::OutputDelete { output_id } => Some((EntityKind::Output, output_id.as_str())),
+        Edit::EncoderDelete { profile_id } => Some((EntityKind::Encoder, profile_id.as_str())),
+        _ => None,
     }
 }
 
@@ -298,6 +327,9 @@ fn apply_edit(
         return applied;
     }
     if let Some(applied) = crate::audio::apply(state, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::hotkey::apply(state, edit, at) {
         return applied;
     }
     match edit {

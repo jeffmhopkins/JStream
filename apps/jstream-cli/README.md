@@ -133,7 +133,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine accepts only `normal` until it draws the
-  others. Several edits on one line go as **one atomic batch**: one new
+  others.
+  `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
+  `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
+  output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
+  Applying a batch prints `removed hotkey <chord>` for each binding its deletes
+  removed. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -179,8 +184,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   server URL, as `output.create` takes it; for any other output, its kind as JSON).
   `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs; only `--json` shows the sources' audio, the
-  buses and the sends. `output status` prints
+  (<name>):` by its role, then the outputs, then a `hotkeys:` table (`CHORD`,
+  `ACTION`) when any are bound; only `--json` shows the sources' audio, the buses and
+  the sends. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.

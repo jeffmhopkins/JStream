@@ -734,7 +734,7 @@ impl Engine {
             self.save_collection();
         }
         match (&result, output) {
-            (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
+            (Ok(CallResult::Batch { rev, .. }), _) => tracing::debug!(rev = %rev, "batch applied"),
             (Ok(CallResult::History { rev, step_rev, .. }), _) => {
                 tracing::debug!(rev = %rev, step_rev = %step_rev, "history step applied");
             }
@@ -2103,7 +2103,10 @@ impl State {
             applied.touched,
             applied.inverse.edits,
         );
-        let result = CallResult::Batch { rev: applied.rev };
+        let result = CallResult::Batch {
+            rev: applied.rev,
+            removed_hotkeys: applied.removed_hotkeys,
+        };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
         }

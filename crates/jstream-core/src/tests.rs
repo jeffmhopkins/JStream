@@ -109,7 +109,7 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
 
 fn batch(control: &dyn Control, batch: Batch) -> Result<Rev, ControlError> {
     match block_on(control.call(Call::Batch(batch)))?.result {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         other => panic!("not a batch result: {other:?}"),
     }
 }
@@ -494,7 +494,7 @@ fn an_idempotent_retry_gets_the_original_result() {
     let mut events = control.events();
     let keyed = Batch::single(create("a")).with_idempotency_key(IdempotencyKey::new("k1"));
     let first = block_on(control.call(Call::Batch(keyed.clone()))).expect("first");
-    assert_eq!(first.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(first.result, CallResult::batch(Rev(1)));
     assert_eq!(batch(&control, Batch::single(create("b"))), Ok(Rev(2)));
     // The retry answers before the revision check, so a now-stale `expected_rev` is fine.
     let retry =
