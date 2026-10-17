@@ -4248,7 +4248,7 @@ stamp = { hash = "b3:5670e6a5758601b2" }
 stamp = { hash = "b3:8042c8d8d5117226" }
 
 ["THREAT-MODEL#plugins"."body"]
-stamp = { hash = "b3:0e1606ed49fc1a35", by = "agent:vcam-optin-561", note = "re-read: WASM gap now points at proposed ADR-0069 and its recommendation; table's roadmap id corrected from W1 to WA1 (W1 is the audio waveform item in progress.toml); CLAP and WGSL rows unchanged" }
+stamp = { hash = "b3:7364a31f64c18d93", by = "agent:vcam-optin-561", note = "re-read (#584 round 1): WASM gap now says ADR-0069 (accepted) decides the limits, hotkey bindings included, and none is built (WA1); CLAP row says the host process and launcher exist (jstream-plugin-host is in this tree after merging wave/m1-3) and graph wiring is not; WGSL row unchanged" }
 
 ["THREAT-MODEL#plugins"."dep:docs/RULES.md#R-SEC-003"]
 stamp = { hash = "b3:e62d5f1a75c6baa0" }

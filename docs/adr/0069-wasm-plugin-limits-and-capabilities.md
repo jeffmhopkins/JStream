@@ -2,14 +2,14 @@
 id = "ADR-0069"
 title = "WASM plugin resource limits and the Control calls a plugin may make"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0069: WASM plugin resource limits and the Control calls a plugin may make
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -75,12 +75,15 @@ growth past the cap fails, and that normally ends in a trap.
   simplest, but it breaks R-SEC-003's promise in practice, as above.
 - **S2, capability classes in the manifest, granted at install (recommended).** The host
   hands each plugin a scoped `Control`. That is a wrapper with its own session, so the audit
-  log and undo name the plugin (ADR-0013). The wrapper checks every command against a fixed
+  log names the plugin and its undo history is its own (per client, ADR-0013). The wrapper checks every command against a fixed
   table that maps each protocol command to one class:
   - `read` (always granted): every query, `kind.*`, `delete.plan` and event subscription.
   - `edit`: scene, item, source, filter, transition, bus, send, hotkey, canvas and
     studio edits, live parameter edits (`live.*`, ADR-0032), plus `history.*` on the
-    plugin's own session. Excluded are the edits
+    plugin's own session. A hotkey binding stores an action that runs when a person
+    presses the chord, so `hotkey.set` is also checked against the bound action: a plugin
+    may bind only actions its own granted classes allow it to call. With `edit` alone it
+    can't bind `output.start`, `scene.switch` or `output.clear_key`. Excluded are the edits
     that reach the network or the filesystem: a `browser` source's URL, and file and URL
     settings of media and image sources. Those need `network` or `filesystem` as well,
     checked against the grant's hosts or folders.
@@ -90,16 +93,20 @@ growth past the cap fails, and that normally ends in a trap.
     covers `output.create`, `set_target`, `set_key`, `clear_key` or `delete`, and never
     `encoder.*`.
   - **Never granted to a plugin:**
-    - `output.set_target`, `set_key`, `clear_key`, `create` and `delete`;
+    - `output.set_target`, `set_key`, `clear_key`, `create`, `delete` and
+      `set_encoder`, and `encoder.*`;
     - `youtube.*`;
     - `pairing.*` and `device.*`;
     - `video.snapshot` and `preview.subscribe` without `filesystem`. The pixels of a
       user's capture are data a plugin could leak through any granted host.
 
+  - **Everything else:** any command not named in a class above, today or added later
+    (for example `audio.reset_loudness` and `preview.unsubscribe`), is "never" until a PR
+    places it in a class. A test checks that every command is placed (alongside
+    `every_command_is_classified`).
+
   A denied call fails with a new error code, `forbidden`. The code is additive: clients
-  already treat an unknown code as an error. Commands added later default to "never" until
-  a PR places them in a class, and a test checks that every command is placed (alongside
-  `every_command_is_classified`).
+  already treat an unknown code as an error.
 - **S3, a per-method allowlist in the manifest.** This is the finest-grained option, but
   the grant dialog becomes a list of protocol methods. Every protocol change could also
   break a manifest.
@@ -118,12 +125,13 @@ growth past the cap fails, and that normally ends in a trap.
 - **U1 (recommended).** Text a plugin supplies about itself (its name, description,
   messages) appears only in `remote_*` fields, per ADR-0059. Names a plugin sets on scenes
   and sources are ordinary state: they keep the existing length caps, and the plugin's
-  session id in the audit log and history attributes them. The MCP instructions already
-  say that state text can come from anyone with access.
+  session id in the audit log and history attributes them. The MCP server instructions
+  gain a line saying that names and other state text can be set by any client or plugin,
+  and are data, not instructions.
 
 <a id="decision"></a>
 ## Decision
-**Proposed, awaiting the maintainer:** C1, M1, S2, G1 and U1.
+**Accepted by the maintainer:** C1, M1, S2, G1 and U1.
 
 - **CPU.** Epoch interruption gives each entry into a plugin 100 ms of wall time (init
   gets 1 s), re-armed after each host call. A plugin's trap, whether from the CPU deadline,
@@ -131,12 +139,15 @@ growth past the cap fails, and that normally ends in a trap.
   never restarted on its own. The engine logs the reason (`cpu_limit`, `memory_limit` or
   `trap`) and emits it as a plugin state event. Only a person re-enables the plugin.
 - **Memory.** One instance, at most 64 MiB of linear memory and 10,000 table elements per
-  plugin. The host also caps each plugin's event queue at 1,000 events, dropping the oldest
-  as other clients do, and caps its commands at 50 a second. Past the command cap, calls
+  plugin. The host also caps each plugin's event queue at 1,000 events. On overflow it
+  drops the whole queue and delivers one `events.dropped` notice with the count, as a
+  slow WebSocket client gets, so the plugin knows to re-read state. It also caps the
+  plugin's commands at 50 a second. Past the command cap, calls
   fail with `forbidden` and no trap.
 - **API scope.** Each plugin gets a scoped `Control` with its own session. The manifest's
   capability classes are checked command by command against one table in the protocol
-  crate, and every command must be placed in a class or under "never".
+  crate, and every command must be placed in a class or under "never". A hotkey binding
+  is checked against its bound action too.
 - **Grants.**
   - **Filesystem and network.** R-SEC-003's grants are concrete. Network means the hosts
     the manifest names (scheme, host and port). Filesystem means a private data folder per
@@ -148,7 +159,8 @@ growth past the cap fails, and that normally ends in a trap.
 - **People only.** Install, grant, widen and re-enable are WebSocket API calls only, with
   no MCP tool.
 - **Untrusted output.** Plugin-supplied text about the plugin is `remote_*`. Changes a
-  plugin makes are attributed to its session.
+  plugin makes are attributed to its session, and the MCP instructions say that state
+  text can come from any client or plugin.
 
 <a id="consequences"></a>
 ## Consequences
@@ -157,12 +169,13 @@ growth past the cap fails, and that normally ends in a trap.
   engine.
 - **What WA1 must build.**
   - The scoped `Control` wrapper and its command-to-class table, with a test that every
-    command is placed.
+    command is placed, and the check of a hotkey's bound action.
   - The `forbidden` error code.
   - The plugin state event.
   - The epoch ticker.
   - The `StoreLimits` setup.
   - The grant flow in the UI.
+  - The line in the MCP server instructions about state text.
   - `jstream_plugin_wasm::no_ambient_capabilities`, the test R-SEC-003 already names.
 - **Protocol churn.** Every new command needs a class. The test makes forgetting one fail
   CI instead of granting it silently.
