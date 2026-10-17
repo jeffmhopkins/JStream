@@ -405,7 +405,7 @@ stamp = { hash = "b3:747746231a8c0c9e", by = "agent:t1-studio", note = "Tool lis
 stamp = { hash = "b3:3df60ecee36f89ff", by = "agent:t1-studio", note = "Tool list names capture, transition and video_mix; schema size updated to about 593 KB, tools.snap's size after regenerating with both sets of ops." }
 
 ["ARCH#packaging"."body"]
-stamp = { hash = "b3:d3491d04a2abb638", by = "agent:vcam-242", note = "ADR-0066 accepted and supersedes ADR-0020: citations and depends_on now point at ADR-0066, which restates the portable zip, state and signing unchanged. The Virtual camera bullet says today's registered DLL is the one in the user-writable folder (#242) and ADR-0066 (accepted) makes registering optional with an admin-only %ProgramFiles% copy in the same prompt (#561); the one-prompt, HKLM and S2 findings still match vcam_register.rs" }
+stamp = { hash = "b3:8e24d2ab1dc48351", by = "agent:vcam-optin-561", note = "re-read: Virtual camera bullet rewritten for the landed ADR-0066 code: opt-in only, protected Program Files copy, content comparison, unregister, daemon flags; spike findings unchanged | merge: re-read: the merge changed no Packaging text (wave hunks are in data model, protocol and GPU sections); this branch's opt-in copy bullet replaces #556's interim one" }
 
 ["ARCH#packaging"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:vcam-242", note = "ADR-0066 accepted and supersedes ADR-0020: citations and depends_on now point at ADR-0066, which restates the portable zip, state and signing unchanged. The Virtual camera bullet says today's registered DLL is the one in the user-writable folder (#242) and ADR-0066 (accepted) makes registering optional with an admin-only %ProgramFiles% copy in the same prompt (#561); the one-prompt, HKLM and S2 findings still match vcam_register.rs" }
@@ -639,7 +639,7 @@ stamp = { hash = "b3:a667852c45363c39", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:67e9c88a4f6bc64f", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#400 waves): main.rs's merge-main usage gains --from; P1's dist dispatch and usage entry stay; xtask line lists docs, lint-deps, governance, dist (the portable zip), gen-schema, golden; holds" }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:20d7701ee9891878", by = "agent:wave-owner", note = "main into wave/m1-2: main's jstream-plugin-host row in the hosts table joins the wave's daemon row with YouTube sign-in; both hold" }
+stamp = { hash = "b3:b5b2bb4834dd28a8", by = "agent:vcam-optin-561", note = "re-read: diagram now says the vcam DLL is an admin-only copy registered only on opt-in; daemon row still holds | merge: re-read: the merge changed nothing in Shape beyond reconciling #556's stamp; the opt-in copy diagram line holds" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -1524,7 +1524,7 @@ stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmE
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:28ead4aa77305de7", by = "agent:vcam-optin-561", note = '''Data-directory and open-question citations moved from superseded ADR-0020 to ADR-0066, which keeps %APPDATA%\JStream and the portable marker; nothing else changed | merge: re-read: wave/m1-3 brought the CEF bullet's lent program-stage GPU context (Engine::use_gpu); unrelated to this branch's ADR-0066 citations, both hold''' }
+stamp = { hash = "b3:584eaa2e09e7f007", by = "agent:vcam-optin-561", note = "re-read: register.rs bullet now covers both flags, copy/DACL/registry work in the platform crate, readback by content, and that startup never prompts; parser bullet lists --unregister-vcam | merge: re-read: the wave brought the CEF bullet's lent program-stage GPU context (Engine::use_gpu); unrelated to the register.rs bullet, both hold" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:90414bf561410e34", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
@@ -1572,7 +1572,7 @@ stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:66ad1f97a83dc1ed", by = "agent:vcam-optin-561", note = "Only the citation for shipping jstream-daemon.exe beside the desktop app moved from superseded ADR-0020 to ADR-0066, which keeps that deliverable | merge: re-read: wave/m1-3 only rejoined the Serving bullet's line break; content unchanged" }
+stamp = { hash = "b3:0f8262a1a79af5c1", by = "agent:vcam-optin-561", note = "re-read: the register.rs bullet now names the optional --register-vcam (admin-only copy), --unregister-vcam, and startup only logging; the rest unaffected | merge: re-read: the wave only rejoined the Serving bullet's line; this branch's register.rs bullet holds" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: the token file now names the device file beside it, live mode with the cef feature opens browser sources, the end-to-end MCP test sets the canvas to the fake display's size, and YouTube sign-in is not here because the daemon doesn't call Engine::with_youtube yet, beside wave/m3's CLAP scan. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. The daemon's own link matches its Cargo.toml (jstream-browser always, cef = jstream-browser/cef). serve.rs, against wave/m3, gains MfMediaDecoders, the CEF wiring (cef_browser, browse) and its test, and passes main.rs's device file to the server through bind's device_file parameter, beside the clap-scan thread." }
@@ -1620,7 +1620,7 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:227d6b118e5f59c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents lists live.rs in the new lib target (lib.rs) as the live engine wiring moved out of serve.rs, and Serving says serve.rs makes the Windows engine live through it. Tests moves the opener and live-engine unit tests to live.rs. tests/e2e.rs now drives the library's jstream_daemon::live::{live, rtmp} instead of its deleted copy of live, the opener and Connect. It makes the engine live first, then sets the CPU compositor on a clone (B1), so 'on the platform fakes with the CPU compositor' holds: e2e passes with no Vulkan ICD and failed so before. Merge of wave/m1-2 (#312 YouTube, #482, #311): the YouTube Contents bullet and Not-here-yet text sit beside #278's live.rs and Serving bullets. Merged serve.rs calls with_youtube on the engine and then live(...) on Windows, so Serving still holds. cargo test -p jstream-daemon passes (lib 3, bin 30, daemon 9, e2e 1)" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:2617b4e456d60f33", by = "agent:vcam-242", note = "Only the portable-marker citation moved from ADR-0020 to ADR-0066, which keeps the data-folder rule; the --register-vcam text describes today's behaviour, which #561 will change" }
+stamp = { hash = "b3:442a1d3725cbd86b", by = "agent:vcam-optin-561", note = "re-read: added --unregister-vcam to the options table; rewrote the Virtual camera bullet for the opt-in Program Files copy, content comparison, unregister and their exit codes; exit-code table names both flags | merge: re-read: the merge changed no Usage text; the stamp conflict with #556's ADR-0066 citation stamps was resolved; --register-vcam / --unregister-vcam text holds" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:4d50feb4693c00d1", by = "agent:vcam-optin-561", note = "re-read: added --unregister-vcam to the options table; rewrote the Virtual camera bullet for the opt-in Program Files copy, content comparison, unregister and their exit codes; exit-code table names both flags" }
@@ -1632,7 +1632,7 @@ stamp = { hash = "b3:0163ec2a07050ae4", by = "agent:vcam-optin-561", note = "re-
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:a5efef7fc35ff2df", by = "agent:vcam-optin-561", note = "depends_on, the bundler-off note and lib.rs's Docs line now cite ADR-0066 instead of superseded ADR-0020; ADR-0066 keeps the no-installer portable folder, so the design holds | merge: re-read: wave/m1-3 brought the browser-sources bullet's lent stage context; this branch's ADR-0066 citation and bundler-off note still hold" }
+stamp = { hash = "b3:c7eb0e5d17f9c553", by = "agent:vcam-optin-561", note = "re-read (#565 B1): vcam host value list now says outdated, not moved; the virtual camera bullet says vcam_status compares the admin-only copy by content, warns when outdated and never registers or prompts; the rest is unaffected | merge: re-read: the wave brought the browser-sources bullet's lent stage context; this branch's vcam outdated value and content-comparison sentence hold" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1689,7 +1689,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:0d1409e0a940065d", by = "agent:vcam-242", note = "jstream.exe in the portable folder and lib.rs's module doc now cite ADR-0066, which keeps the portable deliverable; text otherwise unchanged" }
+stamp = { hash = "b3:9e63c0850d1f640c", by = "agent:vcam-optin-561", note = "re-read (#565 B1): host.rs vcam_status now reports outdated as well; purpose says registered and current, and names the optional registration and unregistration modes the daemon provides for now | merge: re-read: no text change from the merge, only #556's stamps reconciled; vcam_status 'registered and current' holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. The desktop's purpose says it links core and server, still true, and its contents already list browser sources (browser.rs, cef feature), matching main's sources and jstream-browser links." }
@@ -2250,10 +2250,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:4d61e0ed41a75201", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey); the WindowsVcam ADR-0066 citation still holds" }
+stamp = { hash = "b3:ba50924aa9de0351", by = "agent:vcam-optin-561", note = "re-read: register_vcam/unregister_vcam/vcam_registration bullet rewritten for ADR-0066 (protected COPY_DACL, staging and retire, keys last, Outdated reasons); WindowsVcam start hint says the step is optional | merge: re-read: no text change from the merge, only #556's ADR-0066 citation stamps reconciled; the register_vcam/unregister_vcam bullet holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:54d72e265b128a7b", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey); the WindowsVcam ADR-0066 citation still holds" }
+stamp = { hash = "b3:54d72e265b128a7b", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: no text change from the merge, only #556's ADR-0066 citation stamps reconciled; the register_vcam/unregister_vcam bullet holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:2214bbe1a9c063d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's WgcCapture through Capture::on_context, the CPU H.264 encoder taking RGBA and BGRA, the GPU H.264 path (Codecs::on_context, encode targets copied into allocator samples, fence sync), MfMediaDecoders (Source Reader, frames, audio with the gapless cut, seeking, threads), WindowsGpu's release fence, mfreadwrite delay-loaded for MfMediaDecoders, the not-yet line naming packet-level video decoders, and the GPU encode and media-file tests, beside wave/m3's CLAP PluginBlock and ProAudioThread section. Inputs: lib.rs's docs list MfMediaDecoders, and it gains the decode module and that re-export, beside the CLAP items. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. This crate implements MediaDecoders and the on_context seams. The crate-map row drops the CEF browser backend (ADR-0021) main moved to jstream-browser and keeps wave/m3's CLAP launcher and shared block. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Neither the preview thread nor the CLAP sentence contradicts this crate's text." }
@@ -3576,7 +3576,7 @@ stamp = { hash = "b3:c7c695f9d00a1e78", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:5520b2ac702fede5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: outputs.rs's only change is the two test literals gaining filters beside video_mix, and control design's change is the undo text; the panel design is unchanged." }
+stamp = { hash = "b3:da2767c6c8e48a9e", by = "agent:vcam-optin-561", note = "re-read (#565 N3): the fixture still contains 'is not registered', which the design says gets the full registration command; holds | merge: re-read: the wave's outputs.rs change only adds filters and video_mix fields to test fixtures; the vcam hint text holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's properties-form text (an audio-restricted source reference offers only sources reporting audio, less scene sources; properties.rs offers(), test an_audio_reference_offers_only_sources_with_audio). Main's filters and opacity reach the UI only as protocol fields filled in fixtures (sources.rs, store.rs, canvas/model.rs), no UI feature to document. Holds, no edit." }
@@ -3639,7 +3639,7 @@ stamp = { hash = "b3:c7c695f9d00a1e78", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:5520b2ac702fede5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read after the merge: outputs.rs changed only in two test OutputInfo literals that now carry both filters and video_mix; the UI purpose doesn't describe output filters, so it holds." }
+stamp = { hash = "b3:da2767c6c8e48a9e", by = "agent:vcam-optin-561", note = "re-read (#565 N3): outputs.rs change is only a test fixture for the engine's new refusal wording; purpose unaffected | merge: re-read: the wave's outputs.rs change only adds filters and video_mix fields to test fixtures; purpose unaffected" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): properties.rs only gained #459's offers() for Media::Audio and main's filters field in a test fixture; contents list (host.rs, store.rs, panels incl. properties, outputs, mixer, confirm, canvas) still matches. Holds, no edit." }
@@ -3732,7 +3732,7 @@ stamp = { hash = "b3:5506fd7891457520" }
 stamp = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:d3491d04a2abb638", by = "agent:vcam-242", note = "Packaging's changes (ADR-0066 citations, the accepted Program Files copy for the product's step) don't affect the smoke steps: copy outside the profile, regsvr32 elevated, cleanup" }
+stamp = { hash = "b3:8e24d2ab1dc48351", by = "agent:vcam-optin-561", note = "re-read against the new Packaging text: the regsvr32 smoke check still holds as a development check; the product's copy-based check is #563 | merge: re-read: its Packaging dep is this branch's rewrite; the merge changed no Packaging text; regsvr32 as a dev check holds" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."file:crates/jstream-vcam-windows/examples/vcam_smoke/main.rs"]
 stamp = { hash = "b3:741967485a750fec" }
@@ -3741,7 +3741,7 @@ stamp = { hash = "b3:741967485a750fec" }
 stamp = { hash = "b3:52b22e31260a816a" }
 
 ["CRATE-jstream-vcam-windows#purpose"."body"]
-stamp = { hash = "b3:b0e8b76dbb3eeaa7", by = "agent:vcam-242", note = "Citation and depends_on (and lib.rs's doc) moved from superseded ADR-0020 to ADR-0066; Packaging gained the #242 sentence and the accepted Program Files copy. The section's COM, frames, pacing, trust and HKLM DllRegisterServer description is current behaviour and still matches the crate until #561" }
+stamp = { hash = "b3:ec6b99a80b128242", by = "agent:vcam-optin-561", note = "re-read: Registration bullet now says regsvr32 is for development and the product registers an admin-only Program Files copy via the optional --register-vcam | merge: re-read: no text change from the merge; its Packaging dep is this branch's rewrite, #556's stamps reconciled" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:crates/jstream-vcam-proto/README.md#purpose"]
 stamp = { hash = "b3:b6a3f609729e0f1f" }
@@ -3750,7 +3750,7 @@ stamp = { hash = "b3:b6a3f609729e0f1f" }
 stamp = { hash = "b3:19af02a703359937", by = "agent:vcam-242", note = "Citation and depends_on (and lib.rs's doc) moved from superseded ADR-0020 to ADR-0066; Packaging gained the #242 sentence and the accepted Program Files copy. The section's COM, frames, pacing, trust and HKLM DllRegisterServer description is current behaviour and still matches the crate until #561" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:d3491d04a2abb638", by = "agent:vcam-242", note = "Citation and depends_on (and lib.rs's doc) moved from superseded ADR-0020 to ADR-0066; Packaging gained the #242 sentence and the accepted Program Files copy. The section's COM, frames, pacing, trust and HKLM DllRegisterServer description is current behaviour and still matches the crate until #561" }
+stamp = { hash = "b3:8e24d2ab1dc48351", by = "agent:vcam-optin-561", note = "re-read: Registration bullet now says regsvr32 is for development and the product registers an admin-only Program Files copy via the optional --register-vcam | merge: re-read: no text change from the merge; its Packaging dep is this branch's rewrite, #556's stamps reconciled" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. This section's claims about unsafe still hold." }
@@ -4140,7 +4140,7 @@ stamp = { hash = "b3:100d1063c61d4a12", by = "agent:wave-owner", note = "main in
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:2617b4e456d60f33", by = "agent:vcam-242", note = "Re-read: daemon usage changed only by an ADR-0020 to ADR-0066 citation swap for the portable marker; the prerequisites are unaffected" }
+stamp = { hash = "b3:442a1d3725cbd86b", by = "agent:vcam-optin-561", note = "re-read: the daemon usage change adds --unregister-vcam only; nothing here uses the virtual camera | merge: re-read: its daemon Usage dep changed only by stamp reconciliation; nothing here uses the camera" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -4149,7 +4149,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:33c55fb36e6af6d9", by = "agent:t1-studio", note = "CLI usage additions (preset, preview, capture targets) don't touch the smoke script's commands; holds." }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:2617b4e456d60f33", by = "agent:vcam-242", note = "Re-read: daemon usage changed only by an ADR-0020 to ADR-0066 citation swap; the smoke script's steps and options are unaffected" }
+stamp = { hash = "b3:442a1d3725cbd86b", by = "agent:vcam-optin-561", note = "re-read: the smoke script starts the daemon with its own options; the new vcam flag doesn't affect it | merge: re-read: its daemon Usage dep changed only by stamp reconciliation; the smoke script doesn't use the camera flags" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -4161,7 +4161,7 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:33c55fb36e6af6d9", by = "agent:t1-studio", note = "CLI usage gained scene switch --preset, studio set-preview and capture targets; the go-live steps use none of them and their commands are unchanged." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:2617b4e456d60f33", by = "agent:vcam-242", note = "Re-read: daemon usage changed only by an ADR-0020 to ADR-0066 citation swap; the commands and checks are unaffected" }
+stamp = { hash = "b3:442a1d3725cbd86b", by = "agent:vcam-optin-561", note = "re-read: steps use --port and the CLI only; the new vcam flag doesn't affect them | merge: re-read: its daemon Usage dep changed only by stamp reconciliation; the steps don't use the camera flags" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the steps against cli#usage and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the go-live steps use output and key commands, unaffected by the CLI's hotkey and live-event text or the server's new connection caps. Holds." }
@@ -4275,7 +4275,7 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
 ["THREAT-MODEL#vcam"."body"]
-stamp = { hash = "b3:e390a9d88a40ceef", by = "agent:vcam-242", note = "Maintainer accepted ADR-0066: the paragraph is now 'Accepted, not yet on main (#242)' quoting his decision, ADR-0066 marked accepted, depends_on moved from superseded ADR-0020 to ADR-0066. #242 stays in Gaps until #561 lands, since the page counts only merged controls; today's behaviour (HKLM InprocServer32 naming the DLL beside the exe, swappable without a prompt) still matches register.rs and vcam_register.rs" }
+stamp = { hash = "b3:bbd408ba81b85682", by = "agent:vcam-optin-561", note = "re-read (#565 N2): the controls sentence now limits the guarantee to a camera registered by this step and to the copy; matches the accepted paragraph on pre-ADR-0066 registrations | merge: re-read: resolved the conflict with #556's interim 'accepted, not yet on main' text by keeping this branch's landed controls, registration residuals and #563 gap" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:vcam-242", note = "Maintainer accepted ADR-0066: the paragraph is now 'Accepted, not yet on main (#242)' quoting his decision, ADR-0066 marked accepted, depends_on moved from superseded ADR-0020 to ADR-0066. #242 stays in Gaps until #561 lands, since the page counts only merged controls; today's behaviour (HKLM InprocServer32 naming the DLL beside the exe, swappable without a prompt) still matches register.rs and vcam_register.rs" }
@@ -4329,7 +4329,7 @@ stamp = { hash = "b3:128bf552bd7be538", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:claude-ui-features", note = "app.rs: the status bar shows brand, URL, protocol, client, rev and Disconnect with no menus (HD-01 partial, HD-02/03 to build); panels/outputs.rs: go_live_targets starts stopped or failed RTMP outputs with a key and each card starts and stops its own output (HD-09 partial, HD-07 to build). HD-05/06/08 blockers are E2b #317, T1/T1u, A6b." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:5520b2ac702fede5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: outputs.rs's only D8 change is the test OutputInfo literals gaining filters beside video_mix; the header bar's start/stop and status behaviour is unaffected." }
+stamp = { hash = "b3:da2767c6c8e48a9e", by = "agent:vcam-optin-561", note = "re-read (#565 N3): outputs.rs change is a test fixture only; header unaffected | merge: re-read: the wave's outputs.rs change is fixtures only; header unaffected" }
 
 ["UI-FEATURES#inspector"."body"]
 stamp = { hash = "b3:d31ba81be56d0df5", by = "agent:claude-ui-features", note = "panels/properties.rs: the settings form from kind.describe with groups, advanced, visible_if and Reset, and no placement, crop, opacity or blend controls, so IN-01/02/04/06 to IN-08 to build; IN-03/05/09/10 locked on source.sizes, X1 and T1 as noted." }
@@ -4365,7 +4365,7 @@ stamp = { hash = "b3:7350b13d63f192ea", by = "agent:t1-studio", note = "UI fixtu
 stamp = { hash = "b3:3cbe7856eda760ab", by = "agent:claude-ui-features", note = "panels/outputs.rs: output cards with status badges, start/stop, keys, encoder profile and health, but no program-output row or FX button (OU-02 partial; OU-01/03 on D8p, OU-04 on A6b and the OAuth client)." }
 
 ["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:5520b2ac702fede5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: outputs.rs changes only in two test literals adding filters to OutputInfo; the outputs panel text (create, keys, start and stop, encoders) still matches." }
+stamp = { hash = "b3:da2767c6c8e48a9e", by = "agent:vcam-optin-561", note = "re-read (#565 N3): outputs.rs change is a test fixture only; OU rows unaffected | merge: re-read: the wave's outputs.rs change is fixtures only; OU rows unaffected" }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:e0fff104df6bbece", by = "agent:claude-ui-features", note = "panels/scenes.rs: rows with a Program badge and a hover Program button, up/down reorder buttons, double-click rename, delete and the New scene name field (SC-02, SC-04, SC-05 partial; SC-10 cut button); folders, labels and keyframes are B11 #323 and K1 as noted." }

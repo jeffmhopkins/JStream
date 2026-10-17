@@ -60,7 +60,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 97 of 113 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 23 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 1</summary>
+<summary><b>What's left</b>: 24 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 8, 👤 maintainer 2, ❔ not set 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
