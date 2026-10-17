@@ -875,7 +875,9 @@ fn the_cache_frees_after_the_frame_fence() {
         .expect("resize");
     assert_eq!(cache.pending(), 1);
     assert!(cache.reclaim().is_none(), "frame {frame} has not ended");
-    drop(cache.end_frame(compositor));
+    // `end_frame` polls without blocking, so a GPU that has already finished this
+    // frame's (empty) work hands the replaced texture back here: count it too (#502).
+    let first = cache.end_frame(compositor).map_or(0, |freed| freed.len());
 
     // The next frame uses only "kept": "swapped" retires after this frame's fence.
     cache.begin_frame();
@@ -888,7 +890,7 @@ fn the_cache_frees_after_the_frame_fence() {
         .poll(wgpu::PollType::wait_indefinitely())
         .expect("poll");
     let late = cache.reclaim().map_or(0, |freed| freed.len());
-    assert_eq!(early + late, 2, "both retired textures come back");
+    assert_eq!(first + early + late, 2, "both retired textures come back");
     assert_eq!((cache.live(), cache.pending()), (1, 0));
     assert_eq!(cache.drain().len(), 1);
 }
