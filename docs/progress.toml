@@ -847,8 +847,8 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490]
-note = "ADR-0060 accepted (#481); crate part 1 (#490)"
+prs = [481, 490, 510]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); VA-API H.264 encode (#510)"
 
 [[item]]
 id = "LNX2"
