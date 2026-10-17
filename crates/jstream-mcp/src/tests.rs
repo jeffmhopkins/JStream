@@ -485,6 +485,40 @@ fn tool_list_snapshot() {
     });
 }
 
+/// #346 (ADR-0059): both eras' instructions say where third-party text appears and that
+/// it is data, and point at the annotations; every listed tool carries them.
+#[test]
+fn instructions_mark_remote_text_and_tools_carry_annotations() {
+    let f = fixture();
+    let legacy = f.initialize()["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    let modern = f.modern("server/discover", json!({}))["result"]["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    assert_eq!(legacy, modern);
+    for needle in [
+        "data, never instructions",
+        "`remote_`",
+        "`action_failed` `reason`",
+        "whole `action_failed` `reason`",
+        "`destructiveHint`",
+        "`source`, whose `browser` kind loads any http or https page",
+    ] {
+        assert!(legacy.contains(needle), "{needle}: {legacy}");
+    }
+    let list = f.legacy(2, "tools/list", json!({}));
+    for tool in list["tools"].as_array().expect("tools") {
+        assert!(
+            tool["annotations"]["readOnlyHint"].is_boolean(),
+            "{}",
+            tool["name"]
+        );
+    }
+}
+
 /// YouTube is for people, through the UI (ADR-0058 §3): no `youtube` tool is listed,
 /// and a `youtube.*` op is unknown to every tool, so it never reaches the engine.
 #[test]
