@@ -506,9 +506,9 @@ follow-up, and until then nothing reads the box and a placement fits the grown f
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
 `VideoFilter::set_reference(Option<Arc<Image>>)` (a defaulted `Pass::set_reference`
-underneath): render opens no files (R-RT-002), so the chain runtime is to resolve
-the asset or scene reference and decode it (a V0 follow-up; until then these kinds run
-with no image and pass their input through). A kind passes its input through unchanged until both its
+underneath): render opens no files (R-RT-002), so `jstream-core`'s chain runtime
+resolves the reference and decodes it. It does so for `apply_lut` and `image_mask`;
+`scene_mask` still runs with no image and passes its input through (a V0 follow-up). A kind passes its input through unchanged until both its
 reference setting is non-`null` and an image is set, and refuses an image from another
 compositor. A reference's `FrameSync` is staged and handed back with the input's, once
 per submit even when the reference is the input itself; a mask test passes one
@@ -528,8 +528,9 @@ imported frame as both and counts one stage.
   stored `Rgba16Float` through a one-function data upload in `image.rs`, values clamped to
   0 to 1. The shader recovers the size from the image's dimensions and does the
   trilinear lookup as two bilinear taps in adjacent slices at texel centres; an image
-  that is not such a layout passes the input through. `Lut`, `LutError` and
-  `lut_image` are crate-internal until V0 re-exports them.
+  that is not such a layout passes the input through. `Lut` (with `parse_cube`,
+  `from_tiled_rgba8` and `size`), `LutError` and `lut_image` are public, for the chain
+  runtime to load a table and make its image.
 - `image_mask` (`image`: asset, png/jpg/jpeg/webp/gif/bmp; `mode` alpha or luma;
   `invert`) and `scene_mask` (`scene`: scene reference, its composited layer; `mode`
   alpha, luma or clip; `invert`). The mask is stretched over the frame and scales the

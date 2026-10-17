@@ -635,3 +635,83 @@ fn a_media_file_loaded_before_the_media_backend_plays_once_it_is_injected() {
     assert!(plays(&engine, 1), "and advances on the clock");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// A 2-point `.cube` table that inverts every colour.
+const INVERT: &str = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
+
+/// The version of the asset the first filter of `id`'s video chain reads in the
+/// published program mix, once every build and load is done.
+fn chain_asset(engine: &Engine, id: &str) -> Option<u64> {
+    assert!(engine.settle_sources(), "the assets were loaded in time");
+    let snapshot = engine.render_hub().load();
+    let chain = snapshot.shot().chain(&SourceId::new(id))?;
+    chain.filters[0]
+        .reference
+        .as_ref()
+        .map(|asset| asset.version)
+}
+
+/// V0: the sources thread loads the file a video filter reads and the plan hands it to
+/// the source's chain; a file that can't be read leaves the filter without one (it
+/// passes its input through), and pointing it at another file loads that.
+#[test]
+fn a_video_filters_asset_is_loaded_for_its_chain() {
+    let dir = temp_dir("filter-asset");
+    fs::write(dir.join("invert.cube"), INVERT).expect("the table");
+    fs::write(dir.join("again.cube"), INVERT).expect("the table");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let control = connected(&engine);
+    let lut = |path: &str| {
+        Reference::Asset {
+            root: AssetRoot::Collection,
+            path: path.into(),
+        }
+        .to_value()
+    };
+    let owner = jstream_protocol::FilterOwner::Source {
+        source_id: SourceId::new("pic"),
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("pic", "color", color("#ffffff")),
+            add("a", "i1", "pic"),
+            Edit::FilterAdd {
+                owner: owner.clone(),
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                kind: "apply_lut".into(),
+                settings: settings(&[("lut", lut("invert.cube"))]),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("created");
+    let first = chain_asset(&engine, "pic").expect("the table is loaded");
+
+    let point = |path: &str| {
+        batch(
+            &control,
+            edits(vec![Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                patch: settings(&[("lut", lut(path))]),
+            }]),
+        )
+        .expect("set");
+    };
+    point("nowhere.cube");
+    assert_eq!(
+        chain_asset(&engine, "pic"),
+        None,
+        "a missing file loads nothing"
+    );
+    point("again.cube");
+    let again = chain_asset(&engine, "pic").expect("the other table is loaded");
+    assert_ne!(again, first, "another file is another load");
+    let _ = fs::remove_dir_all(dir);
+}
