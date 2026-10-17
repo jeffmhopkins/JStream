@@ -1188,7 +1188,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:3d1ceddd51b37ea4", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:431e68aa203c51b7", by = "agent:rtmp-cleartext-warning", note = "Re-read against the new warn in connect_rtmp_with: no new thread, wait, allocation on a steady path or secret in a log (only the host is logged), so the design bullets hold." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:34bc4256c643b59c", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
@@ -1275,7 +1275,7 @@ stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
-stamp = { hash = "b3:cd76a871c2ae751d" }
+stamp = { hash = "b3:5cdde1bf210c6561", by = "agent:rtmp-cleartext-warning", note = "Re-read against the new warn in connect_rtmp_with: no new thread, wait, allocation on a steady path or secret in a log (only the host is logged), so the design bullets hold." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/render.rs"]
 stamp = { hash = "b3:73217f8b1b1bf082", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: live values, calls, undo, snapshots, preview streams, locking, audit and not-yet hold with the wave's youtube, filters, preview and scopes. Edited Calls, the render-snapshot and compose paragraphs and the live channel bullet so video.snapshot and the preview thread both load the live values with the snapshot and draw them (engine.rs PreviewSource::current, preview/mod.rs serve/gpu_draw), and a preview stream is due on a live change." }
@@ -1410,7 +1410,7 @@ stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Studio, Transitions, Preview bullets and the tests list (sources.rs, transitions.rs) match the merged src | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
-stamp = { hash = "b3:cd76a871c2ae751d" }
+stamp = { hash = "b3:5cdde1bf210c6561", by = "agent:rtmp-cleartext-warning", note = "Re-read against connect_rtmp_with now logging a warn (host only) for plain rtmp:// to a non-loopback host; Purpose's description of the engine and its publish path is unaffected; holds." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/render.rs"]
 stamp = { hash = "b3:73217f8b1b1bf082", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section after merging wave/m1-2: contents carry the wave's youtube, filters, preview and scope sources beside gestures and live values; snapshot bullet now names the preview thread among compose's callers with live values (preview/mod.rs gpu_draw), tests list adds the preview live-value test (a_live_value_is_sent_without_waiting_for_a_keyframe)." }
@@ -1494,7 +1494,7 @@ stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Render tick passes its due media time through DrawFn to compose; capture scaled to fill without a scene | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
-stamp = { hash = "b3:cd76a871c2ae751d" }
+stamp = { hash = "b3:5cdde1bf210c6561", by = "agent:rtmp-cleartext-warning", note = "Re-read against connect_rtmp_with: added that a plain rtmp:// URL to another machine logs a warning naming the host, never the path; the reconnect, timeout and first-connect text is unchanged and holds." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/render.rs"]
 stamp = { hash = "b3:73217f8b1b1bf082", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the runtime section after merging wave/m1-2: the render tick adopts the snapshot then the live values and draws them (pipeline.rs: reader.adopt(); reader.held(); frames.draw(..., live, size) after the wave's read_capture), and the collector list joins live values with the wave's scope lists; capture path, mixer and output threads unchanged by live values." }
@@ -1509,7 +1509,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:4e91a5d020065485", by = "agent:t1-studio", note = "Option list matches args.rs, now including --youtube-client; core#design and persistence deps re-read | merge: Merged main via wave/m1-3: serve.rs keeps with_youtube and adds scan_clap_plugins on a jstream-clap-scan thread; README text matches" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:3d1ceddd51b37ea4", by = "agent:t1-studio", note = "Option list matches args.rs, now including --youtube-client; core#design and persistence deps re-read | merge: Merged main via wave/m1-3: serve.rs keeps with_youtube and adds scan_clap_plugins on a jstream-clap-scan thread; README text matches" }
+stamp = { hash = "b3:431e68aa203c51b7", by = "agent:rtmp-cleartext-warning", note = "Re-read against core's Design now saying connect_rtmp logs a warning, host only, for plain rtmp:// to another machine: the daemon's publish opener calls connect_rtmp, so that warning reaches its log files; nothing here says otherwise, and no secret is logged; holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against core#design and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the daemon's live.rs (engine wiring, not live values), crash redaction and the server's TCP cap and in-flight bound don't touch gestures; sessions per connection still give each client its own gestures, which expire with the session. Holds." }
@@ -2061,7 +2061,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:7bd3744aad4f0944", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:5826946faa72f5b2", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube; the generic RTMPS output stays agent-controllable under ADR-0058 §3" }
+stamp = { hash = "b3:0fe67f408da9014c", by = "agent:rtmp-cleartext-warning", note = "Re-read against RtmpUrl::sends_key_in_cleartext and is_loopback (localhost, 127/8, ::1, IPv4-mapped loopback): the Transport bullet now says the key travels in the clear over rtmp:// and when that crosses the network; the rest holds." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:13fabd34e2ef41ff", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose still holds against the reworded crate-map row: it says the Output trait comes later and lists jstream-media and jstream-mux as its JStream dependencies, matching the row" }
@@ -2124,7 +2124,7 @@ stamp = { hash = "b3:9b9bc2743314c44c" }
 stamp = { hash = "b3:4a6d6e6f01f968f4" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/url.rs"]
-stamp = { hash = "b3:19a6b6cb7ecef9fe" }
+stamp = { hash = "b3:25f1dbe9e3fe1e6e", by = "agent:rtmp-cleartext-warning", note = "Re-read against RtmpUrl::sends_key_in_cleartext and is_loopback (localhost, 127/8, ::1, IPv4-mapped loopback): the Transport bullet now says the key travels in the clear over rtmp:// and when that crosses the network; the rest holds." }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
 stamp = { hash = "b3:edb0cb2cdc54df68", by = "agent:t1-studio", note = "Render composites the program mix, a scene or a transition between two, as ARCH gpu-pipeline says | merge: Merged main via wave/m1-3: render opens its own device hardware first with software fallback, composing the program mix or a transition; holds" }
@@ -3495,7 +3495,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:212a6c104c20a442", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: fixed the mixer's fader bullet, which said live values aren't in the protocol; they are, but live.set takes only item placements and crops (live.rs is_live_adjustable), so faders still send one edit on release. Everything else (connecting, events, properties, outputs, pairing, mixer) is unchanged by live values." }
+stamp = { hash = "b3:39e932379e7ae5bd", by = "agent:rtmp-cleartext-warning", note = "Re-read against cleartext_warning, the card's warning line and the .output .warning style: added a bullet saying plain rtmp:// to a non-loopback host gets the warning, worked out from state.get's URL since output.status has no flag; the key bullet is unchanged and holds." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:34bc4256c643b59c", by = "agent:t1-studio", note = "UI fixtures and patterns carry preset_id None and the new ItemInfo fields; behaviour unchanged by T1 and the live-values merge" }
@@ -3540,7 +3540,7 @@ stamp = { hash = "b3:c7c695f9d00a1e78", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
+stamp = { hash = "b3:8331dd9eef5f08af", by = "agent:rtmp-cleartext-warning", note = "Re-read against cleartext_warning, the card's warning line and the .output .warning style: added a bullet saying plain rtmp:// to a non-loopback host gets the warning, worked out from state.get's URL since output.status has no flag; the key bullet is unchanged and holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's properties-form text (an audio-restricted source reference offers only sources reporting audio, less scene sources; properties.rs offers(), test an_audio_reference_offers_only_sources_with_audio). Main's filters and opacity reach the UI only as protocol fields filled in fixtures (sources.rs, store.rs, canvas/model.rs), no UI feature to document. Holds, no edit." }
@@ -3558,7 +3558,7 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:7350b13d63f192ea", by = "agent:t1-studio", note = "UI fixtures and patterns carry preset_id None and the new ItemInfo fields; behaviour unchanged by T1 and the live-values merge" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:a3ba61c525d96483", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
+stamp = { hash = "b3:074b107e7d0661b8", by = "agent:rtmp-cleartext-warning", note = "Re-read against cleartext_warning, the card's warning line and the .output .warning style: added a bullet saying plain rtmp:// to a non-loopback host gets the warning, worked out from state.get's URL since output.status has no flag; the key bullet is unchanged and holds." }
 
 ["CRATE-jstream-ui#purpose"."body"]
 stamp = { hash = "b3:9a20394443b85faa", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
@@ -3603,7 +3603,7 @@ stamp = { hash = "b3:c7c695f9d00a1e78", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
+stamp = { hash = "b3:8331dd9eef5f08af", by = "agent:rtmp-cleartext-warning", note = "Re-read against cleartext_warning and the warning line on the output card: Purpose's list of what the outputs panel does still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): properties.rs only gained #459's offers() for Media::Audio and main's filters field in a test fixture; contents list (host.rs, store.rs, panels incl. properties, outputs, mixer, confirm, canvas) still matches. Holds, no edit." }
@@ -4293,7 +4293,7 @@ stamp = { hash = "b3:128bf552bd7be538", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:claude-ui-features", note = "app.rs: the status bar shows brand, URL, protocol, client, rev and Disconnect with no menus (HD-01 partial, HD-02/03 to build); panels/outputs.rs: go_live_targets starts stopped or failed RTMP outputs with a key and each card starts and stops its own output (HD-09 partial, HD-07 to build). HD-05/06/08 blockers are E2b #317, T1/T1u, A6b." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude-ui-features", note = "app.rs: the status bar shows brand, URL, protocol, client, rev and Disconnect with no menus (HD-01 partial, HD-02/03 to build); panels/outputs.rs: go_live_targets starts stopped or failed RTMP outputs with a key and each card starts and stops its own output (HD-09 partial, HD-07 to build). HD-05/06/08 blockers are E2b #317, T1/T1u, A6b." }
+stamp = { hash = "b3:8331dd9eef5f08af", by = "agent:rtmp-cleartext-warning", note = "Re-read against the outputs.rs change: go live and end stream, which this section covers, are unchanged; the new warning is on the output card only; holds." }
 
 ["UI-FEATURES#inspector"."body"]
 stamp = { hash = "b3:d31ba81be56d0df5", by = "agent:claude-ui-features", note = "panels/properties.rs: the settings form from kind.describe with groups, advanced, visible_if and Reset, and no placement, crop, opacity or blend controls, so IN-01/02/04/06 to IN-08 to build; IN-03/05/09/10 locked on source.sizes, X1 and T1 as noted." }
@@ -4329,7 +4329,7 @@ stamp = { hash = "b3:7350b13d63f192ea", by = "agent:t1-studio", note = "UI fixtu
 stamp = { hash = "b3:3cbe7856eda760ab", by = "agent:claude-ui-features", note = "panels/outputs.rs: output cards with status badges, start/stop, keys, encoder profile and health, but no program-output row or FX button (OU-02 partial; OU-01/03 on D8p, OU-04 on A6b and the OAuth client)." }
 
 ["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude-ui-features", note = "panels/outputs.rs: output cards with status badges, start/stop, keys, encoder profile and health, but no program-output row or FX button (OU-02 partial; OU-01/03 on D8p, OU-04 on A6b and the OAuth client)." }
+stamp = { hash = "b3:8331dd9eef5f08af", by = "agent:rtmp-cleartext-warning", note = "Re-read the OU rows against the card's new cleartext warning: it adds no prototype feature and changes no row's status; holds." }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:e0fff104df6bbece", by = "agent:claude-ui-features", note = "panels/scenes.rs: rows with a Program badge and a hover Program button, up/down reorder buttons, double-click rename, delete and the New scene name field (SC-02, SC-04, SC-05 partial; SC-10 cut button); folders, labels and keyframes are B11 #323 and K1 as noted." }
@@ -4395,5 +4395,5 @@ stamp = { hash = "b3:c3bf32d6cb3bcaf4", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude-ui-features", note = "style.css: 7 colour variables under color-scheme light dark with a prefers-color-scheme dark block and system-ui font, so WS-01/WS-03 to build and WS-08's bottom-right Dismiss box hold; index.html: only the Trunk css and rust links, no font link, matching WS-02 waiting on bundling Plex." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:a3ba61c525d96483", by = "agent:claude-ui-features", note = "style.css: 7 colour variables under color-scheme light dark with a prefers-color-scheme dark block and system-ui font, so WS-01/WS-03 to build and WS-08's bottom-right Dismiss box hold; index.html: only the Trunk css and rust links, no font link, matching WS-02 waiting on bundling Plex." }
+stamp = { hash = "b3:074b107e7d0661b8", by = "agent:rtmp-cleartext-warning", note = "Re-read against the one new rule, .output .warning, which uses the existing --problem colour; the theme tokens and their description are unchanged; holds." }
 

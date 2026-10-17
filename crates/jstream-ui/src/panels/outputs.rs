@@ -349,6 +349,37 @@ pub fn describe_kind(kind: &OutputKind) -> String {
     }
 }
 
+/// The warning an output's card shows when its server URL is plain `rtmp://` to
+/// another machine: the stream key would cross the network unencrypted (#353).
+/// `rtmps://`, and `rtmp://` to `localhost` or a loopback address (a local relay), get
+/// none.
+pub const CLEARTEXT_WARNING: &str = "This server is plain rtmp://, so the stream key is sent unencrypted. Use rtmps:// if the service offers it.";
+
+/// [`CLEARTEXT_WARNING`] for an output that needs it, else `None`.
+pub fn cleartext_warning(kind: &OutputKind) -> Option<&'static str> {
+    let OutputKind::Rtmp {
+        target: RtmpTarget::Generic { url },
+    } = kind
+    else {
+        return None;
+    };
+    let (scheme, rest) = url.split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("rtmp") {
+        return None;
+    }
+    let authority = rest.split('/').next().unwrap_or_default();
+    let host = match authority.strip_prefix('[') {
+        // `[v6]` or `[v6]:port`.
+        Some(bracketed) => bracketed.split(']').next().unwrap_or_default(),
+        None => authority.split(':').next().unwrap_or_default(),
+    };
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.to_canonical().is_loopback());
+    (!loopback).then_some(CLEARTEXT_WARNING)
+}
+
 /// An output state, for its badge.
 pub fn state_label(state: OutputState) -> &'static str {
     match state {
@@ -819,6 +850,10 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
             <p class="target">
                 {move || row.with(|row| row.as_ref().map(|row| describe_kind(&row.info.kind)))}
             </p>
+            {move || {
+                row.with(|row| row.as_ref().and_then(|row| cleartext_warning(&row.info.kind)))
+                    .map(|warning| view! { <p class="warning" role="note">{warning}</p> })
+            }}
             <Show when=move || editing.get()>
                 <form class="inline" on:submit=save_target>
                     <input type="text" aria-label="Server URL" bind:value=target />
@@ -1008,9 +1043,9 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, Vcam, create_edit,
-        describe_kind, explain_start_failure, go_live_targets, live_outputs, load, next_output_id,
-        start_blocker, start_or_stop_all, status, take_key,
+        CLEARTEXT_WARNING, Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, Vcam,
+        cleartext_warning, create_edit, describe_kind, explain_start_failure, go_live_targets,
+        live_outputs, load, next_output_id, start_blocker, start_or_stop_all, status, take_key,
     };
     use jstream_control::protocol::{
         Action, DropCounts, Edit, OutputId, OutputInfo, OutputKind, OutputState, RtmpTarget,
@@ -1353,6 +1388,35 @@ mod tests {
             },
         };
         assert_eq!(explain_start_failure(&stream, reason.clone()), reason);
+    }
+
+    /// Plain `rtmp://` to another machine warns that the key goes unencrypted;
+    /// `rtmps://`, loopback and other kinds don't (#353).
+    #[test]
+    fn plain_rtmp_to_another_machine_warns_about_the_key() {
+        let rtmp = |url: &str| OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url: url.into() },
+        };
+        for url in [
+            "rtmp://live.example.com/app",
+            "RTMP://192.168.1.20:1935/live",
+            "rtmp://[2001:db8::1]:1935/live",
+        ] {
+            assert_eq!(
+                cleartext_warning(&rtmp(url)),
+                Some(CLEARTEXT_WARNING),
+                "{url}"
+            );
+        }
+        for url in [
+            "rtmps://live.example.com/app",
+            "rtmp://localhost/live",
+            "rtmp://127.0.0.1:1936/live",
+            "rtmp://[::1]/live",
+        ] {
+            assert_eq!(cleartext_warning(&rtmp(url)), None, "{url}");
+        }
+        assert_eq!(cleartext_warning(&OutputKind::VirtualCam), None);
     }
 
     #[test]

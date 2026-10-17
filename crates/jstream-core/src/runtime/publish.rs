@@ -278,6 +278,14 @@ fn connect_rtmp_with(
     policy: ReconnectPolicy,
 ) -> Result<RtmpPublish, PublishError> {
     let url = RtmpUrl::parse(url).map_err(rtmp_err)?;
+    if url.sends_key_in_cleartext() {
+        // The host only: never the URL's path, which may hold a pasted key.
+        tracing::warn!(
+            host = url.host(),
+            "publishing over plain rtmp://: the stream key crosses the network unencrypted; \
+             use rtmps:// if the server offers it (#353)"
+        );
+    }
     let key = StreamKey::new(key).map_err(rtmp_err)?;
     let publisher = connect_publisher(&url, &key, &RTMP_TIMEOUTS).map_err(rtmp_err)?;
     let connector = rtmp_connector(url, key, RTMP_TIMEOUTS);
