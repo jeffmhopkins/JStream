@@ -1637,6 +1637,36 @@ mod tests {
         assert_eq!(before, after, "nothing was written");
     }
 
+    /// #551 N1: `docs merge-main` moves inline stamps and lists the branch's notes after it
+    /// commits the merge, so a ledger that doesn't parse fails there; the error says the
+    /// merge is committed rather than reading as a failed merge.
+    #[test]
+    fn merge_main_says_the_merge_is_committed_when_the_notes_cannot_be_listed() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([("S.md", s), ("src/a.rs", "a\n")]);
+        let (origin, work) = origin_and_clone("merge-main-bad-branch", &files);
+        work.write(ledger::PATH, "this is [not a ledger\n");
+        commit_all(&work, "work: broken ledger");
+        origin.write("src/a.rs", "a main\n");
+        commit_all(&origin, "main: a");
+        let err = merge::merge_main(&work.0, "main").expect_err("the notes can't be listed");
+        let err = format!("{err:#}");
+        assert!(err.contains("the merge is committed"), "{err}");
+        assert!(err.contains(ledger::PATH), "{err}");
+        let out = Command::new("git")
+            .args(["rev-list", "--parents", "-n", "1", "HEAD"])
+            .current_dir(&work.0)
+            .output()
+            .expect("git runs");
+        let parents = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(
+            parents.split_whitespace().count(),
+            3,
+            "HEAD is the merge: {parents}"
+        );
+    }
+
     /// ADR-0053 transition: a branch from before the ledger re-stamped a section inline and
     /// added a new section with an inline stamp; main moved every stamp to the ledger.
     /// `docs merge-main` takes main's side of the inline conflict, then moves the new

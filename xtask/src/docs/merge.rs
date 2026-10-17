@@ -131,8 +131,8 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     let mut report = Merge::default();
     if out.status.success() {
         report.committed = true;
-        report.migrated = migrate_inline(root)?;
-        report.inputs = stale_report(root)?;
+        report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
+        report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
         return Ok(report);
     }
@@ -200,8 +200,8 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     if report.refused.is_empty() {
         git_ok(root, &["commit", "-q", "--no-edit"])?;
         report.committed = true;
-        report.migrated = migrate_inline(root)?;
-        report.inputs = stale_report(root)?;
+        report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
+        report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
     }
     Ok(report)
@@ -359,6 +359,12 @@ pub(crate) fn branch_entries(
         })
         .collect())
 }
+
+/// Added to an error from the steps after the merge commit (moving inline stamps, listing
+/// stale sections), so the error doesn't read as if the merge failed.
+const AFTER_COMMIT: &str = "the merge is committed, but the steps after it failed; fix what \
+     the error names, then run `cargo xtask docs check` and verify each stale section with \
+     `--note`";
 
 /// Each stale section after a merge commit with its stale inputs, each with this branch's
 /// earlier note and the merged commits that changed it (none listed when the branch has no
