@@ -11,6 +11,10 @@ use crate::finite::Finite32;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+mod drawn;
+
+pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, NEAR_W};
+
 /// How the cropped source fills the item's box.
 ///
 /// The three values are the complete set. A new one is a string-enum addition.

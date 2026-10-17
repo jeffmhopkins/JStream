@@ -213,7 +213,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ✅ merged | #325 |
 | E3d | Composite to NV12 on the GPU | 🔍 in review | #280 |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
+| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: 3D transforms part 1, the drawn polygon and unplace (#611), in review into wave/m3-2; the compositor draw and lifting the rejection to build | #359, #611 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
