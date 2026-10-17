@@ -47,6 +47,9 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
   otherwise a CPU one; `path()` returns the `VideoPath` it took.
   `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `request_keyframe()`,
   `info()`, `stats()` and `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
+  `VideoSession::codec()` is the codec encoding now: `info()`'s, or the one the encoder
+  fell back to after it opened (a hardware encoder refusing its first frame, #443),
+  which the encode thread records once.
 - `VideoInput` / `AudioInput`: cloneable push handles. `push` never blocks.
 - `Subscription`: `recv`, `try_recv`, `recv_timeout`, each returning packets in decode
   order and then a `StreamEnd`; `info()`, per-subscriber `stats()`, and

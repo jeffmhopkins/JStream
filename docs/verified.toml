@@ -1188,7 +1188,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:3d1ceddd51b37ea4", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:6cdddb9925293cda", by = "agent:claude-443", note = "Re-read the encoder profiles paragraph: output.status's encoder.hardware now comes from VideoSession::codec, so a first-frame software fallback reports software; added that. The session-limit sentence still holds (item 2 of #443 is not done here)." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:34bc4256c643b59c", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
@@ -1272,7 +1272,7 @@ stamp = { hash = "b3:d366294d283384c9", by = "agent:t1-studio", note = "Pairing 
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Pairing uses stored opacity and flattens only opaque covering nested scenes; preview streams draw transitions at the clock; touched set covers hotkey-named presets | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:3533bfa892a38a31", by = "agent:claude-443", note = "Re-read the encoder profiles paragraph: output.status's encoder.hardware now comes from VideoSession::codec, so a first-frame software fallback reports software; added that. The session-limit sentence still holds (item 2 of #443 is not done here)." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1407,7 +1407,7 @@ stamp = { hash = "b3:d366294d283384c9", by = "agent:t1-studio", note = "Studio, 
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Studio, Transitions, Preview bullets and the tests list (sources.rs, transitions.rs) match the merged src | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:3533bfa892a38a31", by = "agent:claude-443", note = "Re-read: Encoders::hardware now reads VideoSession::codec instead of the opened info; the crate's purpose and dependencies are unchanged." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1491,7 +1491,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:66ed4d801631a6b0", by = "agent:t1-studio", note = "Render tick passes its due media time through DrawFn to compose; capture scaled to fill without a scene | merge: Merged main via wave/m1-3: CLAP plugin scan and HostSupervisor, the clap filter.add refusal checked after T1/live ends_gesture check, hardware-first compositors in render, snapshot and preview; T1 transition and preview text holds" }
+stamp = { hash = "b3:3533bfa892a38a31", by = "agent:claude-443", note = "Re-read the runtime section: only Encoders::hardware's source changed (VideoSession::codec); the threads, sessions and fallbacks it describes are unchanged." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1509,7 +1509,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:4e91a5d020065485", by = "agent:t1-studio", note = "Option list matches args.rs, now including --youtube-client; core#design and persistence deps re-read | merge: Merged main via wave/m1-3: serve.rs keeps with_youtube and adds scan_clap_plugins on a jstream-clap-scan thread; README text matches" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:3d1ceddd51b37ea4", by = "agent:t1-studio", note = "Option list matches args.rs, now including --youtube-client; core#design and persistence deps re-read | merge: Merged main via wave/m1-3: serve.rs keeps with_youtube and adds scan_clap_plugins on a jstream-clap-scan thread; README text matches" }
+stamp = { hash = "b3:6cdddb9925293cda", by = "agent:claude-443", note = "Re-read: depends on core's Design, whose change is only the encoder.hardware source for output.status; the daemon's wiring of engine and backends is unchanged." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against core#design and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the daemon's live.rs (engine wiring, not live values), crash redaction and the server's TCP cap and in-flight bound don't touch gestures; sessions per connection still give each client its own gestures, which expire with the session. Holds." }
@@ -1797,16 +1797,16 @@ stamp = { hash = "b3:dca502d9616aae14" }
 stamp = { hash = "b3:6a8de9fcad8ead85" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/session.rs"]
-stamp = { hash = "b3:55ea3a587b34caad" }
+stamp = { hash = "b3:3b7a53710259d571", by = "agent:claude-443", note = "Re-read threads and pacing, drops and codec configuration: the encode loop now asks the driver for a codec change after each encode (a bool and name compare, allocating only on the one change) and stores it in a OnceLock, so no lock and no wait on the control plane; Subscription::info still carries the opened codec." }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/tests.rs"]
-stamp = { hash = "b3:df3b8e35c3661ab4" }
+stamp = { hash = "b3:2aac85c6b426f920", by = "agent:claude-443", note = "Re-read threads and pacing, drops and codec configuration: the encode loop now asks the driver for a codec change after each encode (a bool and name compare, allocating only on the one change) and stores it in a OnceLock, so no lock and no wait on the control plane; Subscription::info still carries the opened codec." }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/video.rs"]
-stamp = { hash = "b3:6c1b99c4b8c63792" }
+stamp = { hash = "b3:4500e061e4435b08", by = "agent:claude-443", note = "Re-read threads and pacing, drops and codec configuration: the encode loop now asks the driver for a codec change after each encode (a bool and name compare, allocating only on the one change) and stores it in a OnceLock, so no lock and no wait on the control plane; Subscription::info still carries the opened codec." }
 
 ["CRATE-jstream-encode#purpose"."body"]
-stamp = { hash = "b3:da6d5d03b57d906e", by = "agent:t1-studio", note = "Dev-dependencies (jstream-platform fake, wgpu, criterion) match Cargo.toml" }
+stamp = { hash = "b3:bafb514021c2ac69", by = "agent:claude-443", note = "Re-read the API list: added VideoSession::codec (the codec encoding now, recorded once by the encode thread through Driver::codec_changed and a OnceLock). Dependencies unchanged." }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-encode"]
 stamp = { hash = "b3:984f333744172f87" }
@@ -1836,13 +1836,13 @@ stamp = { hash = "b3:dca502d9616aae14" }
 stamp = { hash = "b3:6a8de9fcad8ead85" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/session.rs"]
-stamp = { hash = "b3:55ea3a587b34caad" }
+stamp = { hash = "b3:3b7a53710259d571", by = "agent:claude-443", note = "Re-read the API list: added VideoSession::codec (the codec encoding now, recorded once by the encode thread through Driver::codec_changed and a OnceLock). Dependencies unchanged." }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/tests.rs"]
-stamp = { hash = "b3:df3b8e35c3661ab4" }
+stamp = { hash = "b3:2aac85c6b426f920", by = "agent:claude-443", note = "Re-read the API list: added VideoSession::codec (the codec encoding now, recorded once by the encode thread through Driver::codec_changed and a OnceLock). Dependencies unchanged." }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/video.rs"]
-stamp = { hash = "b3:6c1b99c4b8c63792" }
+stamp = { hash = "b3:4500e061e4435b08", by = "agent:claude-443", note = "Re-read the API list: added VideoSession::codec (the codec encoding now, recorded once by the encode thread through Driver::codec_changed and a OnceLock). Dependencies unchanged." }
 
 ["CRATE-jstream-graph#purpose"."body"]
 stamp = { hash = "b3:c705fa48e06f0bc1", by = "agent:t1-studio", note = "source.create names the refused category; transition.delete removes bindings naming the preset; tests list includes the preset-hotkey test | merge: Merged main via wave/m1-3: source.create refuses filter or transition kinds including scanned CLAP ones, naming the category; test a_filter_kind_cannot_be_created_as_a_source passes" }
@@ -2148,7 +2148,7 @@ stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:b28e65141c38887d", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's FrameSync::platform, Capture::on_context, Codecs::on_context, Media files (MediaDecoders), the Data folder (paths), FakeMediaDecoders and the reworded not-yet line, beside wave/m3's PluginHosts trait and its fake. Inputs: lib.rs's docs name paths, and it gains main's media_file and paths modules and the MediaDecoders re-exports beside plugin_host; Cargo.toml's summary gains paths (ADR-0020); the crate-map row gains MediaDecoders and paths beside PluginHosts; plugin_host.rs is wave/m3's, unchanged. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). This crate's traits touch neither." }
+stamp = { hash = "b3:144628a7f41bfeb3", by = "agent:claude-443", note = "Re-read the Codecs bullet: VideoEncoder::info now documents that it changes only when an encoder falls back before its first packet (#443); added that sentence. No trait shape changed." }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes; OAuthTokenStore still holds the Google refresh token" }
@@ -2187,7 +2187,7 @@ stamp = { hash = "b3:d0428542e93b8a89", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:34c4d1c416af47c3" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/codec.rs"]
-stamp = { hash = "b3:64d00588cf8e082d" }
+stamp = { hash = "b3:cefa2333300d19c2", by = "agent:claude-443", note = "Re-read the Codecs bullet: VideoEncoder::info now documents that it changes only when an encoder falls back before its first packet (#443); added that sentence. No trait shape changed." }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/error.rs"]
 stamp = { hash = "b3:7d8f9a5250232107" }
@@ -2229,10 +2229,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:f6eb3695c90eeb37", by = "agent:t1-studio", note = "merge: Merged main via wave/m1-3: adds the CLAP plugin-host launcher and shared block; consistent with ARCH threading and crate-map" }
+stamp = { hash = "b3:1607aa08c82783ce", by = "agent:claude-443", note = "Re-read the video encoder bullets: added the first-frame fallback (FirstFrameFallback, #443), the new codec/fallback.rs, and the tracing dependency it logs through; the PROCESS_INPUT call name is shared with MfVideoEncoder::encode." }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:b28e65141c38887d", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's WgcCapture through Capture::on_context, the CPU H.264 encoder taking RGBA and BGRA, the GPU H.264 path (Codecs::on_context, encode targets copied into allocator samples, fence sync), MfMediaDecoders (Source Reader, frames, audio with the gapless cut, seeking, threads), WindowsGpu's release fence, mfreadwrite delay-loaded for MfMediaDecoders, the not-yet line naming packet-level video decoders, and the GPU encode and media-file tests, beside wave/m3's CLAP PluginBlock and ProAudioThread section. Inputs: lib.rs's docs list MfMediaDecoders, and it gains the decode module and that re-export, beside the CLAP items. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. This crate implements MediaDecoders and the on_context seams. The crate-map row drops the CEF browser backend (ADR-0021) main moved to jstream-browser and keeps wave/m3's CLAP launcher and shared block. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Neither the preview thread nor the CLAP sentence contradicts this crate's text." }
+stamp = { hash = "b3:144628a7f41bfeb3", by = "agent:claude-443", note = "Re-read the video encoder bullets: added the first-frame fallback (FirstFrameFallback, #443), the new codec/fallback.rs, and the tracing dependency it logs through; the PROCESS_INPUT call name is shared with MfVideoEncoder::encode." }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:2214bbe1a9c063d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's WgcCapture through Capture::on_context, the CPU H.264 encoder taking RGBA and BGRA, the GPU H.264 path (Codecs::on_context, encode targets copied into allocator samples, fence sync), MfMediaDecoders (Source Reader, frames, audio with the gapless cut, seeking, threads), WindowsGpu's release fence, mfreadwrite delay-loaded for MfMediaDecoders, the not-yet line naming packet-level video decoders, and the GPU encode and media-file tests, beside wave/m3's CLAP PluginBlock and ProAudioThread section. Inputs: lib.rs's docs list MfMediaDecoders, and it gains the decode module and that re-export, beside the CLAP items. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. This crate implements MediaDecoders and the on_context seams. The crate-map row drops the CEF browser backend (ADR-0021) main moved to jstream-browser and keeps wave/m3's CLAP launcher and shared block. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Neither the preview thread nor the CLAP sentence contradicts this crate's text." }
@@ -2297,14 +2297,17 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/aac.rs"]
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
+["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/fallback.rs"]
+stamp = { hash = "b3:b5a7e2927ed0ccef", by = "agent:claude-443", note = "Re-read the video encoder bullets: added the first-frame fallback (FirstFrameFallback, #443), the new codec/fallback.rs, and the tracing dependency it logs through; the PROCESS_INPUT call name is shared with MfVideoEncoder::encode." }
+
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
 stamp = { hash = "b3:b132c98638f816bf" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mod.rs"]
-stamp = { hash = "b3:c2e6e562b0ab09bc", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read MfCodecs bullets against codec/video.rs: one session for H.264/HEVC/AV1 via Format, CPU path takes NV12/RGBA/BGRA through Nv12Packer (#424) for every codec, software MFT H.264 only, shared bullets and test list say video encoders, HEVC/AV1 hardware tests from RGBA; holds" }
+stamp = { hash = "b3:da0c443581a4218d", by = "agent:claude-443", note = "Re-read the video encoder bullets: added the first-frame fallback (FirstFrameFallback, #443), the new codec/fallback.rs, and the tracing dependency it logs through; the PROCESS_INPUT call name is shared with MfVideoEncoder::encode." }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/video.rs"]
-stamp = { hash = "b3:3128d2bbed1cee78", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read MfCodecs bullets against codec/video.rs: one session for H.264/HEVC/AV1 via Format, CPU path takes NV12/RGBA/BGRA through Nv12Packer (#424) for every codec, software MFT H.264 only, shared bullets and test list say video encoders, HEVC/AV1 hardware tests from RGBA; holds" }
+stamp = { hash = "b3:4f51e44063f1c9ba", by = "agent:claude-443", note = "Re-read the video encoder bullets: added the first-frame fallback (FirstFrameFallback, #443), the new codec/fallback.rs, and the tracing dependency it logs through; the PROCESS_INPUT call name is shared with MfVideoEncoder::encode." }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/com.rs"]
 stamp = { hash = "b3:c237392a0b5423fa" }
@@ -3780,7 +3783,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:56ca5965c32db6a2", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 on wave/m1-2: re-read the whole section against the PR's change. chat.rs: the chat bullet (liveChatMessages.list with id,snippet,authorDetails, 2000 a page, Scope::Readonly; ChatMessage fields and events; controls replaced, 1000/100 caps; ChatPoller following the page token, at least 1 s, the 60 s-30 min and 5 s-5 min ladders restarting on a class change, stopping on offlineAt or liveChatEnded/NotFound/Disabled, no thread or sleep; quota cost and the per-collection opt-in, ADR-0058 §5) matches chat.rs and chat/tests.rs with the three fixtures; lib.rs adds pub mod chat, the ChatPoller re-export and the crate doc line; live.rs opens call, non_empty and u64_or_string to pub(crate) for chat.rs; the wave's built-in client and UI-only paragraphs before Not yet are unchanged; Not yet lists sending, the engine polling with its switch and youtube.chat.feature, streamList, audience stats and quota accounting; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:b28e65141c38887d", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. The OAuthTokenStore text this README relies on is unchanged." }
+stamp = { hash = "b3:144628a7f41bfeb3", by = "agent:claude-443", note = "Re-read: depends on jstream-platform's Purpose, whose only change is a sentence on VideoEncoder::info changing at a first-frame fallback (#443); this crate uses jstream-platform for Secret only, so it still holds." }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:311cefe9eebe1f9a", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
