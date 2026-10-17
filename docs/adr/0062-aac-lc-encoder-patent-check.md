@@ -2,14 +2,14 @@
 id = "ADR-0062"
 title = "AAC-LC encoder patent check: may JStream ship its own encoder?"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0062: AAC-LC encoder patent check: may JStream ship its own encoder?
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -217,6 +217,12 @@ ADR-0061.
 
 <a id="questions"></a>
 ## Questions for the maintainer
+**Answered:** the maintainer accepted this ADR as proposed ("Accept Adr 0062", relayed in
+ADR-0043's proxy form on #508). That chooses option A with the limits in Decision: no
+legal opinion first, worldwide distribution, the tool and technique limits as written,
+and the notice wording as written. The proposal doesn't include contacting Via LA, so the
+project makes no such contact.
+
 1. **Is this information enough to decide on, or do you want a legal opinion first?**
    This ADR isn't one. Paying for a patent attorney's opinion would be a spending decision.
 2. **Which option: A (recommended), B, C, D or E?**
