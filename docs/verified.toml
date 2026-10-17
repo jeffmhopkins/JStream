@@ -3171,7 +3171,7 @@ stamp = { hash = "b3:c96607ecbfc52f86" }
 stamp = { hash = "b3:cbc148f78a6a98ff" }
 
 ["README#platforms"."body"]
-stamp = { hash = "b3:18feaae75f4923a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Linux row's link moved from superseded ADR-0003 to ADR-0031, which restates the Linux codec-path deferral unchanged; Windows fact marker and ADR-0008 policy, macOS row unchanged" }
+stamp = { hash = "b3:085afe682e9ab1a7", by = "agent:find-idle-work", note = "Linux row now cites accepted ADR-0060 (GNOME/KDE Wayland, Ubuntu LTS, Fedora supported tier, per its decision 1); Windows and macOS rows unchanged; holds" }
 
 ["README#platforms"."dep:docs/adr/0008-windows-support-policy.md"]
 stamp = { hash = "b3:c65b46a55b573338" }
