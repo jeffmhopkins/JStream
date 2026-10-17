@@ -2670,7 +2670,7 @@ stamp = { hash = "b3:8547ab2b9342942f" }
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#canvas"."body"]
-stamp = { hash = "b3:2c42943b912b6f1d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
+stamp = { hash = "b3:6c9fa506152d5146", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: intro and Preview bullet re-checked against preview.rs, screen.rs and mod.rs (rewrapped one sentence); JPEG path re-run in Chromium against the daemon at protocol 0.24" }
 
 ["CRATE-jstream-ui#canvas"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -2679,10 +2679,16 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:ff923b70ae781b73" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: intro and Preview bullet re-checked against preview.rs, screen.rs and mod.rs (rewrapped one sentence); JPEG path re-run in Chromium against the daemon at protocol 0.24" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+
+["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: intro and Preview bullet re-checked against preview.rs, screen.rs and mod.rs (rewrapped one sentence); JPEG path re-run in Chromium against the daemon at protocol 0.24" }
+
+["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: intro and Preview bullet re-checked against preview.rs, screen.rs and mod.rs (rewrapped one sentence); JPEG path re-run in Chromium against the daemon at protocol 0.24" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2703,10 +2709,16 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:8cf7ec4e2d3163db", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; placement via style: bindings plus the .stage-screen class; holds with the wave's shell and panels" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; placement via style: bindings plus the .stage-screen class; holds with the wave's shell and panels" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; placement via style: bindings plus the .stage-screen class; holds with the wave's shell and panels" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2751,10 +2763,10 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:54e4380a88fc2840", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: main's virtual camera card and registration hints (desktop_vcam), the pairing status in Connecting, and the opacity, blend and filters fields in the sources and store tests stand beside the wave's Studio store with buses, the scene, sources and properties panels with the bus picker, and the Mixer bullet whose bus delete reads delete.plan with DeleteTarget::Bus and applies the plan at its rev; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:775169539bbcd8d4", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: main's virtual camera card and registration hints (desktop_vcam), the pairing status in Connecting, and the opacity, blend and filters fields in the sources and store tests stand beside the wave's Studio store with buses, the scene, sources and properties panels with the bus picker, and the Mixer bullet whose bus delete reads delete.plan with DeleteTarget::Bus and applies the plan at its rev; holds" }
+stamp = { hash = "b3:2957483b1cf77d38", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; placement via style: bindings plus the .stage-screen class; holds with the wave's shell and panels" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:92092b53f0278780", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list covers main's host.rs desktop() and desktop_vcam() and outputs.rs (streams, recordings, the virtual camera) beside the wave's Store bullet (Collection keeps state.get's buses), the properties form's bus reference select, and the Panels bullet with confirm.rs shared with mixer.rs, whose bus delete reads delete.plan; holds" }
+stamp = { hash = "b3:099b731e2c3cbb0b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: Canvas bullet (boxes over the live program preview, no 'not hooked up yet') matches canvas/mod.rs; the wave's new panels entries are untouched and unaffected" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -2763,10 +2775,16 @@ stamp = { hash = "b3:8b72f650cbef12f9" }
 stamp = { hash = "b3:8cf7ec4e2d3163db", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: Canvas bullet (boxes over the live program preview, no 'not hooked up yet') matches canvas/mod.rs; the wave's new panels entries are untouched and unaffected" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: Canvas bullet (boxes over the live program preview, no 'not hooked up yet') matches canvas/mod.rs; the wave's new panels entries are untouched and unaffected" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: Canvas bullet (boxes over the live program preview, no 'not hooked up yet') matches canvas/mod.rs; the wave's new panels entries are untouched and unaffected" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }

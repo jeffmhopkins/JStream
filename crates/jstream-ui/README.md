@@ -246,9 +246,8 @@ in the browser, and `mod.rs` is the component.
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
   decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap` one at a
   time, and while one decodes only the newest that arrives waits, so the last picture
-  is never lost. Each decoded picture is
-  drawn into a `<canvas>` placed with the canvas's own fit, so the picture lies exactly
-  under the boxes. If the decoder fails, the canvas closes the stream and subscribes
+  is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
+  canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. Without live values (below), the
