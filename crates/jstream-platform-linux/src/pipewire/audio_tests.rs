@@ -57,6 +57,8 @@ struct Seen {
     next: u64,
     gaps: u64,
     ragged: u64,
+    /// Packets flagged silent (an idle source's empty chunks).
+    silent: u64,
     peak: f32,
     times: Vec<MediaTime>,
     errors: Vec<String>,
@@ -85,6 +87,7 @@ impl AudioInputHandler for Recorder {
         }
         s.next = packet.device_position + (packet.samples.len() / self.channels) as u64;
         s.packets += 1;
+        s.silent += u64::from(packet.flags.silent);
         let peak = packet.samples.iter().fold(0.0f32, |m, v| m.max(v.abs()));
         s.peak = s.peak.max(peak);
         if let Some(t) = packet.time {

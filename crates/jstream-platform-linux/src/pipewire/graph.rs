@@ -242,7 +242,8 @@ impl Graph {
         );
     }
 
-    /// Forgets a node or client, from a `global_remove` event.
+    /// Forgets a node or client, from a `global_remove` event. The connection destroys a
+    /// removed device node's bound proxy itself (`State::unbind_node` in `audio.rs`).
     pub(crate) fn remove(&mut self, id: u32) {
         self.nodes.remove(&id);
         self.clients.remove(&id);

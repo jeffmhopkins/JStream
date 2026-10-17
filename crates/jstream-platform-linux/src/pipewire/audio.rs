@@ -29,14 +29,14 @@ use jstream_platform::{
 };
 
 use super::ffi::{
-    self, CHUNK_SKIP, FLAG_AUTOCONNECT, FLAG_MAP_BUFFERS, FLAG_RT_PROCESS, Fns, PW_DIRECTION_INPUT,
-    PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_ID_CORE, PW_VERSION_CORE_EVENTS, PW_VERSION_METADATA,
-    PW_VERSION_METADATA_EVENTS, PW_VERSION_NODE, PW_VERSION_NODE_EVENTS, PW_VERSION_REGISTRY,
-    PW_VERSION_REGISTRY_EVENTS, PW_VERSION_STREAM_EVENTS, Ptr, PwBuffer, PwCoreEvents, PwCoreInfo,
-    PwCoreMethods, PwMetadataEvents, PwMetadataMethods, PwNodeEvents, PwNodeInfo, PwNodeMethods,
-    PwRegistryEvents, PwRegistryMethods, PwStreamEvents, PwTime, STATE_ERROR, STATE_STREAMING,
-    STATE_UNCONNECTED, SpaDict, SpaHook, SpaInterface, SpaPod, TYPE_CLIENT, TYPE_METADATA,
-    TYPE_NODE,
+    self, CHUNK_CORRUPTED, CHUNK_EMPTY, FLAG_AUTOCONNECT, FLAG_MAP_BUFFERS, FLAG_RT_PROCESS, Fns,
+    PW_DIRECTION_INPUT, PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_ID_CORE, PW_VERSION_CORE_EVENTS,
+    PW_VERSION_METADATA, PW_VERSION_METADATA_EVENTS, PW_VERSION_NODE, PW_VERSION_NODE_EVENTS,
+    PW_VERSION_REGISTRY, PW_VERSION_REGISTRY_EVENTS, PW_VERSION_STREAM_EVENTS, Ptr, PwBuffer,
+    PwCoreEvents, PwCoreInfo, PwCoreMethods, PwMetadataEvents, PwMetadataMethods, PwNodeEvents,
+    PwNodeInfo, PwNodeMethods, PwRegistryEvents, PwRegistryMethods, PwStreamEvents, PwTime,
+    STATE_ERROR, STATE_STREAMING, STATE_UNCONNECTED, SpaDict, SpaHook, SpaInterface, SpaPod,
+    TYPE_CLIENT, TYPE_METADATA, TYPE_NODE,
 };
 use super::graph::{Graph, Plan, packet_hns};
 use crate::MonotonicClock;
@@ -62,9 +62,10 @@ struct State {
     /// The bound `default` metadata object, once the registry announced it.
     metadata: Ptr,
     metadata_hook: Box<SpaHook>,
-    /// The bound device nodes, whose info carries their channel count, each with its
-    /// listener's hook. Destroyed in `Connection::drop`.
-    nodes: Vec<(Ptr, Box<SpaHook>)>,
+    /// The bound device nodes, whose info carries their channel count: each global id,
+    /// proxy and listener's hook. Destroyed when the node's global goes, or in
+    /// `Connection::drop`.
+    nodes: Vec<(u32, Ptr, Box<SpaHook>)>,
     /// The sequence number of the round trip being waited for, and whether it is done.
     pending: c_int,
     done: bool,
@@ -267,8 +268,9 @@ impl Connection {
                 data,
             );
         }
-        // The first round trip delivers the globals, and binds the default metadata;
-        // the second delivers the metadata's properties.
+        // The first round trip delivers the globals, and binds the default metadata and
+        // each device node; the second delivers the metadata's properties and the
+        // nodes' info (their channel counts).
         self.round_trip()?;
         self.round_trip()
     }
@@ -347,13 +349,14 @@ impl Drop for Connection {
         let fns = self.fns;
         // SAFETY: the loop's thread is stopped first, so nothing else uses the state or
         // the proxies; then each object is destroyed once, children before the core:
-        // the metadata and registry proxies, the core, the context, the loop. Null
+        // the bound device node proxies, the metadata and registry proxies, the core,
+        // the context, the loop. Null
         // pointers are the steps `open` never reached. The state (and a stream's
         // handler in it) is freed last, after its last callback has returned.
         unsafe {
             (fns.thread_loop_stop)(self.thread_loop);
             let state = &mut *self.state;
-            for (node, _) in &state.nodes {
+            for (_, node, _) in &state.nodes {
                 (fns.proxy_destroy)(*node);
             }
             if !state.metadata.is_null() {
@@ -497,6 +500,7 @@ unsafe extern "C" fn on_global_remove(data: *mut c_void, id: u32) {
     unsafe {
         with(data, |s| {
             s.graph.remove(id);
+            s.unbind_node(id);
             if let Some(stream) = s.stream.as_ref()
                 && stream.watch == Some(id)
             {
@@ -598,7 +602,24 @@ impl State {
                     data.cast(),
                 );
             }
-            self.nodes.push((node, hook));
+            self.nodes.push((id, node, hook));
+        }
+    }
+
+    /// Destroys the proxy bound to device node `id`, once its global is gone, so a
+    /// device that comes and goes during a stream leaves nothing behind. On the loop's
+    /// thread, from the registry's `global_remove` event.
+    fn unbind_node(&mut self, id: u32) {
+        let Some(at) = self.nodes.iter().position(|(n, _, _)| *n == id) else {
+            return;
+        };
+        let (_, node, mut hook) = self.nodes.swap_remove(at);
+        // SAFETY: on the loop's thread, which owns the proxy's listener list: the hook
+        // is unlinked from it before it is freed, then the proxy (bound in `bind_node`,
+        // not yet destroyed) is destroyed once.
+        unsafe {
+            hook.remove();
+            (self.fns.proxy_destroy)(node);
         }
     }
 
@@ -819,13 +840,16 @@ impl Realtime {
         // SAFETY: as above.
         let c = unsafe { &*chunk };
         let stride = self.channels * 4;
-        if c.flags & CHUNK_SKIP != 0 {
+        if c.flags & CHUNK_CORRUPTED != 0 {
             // The frames are lost but still count, so the next packet's position jumps
             // (when the chunk says how many there were).
             ex.position += (c.size as usize / stride) as u64;
             ex.discontinuity = true;
             return;
         }
+        // An empty chunk (nothing played into the source) is silence, not a loss: it is
+        // delivered as a silent packet, so the engine keeps getting times.
+        let silent = c.flags & CHUNK_EMPTY != 0;
         let offset = (c.offset as usize).min(maxsize);
         let size = (c.size as usize).min(maxsize - offset);
         let mut frames = size / stride;
@@ -857,7 +881,7 @@ impl Realtime {
             time,
             flags: AudioPacketFlags {
                 discontinuity: std::mem::take(&mut ex.discontinuity),
-                silent: false,
+                silent,
             },
         };
         if let Handler::Input(h) = &mut ex.handler {
