@@ -528,13 +528,13 @@ stamp = { hash = "b3:ff923b70ae781b73" }
 stamp = { hash = "b3:56b6301e2e6a132b" }
 
 ["CLAUDE#docs-duty"."body"]
-stamp = { hash = "b3:fc3acf4b246526a2", by = "agent:claude", note = "merge-main step now tells builders to re-verify each stale section with docs verify --merge, written per section from the merged commits merge-main prints; matches DOCS#verification's new --merge paragraph and DOCS#notes' updated after-merge bullet; the other duty bullets are unchanged" }
+stamp = { hash = "b3:1bdcbe942d9c36a8", by = "agent:claude", note = "docs-duty now says to use docs verify --renote, not --note or a hand edit, when a reviewer asks for a better note on a fresh section; matches DOCS#verification's new --renote paragraph and DOCS#notes' added sentence; the merge-main and other duty bullets are unchanged" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#notes"]
-stamp = { hash = "b3:300741f4cc467f14", by = "agent:claude", note = "merge-main step now tells builders to re-verify each stale section with docs verify --merge, written per section from the merged commits merge-main prints; matches DOCS#verification's new --merge paragraph and DOCS#notes' updated after-merge bullet; the other duty bullets are unchanged" }
+stamp = { hash = "b3:f32bbe96ef9bc7e5", by = "agent:claude", note = "docs-duty now says to use docs verify --renote, not --note or a hand edit, when a reviewer asks for a better note on a fresh section; matches DOCS#verification's new --renote paragraph and DOCS#notes' added sentence; the merge-main and other duty bullets are unchanged" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:4bc8d9912a9d4f56", by = "agent:claude", note = "merge-main step now tells builders to re-verify each stale section with docs verify --merge, written per section from the merged commits merge-main prints; matches DOCS#verification's new --merge paragraph and DOCS#notes' updated after-merge bullet; the other duty bullets are unchanged" }
+stamp = { hash = "b3:a26856c8dd0616cd", by = "agent:claude", note = "docs-duty now says to use docs verify --renote, not --note or a hand edit, when a reviewer asks for a better note on a fresh section; matches DOCS#verification's new --renote paragraph and DOCS#notes' added sentence; the merge-main and other duty bullets are unchanged" }
 
 ["CLAUDE#pr-loop"."body"]
 stamp = { hash = "b3:f50bf78c7a2c63c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: item 6 now cites ADR-0056, which restates ADR-0018's action-pin pre-approval unchanged (decision item 3); Dependabot auto-merge and CI handling still hold; rest of the loop untouched." }
@@ -3186,13 +3186,13 @@ stamp = { hash = "b3:8849c3355f43050d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/ledger.rs"]
-stamp = { hash = "b3:4df8112d7b80826f", by = "agent:claude", note = "merge-main bullet now says it lists each stale input with the branch's earlier note and the merged commits that changed it, and that docs verify --merge keeps those notes and adds the merge text; matches stale_report/StaleInput in merge.rs and verify_merge/restamp_merge in mod.rs and ledger.rs; the rest of Available now is unchanged by this diff" }
+stamp = { hash = "b3:3ce9859c7d9a760b", by = "agent:claude", note = "xtask gains docs verify --renote (verify_renote in mod.rs, ledger::renote, merge::base_ledger/check_branch); the Hash-bound verification bullet still says docs verify records a re-read and the merge-main bullet is unchanged, and --renote is described in DOCS#verification, so the Available now list still holds" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/merge.rs"]
-stamp = { hash = "b3:28f2d5ecdfa1f75f", by = "agent:claude", note = "merge-main bullet now says it lists each stale input with the branch's earlier note and the merged commits that changed it, and that docs verify --merge keeps those notes and adds the merge text; matches stale_report/StaleInput in merge.rs and verify_merge/restamp_merge in mod.rs and ledger.rs; the rest of Available now is unchanged by this diff" }
+stamp = { hash = "b3:9b42c0f244d564b9", by = "agent:claude", note = "xtask gains docs verify --renote (verify_renote in mod.rs, ledger::renote, merge::base_ledger/check_branch); the Hash-bound verification bullet still says docs verify records a re-read and the merge-main bullet is unchanged, and --renote is described in DOCS#verification, so the Available now list still holds" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/mod.rs"]
-stamp = { hash = "b3:a2b706530a538b2e", by = "agent:claude", note = "merge-main bullet now says it lists each stale input with the branch's earlier note and the merged commits that changed it, and that docs verify --merge keeps those notes and adds the merge text; matches stale_report/StaleInput in merge.rs and verify_merge/restamp_merge in mod.rs and ledger.rs; the rest of Available now is unchanged by this diff" }
+stamp = { hash = "b3:e5ea095d0108f343", by = "agent:claude", note = "xtask gains docs verify --renote (verify_renote in mod.rs, ledger::renote, merge::base_ledger/check_branch); the Hash-bound verification bullet still says docs verify records a re-read and the merge-main bullet is unchanged, and --renote is described in DOCS#verification, so the Available now list still holds" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/parse.rs"]
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
@@ -3408,7 +3408,7 @@ stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade fro
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
 
 ["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:4bc8d9912a9d4f56", by = "agent:claude", note = "DOCS#verification gained the docs verify --merge paragraph and the per-input merge-main report; this section only says merge-main --from wave/<name> resolves the same conflicts and lists the sections to re-read and verify, which still holds, and the --merge flag works the same after a wave merge" }
+stamp = { hash = "b3:a26856c8dd0616cd", by = "agent:claude", note = "DOCS#verification gained the docs verify --renote paragraph, including --from wave/<name> for a PR into a wave; this section only says merge-main --from wave/<name> resolves conflicts and lists sections to re-verify, which still holds" }
 
 ["RUNBOOK-WAVES#landing"."body"]
 stamp = { hash = "b3:4658abf796c67b1a", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "step 5 now also drops or updates each landed row's needs; the rest of the landing steps are unchanged and match the progress.toml rules" }
