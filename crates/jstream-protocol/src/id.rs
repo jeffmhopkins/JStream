@@ -96,6 +96,11 @@ opaque_id!(
     RequestId
 );
 opaque_id!(
+    /// A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by
+    /// the client that opens it, and unique among that client's open gestures.
+    GestureId
+);
+opaque_id!(
     /// Makes a retried batch safe: the engine applies a batch with a given key at most
     /// once per client and answers a retry with the original result.
     IdempotencyKey

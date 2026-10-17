@@ -153,6 +153,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   command is a new client, so a one-shot `undo` would always find nothing to undo.
   `mcp` is one client for its whole run: its `history` tool undoes and redoes the
   agent's own edits.
+- **No live-value command.** A gesture belongs to its client and expires when the
+  session ends ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so a one-shot
+  `live.set` would be undone as the command exits. `mcp`'s `live` tool keeps one open
+  for the agent's run. `events` shows other clients' gestures: human output prints
+  `live.changed <gesture> by <client>: <setters>` and `live.ended <gesture> by
+  <client> <outcome> [rev N]`.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it

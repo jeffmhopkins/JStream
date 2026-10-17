@@ -431,9 +431,9 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
-| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot and `rev` under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
@@ -500,21 +500,23 @@ source frame and a collection file's load, the control side re-plans the program
 under the collection lock: the reachable scenes, the frames they show and the passes
 that draw them. It publishes that as the next render generation only when it draws
 something new, so a batch that touches nothing on program publishes nothing. The render
-thread loads it without the lock. `video.snapshot` reads it together with `rev` under
-the lock on the control path, and its thread only receives the snapshot. The render
+thread loads it without the lock. `video.snapshot` and the preview thread read it
+together with `rev` and the live values under the lock, and draw the live values over
+it. The render
 thread draws through a `jstream-render` resource cache keyed by source and by nested
 scene and depth. A frame that shows what the last one showed allocates no texture: an
 unchanged frame is not uploaded again and each nested scene is redrawn into the layer it
 had. An image no frame references is retired, then freed once the GPU has finished the
 last frame that used it (a `Queue::on_submitted_work_done` fence the cache polls without
-blocking). The render thread hands those images, and each render snapshot it replaces,
-to the program stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render
+blocking). The render thread hands those images, and each render snapshot and set of
+live values it replaces, to the program stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render
 thread stamps its reader slot as the handover below says. When a fatal error stops its
 drawing it publishes the stopped marker too: it adopts nothing more and only repeats the
 frame it last drew until teardown. The audio and outputs snapshots are not built.
 
-**Live-value handover** (decided; the render generation and its reader slot are built,
-the parameter channels and the gesture release are not): the engine learns that a
+**Live-value handover** (decided; built for the render thread: its generation, its reader
+slot, its parameter channel and the gesture release. The mixer's channel and generation
+are not, so audio faders have no live values yet): the engine learns that a
 real-time thread holds a committed snapshot through a **generation counter per
 subsystem**. Each time the control side publishes a subsystem's snapshot it bumps that
 subsystem's generation and stores it in the snapshot. Each real-time thread that reads
@@ -617,10 +619,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
   and set a scene's `transition_in` and `transition_out` and an item's transition
   settings. The scene-switch action takes an optional preset.
-- **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
-  actions that override live-adjustable parameters during a drag or a live dialog, with
-  no `rev` bump or undo step; one batch commits the gesture
-  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+- **Live values** (`live.set`, `live.cancel`; query `live.list`; events `live.changed`,
+  `live.ended`; protocol 0.26): actions that override live-adjustable parameters during
+  a drag or a live dialog, with no `rev` bump or undo step; one batch carrying `ends_gesture`
+  commits the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). Built for item
+  placements and crops; audio faders follow with the mixer's parameter channel.
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
@@ -737,7 +740,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -747,12 +750,17 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
   apart: each read returns the newest tick as `stats` (running totals), so it can't
   evict the state and output events and its drop counts stay visible. `meters.tick`,
-  about ten a second while the mixer runs, is kept the same way, as `meters`. `youtube.*` events are not
-  returned to agents (ADR-0058 §3).
+  about ten a second while the mixer runs, is kept the same way, as `meters`. A drag's
+  `live.changed` events are merged, in place, into the newest one of their gesture that
+  no read has returned yet, while only `live.changed` events for other parameters follow
+  it, so an unread drag holds one buffered event and `seq` has no gaps. `youtube.*`
+  events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 279 KB
-  of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 484 KB
+  of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
+  of the edit schemas `item` and `batch` do, because `live.set` takes edits and
+  `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
