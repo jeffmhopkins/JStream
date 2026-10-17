@@ -169,8 +169,12 @@ web schemes, `data:`, `blob:` and `about:` pages, and `file:` only below a local
 own folder; popups are not shown. The control server already refuses a page's
 WebSocket upgrade, since its `Origin` is foreign or `null`.
 
-**Gaps:** no explicit policy for permission requests (camera, microphone, location) and
-no stance on requests to loopback and LAN addresses (#347). ADR-0021's per-source
+**Gaps:** permission requests are refused: the helper's permission handler cancels every
+camera, microphone and screen request and denies every permission prompt
+(`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
+a focused page's clipboard writes, never reaches that handler; the helper never focuses a
+page or sends it input (#347).
+No stance on requests to loopback and LAN addresses (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
 <a id="files"></a>
@@ -336,7 +340,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #344 | Server, pairing | Windows token, devices and log files only inherit their folder's ACL | Medium |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |
-| #347 | Browser | No permission policy; no stance on loopback and LAN requests | Medium |
+| #347 | Browser | Permissions granted without a prompt; no stance on loopback and LAN requests | Medium |
 | #348 | WASM | No CPU, memory or API-scope limits decided | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
