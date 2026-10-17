@@ -355,7 +355,7 @@ the presets and each scene's overrides in a section under it.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🟡 | A list of presets ("Kind · N ms · easing", default marked) with an "Add a preset" form under the studio bar, not the spec's picker. |
+| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🟡 | A list of presets under the studio bar, each with its name, a line such as "Fade, 300 ms, ease in and out" (a cut shows only its kind) and a "Default" badge on the default, then an "Add a preset" form. It is not the spec's picker. |
 | TR-02 | Preset fields | Duration; Move: stagger, items in one scene only (Fade, Scale, Slide); easing (Ease in-out, Ease out, Linear, Spring). | ✅ | The kind's own fields come from `kind.describe`. |
 | TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🟡 | Make default and Delete are built (Delete is off for the default); no override counts yet. |
 | TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | ✅ | The engine resolves it ([ADR-0029](adr/0029-transitions.md)); the studio bar names the preset it will use and why. |

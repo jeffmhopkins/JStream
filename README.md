@@ -60,7 +60,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 97 of 113 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 23 items, by next step: 🔨 build 11, 🌊 its wave lands 1, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 2</summary>
+<summary><b>What's left</b>: 23 items, by next step: 🔨 build 12, 🌊 its wave lands 1, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -77,7 +77,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
 | U4p | Live preview on canvas | M2 | 🔨 build | draft #302 |  |
 | T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
-| T1u | Studio-mode UI | M2 | ❔ not set |  | #304 |
+| T1u | Studio-mode UI | M2 | 🔨 build |  | #304 |
 | E2 | Video mixes | M2 | 🔨 build |  | #259 |
 | D8p | Audio chain protocol fields | M2 | 🔨 build | draft #303 |  |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |

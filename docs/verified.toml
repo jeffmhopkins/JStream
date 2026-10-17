@@ -4398,7 +4398,7 @@ stamp = { hash = "b3:c3bf32d6cb3bcaf4", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:ed0a7d035b91ffb9", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script after FL-08 moved to locked: 130 rows, 3 built, 24 partial, 59 to build, 43 need the engine, 1 decision." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#transitions"]
-stamp = { hash = "b3:9ad9f05d28ff994d", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304: counts recomputed from the rows (HD-06 to-build; TR-02/04/06 built, TR-01/03 partial); total 130; holds" }
+stamp = { hash = "b3:2718d478b01a57e0", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304 review B1: only TR-01's note changed (it now quotes describe_preset's real line and the Default badge); its status stays partial, so the Transitions counts (3/2/0/1/0) and totals hold" }
 
 ["UI-FEATURES#theme"."body"]
 stamp = { hash = "b3:c3bf32d6cb3bcaf4", by = "agent:claude-ui-features", note = "style.css: 7 colour variables under color-scheme light dark with a prefers-color-scheme dark block and system-ui font, so WS-01/WS-03 to build and WS-08's bottom-right Dismiss box hold; index.html: only the Trunk css and rust links, no font link, matching WS-02 waiting on bundling Plex." }

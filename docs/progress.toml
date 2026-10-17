@@ -746,6 +746,7 @@ milestone = "M2"
 title = "Studio-mode UI"
 status = "review"
 prs = [304]
+needs = ["build"]
 
 [[item]]
 id = "E2"
