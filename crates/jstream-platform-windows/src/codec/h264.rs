@@ -21,9 +21,8 @@ use jstream_platform::media::{
     Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame,
     VideoFrameInfo,
 };
+use jstream_platform::nv12::{RgbOrder, rgb_to_nv12};
 use jstream_platform::{PlatformError, RateControl, VideoEncoderConfig};
-
-use crate::capture::convert::{RgbOrder, rgb_to_nv12};
 
 /// What the MFT is configured with, derived from a [`VideoEncoderConfig`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
