@@ -186,13 +186,34 @@ It has:
   reading of the private TCC database, and logs a hint naming System Settings ›
   Privacy & Security › Screen & System Audio Recording when a tap opens.
   `input_format` for a tap makes one for a moment to read its format.
+- **`AvFoundationVideoDevices`** (`VideoDevices`, ADR-0063 §10) checks the floor when
+  created. **`devices`** lists the built-in, Continuity and external (USB) cameras an
+  `AVCaptureDeviceDiscoverySession` finds, under their `uniqueID`s. A camera's `audio`
+  is the one audio capture device with the same `modelID`, whose `uniqueID` is its Core
+  Audio UID, so `CoreAudioIo` opens it. A USB webcam's camera and microphone share a
+  model; a Mac's built-in ones don't, so they stay unpaired, as does a model two audio
+  devices share. **`formats`** lists, in the camera's order, one entry per format and
+  frame-rate range at that range's highest rate, each `Raw(Nv12)`: AVFoundation
+  converts every native format, and decodes MJPEG itself, to the NV12 the backend asks
+  for. A camera's YUY2 and MJPEG formats of the same size and rate are therefore one
+  entry, and no format needs a `CaptureDecoder`. **`open`** checks the Camera permission
+  the way `open_input` checks the Microphone one: it asks once, then returns a
+  `PlatformError::Os` naming System Settings › Privacy & Security › Camera. Listing
+  needs no permission. It then runs an `AVCaptureSession` with the camera's input, its
+  active format and frame duration set to the chosen ones, and an
+  `AVCaptureVideoDataOutput` that asks for NV12 in video range and drops late frames.
+  Each frame is copied out on the output's serial queue into the capture mailbox,
+  reusing a frame the reader skipped. Its `pts` is the sample's presentation time on
+  `MachClock`, and its colour is BT.601 below 720 lines and BT.709 from there, in
+  limited range, as on Windows. A watcher thread checks every 500 ms that the camera is
+  still connected and the session still running, and otherwise the stream reports
+  `DeviceLost`.
 
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
   proves the synchronisation;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
-- AVFoundation webcams;
 - video decode and the media-file source.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until its own
@@ -205,10 +226,11 @@ VideoToolbox, which falls back to Apple's software encoder on a Mac without a ha
 one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
 the login keychain with uniquely named items, deleted afterwards, listing audio
 devices and their input formats, refusing an unknown output, reading the Microphone
-status without prompting, listing processes, and refusing to tap an unknown output or
-process) need no permission, so they run in the `macos` CI job. The `hw-tests` feature
+status without prompting, listing processes, refusing to tap an unknown output or
+process, and listing cameras and their formats) need no permission, so they run in the `macos` CI job. The `hw-tests` feature
 is for tests that need the Screen Recording, Camera, Microphone or system audio
 recording permission (listing and capturing a display, the missing-permission error,
 recording the default input, and recording desktop audio, the default output and the
-test's own process playing a tone through taps), speakers (playing a tone on the
-default output), or the hardware encoders, which run by hand on a Mac.
+test's own process playing a tone through taps, and capturing NV12 frames from the
+first camera), speakers (playing a tone on the default output), or the hardware
+encoders, which run by hand on a Mac.
