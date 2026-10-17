@@ -323,3 +323,139 @@ relied_on = "Fedora releases still supported: 43 (until Dec 2026) and 44 (until 
 review_every = "90d"
 status = "ok"
 checked_note = "Re-read the supported rows; Fedora 42 is end of life"
+
+[[external]]
+id = "via-la-aac"
+url = "https://www.via-la.com/licensing-programs/aac/"
+relied_on = "Via LA administers one AAC pool licence covering AAC-LC, HE-AAC, HE-AAC v2, xHE-AAC, MPEG-D DRC, AAC Scalable, AAC-LD and AAC-ELD; developers of end-user encoders and decoders need it; per-unit fees ($0.98 for the first 500,000 a year) plus a $15,000 initial fee ($1,000 for small entities), no cap listed; no fees for distributing AAC bit streams; its licensors (ADR-0062)"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read the covered technologies, who needs a licence, the fee table, initial fee and licensor list"
+
+[[external]]
+id = "via-la-aac-patent-list"
+url = "https://www.via-la.com/wp-content/uploads/2026/09/26Q3-AAC-Patent-List-website.pdf"
+relied_on = "The AAC pool's patent list gives licensor, country and patent number only: no expiry or priority dates and no mapping to profiles or tools (ADR-0062). Replaced by the next quarter's list when published"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read the columns; no expiry, priority or profile columns"
+
+[[external]]
+id = "sec-aac-patent-license-agreement"
+url = "https://www.sec.gov/Archives/edgar/data/1649009/000121390020023370/ea125930ex10-9_siyatamobile.htm"
+relied_on = "Via Licensing's AAC Patent License Agreement form (June 2018): fees on each licensed product Sold or Otherwise Supplied, Otherwise Supply includes transfers without compensation, each computer with the software counts separately, fees only where a licensed patent remains unexpired; profiles listed include MPEG-4 AAC Profile including MPEG-2 AAC LC (ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read sections 1.1, 1.17, 4.3 and 4.6.3"
+
+[[external]]
+id = "fraunhofer-aac-lc"
+url = "https://www.iis.fraunhofer.de/en/ff/amm/broadcast-streaming/aaclc.html"
+relied_on = "Fraunhofer says a patent licensing programme covering all versions of AAC is administered by Via LA; no statement that AAC-LC patents have expired (ADR-0062)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the licensing paragraph; no expiry statement"
+
+[[external]]
+id = "fraunhofer-patent-licensing"
+url = "https://www.iis.fraunhofer.de/en/ff/amm/lizenz/patent.html"
+relied_on = "Fraunhofer licenses its AAC patents (AAC-LC included) through the Via LA pool or directly; no statement about expired AAC patents or open-source encoders (ADR-0062)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the AAC paragraphs; no expiry or open-source statement"
+
+[[external]]
+id = "doom9-aac-patent-list-analysis"
+url = "https://forum.doom9.org/showthread.php?p=2027355"
+relied_on = "Community analysis of Via LA's AAC patent list: US patents with priority on or before 2003-12-31 still in force, the last expiring 2028-12-09 (US 8311809); 1,120 entries without dates on Google Patents; not legal advice (ADR-0062)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read posts 4 and 6 of the thread"
+
+[[external]]
+id = "redhat-fdk-aac-free-review"
+url = "https://bugzilla.redhat.com/show_bug.cgi?id=1501522"
+relied_on = "Fedora's fdk-aac-free package review: Red Hat Legal cleared the package's licence as free; the stripped library still decodes all AAC files, some with reduced functionality (ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read comments 2, 34, 39 and 75"
+
+[[external]]
+id = "debian-fdk-aac-free-new"
+url = "https://ftp-master.debian.org/new/fdk-aac-free_2.0.2-3.html"
+relied_on = "Debian's fdk-aac-free upload describes Fedora's fork as stripping newer high efficiency profiles with patent concerns, on the premise that patents no longer apply to this code (ADR-0062). The page disappears when the upload leaves the NEW queue"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the copyright and changelog text"
+
+[[external]]
+id = "patent-us9462404"
+url = "https://patents.google.com/patent/US9462404"
+relied_on = "US9462404: Fraunhofer, compatible multi-channel coding (downmix side information), not an AAC-LC tool; expires 2026-05-19 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us8014534"
+url = "https://patents.google.com/patent/US8014534"
+relied_on = "US8014534: Dolby International, parametric stereo width, not an AAC-LC tool; expires 2026-06-29 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us7577570"
+url = "https://patents.google.com/patent/US7577570"
+relied_on = "US7577570: Dolby International, aliasing reduction in SBR filterbanks, not an AAC-LC tool; expires 2026-08-10 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us7756711"
+url = "https://patents.google.com/patent/US7756711"
+relied_on = "US7756711: Panasonic, frequency-domain band extension, not an AAC-LC tool; expires 2026-12-27 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us8340302"
+url = "https://patents.google.com/patent/US8340302"
+relied_on = "US8340302: Philips, parametric representation of spatial audio (parametric stereo), not an AAC-LC tool; expires 2027-08-01 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us8116460"
+url = "https://patents.google.com/patent/US8116460"
+relied_on = "US8116460: Dolby International, high-frequency reconstruction (SBR), not an AAC-LC tool; expires 2027-10-24 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us7933415"
+url = "https://patents.google.com/patent/US7933415"
+relied_on = "US7933415: Philips, parametric stereo decorrelator, not an AAC-LC tool; expires 2027-12-27 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us7949057"
+url = "https://patents.google.com/patent/US7949057"
+relied_on = "US7949057: Panasonic, band extension, not an AAC-LC tool; expires 2028-07-18 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us8311809"
+url = "https://patents.google.com/patent/US8311809"
+relied_on = "US8311809: Philips, converting a decoded sub-band signal into stereo (parametric stereo), not an AAC-LC tool; expires 2028-12-09 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"

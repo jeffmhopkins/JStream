@@ -1,10 +1,11 @@
 //! Linux platform backends: the implementations of the `jstream-platform` traits on Linux,
-//! as ADR-0060 lays them out. The first part: it has the `CLOCK_MONOTONIC` media
-//! clock (`MonotonicClock`), session and support-tier detection (`Session`), the
-//! ScreenCast portal's capture targets (`PortalCapture`), run-time loading of libpipewire
-//! (`PipeWire`, behind `PipeWireAudio`) and libva, and VA-API H.264 encoding from CPU
-//! frames behind `VaapiCodecs`. Capture and audio sessions report `Unsupported` until
-//! their follow-ups land. Layer 2, and one of the crates allowed `unsafe`
+//! as ADR-0060 lays them out. It has the `CLOCK_MONOTONIC` media clock
+//! (`MonotonicClock`), session and support-tier detection (`Session`), display and window
+//! capture through the ScreenCast portal and a PipeWire video stream (`PortalCapture`, on
+//! the crate's own minimal D-Bus client), run-time loading of libpipewire (`PipeWire`,
+//! behind `PipeWireAudio`) and libva, and VA-API H.264 encoding from CPU frames
+//! behind `VaapiCodecs`. Audio sessions report `Unsupported` until their follow-ups
+//! land. Layer 2, and one of the crates allowed `unsafe`
 //! (R-UNSAFE-001): every system call is wrapped here behind safe APIs.
 //!
 //! System libraries are loaded with `dlopen` when first needed, never linked, so the
@@ -16,11 +17,17 @@
 
 mod clock;
 mod codec;
+#[cfg(any(target_os = "linux", test))]
+mod dbus;
 #[cfg(target_os = "linux")]
 mod dl;
+#[cfg(target_os = "linux")]
+mod mailbox;
 mod pipewire;
 mod portal;
 mod session;
+#[cfg(any(target_os = "linux", test))]
+mod spa;
 mod vaapi;
 
 #[cfg(target_os = "linux")]
