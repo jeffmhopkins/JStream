@@ -205,16 +205,19 @@ applies_to = ["crates/**"]
 -->
 Only crates whose metadata declares `unsafe_allowed = true` may contain `unsafe`:
 `jstream-platform-windows`, `jstream-platform-macos`, `jstream-platform-linux`,
-`jstream-vcam-windows`, `jstream-browser` (ADR-0046), `jstream-browser-helper` (ADR-0048,
-for its `RunWinMain` export) and `*-sys`. All other crates have `#![forbid(unsafe_code)]`,
-and lint-deps checks that it's present.
+`jstream-vcam-windows`, `jstream-plugin-clap`, `jstream-browser` (ADR-0046),
+`jstream-browser-helper` (ADR-0048, for its `RunWinMain` export) and `*-sys`. All other
+crates have `#![forbid(unsafe_code)]`, and lint-deps checks that it's present. Only
+`jstream-plugin-host` may depend on `jstream-plugin-clap`, directly or through other
+crates, so no other process loads a CLAP plugin
+([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); lint-deps checks that too.
 
 <a id="R-UNSAFE-002"></a>
 ### R-UNSAFE-002: Every unsafe block is justified
 <!-- @rule
 status = "active"
 enforced_by = ["lint:clippy::undocumented_unsafe_blocks"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 
@@ -223,7 +226,7 @@ Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 FFI wrappers expose safe APIs. Raw handles don't leak past a crate's public API.
 COM / Objective-C / C resources are wrapped in RAII types.
@@ -233,7 +236,7 @@ COM / Objective-C / C resources are wrapped in RAII types.
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Prefer maintained bindings (`windows`, `objc2-*`, `pipewire`) over hand-written `extern` blocks.
 
@@ -242,7 +245,7 @@ Prefer maintained bindings (`windows`, `objc2-*`, `pipewire`) over hand-written 
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Every function called from foreign code (COM methods, WGC/WASAPI/MF callbacks, Core Audio
 procs) wraps its body in `catch_unwind`. A caught panic becomes an error the engine
@@ -258,8 +261,8 @@ depends_on = ["docs/ARCHITECTURE.md#threading"]
 ### R-RT-001: Audio thread does not allocate, lock, block or log
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "review"]
-applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**"]
+enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "test:jstream_plugin_host::rt::a_pass_does_not_allocate", "review"]
+applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**", "apps/jstream-plugin-host/src/rt.rs"]
 -->
 In steady state, the audio callback and mixer do not allocate, take locks, block, make
 syscalls other than the device API, or log. Debug builds and tests install

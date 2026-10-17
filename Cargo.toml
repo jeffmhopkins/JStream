@@ -23,6 +23,9 @@ arc-swap = { version = "1.9", default-features = false }
 assert_no_alloc = { version = "1", default-features = false, features = ["warn_debug", "warn_release"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
+# The CLAP plugin ABI's raw bindings for `jstream-plugin-clap` (ADR-0035, R-UNSAFE-004):
+# MIT or Apache-2.0, no dependencies.
+clap-sys = { version = "0.5", default-features = false }
 # CEF's C API for browser sources (ADR-0021, picked by spike S4; ADR-0046), pinned
 # exactly: the version carries the CEF build it was generated from (154.0.34), and its
 # sys crate's build script downloads that exact CEF distribution. No default features:
@@ -75,6 +78,7 @@ jstream-platform = { path = "crates/jstream-platform" }
 jstream-platform-linux = { path = "crates/jstream-platform-linux" }
 jstream-platform-macos = { path = "crates/jstream-platform-macos" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
+jstream-plugin-clap = { path = "crates/jstream-plugin-clap" }
 jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
@@ -86,8 +90,9 @@ jstream-youtube = { path = "crates/jstream-youtube" }
 # in the tree under tokio, getrandom and others; no build script compiling C.
 libc = { version = "0.2", default-features = false }
 # `dlopen` for the Linux backends' system libraries (libpipewire, libva), loaded at run
-# time so the workspace builds without their headers (ADR-0060). Already in the tree at
-# 0.9 under cef; no build script.
+# time so the workspace builds without their headers (ADR-0060), and for loading a CLAP
+# plugin file (a DLL) in the plugin host (`jstream-plugin-clap`, ADR-0035). Already in
+# the tree at 0.9 under cef; no build script.
 libloading = { version = "0.9", default-features = false, features = ["std"] }
 # WGSL parsing and validation for effect packs (`jstream-effects`). Pinned to wgpu's
 # exact version (ADR-0004), so it is the copy wgpu already brings in. `wgsl-in` is the
