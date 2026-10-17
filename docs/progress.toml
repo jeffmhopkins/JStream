@@ -849,8 +849,8 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510, 598]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); portal restore tokens per source (#598)"
+prs = [481, 490, 509, 510, 598, 610]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); portal restore tokens per source (#598); the pointer as PipeWire cursor metadata, platform only (#610); the source's show_cursor setting and the engine drawing it follow the main sync (#521), at the version the waves session assigns"
 
 [[item]]
 id = "LNX2"
