@@ -52,7 +52,12 @@
 //! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token (or a refused
 //! cookie) 401. `Host` and the token must appear exactly once, and `Origin` at most once.
 //! `Gate::admit` logs each refusal at `warn` with its reason and the peer address, and
-//! never a header's value, so never the token or the cookie (R-SEC-001).
+//! never a header's value, so never the token or the cookie (R-SEC-001). Credential
+//! refusals are logged one by one only up to [`LOGGED_FAILURES`] in a
+//! [`FAILURE_WINDOW`], for every peer together; the rest of the window's are counted,
+//! and the count is logged in one line with the next one after the window (#354). They
+//! are still refused and the right token still admitted: 256 bits can't be guessed, so
+//! slowing attempts down would only let any local process lock the real clients out.
 //!
 //! A request that passes the gate can still be refused because the server already has
 //! `ServerConfig::max_connections` connections open: HTTP 503 (`Refusal::Full`), logged
@@ -66,8 +71,8 @@ use axum::response::{IntoResponse, Response};
 use jstream_control::WS_TOKEN_PROTOCOL_PREFIX;
 use jstream_protocol::DeviceId;
 use std::net::{Ipv6Addr, SocketAddr};
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// The default port of the `http` and `ws` schemes: a `Host` or `Origin` without a port
 /// names it (RFC 9110 §7.2, RFC 6455 §3).
@@ -83,6 +88,57 @@ pub(crate) const DEVICE_COOKIE: &str = "__Host-jstream_device";
 /// The `Sec-Fetch-Site` values a request admitted by the cookie may carry: the page
 /// itself, or the user typing the address.
 const COOKIE_FETCH_SITES: [&str; 2] = ["same-origin", "none"];
+
+/// Credential refusals logged one by one in a [`FAILURE_WINDOW`]; later ones in the
+/// window are only counted (#354).
+const LOGGED_FAILURES: u32 = 10;
+
+/// The window [`LOGGED_FAILURES`] counts in, from its first credential refusal.
+const FAILURE_WINDOW: Duration = Duration::from_secs(60);
+
+/// The credential refusals of the current window, from every peer together: on loopback
+/// a peer address names no one worth keeping apart. Fixed size, however many arrive.
+#[derive(Debug, Default)]
+struct Failures {
+    /// When the current window began; `None` before the first refusal.
+    since: Option<Instant>,
+    /// Refusals in the current window.
+    count: u32,
+}
+
+/// How to log one credential refusal.
+#[derive(Debug, PartialEq, Eq)]
+enum FailureLog {
+    /// Log it, after a line counting the previous window's `unlogged` ones, if any.
+    Log { unlogged: u32 },
+    /// Say that the window's later refusals won't be logged, instead of logging it.
+    Silence,
+    /// Count it only.
+    Quiet,
+}
+
+impl Failures {
+    /// Records a refusal at `now` and says how to log it.
+    fn record(&mut self, now: Instant) -> FailureLog {
+        let in_window = self
+            .since
+            .is_some_and(|since| now.saturating_duration_since(since) < FAILURE_WINDOW);
+        if !in_window {
+            let unlogged = self.count.saturating_sub(LOGGED_FAILURES);
+            self.since = Some(now);
+            self.count = 1;
+            return FailureLog::Log { unlogged };
+        }
+        self.count = self.count.saturating_add(1);
+        if self.count <= LOGGED_FAILURES {
+            FailureLog::Log { unlogged: 0 }
+        } else if self.count == LOGGED_FAILURES + 1 {
+            FailureLog::Silence
+        } else {
+            FailureLog::Quiet
+        }
+    }
+}
 
 /// Why an upgrade request was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -214,6 +270,8 @@ pub(crate) struct Gate {
     hosts: Vec<String>,
     /// Lowercase `scheme://host[:port]` values, besides `http://<accepted host>`.
     extra_origins: Vec<String>,
+    /// The credential refusals of the current window, for logging them (#354).
+    failures: Mutex<Failures>,
 }
 
 impl Gate {
@@ -247,22 +305,54 @@ impl Gate {
             port,
             hosts,
             extra_origins,
+            failures: Mutex::default(),
         }
     }
 
     /// Checks an upgrade request's headers, as [`check`](Gate::check) does, and logs a
-    /// refusal with its reason and `peer`, the address it came from. Nothing from the
-    /// headers is logged: not the token, nor the `Host` or `Origin` values.
+    /// refusal with its reason and `peer`, the address it came from, a credential
+    /// refusal only up to [`LOGGED_FAILURES`] in a window ([`log_failure`]). Nothing
+    /// from the headers is logged: not the token, nor the `Host` or `Origin` values.
+    ///
+    /// [`log_failure`]: Gate::log_failure
     pub(crate) fn admit(
         &self,
         headers: &HeaderMap,
         peer: SocketAddr,
     ) -> Result<Credential, Refusal> {
         let result = self.check(headers);
-        if let Err(refusal) = &result {
-            refusal.log(peer);
+        match result {
+            Err(refusal) if refusal.is_credential() => {
+                self.log_failure(refusal, peer, Instant::now());
+            }
+            Err(refusal) => refusal.log(peer),
+            Ok(_) => {}
         }
         result
+    }
+
+    /// Logs a credential refusal at `now` as [`Failures::record`] says: one by one up to
+    /// [`LOGGED_FAILURES`] in a [`FAILURE_WINDOW`], then one line saying the rest
+    /// aren't, and their count with the next refusal after the window.
+    fn log_failure(&self, refusal: Refusal, peer: SocketAddr, now: Instant) {
+        let log = self
+            .failures
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .record(now);
+        match log {
+            FailureLog::Log { unlogged } => {
+                if unlogged > 0 {
+                    tracing::warn!(unlogged, "failed credential checks were not logged");
+                }
+                refusal.log(peer);
+            }
+            FailureLog::Silence => tracing::warn!(
+                window_secs = FAILURE_WINDOW.as_secs(),
+                "too many failed credential checks: not logging the rest of this window"
+            ),
+            FailureLog::Quiet => {}
+        }
     }
 
     /// Checks only `Host` and `Origin`, as for `POST /api/v1/pair` and `GET /pair`, the
@@ -616,8 +706,8 @@ fn base64_decode(text: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        Credential, DEVICE_COOKIE, Gate, Refusal, check_extra_hosts, device_cookie_header,
-        renew_cookie,
+        Credential, DEVICE_COOKIE, FAILURE_WINDOW, FailureLog, Failures, Gate, LOGGED_FAILURES,
+        Refusal, check_extra_hosts, device_cookie_header, renew_cookie,
     };
     use crate::config::{ServerConfig, Token};
     use crate::devices::{Devices, Now};
@@ -626,6 +716,7 @@ pub(crate) mod tests {
     use std::fmt;
     use std::net::SocketAddr;
     use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
     use tracing::field::{Field, Visit};
     use tracing::span::{Attributes, Id, Record};
     use tracing::{Metadata, Subscriber};
@@ -1343,6 +1434,71 @@ pub(crate) mod tests {
             "refusals are warnings: {logged}"
         );
         for secret in ["wr0ng-s3cret", "t0ken", "evil.example"] {
+            assert!(!logged.contains(secret), "{secret} logged: {logged}");
+        }
+    }
+
+    /// A window logs its first [`LOGGED_FAILURES`] refusals, then one silencing line,
+    /// then nothing; the next refusal after it starts a new window and carries the
+    /// count of the ones not logged (#354).
+    #[test]
+    fn failures_past_the_limit_are_counted_not_logged() {
+        let start = Instant::now();
+        let mut failures = Failures::default();
+        assert_eq!(failures.record(start), FailureLog::Log { unlogged: 0 });
+        for _ in 1..LOGGED_FAILURES {
+            assert_eq!(failures.record(start), FailureLog::Log { unlogged: 0 });
+        }
+        assert_eq!(failures.record(start), FailureLog::Silence);
+        let late = start + FAILURE_WINDOW - Duration::from_millis(1);
+        for _ in 0..1000 {
+            assert_eq!(failures.record(late), FailureLog::Quiet);
+        }
+        let next = start + FAILURE_WINDOW;
+        assert_eq!(failures.record(next), FailureLog::Log { unlogged: 1001 });
+        assert_eq!(failures.record(next), FailureLog::Log { unlogged: 0 });
+        // A window that stayed under the limit has nothing to report.
+        assert_eq!(
+            failures.record(next + FAILURE_WINDOW),
+            FailureLog::Log { unlogged: 0 }
+        );
+    }
+
+    /// A flood of wrong tokens logs a bounded number of lines and never the token, and
+    /// the right token is still admitted during it (#354).
+    #[test]
+    fn a_flood_of_wrong_tokens_logs_a_bounded_summary() {
+        let gate = gate(&[], &[]);
+        let peer = SocketAddr::from(([127, 0, 0, 1], 50_000));
+        let wrong = with(header::AUTHORIZATION, Some("Bearer wr0ng-s3cret"));
+        let capture = Capture::default();
+        let start = Instant::now();
+        tracing::subscriber::with_default(capture.clone(), || {
+            for _ in 0..500 {
+                assert_eq!(gate.admit(&wrong, peer), Err(Refusal::Token));
+            }
+            assert_eq!(gate.admit(&headers(&good()), peer), Ok(Credential::Control));
+            // Not credential refusals: logged every time.
+            for _ in 0..LOGGED_FAILURES + 5 {
+                assert_eq!(
+                    gate.admit(&with(header::ORIGIN, Some("http://evil.example")), peer),
+                    Err(Refusal::Origin)
+                );
+            }
+            gate.log_failure(Refusal::Token, peer, start + 2 * FAILURE_WINDOW);
+        });
+        let logged = capture.text();
+        let count = |text: &str| logged.lines().filter(|l| l.contains(text)).count();
+        assert_eq!(
+            count("missing or wrong control token"),
+            usize::try_from(LOGGED_FAILURES).expect("small") + 1,
+            "{logged}"
+        );
+        assert_eq!(count("not logging the rest of this window"), 1, "{logged}");
+        assert_eq!(count("were not logged"), 1, "{logged}");
+        assert!(logged.contains("unlogged=490"), "{logged}");
+        assert_eq!(count("Origin not allowed"), 15, "{logged}");
+        for secret in ["wr0ng-s3cret", "t0ken"] {
             assert!(!logged.contains(secret), "{secret} logged: {logged}");
         }
     }

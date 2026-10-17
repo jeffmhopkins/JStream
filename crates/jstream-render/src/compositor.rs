@@ -139,6 +139,8 @@ impl Compositor {
         } else {
             None
         };
+        // Last, so no error between the staging and the submit it arms (#391).
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -260,6 +262,7 @@ impl Compositor {
             });
         }
         self.load(scene)?;
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -292,7 +295,7 @@ impl Compositor {
     /// # Errors
     /// [`RenderError::Invalid`] when `input` came from another compositor,
     /// [`RenderError::TooLarge`] for an output past the adapter limit, and
-    /// [`RenderError::Sync`] when staging an imported input fails.
+    /// [`RenderError::Sync`] when staging an imported input or reference image fails.
     pub fn apply_filter(
         &mut self,
         filter: &mut VideoFilter,
@@ -324,15 +327,19 @@ impl Compositor {
             runtime: &mut self.filters,
             encoder: &mut encoder,
             clock,
+            holds: &mut self.staged,
         };
-        filter.pass_mut().encode(&mut ctx, input, &output)?;
+        ctx.holds.clear();
+        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, &output) {
+            self.staged.clear();
+            return Err(err);
+        }
+        ctx.hold(input);
         // Staged only once recording succeeded, right before the submit it arms, and
-        // handed back to the platform at the end of that submit, as `render` does.
-        self.staged.clear();
-        if let Some(sync) = input.sync() {
+        // handed back to the platform at the end of that submit, as `render` does: the
+        // input's hold and those of the images the filter reads besides it, each once.
+        for (sync, _) in &self.staged {
             sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
-            self.staged
-                .push((Arc::clone(sync), input.texture().clone()));
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
@@ -603,12 +610,12 @@ impl Compositor {
         Ok(())
     }
 
-    /// Validates `scene`, builds its vertices, stages its frame holds and writes the
-    /// vertex buffer: everything before the passes are recorded.
+    /// Validates `scene`, builds its vertices and writes the vertex buffer. The caller
+    /// stages the frame holds after this and every other step that can fail, so an
+    /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         color::validate(scene.background)?;
         self.prepare(scene)?;
-        self.stage_sources(scene)?;
         self.ensure_vertex_buffer()?;
         if !self.vertices.is_empty() {
             self.gpu
@@ -688,6 +695,14 @@ impl Compositor {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         }))
+    }
+}
+
+#[cfg(test)]
+impl Compositor {
+    /// Lowers the buffer limit, as a smaller adapter's would be.
+    pub(crate) fn cap_buffer_size(&mut self, bytes: u64) {
+        self.gpu.max_buffer_size = bytes;
     }
 }
 

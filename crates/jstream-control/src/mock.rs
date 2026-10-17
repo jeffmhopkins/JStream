@@ -235,8 +235,9 @@ struct State {
     /// collection holds.
     declared: BTreeSet<OutputId>,
     /// The in-memory stand-in for the OS credential store: the stream keys
-    /// `output.set_key` stored, by output. Kept when an output is deleted, as the
-    /// engine's store keeps them, until `output.clear_key`.
+    /// `output.set_key` stored, by output. As in the engine, a key is removed by
+    /// `output.clear_key`, and by an applied batch, undo or redo that deletes its output
+    /// or changes its `OutputKind::key_server` (#343).
     keys: BTreeMap<OutputId, SecretString>,
     /// The result of each batch, undo or redo applied with an idempotency key, per
     /// client: batches and history calls share a client's keys.
@@ -636,6 +637,21 @@ impl State {
                 reason: "rev overflowed".into(),
             })?;
         let rev = next.rev;
+        // A key never follows its output to another server, or outlives it (#343).
+        let stale: Vec<OutputId> = self
+            .collection
+            .outputs
+            .iter()
+            .filter(|(output_id, kind)| {
+                next.outputs
+                    .get(*output_id)
+                    .is_none_or(|now| now.key_server() != kind.key_server())
+            })
+            .map(|(output_id, _)| output_id.clone())
+            .collect();
+        for output_id in stale {
+            self.keys.remove(&output_id);
+        }
         self.collection = next;
         Ok((rev, undo.into_iter().rev().flatten().collect(), removed))
     }
@@ -2035,8 +2051,9 @@ const MAX_PATH_LEN: usize = 4096;
 
 /// Why `path` is not an acceptable recording path, or `None` when it is: the checks and
 /// fixed reasons of `jstream-graph`'s path validation, in the same order. The rule is
-/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, no `..` segment, and a
-/// file name last.
+/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, not two leading
+/// separators (a UNC or device path), no `:` but a drive letter's, no `?` or `*`, no
+/// `..` segment, and a file name last that is not a DOS device name.
 fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
         return Some("must not be empty");
@@ -2055,13 +2072,41 @@ fn record_path_problem(path: &str) -> Option<&'static str> {
     if !(path.starts_with(['/', '\\']) || drive) {
         return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
     }
+    let rest = if drive { &path[2..] } else { path };
+    if rest[1..].starts_with(['/', '\\']) {
+        return Some("must not start with two separators");
+    }
+    if rest.contains(':') {
+        return Some("must not contain `:` but a drive letter's");
+    }
+    if rest.contains(['?', '*']) {
+        return Some("must not contain `?` or `*`");
+    }
     let mut segments = path.split(['/', '\\']);
     if segments.clone().any(|segment| segment == "..") {
         return Some("must not contain a `..` segment");
     }
     match segments.next_back() {
         Some("" | ".") | None => Some("must end in a file name"),
+        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
         Some(_) => None,
+    }
+}
+
+/// Whether Win32 opens the path component `name` as a DOS device, as in `jstream-graph`:
+/// a stem (the name before its first `.`, without trailing spaces, in any ASCII case) of
+/// `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`,
+/// `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`.
+fn is_dos_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    match upper.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        _ => ["COM", "LPT"].iter().any(|port| {
+            upper.strip_prefix(port).is_some_and(|n| {
+                matches!(n.as_bytes(), [b'0'..=b'9']) || matches!(n, "\u{b9}" | "\u{b2}" | "\u{b3}")
+            })
+        }),
     }
 }
 
@@ -3993,13 +4038,27 @@ mod tests {
         let state = format!("{:?}", query(&*control, Query::StateGet));
         assert!(!state.contains("abcd"), "{state}");
 
-        // The key outlives the output, as in the engine's store, until it is cleared;
-        // clearing an unknown output's key, or a missing key, succeeds.
+        // As in the engine (#343): a new path on the same server keeps the key, a new
+        // server removes it, and so does deleting the output.
+        let retarget = |url: &str| {
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("yt"),
+                target: RtmpTarget::Generic { url: url.into() },
+            })
+        };
+        let path_only = retarget("rtmp://A.rtmp.youtube.com:1935/other");
+        assert_eq!(batch(&*control, path_only), Ok(Rev(2)));
+        assert!(engine.stream_key(&OutputId::new("yt")).is_some());
+        let elsewhere = retarget("rtmp://attacker.example/live2");
+        assert_eq!(batch(&*control, elsewhere), Ok(Rev(3)));
+        assert!(engine.stream_key(&OutputId::new("yt")).is_none());
+        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::action()));
         let delete = Batch::single(Edit::OutputDelete {
             output_id: OutputId::new("yt"),
         });
-        assert_eq!(batch(&*control, delete), Ok(Rev(2)));
-        assert!(engine.stream_key(&OutputId::new("yt")).is_some());
+        assert_eq!(batch(&*control, delete), Ok(Rev(4)));
+        assert!(engine.stream_key(&OutputId::new("yt")).is_none());
+        // Clearing an unknown output's key, or a missing key, succeeds.
         for _ in 0..2 {
             let clear = Action::OutputClearKey {
                 output_id: OutputId::new("yt"),
@@ -4008,7 +4067,7 @@ mod tests {
         }
         assert!(engine.stream_key(&OutputId::new("yt")).is_none());
         let events = drain(&mut events);
-        assert_eq!(events.len(), 2, "only the two batches: {events:?}");
+        assert_eq!(events.len(), 4, "only the four batches: {events:?}");
     }
 
     #[test]

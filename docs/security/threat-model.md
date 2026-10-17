@@ -107,16 +107,18 @@ a stolen token, local denial of service.
   (authenticated or not), 32 WebSocket connections, 64 calls in flight per connection,
   16 MCP sessions, 10 s to send headers and finish the handshake, a bounded event
   outbox.
+- Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
+  of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
 
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
 It doesn't expire or rotate; deleting the file and restarting makes a new one. A browser
 can be given the control token through the `Basic` prompt, and then holds it as a cached,
-ambient credential until it is closed.
+ambient credential until it is closed. Failed tokens are not delayed or locked out:
+256 bits can't be guessed, and a lockout would let any local process shut out the real
+clients.
 
-**Gaps:** the Windows token file only inherits its folder's ACL (#344); failed tokens
-are not throttled, which only matters for log noise, since 256 bits can't be guessed
-(#354).
+**Gaps:** the Windows token file only inherits its folder's ACL (#344).
 
 <a id="pairing"></a>
 ## Pairing and remote browsers
@@ -187,7 +189,9 @@ makes Windows contact a remote host.
 - Image formats are sniffed from their bytes; each decoder has a memory limit; files are
   capped at 256 MiB, 16384 pixels a side and 1 GiB decoded. The image and font
   decoders are memory-safe Rust.
-- Recordings must be absolute paths without `..`, are written to a `.part` file created
+- Recordings must be absolute paths without `..`, not UNC, device or NT object paths,
+  with no `:` but a drive letter's, and not ending in a DOS device name (`NUL`,
+  `nul.mp4`, `CON`, `COM1`, …), which Windows opens in place of a file. They are written to a `.part` file created
   new, and never replace an existing file.
 - Fuzz targets cover the protocol, source and output kind settings, collection loading,
   AMF0, H.264, HEVC, AV1, AAC and the muxers (`fuzz/`).
@@ -222,7 +226,8 @@ non-finite samples turned to silence.
   coming back are not validated (nothing reads them yet); plugin-reported names reach
   the UI and agents; the host can reset the mixer's miss counters.
 - WASM (#348): no CPU or memory limits are decided, and nothing limits which `Control`
-  calls a plugin may make, so a sandboxed plugin could still retarget an output (#343).
+  calls a plugin may make, so a sandboxed plugin could still retarget an output (it
+  can't take the old key along: #343 removes it on a new server).
   R-SEC-003 names an enforcing test in a crate that doesn't exist yet.
 - WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
   device loss isn't handled.
@@ -239,7 +244,8 @@ injection), and so using its full access against the user.
 **Controls on main:** MCP goes through the same gate and token as the WebSocket API
 (over stdio, through `jstream-cli mcp`, it uses the CLI's token). The desktop app keeps
 MCP off. Tool arguments and results are not logged; the audit log records who changed
-what, without arguments. Stream keys are never in a result.
+what, without arguments. Stream keys are never in a result, and a retarget to another
+host removes the output's key rather than sending it there (#343).
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through
@@ -247,8 +253,7 @@ what, without arguments. Stream keys are never in a result.
 agent sets with `output.set_key` is in the agent's own transcript.
 
 **Gaps:** results don't mark third-party text, and an RTMP server's error text reaches
-the agent unbounded (#346); a retarget sends an existing key to a new host, which is
-the main thing an injected instruction would aim for (#343).
+the agent unbounded (#346).
 
 <a id="secrets"></a>
 ## Secrets and the network
@@ -266,15 +271,20 @@ intercepted connection.
   one (user info, query, fragment) are refused.
 - RTMPS and the YouTube API use rustls with the OS roots and hostname checks; nothing
   turns verification off. An RTMP server's text has the key replaced before it is kept.
+- A key is bound to its server: pointing an output at another scheme, host or port,
+  or deleting it, removes its key, and the output can't start until that removal has
+  happened. A start already past that check when the retarget lands opens the target
+  it checked, not the new one, so a retarget never sends the old key to the new host
+  (#343). While that start is opening, `output.set_key` is refused, so a key sent for
+  the new server isn't read with the old one either.
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
 
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
 the URL, as the target documentation warns.
 
-**Gaps:** retargeting keeps the key (#343); `rtmp://` sends the key in cleartext with no
-warning, crash reports redact only the control token, and the redaction test covers
-the engine only (#353).
+**Gaps:** `rtmp://` sends the key in cleartext with no warning, crash reports redact
+only the control token, and the redaction test covers the engine only (#353).
 
 <a id="vcam"></a>
 ## Virtual camera
@@ -307,7 +317,6 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 
 | Issue | Area | Gap | Severity |
 |---|---|---|---|
-| #343 | Secrets, MCP | `output.set_target` keeps the stream key, so a retarget sends it to the new host | High |
 | #344 | Server, pairing | Windows token, devices and log files only inherit their folder's ACL | Medium |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |
@@ -317,7 +326,6 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #352 | Files | Image and font decoders unfuzzed; no fuzzing in CI | Low |
 | #353 | Secrets | `rtmp://` cleartext, crash-report redaction, redaction test scope | Low |
-| #354 | Server | Failed tokens are not throttled (log noise) | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium |

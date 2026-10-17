@@ -59,7 +59,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
-  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). `OutputKind::key_server` names the
+  server a stream key is bound to (scheme, host and port), which the engine and the
+  mock compare to remove a key that would otherwise follow its output elsewhere (#343).
 - **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
   `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
   every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
@@ -461,7 +463,11 @@ application name, and is refused if it could carry a credential (`user:password@
 query or a fragment). A key pasted into the path can't be told from a nested
 application name, so it is stored as given. A `record` output (0.9) records to a file
 on the engine's machine: `path` must be absolute (`/…`, `\…`, `C:\…` or `C:/…`), have
-no `..` segment and end in a file name, and
+no `..` segment and end in a file name. As for an `absolute` asset path, it must not
+start with a second separator (a UNC share or device, `\\host\share\…`, `\\.\…`,
+`\\?\…`), nor contain `:` but the drive letter's, `?` or `*` (`\??\UNC\…`), nor
+end in a DOS device name (`NUL`, `nul.mp4`, `CON`, `COM1`, `LPT1`, …), by the same rule
+as an asset path's last component. And
 `container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
@@ -479,10 +485,23 @@ so it is set with the `output.set_key` action and removed with `output.clear_key
 from YouTube on each `output.start` ([YouTube](#design)), so it needs no
 `output.set_key`. Its ID must be ASCII letters, digits, `-` and `_`, at most 128 bytes.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
-error, query or log carries it, and `output.status` reports only `key_set`. A key
-outlives `output.delete`, so undoing the delete gives back a working output; a client
-that deletes for good also sends `output.clear_key`, which succeeds for an output no
-longer in the collection. Its errors carry fixed reasons that never quote the key.
+error, query or log carries it, and `output.status` reports only `key_set`. A key is
+bound to the server it was set for (#343): when an applied batch, undo or redo deletes
+the output, or points it at another server (`OutputKind::key_server`: scheme, host and
+port; a new path on the same server keeps the key), the engine removes the key from the
+credential store, and refuses that output's `output.start` with `action_failed` until
+the key is gone. So a retarget never sends the old key to the new server, and an output
+re-created with a deleted one's ID starts with no key. Undoing the delete or the
+retarget restores the target but not the secret: set it again with `output.set_key`.
+A start already opening when the retarget lands opens the server it checked, so while
+an output's `output.start` is opening, `output.set_key` for it fails with
+`action_failed`: a key sent for the new server waits until the start has settled.
+The two stay edits under the classification rule above: their effect on the collection
+state, and its inverse, are unchanged, and the key, which is not collection state, is
+removed by the engine guarding it, as a deleted output's runtime state is dropped.
+`output.clear_key` succeeds for an output no longer in the collection. No message
+changed, so this changes no `PROTOCOL_VERSION`. Its errors carry fixed reasons that
+never quote the key.
 
 Encoder profiles (0.13) are collection state as well
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).

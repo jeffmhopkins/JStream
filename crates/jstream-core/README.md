@@ -38,7 +38,9 @@ state machine. Contents:
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
-  injected `StreamKeyStore`, never under the collection lock. It holds the
+  injected `StreamKeyStore`, never under the collection lock, and so does the removal
+  of a key whose output a batch, undo or redo deleted or moved to another server
+  (*Stream keys* below). It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
   history and the subscribers behind one lock, and the drop ledger behind another, and executes
   batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
@@ -657,7 +659,8 @@ returns the earliest time one of its frames changes (`Source::next_change`), and
 thread re-plans then, so an animated image or a video advances on the clock and a
 still one is never re-planned. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
-FFT each 1/30 s) is painted by that thread just before each re-plan, holding no engine
+FFT each 1/30 s, and `chat_message`, which redraws when another message is featured)
+is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time
 zeros. Every other built kind makes its frames when built, or (a `media` file) decodes
@@ -884,7 +887,19 @@ collection (`not_found`), then the key's shape (`invalid_argument`, field `key`:
 over 1024 bytes, or with whitespace, control or non-ASCII characters), then stores it
 under the output ID with no engine lock held. `output.clear_key` removes it and succeeds
 when there is none, even for an output no longer in the collection. With no store, or when
-the store refuses, both fail with `action_failed`. The key is write-only
+the store refuses, both fail with `action_failed`. A key is bound to its server (#343):
+under the collection lock, an applied batch, undo or redo marks every output it deleted
+or whose `OutputKind::key_server` it changed in `State::stale_keys`; once the lock is
+released the engine removes those keys from the store and unmarks each one removed.
+`output.start` refuses a marked output with `action_failed`, so a start that begins
+after the batch never reads the old key for the new server. A start that checked the
+key just before the batch is covered by `Engine::output_kind`: until the start settles
+it answers the kind the start checked (kept in its `Pending`), so a host's opener reads
+that server, never the new one with the old key. For the same reason `output.set_key`
+fails with `action_failed` while that output's start is opening: a key sent for the new
+server then can't be read with the old one. A store that refuses
+leaves the output marked (the batch still succeeds, and a warning is logged) until an
+`output.set_key` or `output.clear_key` succeeds. The key is write-only
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): every reason is fixed text, nothing logs
 the call's arguments, and no response, event or query carries it. The crate-root test
 `secrets_are_redacted` sets a key and checks the reply, `state.get`, `output.list`,
