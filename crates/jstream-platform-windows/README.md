@@ -443,11 +443,16 @@ The code is ported from spikes S1 to S3. This first cut has:
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)).
   - `PluginBlock` is one filter instance's
     [`jstream-plugin-proto`](../jstream-plugin-proto/README.md#purpose) `Shared` block
-    as a named file mapping. `create` (the engine) makes a new, zeroed one exactly the
-    block's size that only this user can open (a DACL naming the user's SID alone),
-    and refuses a name that already exists. `open` (the plugin host) maps it by name and
-    refuses a section smaller than this version's block. Both give `&Shared` through
-    `AsRef`, unmap on drop, and are `Send` and `Sync`, since the block is all atomics.
+    as an unnamed file mapping (#351). `create` (the engine) makes a new, zeroed one
+    exactly the block's size, with a DACL naming the user's SID alone and a handle that
+    isn't inheritable. With no name, no other process can open it, and no other child
+    of the engine inherits it. `share_with` duplicates its handle into one host process
+    and returns the handle's value there. `from_handle` (the plugin host) maps the
+    section from that value, taking ownership of the handle once it maps (a value that
+    doesn't map is left open, since it may not be the host's to close), and refuses a
+    value that can't be a handle or a section smaller than this version's block. Both give
+    `&Shared` through `AsRef`, unmap on drop, and are `Send` and `Sync`, since the
+    block is all atomics.
   - `ProAudioThread::register` registers the calling thread with MMCSS "Pro Audio"
     until the guard drops, as the WASAPI threads do. It is best effort, and the guard
     isn't `Send`.
@@ -457,11 +462,13 @@ The code is ported from spikes S1 to S3. This first cut has:
     engine's handle closes (and suppresses the crash dialog), so no host outlives the
     engine. A host starts with a cleared environment that keeps only the system and
     user-folder variables (`KEPT_ENV`), so it never sees the engine's keys, tokens or
-    configuration, and its stderr is discarded. `start` creates a block named
-    `Local\JStreamPlugin-<pid>-<n>`, initialised with the request's configuration,
-    passes its name on the command line, and keeps the stdin and stdout pipes as the
-    control channel; a thread decodes stdout into messages and stops on a frame that
-    doesn't decode. Dropping a host kills it. `scan` runs `scan <file>` and kills the
+    configuration, and its stderr is discarded. `start` creates an unnamed block,
+    initialised with the request's configuration, starts `run <file> <plugin-id>`,
+    duplicates the block's handle into the new process and sends its value as the
+    first control message (`Block`), before `Start`. It keeps the stdin and stdout
+    pipes as the control channel; a thread decodes stdout into messages and stops on a
+    frame that doesn't decode. The host's block is an `EngineBlock`, so the mixer's miss
+    counts stay in the engine's memory, where the host can't reset them. Dropping a host kills it. `scan` runs `scan <file>` and kills the
     host after its answer, or after 20 s. `search_paths` is CLAP's order on Windows:
     `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and
     `%LOCALAPPDATA%\Programs\Common\CLAP`, keeping the ones that exist, without

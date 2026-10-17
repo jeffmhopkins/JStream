@@ -14,17 +14,27 @@
 //!   keeps the latest, which a restart restores and the caller stores in the filter's
 //!   settings.
 //! - A run of consecutive late blocks in the mixer marks the filter degraded, and its end
-//!   recovered.
+//!   recovered. The mixer counts them in the engine's memory (`EngineBlock`), so the
+//!   host can't hide them.
+//! - What the host sends back is checked before it is passed on (#351): parameter
+//!   descriptions with an unusable range or a repeated id are dropped, a parameter
+//!   change (a control message, or an event in the block's `params_out` ring) must name
+//!   a described parameter and be finite and within its range, and a saved state must be
+//!   at most `MAX_STATE` bytes. What fails is dropped and counted
+//!   ([`HostSupervisor::rejected`]), and the first of each host run is reported as an
+//!   `Error`.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use jstream_platform::{HostBlock, HostRequest, PluginHost, PluginHosts};
-use jstream_plugin_proto::control::{FromHost, ParamDesc, ToHost};
+use jstream_plugin_proto::control::{
+    FromHost, MAX_STATE, ParamDesc, ToHost, check_param_event, valid_params,
+};
 use jstream_plugin_proto::{
-    ERROR_ACTIVATE, ERROR_BAD_CONFIG, ERROR_LOAD, ERROR_NOT_AN_EFFECT, LIVENESS_MS, ParamEvent,
-    STATE_FAILED, Shared,
+    ERROR_ACTIVATE, ERROR_BAD_CONFIG, ERROR_LOAD, ERROR_NOT_AN_EFFECT, LIVENESS_MS, PARAM_SLOTS,
+    ParamEvent, STATE_FAILED, Shared,
 };
 
 /// How long [`HostSupervisor::stop`] waits for a host to stop by itself.
@@ -86,9 +96,11 @@ pub enum HostEvent {
         /// The plugin's own latency, frames.
         latency: u32,
     },
-    /// The plugin's parameters, after it starts and after it restarts itself.
+    /// The plugin's parameters, after it starts and after it restarts itself: only the
+    /// usable ones, each id once.
     Params(Vec<ParamDesc>),
-    /// The plugin changed one of its parameters (its own editor).
+    /// The plugin changed one of its parameters (its own editor, or while processing).
+    /// The id is one of the last `Params`, and the value is finite and within its range.
     ParamChanged(ParamEvent),
     /// A new saved state is in [`HostSupervisor::saved_state`].
     StateSaved,
@@ -152,6 +164,15 @@ pub struct HostSupervisor {
     /// The heartbeat last seen, and when it last changed.
     beat: (u64, Instant),
     degraded: bool,
+    /// The running host's parameters, as its last `Params` described them.
+    params: Vec<ParamDesc>,
+    /// Replies from hosts dropped as invalid, in all.
+    rejected: u64,
+    /// Whether this host run has reported a dropped reply yet.
+    reported: bool,
+    /// Whether this host run has described its parameters yet. Until then the block's
+    /// `params_out` ring is left alone, since its `Params` may still be in the reader.
+    described: bool,
 }
 
 impl std::fmt::Debug for HostSupervisor {
@@ -185,7 +206,18 @@ impl HostSupervisor {
             since: now,
             beat: (0, now),
             degraded: false,
+            params: Vec::new(),
+            rejected: 0,
+            reported: false,
+            described: false,
         }
+    }
+
+    /// Replies from the hosts this supervisor ran that were dropped as invalid: unusable
+    /// parameter descriptions, parameter changes for no described parameter or out of
+    /// range, and oversized states.
+    pub fn rejected(&self) -> u64 {
+        self.rejected
     }
 
     /// Where the host is.
@@ -266,6 +298,9 @@ impl HostSupervisor {
                 self.since = now;
                 self.beat = (heartbeat, now);
                 self.degraded = false;
+                self.params.clear();
+                self.reported = false;
+                self.described = false;
             }
             Err(e) => self.crash(format!("the plugin host didn't start: {e}"), now, events),
         }
@@ -275,10 +310,28 @@ impl HostSupervisor {
         let Some(host) = &mut self.host else {
             return;
         };
+        let mut dropped: Vec<(usize, &str)> = Vec::new();
         while let Some(message) = host.try_recv() {
             match message {
-                FromHost::Params(params) => events.push(HostEvent::Params(params)),
-                FromHost::ParamChanged(event) => events.push(HostEvent::ParamChanged(event)),
+                FromHost::Params(params) => {
+                    let (params, bad) = valid_params(params);
+                    if bad > 0 {
+                        dropped.push((bad, "unusable parameter descriptions"));
+                    }
+                    self.params.clone_from(&params);
+                    self.described = true;
+                    events.push(HostEvent::Params(params));
+                }
+                FromHost::ParamChanged(event) => match check_param_event(&self.params, event) {
+                    Some(event) => events.push(HostEvent::ParamChanged(event)),
+                    None => dropped.push((
+                        1,
+                        "a parameter change for no described parameter or out of range",
+                    )),
+                },
+                FromHost::State(state) if state.len() > MAX_STATE => {
+                    dropped.push((1, "a saved state over 2 MiB"));
+                }
                 FromHost::State(state) => {
                     self.request.state = Some(state);
                     events.push(HostEvent::StateSaved);
@@ -288,6 +341,33 @@ impl HostSupervisor {
                 }
                 FromHost::Error(message) => events.push(HostEvent::Error(message)),
                 FromHost::Plugins(_) => {}
+            }
+        }
+        // Changes the plugin made while processing come back through the block, once
+        // this run has described its parameters. The ring holds at most `PARAM_SLOTS`,
+        // so this ends however fast the host pushes.
+        let block = host.block();
+        let ring = &shared(&block).params_out;
+        let slots = if self.described { PARAM_SLOTS } else { 0 };
+        for _ in 0..slots {
+            let Some(event) = ring.pop() else {
+                break;
+            };
+            match check_param_event(&self.params, event) {
+                Some(event) => events.push(HostEvent::ParamChanged(event)),
+                None => dropped.push((
+                    1,
+                    "a parameter change for no described parameter or out of range",
+                )),
+            }
+        }
+        for (n, what) in dropped {
+            self.rejected += n as u64;
+            if !self.reported {
+                self.reported = true;
+                events.push(HostEvent::Error(format!(
+                    "ignored {what} from the plugin host; later ones are counted, not logged"
+                )));
             }
         }
     }
@@ -336,7 +416,7 @@ impl HostSupervisor {
                 {
                     self.crashes = 0;
                 }
-                let run = status.mixer_miss_run.load(Ordering::Acquire);
+                let run = block.misses().run.load(Ordering::Acquire);
                 if !self.degraded && run >= u64::from(self.policy.degraded_after) {
                     self.degraded = true;
                     events.push(HostEvent::Degraded);
@@ -630,16 +710,16 @@ mod tests {
         let mut rig = Rig::new(SupervisorPolicy::default());
         rig.until_ready();
         let block = rig.sup.block().cloned().unwrap();
-        let status = &shared(&block).status;
-        status.mixer_miss_run.store(49, Ordering::Release);
+        let run = &block.misses().run;
+        run.store(49, Ordering::Release);
         assert!(rig.tick(Duration::from_millis(1)).is_empty());
-        status.mixer_miss_run.store(50, Ordering::Release);
+        run.store(50, Ordering::Release);
         assert!(matches!(
             &rig.tick(Duration::from_millis(1))[..],
             [HostEvent::Degraded]
         ));
         assert!(rig.tick(Duration::from_millis(1)).is_empty());
-        status.mixer_miss_run.store(0, Ordering::Release);
+        run.store(0, Ordering::Release);
         assert!(matches!(
             &rig.tick(Duration::from_millis(1))[..],
             [HostEvent::Recovered]
@@ -658,5 +738,215 @@ mod tests {
         assert!(rig.tick(Duration::from_secs(60)).is_empty());
         rig.sup.enable(rig.now);
         rig.until_ready();
+    }
+
+    /// Ticks until the fake host's `Params` (sent once it is ready) have arrived.
+    fn until_params(rig: &mut Rig) {
+        let mut seen = rig.until_ready();
+        for _ in 0..100 {
+            if seen.iter().any(|e| matches!(e, HostEvent::Params(_))) {
+                return;
+            }
+            seen = rig.tick(Duration::from_millis(1));
+        }
+        panic!("no Params");
+    }
+
+    /// Makes the newest fake host send `messages`, and returns what the supervisor
+    /// passed on once each was either passed on or rejected.
+    fn host_sends(rig: &mut Rig, messages: Vec<FromHost>) -> Vec<HostEvent> {
+        let host = Arc::clone(rig.hosts.hosts().last().unwrap());
+        let want = messages.len() as u64 + rig.sup.rejected();
+        for m in messages {
+            host.send(m);
+        }
+        let mut seen = Vec::new();
+        for _ in 0..100 {
+            seen.extend(rig.tick(Duration::from_millis(1)));
+            let passed = seen
+                .iter()
+                .filter(|e| !matches!(e, HostEvent::Error(_)))
+                .count() as u64;
+            if passed + rig.sup.rejected() >= want {
+                break;
+            }
+        }
+        seen
+    }
+
+    fn param(id: u32, min: f64, max: f64, default: f64) -> ParamDesc {
+        ParamDesc {
+            id,
+            min,
+            max,
+            default,
+            ..fake_param()
+        }
+    }
+
+    fn changes(events: &[HostEvent]) -> Vec<ParamEvent> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                HostEvent::ParamChanged(e) => Some(*e),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn unusable_parameter_descriptions_are_dropped() {
+        let mut rig = Rig::new(SupervisorPolicy::default());
+        until_params(&mut rig);
+        let good = param(5, -1.0, 1.0, 0.0);
+        let seen = host_sends(
+            &mut rig,
+            vec![FromHost::Params(vec![
+                good.clone(),
+                param(6, f64::NAN, 1.0, 0.0),
+                param(7, 0.0, f64::INFINITY, 0.0),
+                param(8, 2.0, 1.0, 1.5),
+                param(9, 0.0, 1.0, 3.0),
+                param(5, 0.0, 9.0, 1.0),
+            ])],
+        );
+        let params: Vec<&Vec<ParamDesc>> = seen
+            .iter()
+            .filter_map(|e| match e {
+                HostEvent::Params(p) => Some(p),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(params, vec![&vec![good]], "{seen:?}");
+        assert_eq!(rig.sup.rejected(), 5);
+        assert!(
+            seen.iter()
+                .any(|e| matches!(e, HostEvent::Error(m) if m.contains("parameter descriptions"))),
+            "{seen:?}"
+        );
+        // Changes are now checked against the new description: id 1 is gone.
+        let seen = host_sends(
+            &mut rig,
+            vec![
+                FromHost::ParamChanged(ParamEvent { id: 1, value: 0.5 }),
+                FromHost::ParamChanged(ParamEvent { id: 5, value: -1.0 }),
+            ],
+        );
+        assert_eq!(changes(&seen), vec![ParamEvent { id: 5, value: -1.0 }]);
+        assert_eq!(rig.sup.rejected(), 6);
+    }
+
+    #[test]
+    fn parameter_changes_must_name_a_parameter_and_fit_its_range() {
+        let mut rig = Rig::new(SupervisorPolicy::default());
+        until_params(&mut rig);
+        // The fake's one parameter is id 1, 0 to 1.
+        let ok = ParamEvent { id: 1, value: 0.5 };
+        let bad = [
+            ParamEvent { id: 2, value: 0.5 },
+            ParamEvent {
+                id: 1,
+                value: f64::NAN,
+            },
+            ParamEvent {
+                id: 1,
+                value: f64::INFINITY,
+            },
+            ParamEvent {
+                id: 1,
+                value: -0.25,
+            },
+            ParamEvent { id: 1, value: 1.5 },
+        ];
+        let mut sent = vec![FromHost::ParamChanged(ok)];
+        sent.extend(bad.iter().map(|e| FromHost::ParamChanged(*e)));
+        let seen = host_sends(&mut rig, sent);
+        assert_eq!(changes(&seen), vec![ok], "{seen:?}");
+        assert_eq!(rig.sup.rejected(), bad.len() as u64);
+        // Reported once, then only counted.
+        let errors = seen
+            .iter()
+            .filter(|e| matches!(e, HostEvent::Error(_)))
+            .count();
+        assert_eq!(errors, 1, "{seen:?}");
+    }
+
+    #[test]
+    fn parameter_changes_in_the_block_are_checked_too() {
+        let mut rig = Rig::new(SupervisorPolicy::default());
+        until_params(&mut rig);
+        let block = rig.sup.block().cloned().unwrap();
+        let ring = &shared(&block).params_out;
+        let ok = ParamEvent { id: 1, value: 1.0 };
+        for event in [
+            ok,
+            ParamEvent { id: 99, value: 0.5 },
+            ParamEvent {
+                id: 1,
+                value: f64::NEG_INFINITY,
+            },
+            ParamEvent { id: 1, value: 2.0 },
+        ] {
+            assert!(ring.push(event));
+        }
+        let events = rig.tick(Duration::from_millis(1));
+        assert_eq!(changes(&events), vec![ok], "{events:?}");
+        assert_eq!(rig.sup.rejected(), 3);
+        assert_eq!(ring.pop(), None, "the ring was drained");
+    }
+
+    #[test]
+    fn the_block_ring_waits_for_the_first_description() {
+        let mut rig = Rig::new(SupervisorPolicy::default());
+        rig.hosts.start_loading(true);
+        rig.tick(Duration::ZERO);
+        let block = rig.sup.host.as_ref().expect("started").block();
+        let ring = &shared(&block).params_out;
+        let ok = ParamEvent { id: 1, value: 0.25 };
+        assert!(ring.push(ok));
+        rig.tick(Duration::from_millis(1));
+        assert_eq!(rig.sup.rejected(), 0, "no false alarm before `Params`");
+        rig.hosts.hosts()[0].finish_loading();
+        let mut seen = rig.until_ready();
+        for _ in 0..100 {
+            if changes(&seen).contains(&ok) {
+                break;
+            }
+            seen.extend(rig.tick(Duration::from_millis(1)));
+        }
+        assert!(changes(&seen).contains(&ok), "{seen:?}");
+        assert_eq!(rig.sup.rejected(), 0);
+    }
+
+    #[test]
+    fn changes_before_any_description_and_oversized_states_are_dropped() {
+        let mut rig = Rig::new(SupervisorPolicy::default());
+        // Still loading, the host hasn't described its parameters yet.
+        rig.hosts.start_loading(true);
+        rig.tick(Duration::ZERO);
+        let host = Arc::clone(&rig.hosts.hosts()[0]);
+        host.send(FromHost::ParamChanged(ParamEvent { id: 1, value: 0.5 }));
+        host.send(FromHost::State(vec![0; MAX_STATE + 1]));
+        let mut seen = Vec::new();
+        for _ in 0..100 {
+            seen.extend(rig.tick(Duration::from_millis(1)));
+            if rig.sup.rejected() >= 2 {
+                break;
+            }
+        }
+        assert_eq!(rig.sup.rejected(), 2, "{seen:?}");
+        assert!(changes(&seen).is_empty(), "{seen:?}");
+        assert!(
+            !seen.iter().any(|e| matches!(e, HostEvent::StateSaved)),
+            "{seen:?}"
+        );
+        assert_eq!(rig.sup.saved_state(), Some(&[1][..]));
+        // A state at the limit is kept.
+        let seen = host_sends(&mut rig, vec![FromHost::State(vec![7; MAX_STATE])]);
+        assert!(
+            seen.iter().any(|e| matches!(e, HostEvent::StateSaved)),
+            "{seen:?}"
+        );
+        assert_eq!(rig.sup.saved_state().map(<[u8]>::len), Some(MAX_STATE));
     }
 }

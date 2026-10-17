@@ -41,7 +41,7 @@ use jstream_audio::{
 };
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebase};
 use jstream_platform::{AudioInputHandler, AudioPacket, AudioPacketFlags};
-use jstream_plugin_proto::{Config, DEFAULT_DEPTH, Shared, first_useful};
+use jstream_plugin_proto::{Config, DEFAULT_DEPTH, EngineBlock, Shared, first_useful};
 use std::sync::Arc;
 
 #[global_allocator]
@@ -272,6 +272,8 @@ impl BusChain {
 /// step processes every input block the mixer can still read (a gain of 0.5).
 struct FakeHost {
     shared: Arc<Shared>,
+    /// The engine's side of the block, where the mixer counts its misses.
+    memory: HostMemory,
     next: u64,
     buf: Vec<f32>,
     processed: u64,
@@ -499,15 +501,16 @@ mod rt {
                         })
                         .expect("valid config");
                     shared.publish_ready(0);
-                    let memory: HostMemory = Arc::new(Arc::clone(&shared));
+                    let memory: HostMemory = Arc::new(EngineBlock::new(Arc::clone(&shared)));
                     clap = Some(
                         sim.devices[1]
                             .control
-                            .insert_host_filter(usize::MAX, memory)
+                            .insert_host_filter(usize::MAX, Arc::clone(&memory))
                             .expect("a ready host"),
                     );
                     host = Some(FakeHost {
                         shared,
+                        memory,
                         next: 0,
                         buf: vec![0.0; 2 * block],
                         processed: 0,
@@ -656,9 +659,9 @@ mod rt {
         assert!(bus.skipped_frames > 0, "{bus:?}");
         let host = host.expect("added");
         let misses = host
-            .shared
-            .status
-            .mixer_misses
+            .memory
+            .misses()
+            .total
             .load(std::sync::atomic::Ordering::Relaxed);
         assert!(
             host.processed > 100 && misses > 10,

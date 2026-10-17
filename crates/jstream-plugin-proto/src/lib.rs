@@ -8,7 +8,8 @@
 //! first block): the mixer writes its dry block `n` into [`Shared::input`] and, in the
 //! same block, reads the processed block `n − depth` from [`Shared::output`]. It never
 //! waits: when that block isn't there it passes its own delayed dry signal instead
-//! and counts a miss in the status block. The host, woken by its own timer, reads each
+//! and counts a miss in the engine's own memory ([`MixerMisses`]), where the host
+//! can't reset it. The host, woken by its own timer, reads each
 //! new input block, runs the plugin over it and writes the result under the same block
 //! number. [`first_useful`] tells it which blocks the mixer can still read, so a host
 //! that fell behind skips ahead instead of producing blocks nobody reads.
@@ -23,7 +24,10 @@
 //! **Trust.** The block is shared with another process. Each side treats what the other
 //! wrote as untrusted input: a slot's frame count must match the reader's buffer,
 //! parameter rings with impossible indices read as empty, and the engine checks the
-//! host's reported latency against its own limits.
+//! host's reported latency against its own limits. What the engine counts about the
+//! host (its misses) stays in the engine's memory, in [`EngineBlock`]. Parameters
+//! and values coming back are checked against the descriptions the host sent
+//! ([`control::valid_params`], [`control::check_param_event`]).
 //!
 //! **Compatibility:** a host uses a block only when [`Shared::config`] returns one,
 //! which checks [`MAGIC`] and [`VERSION`]. Any change to the layout or to the meaning of
@@ -41,11 +45,13 @@
 #![forbid(unsafe_code)]
 
 pub mod control;
+mod engine;
 mod params;
 mod ring;
 mod shared;
 mod status;
 
+pub use engine::{EngineBlock, MixerMisses};
 pub use params::{ParamEvent, ParamRing};
 pub use ring::{BlockRing, Slot, first_useful};
 pub use shared::{Config, ConfigError, Shared};
@@ -59,7 +65,8 @@ pub use status::{
 pub const MAGIC: u32 = u32::from_le_bytes(*b"JSPH");
 
 /// The contract's version. Bumped on any change to the layout or the meaning of a field.
-pub const VERSION: u32 = 1;
+/// 2: the mixer's miss counters left the status block (#351).
+pub const VERSION: u32 = 2;
 
 /// Channels in every audio block: interleaved stereo, as the mixer's.
 pub const CHANNELS: usize = 2;

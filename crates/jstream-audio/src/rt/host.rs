@@ -6,7 +6,8 @@
 //! `n − depth` from the output ring. It never waits on the host: when that block isn't
 //! there (the host is late, hung or dead) it passes its own dry signal, delayed by the
 //! same latency so timing doesn't jump, crossfading at each switch, and counts the miss
-//! in the status block for the control thread to report. Its latency is the pipeline
+//! for the control thread to report. The count lives in the engine's own memory
+//! ([`EngineBlock`]'s `MixerMisses`), not the shared block, so the host can't reset it. Its latency is the pipeline
 //! depth plus the plugin's own, fixed when it is built.
 //!
 //! Everything here is plain loads and stores on the shared block: no syscall, lock or
@@ -15,16 +16,17 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use jstream_plugin_proto::Shared;
+use jstream_plugin_proto::{EngineBlock, Shared};
 
 use super::chain::MAX_CHAIN_LATENCY_MS;
 use crate::AudioError;
 use crate::filter::{AudioFilter, Delay};
 
-/// The shared block a CLAP filter's host process uses, however it is mapped: the
-/// platform crate's OS mapping in the engine, a heap block in tests. Dropped on the
-/// collector thread, never the mixer's.
-pub type HostMemory = Arc<dyn AsRef<Shared> + Send + Sync>;
+/// The shared block a CLAP filter's host process uses, however it is mapped (the
+/// platform crate's OS mapping in the engine, a heap block in tests), with the miss
+/// counts the engine keeps beside it. Dropped on the collector thread, never the
+/// mixer's.
+pub type HostMemory = Arc<EngineBlock>;
 
 /// How long the switch between the plugin's output and the dry signal takes, ms.
 const CROSSFADE_MS: f64 = 2.0;
@@ -180,14 +182,11 @@ impl AudioFilter for HostFilter {
         }
         // The first `depth` blocks can't have arrived yet: not a miss.
         if !wet && n >= self.depth {
-            let status = &self.shared().status;
-            status.mixer_misses.fetch_add(1, Ordering::Relaxed);
-            status.mixer_miss_run.fetch_add(1, Ordering::Relaxed);
+            let misses = self.memory.misses();
+            misses.total.fetch_add(1, Ordering::Relaxed);
+            misses.run.fetch_add(1, Ordering::Relaxed);
         } else if wet && !self.was_wet {
-            self.shared()
-                .status
-                .mixer_miss_run
-                .store(0, Ordering::Relaxed);
+            self.memory.misses().run.store(0, Ordering::Relaxed);
         }
         self.was_wet = wet;
         if frames > 0 {
@@ -232,7 +231,7 @@ mod tests {
         if let Some(latency) = plugin_latency {
             shared.publish_ready(latency);
         }
-        let memory: HostMemory = Arc::new(Arc::clone(&shared));
+        let memory: HostMemory = Arc::new(EngineBlock::new(Arc::clone(&shared)));
         (shared, memory)
     }
 
@@ -264,7 +263,7 @@ mod tests {
         assert!(HostFilter::new(44_100, FRAMES, Arc::clone(&ready)).is_err());
         assert!(HostFilter::new(RATE, FRAMES * 2, Arc::clone(&ready)).is_err());
         assert!(HostFilter::new(RATE, FRAMES, ready).is_ok());
-        let uninit: HostMemory = Arc::new(Shared::new_boxed());
+        let uninit: HostMemory = Arc::new(EngineBlock::new(Shared::new_boxed()));
         assert!(HostFilter::new(RATE, FRAMES, uninit).is_err());
         // 2 × 64 frames plus 4800 is over 100 ms at 48 kHz.
         let (_, slow) = memory(2, Some(4_800));
@@ -299,7 +298,31 @@ mod tests {
                 );
             }
         }
-        assert_eq!(shared.status.mixer_misses.load(Ordering::Relaxed), 0);
+        assert_eq!(filter.memory.misses().total.load(Ordering::Relaxed), 0);
+    }
+
+    /// The host owns the shared block and could zero any word in it. The miss counts
+    /// aren't there, so a host that misses blocks can't hide it (#351).
+    #[test]
+    fn the_host_cannot_reset_the_miss_counts() {
+        let (shared, mem) = memory(2, Some(0));
+        let mut filter = HostFilter::new(RATE, FRAMES, mem).unwrap();
+        for n in 0..8u64 {
+            filter.process(&mut block(n));
+            // A hostile host rewrites every status word it could, every block.
+            let s = &shared.status;
+            for word in [
+                &s.host_reset_seq,
+                &s.heartbeat,
+                &s.processed,
+                &s.host_skipped,
+            ] {
+                word.store(0, Ordering::Relaxed);
+            }
+        }
+        // Blocks 0 and 1 are inside the pipeline; 2 to 7 miss.
+        assert_eq!(filter.memory.misses().total.load(Ordering::Relaxed), 6);
+        assert_eq!(filter.memory.misses().run.load(Ordering::Relaxed), 6);
     }
 
     /// When the host stops, the output becomes the dry signal with the same latency,
@@ -320,9 +343,9 @@ mod tests {
         }
         // Blocks 0 and 1 are inside the pipeline. The host's last step, before block 4,
         // processed up to block 3, so blocks 2 to 5 read its output and 6 to 9 miss.
-        let misses = shared.status.mixer_misses.load(Ordering::Relaxed);
+        let misses = filter.memory.misses().total.load(Ordering::Relaxed);
         assert_eq!(misses, 4);
-        assert_eq!(shared.status.mixer_miss_run.load(Ordering::Relaxed), 4);
+        assert_eq!(filter.memory.misses().run.load(Ordering::Relaxed), 4);
         // With a gain of 1 the dry signal and the host's output agree, so the output
         // is the input two blocks late throughout, whichever path made it. Block 6, the
         // first miss, ramps there from block 5's last frame.
@@ -367,7 +390,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(shared.status.mixer_misses.load(Ordering::Relaxed), 0);
+        assert_eq!(second.memory.misses().total.load(Ordering::Relaxed), 0);
     }
 
     #[test]
