@@ -1,6 +1,6 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
-use crate::{AudioScopes, MediaAudio, SourceError};
+use crate::{AudioScopes, CaptureSpec, MediaAudio, SourceError};
 use jstream_browser::BrowserBackend;
 use jstream_media::{AudioFormat, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame, MediaDecoders};
@@ -61,6 +61,14 @@ pub trait Source: Send {
     /// [`SourceError::NotLive`] when a non-live parameter changed, and
     /// [`SourceError::Setting`] when a value doesn't have its descriptor's type.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
+
+    /// What the platform captures for this source, for a `display` or `window` source;
+    /// `None`, the default, for a source that makes its own frames. A capture source's
+    /// frames come from the platform's capture backend on the engine's render thread,
+    /// so its [`frame`](Self::frame) is [`SourceError::Captured`].
+    fn capture(&self) -> Option<&CaptureSpec> {
+        None
+    }
 
     /// What draws this source's frames ahead of [`frame`](Self::frame), for a source
     /// whose frames follow something live; `None` (the default) for one whose frames are
