@@ -149,7 +149,7 @@ impl Pass for Mask {
         input: &Image,
         output: &Image,
     ) -> Result<(), RenderError> {
-        let aux = self.reference.get(ctx, input)?;
+        let aux = self.reference.get(ctx)?;
         ctx.draw(&Draw {
             shader: SHADER,
             input,
@@ -264,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reference_that_is_the_input_stages_its_hold_once() {
+    fn a_reference_hold_is_staged_once_per_submit() {
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         use jstream_media::{
@@ -298,6 +298,15 @@ mod tests {
             count.load(Ordering::SeqCst),
             1,
             "a hold shared by the input and the reference is staged once per submit"
+        );
+        // A reference with a hold of its own, over an input without one, is staged too.
+        let input = crate::tests::solid(&opened.compositor, 2, 2, IN);
+        let out = run(&mut opened, &mut f, &input, 0.0);
+        near(&out, 0, 0, IN, 1);
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            2,
+            "a reference's own hold is staged for the submit that reads it"
         );
     }
 

@@ -26,8 +26,9 @@ fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
 }
 
 /// The kinds the tests create: `color`, a video kind with a scalar, a reference of each
-/// sort, and an asset; `tone`, an audio kind with no parameters; and the filter kinds
-/// `tint` (video, with a scene reference) and `gain` (audio).
+/// sort, and an asset; `tone`, an audio kind with no parameters; `scope`, a video kind
+/// that draws a bus (as `waveform` and `spectrum` do); and the filter kinds `tint`
+/// (video, with a scene reference) and `gain` (audio).
 fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -73,6 +74,15 @@ fn kinds() -> Vec<KindDescriptor> {
             video: false,
             audio: true,
             params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "scope".into(),
+            category: KindCategory::Source,
+            name: "Scope".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![param("audio", ParamType::Bus, Value::Null)],
         },
         KindDescriptor {
             kind_id: "tint".into(),
@@ -667,6 +677,56 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
         QueryResult::StateGet { outputs, .. } => assert!(outputs.is_empty()),
         other => panic!("not state.get: {other:?}"),
     }
+}
+
+/// A YouTube-bound output (ADR-0058) is an RTMP target naming a broadcast: it is
+/// created, retargeted to and from a generic URL, and its broadcast ID is checked.
+#[test]
+fn a_youtube_target_is_stored_retargeted_and_checked() {
+    let youtube = |id: &str| RtmpTarget::YouTube {
+        broadcast_id: id.into(),
+    };
+    let mut graph = Graph::new();
+    apply_ok(
+        &mut graph,
+        vec![Edit::OutputCreate {
+            output_id: OutputId::new("live"),
+            kind: OutputKind::Rtmp {
+                target: youtube("dQw4w9WgXcQ"),
+            },
+        }],
+    );
+    let retarget = apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: target("rtmp://host/live"),
+        }],
+    );
+    assert_eq!(
+        retarget.inverse.edits,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: youtube("dQw4w9WgXcQ"),
+        }]
+    );
+    for id in ["", "a b", "id?x=1", "id/../x", &"x".repeat(129)] {
+        let (field, reason) = invalid_reason(apply_err(
+            &mut graph,
+            vec![Edit::OutputSetTarget {
+                output_id: OutputId::new("live"),
+                target: youtube(id),
+            }],
+        ));
+        assert_eq!(field, "edits.0.target.broadcast_id", "{id:?}: {reason}");
+    }
+    apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: youtube(&"A-z_9".repeat(25)),
+        }],
+    );
 }
 
 #[test]
@@ -2002,6 +2062,172 @@ fn delete_plan_removes_a_sources_placements_and_clears_references() {
     );
     apply_ok(&mut graph, edits);
     assert!(graph.state().source(&SourceId::new("mic")).is_none());
+}
+
+fn bus_ref(id: &str) -> Value {
+    json!({"type": "bus", "bus_id": id})
+}
+
+/// A `scope` source drawing `bus` (`None`: the program mix).
+fn scope(id: &str, bus: Option<&str>) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: "Scope".into(),
+        kind: SourceKind::Builtin {
+            kind: "scope".into(),
+        },
+        settings: settings(&[("audio", bus.map_or(Value::Null, bus_ref))]),
+        duplicated_from: None,
+    }
+}
+
+fn bus_create(id: &str) -> Edit {
+    Edit::BusCreate {
+        bus_id: BusId::new(id),
+        name: id.into(),
+    }
+}
+
+/// #362: a bus reference names a bus that exists, the master included, as a scene or
+/// source reference does; any other tag is refused.
+#[test]
+fn a_bus_reference_must_name_a_bus() {
+    let mut graph = fixture();
+    assert_eq!(
+        apply_err(&mut graph, vec![scope("wave", Some("ghost"))]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "ghost".into(),
+        }
+    );
+    assert_eq!(
+        invalid_reason(apply_err(
+            &mut graph,
+            vec![Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "Scope".into(),
+                kind: SourceKind::Builtin {
+                    kind: "scope".into(),
+                },
+                settings: settings(&[("audio", source_ref("mic"))]),
+                duplicated_from: None,
+            }],
+        )),
+        (
+            "edits.0.settings.audio".into(),
+            "must be a bus reference or null".into()
+        )
+    );
+    apply_ok(
+        &mut graph,
+        vec![
+            bus_create("vod"),
+            scope("wave", Some("vod")),
+            scope("program", None),
+            scope("master", Some("master")),
+        ],
+    );
+    assert_eq!(
+        graph
+            .state()
+            .source(&SourceId::new("wave"))
+            .and_then(|s| s.settings.get("audio")),
+        Some(&bus_ref("vod"))
+    );
+    assert_eq!(
+        apply_err(
+            &mut graph,
+            vec![set_settings("program", &[("audio", bus_ref("gone"))])]
+        ),
+        ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "gone".into(),
+        }
+    );
+}
+
+/// #362: a bus a source draws can't be deleted, as a referenced scene or source can't
+/// (ADR-0025): the error lists the settings that hold it, and `delete.plan` clears them
+/// (the source then draws the program mix) before it deletes the bus with its sends.
+#[test]
+fn a_drawn_bus_is_deleted_only_with_its_references_cleared() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            bus_create("vod"),
+            scope("wave", Some("vod")),
+            scope("bars", Some("vod")),
+        ],
+    );
+    let delete = Edit::BusDelete {
+        bus_id: BusId::new("vod"),
+    };
+    let error = apply_err(&mut graph, vec![delete.clone()]);
+    let (field, reason) = invalid_reason(error.clone());
+    assert_eq!(field, "edits.0.bus_id");
+    assert!(
+        reason.contains("bus `vod` is still referred to"),
+        "{reason}"
+    );
+    assert_eq!(
+        blockers(error),
+        vec![
+            blocker(EntityKind::Source, "bars", "settings.audio"),
+            blocker(EntityKind::Source, "wave", "settings.audio"),
+        ]
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Bus {
+            bus_id: BusId::new("vod"),
+        },
+    );
+    assert_eq!(
+        edits,
+        vec![
+            set_settings("bars", &[("audio", Value::Null)]),
+            set_settings("wave", &[("audio", Value::Null)]),
+            delete,
+        ]
+    );
+    let before = graph.clone();
+    let applied = apply_ok(&mut graph, edits);
+    assert!(graph.state().bus(&BusId::new("vod")).is_none());
+    assert_eq!(
+        graph
+            .state()
+            .source(&SourceId::new("wave"))
+            .and_then(|s| s.settings.get("audio")),
+        Some(&Value::Null)
+    );
+    graph
+        .apply(&applied.inverse.edits, Some(applied.rev))
+        .expect("undo applies");
+    assert_eq!(graph.state(), before.state());
+    // The master can't be planned away, and a missing bus is not found.
+    assert_eq!(
+        graph.query(&Query::DeletePlan {
+            target: DeleteTarget::Bus {
+                bus_id: BusId::master(),
+            },
+        }),
+        Some(Err(ProtocolError::invalid_argument(
+            "target.bus_id",
+            "the master bus can't be deleted"
+        )))
+    );
+    assert_eq!(
+        graph.query(&Query::DeletePlan {
+            target: DeleteTarget::Bus {
+                bus_id: BusId::new("nope"),
+            },
+        }),
+        Some(Err(ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "nope".into(),
+        }))
+    );
 }
 
 #[test]

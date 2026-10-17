@@ -51,7 +51,9 @@ pub struct Compositor {
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
     draws: Vec<Draw>,
-    staged: Vec<Arc<dyn FrameSync>>,
+    /// The holds staged for the submit being built, and their textures, which the
+    /// submit hands back to the platform (`PRESENT`) after its last use.
+    staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     filters: filter::Runtime,
 }
 
@@ -172,7 +174,10 @@ impl Compositor {
                 },
             );
         }
+        self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        // The platform reuses a frame's texture once nothing holds it.
+        self.staged.clear();
 
         let output = targets.output.clone();
         let pixels = match readback_buffer {
@@ -262,7 +267,10 @@ impl Compositor {
                 label: Some("jstream-render-layer"),
             });
         self.record_composite(&mut encoder, view, scene);
+        self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        // The platform reuses a frame's texture once nothing holds it.
+        self.staged.clear();
         Ok(())
     }
 
@@ -284,7 +292,7 @@ impl Compositor {
     /// # Errors
     /// [`RenderError::Invalid`] when `input` came from another compositor,
     /// [`RenderError::TooLarge`] for an output past the adapter limit, and
-    /// [`RenderError::Sync`] when staging an imported input fails.
+    /// [`RenderError::Sync`] when staging an imported input or reference image fails.
     pub fn apply_filter(
         &mut self,
         filter: &mut VideoFilter,
@@ -316,13 +324,24 @@ impl Compositor {
             runtime: &mut self.filters,
             encoder: &mut encoder,
             clock,
+            holds: &mut self.staged,
         };
-        filter.pass_mut().encode(&mut ctx, input, &output)?;
-        // Staged only once recording succeeded, right before the submit it arms.
-        if let Some(sync) = input.sync() {
+        ctx.holds.clear();
+        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, &output) {
+            self.staged.clear();
+            return Err(err);
+        }
+        ctx.hold(input);
+        // Staged only once recording succeeded, right before the submit it arms, and
+        // handed back to the platform at the end of that submit, as `render` does: the
+        // input's hold and those of the images the filter reads besides it, each once.
+        for (sync, _) in &self.staged {
             sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
         }
+        self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        // The platform reuses a frame's texture once nothing holds it.
+        self.staged.clear();
         Ok(output)
     }
 
@@ -483,16 +502,37 @@ impl Compositor {
     fn stage_sources(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         self.staged.clear();
         for draw in &self.draws {
-            let Some(sync) = scene.items[draw.index].image.sync() else {
+            let image = scene.items[draw.index].image;
+            let Some(sync) = image.sync() else {
                 continue;
             };
-            if self.staged.iter().any(|held| Arc::ptr_eq(held, sync)) {
+            if self.staged.iter().any(|(held, _)| Arc::ptr_eq(held, sync)) {
                 continue;
             }
             sync.stage(self.queue()).map_err(RenderError::Sync)?;
-            self.staged.push(Arc::clone(sync));
+            self.staged
+                .push((Arc::clone(sync), image.texture().clone()));
         }
         Ok(())
+    }
+
+    /// Ends the submit by moving every staged texture to `PRESENT`, which on D3D12 is
+    /// the `COMMON` state the platform's other APIs read a shared texture in
+    /// ([`FrameSync::stage`]). Nothing to do for a scene without frame holds.
+    fn record_release(&self, encoder: &mut wgpu::CommandEncoder) {
+        if self.staged.is_empty() {
+            return;
+        }
+        encoder.transition_resources(
+            std::iter::empty(),
+            self.staged
+                .iter()
+                .map(|(_, texture)| wgpu::TextureTransition {
+                    texture,
+                    selector: None,
+                    state: wgpu::TextureUses::PRESENT,
+                }),
+        );
     }
 
     fn ensure_vertex_buffer(&mut self) -> Result<(), RenderError> {

@@ -536,4 +536,59 @@ mod tests {
         assert!(chain.apply(&input, &[]).is_empty());
         assert!(chain.filters.is_empty());
     }
+
+    #[test]
+    fn refused_settings_are_kept_off_the_record_and_retried() {
+        let config = MixerConfig::default();
+        let block = config.block_frames;
+        let mut mixer = Mixer::new(config).expect("mixer");
+        let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+            .expect("format");
+        let (_producer, input) = mixer.add_input(format).expect("input");
+        let mut chain = Chain::default();
+        // Tenths of a dB below unity: in range, and a new value at every step.
+        let gain = |step: u32| {
+            [chained(
+                "gain",
+                &[("gain_db", json!(-f64::from(step) / 10.0))],
+            )]
+        };
+        assert!(chain.apply(&input, &gain(0)).is_empty());
+
+        // Nothing mixes, so nothing drains the mixer's bounded command queue: in-place
+        // changes fill it until one is refused.
+        let mut accepted = 0;
+        let (step, reasons) = (1..=200)
+            .find_map(|step| {
+                let refused = chain.apply(&input, &gain(step));
+                if refused.is_empty() {
+                    accepted = step;
+                    None
+                } else {
+                    Some((step, refused))
+                }
+            })
+            .expect("the command queue fills");
+        assert!(
+            matches!(&reasons[..], [reason] if reason.contains("keeps its previous settings")
+                && reason.contains("queue is full")),
+            "{reasons:?}"
+        );
+        assert_eq!(
+            chain.filters[0].0,
+            gain(accepted)[0],
+            "the refused change is not recorded"
+        );
+
+        // Mixing drains the queue, and the next pass applies the same wanted chain.
+        let mut out = vec![0.0; block * 2];
+        mixer.mix(0, &mut out).expect("mix");
+        let again = chain.apply(&input, &gain(step));
+        assert!(again.is_empty(), "{again:?}");
+        assert_eq!(chain.filters[0].0, gain(step)[0]);
+        assert!(
+            chain.apply(&input, &gain(step)).is_empty(),
+            "nothing left to retry"
+        );
+    }
 }

@@ -14,6 +14,7 @@
 
 mod aspect;
 mod assets;
+mod external;
 mod multipass;
 mod pack;
 mod params;
@@ -21,10 +22,8 @@ mod pass;
 #[cfg(test)]
 pub(crate) mod testing;
 
-#[allow(
-    unused_imports,
-    reason = "Lane V: only the tests use Blend, Draw and Shader until the filter groups land"
-)]
+pub use external::ExternalFilter;
+pub use pass::PRELUDE;
 pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Shader};
 
 use jstream_protocol::{KindDescriptor, Settings};
@@ -73,6 +72,19 @@ impl VideoFilter {
         })
     }
 
+    /// A filter of a kind defined outside this crate (an effect pack), with `settings`
+    /// complete as the graph stores them.
+    pub fn external(
+        kind_id: &str,
+        filter: std::sync::Arc<dyn ExternalFilter>,
+        settings: &Settings,
+    ) -> Self {
+        Self {
+            kind: kind_id.to_owned(),
+            pass: Box::new(external::External::new(filter, settings)),
+        }
+    }
+
     /// The filter's kind ID.
     pub fn kind(&self) -> &str {
         &self.kind
@@ -84,8 +96,9 @@ impl VideoFilter {
     }
 
     /// The size this filter draws for an input of `width` by `height`. Most filters keep
-    /// the size; aspect ratio and padding filters change it, which changes the source's
-    /// reported size for every placement.
+    /// the size; some change it (for example aspect ratio, padding, a drop shadow, an
+    /// outside outline or a glow), which changes the source's reported size for every
+    /// placement.
     pub fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         self.pass.output_size(width, height)
     }

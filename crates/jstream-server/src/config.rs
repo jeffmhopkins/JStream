@@ -1,6 +1,7 @@
 //! The server's configuration: where it listens, the control token, which `Host` and
-//! `Origin` values it accepts beyond its own, the connection limits, the MCP transport, and
-//! the web UI's directory.
+//! `Origin` values it accepts beyond its own, the connection limits, the MCP transport,
+//! the web UI's directory, the file that keeps the paired devices, and whether the
+//! listener is reached over TLS.
 
 use crate::error::ServerError;
 use std::fmt;
@@ -11,6 +12,11 @@ use std::time::Duration;
 /// The default [`ServerConfig::max_connections`]: a handful of UIs, CLIs and MCP
 /// proxies, with room to spare.
 const MAX_CONNECTIONS: usize = 32;
+
+/// The default [`ServerConfig::max_tcp_connections`]: room for every WebSocket
+/// connection and MCP session at their defaults, a few browsers loading the UI over
+/// several connections each, and connections not yet authenticated (#354).
+const MAX_TCP_CONNECTIONS: usize = 128;
 
 /// The default [`ServerConfig::handshake_timeout`].
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -68,6 +74,10 @@ impl fmt::Debug for Token {
 }
 
 /// How the server listens and whom it lets in.
+///
+/// Every connection limit and timeout must be greater than zero:
+/// [`Server::bind`](crate::Server::bind) refuses a zero one
+/// ([`ServerError::InvalidLimit`]).
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     /// The address to listen on. [`ServerConfig::new`] uses `127.0.0.1` and an ephemeral
@@ -91,6 +101,12 @@ pub struct ServerConfig {
     /// The most WebSocket connections open at once. An upgrade beyond it is refused with
     /// HTTP 503 before a session is opened. [`ServerConfig::new`] sets 32.
     pub max_connections: usize,
+    /// The most TCP connections open at once, of every kind: not yet authenticated,
+    /// refused but still open, HTTP keep-alive ones to `/mcp` and the UI, and WebSocket
+    /// connections (which count against [`max_connections`](Self::max_connections) too).
+    /// A connection accepted beyond it is closed at once, unanswered.
+    /// [`ServerConfig::new`] sets 128.
+    pub max_tcp_connections: usize,
     /// How long a connection has, from being accepted, to complete the protocol
     /// handshake (`hello` answered by `welcome`). One that hasn't is closed (close code
     /// 1008). [`ServerConfig::new`] sets 10 s.
@@ -116,6 +132,28 @@ pub struct ServerConfig {
     /// that isn't a directory ([`ServerError::UiDir`]). [`ServerConfig::new`] leaves it
     /// unset: no UI, and those paths are 404.
     pub ui_dir: Option<PathBuf>,
+    /// The file that keeps the paired devices (ADR-0044): their IDs, names and token
+    /// digests, never their tokens. Read when the server binds (a missing file means no
+    /// devices; one other users can access is refused on Unix, like the token file),
+    /// and rewritten user-only on every change. [`ServerConfig::new`] leaves it unset:
+    /// devices then live in memory and are gone when the server stops.
+    pub device_file: Option<PathBuf>,
+    /// Whether clients reach this listener over TLS (ADR-0047). Only then is the browser
+    /// pairing page served at [`PAIR_PAGE_PATH`](crate::PAIR_PAGE_PATH), may a browser
+    /// pair into the `__Host-jstream_device` cookie and present it, is pairing offered
+    /// beyond loopback, and is the server's own `Origin` `https://`. The server has no
+    /// TLS listener of its own yet, so [`ServerConfig::new`] leaves it off and only tests
+    /// turn it on. Turning it on for a listener reached over plain HTTP would send
+    /// device tokens in the clear.
+    pub tls: bool,
+    /// Whether the server pairs devices at all (ADR-0044, ADR-0047). Off, it answers no
+    /// `pairing.start`, `device.list` or `device.revoke` itself: they reach the session,
+    /// which answers `unsupported`, so a host's UI hides its pairing panel. No code is
+    /// then drawn, and the gate accepts no device token or cookie, even one already in
+    /// `device_file`.
+    /// [`ServerConfig::new`] leaves it on; a host whose engine serves only itself, like
+    /// the desktop app's webview, turns it off.
+    pub pairing: bool,
 }
 
 impl ServerConfig {
@@ -128,19 +166,80 @@ impl ServerConfig {
             extra_hosts: Vec::new(),
             extra_origins: Vec::new(),
             max_connections: MAX_CONNECTIONS,
+            max_tcp_connections: MAX_TCP_CONNECTIONS,
             handshake_timeout: HANDSHAKE_TIMEOUT,
             header_read_timeout: HEADER_READ_TIMEOUT,
             mcp: false,
             max_mcp_sessions: MAX_MCP_SESSIONS,
             mcp_idle_timeout: MCP_IDLE_TIMEOUT,
             ui_dir: None,
+            device_file: None,
+            tls: false,
+            pairing: true,
+        }
+    }
+
+    /// Refuses a zero connection limit or timeout ([`ServerError::InvalidLimit`]): the
+    /// server would refuse or drop every connection or MCP session. Checked by
+    /// [`Server::bind`](crate::Server::bind) before anything is opened.
+    pub(crate) fn check_limits(&self) -> Result<(), ServerError> {
+        let zero = [
+            ("max_connections", self.max_connections == 0),
+            ("max_tcp_connections", self.max_tcp_connections == 0),
+            ("handshake_timeout", self.handshake_timeout.is_zero()),
+            ("header_read_timeout", self.header_read_timeout.is_zero()),
+            ("max_mcp_sessions", self.max_mcp_sessions == 0),
+            ("mcp_idle_timeout", self.mcp_idle_timeout.is_zero()),
+        ];
+        match zero.into_iter().find(|&(_, is_zero)| is_zero) {
+            Some((field, _)) => Err(ServerError::InvalidLimit { field }),
+            None => Ok(()),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Token;
+    use super::{ServerConfig, Token};
+    use crate::error::ServerError;
+    use std::time::Duration;
+
+    /// Sets one field of a config to zero.
+    type Zero = fn(&mut ServerConfig);
+
+    /// #140 N3: a zero limit or timeout is refused, naming the field; the defaults pass.
+    #[test]
+    fn zero_limits_and_timeouts_are_refused() {
+        let Ok(token) = Token::new("abc") else {
+            panic!("a valid token");
+        };
+        let config = ServerConfig::new(token);
+        assert!(config.check_limits().is_ok(), "the defaults");
+        let cases: [(&str, Zero); 6] = [
+            ("max_connections", |c| c.max_connections = 0),
+            ("max_tcp_connections", |c| c.max_tcp_connections = 0),
+            ("handshake_timeout", |c| {
+                c.handshake_timeout = Duration::ZERO
+            }),
+            ("header_read_timeout", |c| {
+                c.header_read_timeout = Duration::ZERO
+            }),
+            ("max_mcp_sessions", |c| c.max_mcp_sessions = 0),
+            ("mcp_idle_timeout", |c| c.mcp_idle_timeout = Duration::ZERO),
+        ];
+        for (name, zero) in cases {
+            let mut bad = config.clone();
+            zero(&mut bad);
+            match bad.check_limits() {
+                Err(ServerError::InvalidLimit { field }) => assert_eq!(field, name),
+                other => panic!("{name}: expected InvalidLimit, got {other:?}"),
+            }
+        }
+        let mut small = config;
+        small.max_connections = 1;
+        small.handshake_timeout = Duration::from_millis(1);
+        assert!(small.check_limits().is_ok(), "small but nonzero");
+    }
 
     #[test]
     fn tokens_must_fit_a_header_and_never_print() {

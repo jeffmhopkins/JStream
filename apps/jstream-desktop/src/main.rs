@@ -22,7 +22,8 @@ fn main() -> ExitCode {
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(Path::to_owned));
-    let data = jstream_desktop::data::dir(exe_dir.as_deref(), |name| std::env::var_os(name));
+    let data =
+        jstream_platform::paths::data_dir_for(exe_dir.as_deref(), |name| std::env::var_os(name));
     let log = app::init_logging(data.as_deref());
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),

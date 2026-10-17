@@ -80,10 +80,10 @@ impl Reference {
         self.named = settings.0.get(id).is_some_and(|v| !v.is_null());
     }
 
-    /// The image to read this frame, checked against `ctx`'s compositor and staged when it
-    /// carries a frame hold that `input` does not share (`apply_filter` stages the
-    /// input's); `None` when the setting is `null` or no image was set.
-    fn get(&self, ctx: &Ctx<'_>, input: &Image) -> Result<Option<&Image>, RenderError> {
+    /// The image to read this frame, checked against `ctx`'s compositor and held for its
+    /// submit (a frame hold is staged with the input's); `None` when the setting is `null`
+    /// or no image was set.
+    fn get(&self, ctx: &mut Ctx<'_>) -> Result<Option<&Image>, RenderError> {
         let Some(image) = self.image.as_deref().filter(|_| self.named) else {
             return Ok(None);
         };
@@ -93,12 +93,7 @@ impl Reference {
                 detail: "the filter's reference image was made by another compositor".into(),
             });
         }
-        if let Some(sync) = image
-            .sync()
-            .filter(|sync| !input.sync().is_some_and(|held| Arc::ptr_eq(held, sync)))
-        {
-            sync.stage(&ctx.gpu.queue).map_err(RenderError::Sync)?;
-        }
+        ctx.hold(image);
         Ok(Some(image))
     }
 }

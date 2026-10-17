@@ -10,7 +10,9 @@
 //! 2. **Drift fit** ([`drift`](super::drift)): the packet's stamp is fitted against its
 //!    device position. A stamp more than 20 ms off the line (once the segment has 100
 //!    points) is an outlier: it is not fitted and not used for timing. A run of 50
-//!    outliers means the line moved, so the segment restarts with the 50th.
+//!    outliers means the line moved, so the segment restarts with the 50th. The first
+//!    stamp after a `discontinuity` flag (on that packet or, if it had none, a later one)
+//!    is never an outlier: when it is off the line, the segment restarts with it at once.
 //! 3. **Anchoring.** An input is placed on the engine time line from a stamp: its next
 //!    output frame `n = ceil(t · rate_out)` goes at the first engine frame at or after the
 //!    stamp's time `t`, and the resampler's position is set so that this frame holds input
@@ -218,6 +220,9 @@ pub struct InputProducer {
     fit: DriftFit,
     pos0: Option<u64>,
     outlier_run: u32,
+    /// A `discontinuity` flag whose stamp has not been fitted yet: the next stamp
+    /// restarts the segment instead of being rejected as an outlier.
+    trust_next_stamp: bool,
     /// The last accepted stamp: (resampler input index, clock seconds).
     stamp: Option<(f64, f64)>,
     anchored: bool,
@@ -257,6 +262,7 @@ impl InputProducer {
             fit: DriftFit::default(),
             pos0: None,
             outlier_run: 0,
+            trust_next_stamp: false,
             stamp: None,
             anchored: false,
             need_anchor: false,
@@ -308,6 +314,7 @@ impl InputProducer {
         if packet.flags.discontinuity && !first {
             self.shared().discontinuities.add(1);
             self.need_anchor = true;
+            self.trust_next_stamp = true;
         }
 
         let pos = packet.device_position;
@@ -373,10 +380,19 @@ impl InputProducer {
     fn add_point(&mut self, x: f64, pos: u64) -> bool {
         let pos0 = *self.pos0.get_or_insert(pos);
         let y = (pos as f64 - pos0 as f64) / self.rate_in;
+        let trusted = std::mem::take(&mut self.trust_next_stamp);
         if self.fit.current_points() >= OUTLIER_MIN_POINTS
             && let Some(pred) = self.fit.predict_y(x)
             && (y - pred).abs() > OUTLIER_S
         {
+            if trusted {
+                // The device said the stream is discontinuous: the line moved here, so
+                // this stamp starts a new segment without waiting for an outlier run.
+                self.shared().resets.add(1);
+                self.restart_segment();
+                self.fit.add(x, y);
+                return true;
+            }
             self.shared().outliers.add(1);
             self.outlier_run += 1;
             if self.outlier_run < OUTLIER_RUN_RESET {
@@ -617,5 +633,68 @@ mod tests {
         assert_eq!(shared.discontinuities.get(), 1);
         assert_eq!(shared.reanchors.get(), 1);
         assert_eq!(shared.resets.get(), 0);
+    }
+
+    /// A discontinuity whose stamp is 50 ms off the fitted line re-anchors at that stamp
+    /// at once (#449): the segment restarts with it, nothing counts as an outlier, and
+    /// its audio lands at its own time, with silence over the jump. Before the fix it was
+    /// rejected and the old mapping held until the 50-outlier run.
+    #[test]
+    fn a_discontinuity_off_the_line_re_anchors_at_once() {
+        let (mut p, ring, shared) = producer();
+        let before = vec![0.25f32; 960];
+        let after = vec![0.5f32; 960];
+        for i in 0..220 {
+            let (s, t0) = if i < 200 {
+                (&before, 1.0)
+            } else {
+                (&after, 1.05)
+            };
+            let mut pk = packet(s, i, t0, true);
+            pk.flags.discontinuity = i == 200;
+            p.push_packet(&pk);
+        }
+        assert_eq!(shared.discontinuities.get(), 1);
+        assert_eq!(shared.outliers.get(), 0);
+        assert_eq!(shared.resets.get(), 1);
+        assert_eq!(shared.reanchors.get(), 1);
+        // The old mapping would put packet 200 at engine frame 48000 + 200 * 480 =
+        // 144000; its stamp, 1.05 + 2.00 s, puts it at 146400. The 50 ms between is
+        // silence, and packet 200's audio starts at 146400.
+        let mut out = [[1.0f32; 2]; 8];
+        ring.read(145_000, &mut out);
+        assert!(
+            out.iter().all(|f| *f == [0.0; 2]),
+            "the jump is silence: {out:?}"
+        );
+        ring.read(146_400 + 100, &mut out);
+        assert!(out.iter().all(|f| (f[0] - 0.5).abs() < 1e-4), "{out:?}");
+        // The new segment's own line holds: later stamps on it are not outliers.
+        assert!(shared.timing_error.load().abs() < 1e-3);
+    }
+
+    /// A flagged packet without a stamp hands the trust to the next stamp, and the trust
+    /// is spent by that stamp: an unflagged outlier later is rejected as usual.
+    #[test]
+    fn only_the_stamp_after_a_discontinuity_skips_outlier_rejection() {
+        let (mut p, _ring, shared) = producer();
+        let s = vec![0.25f32; 960];
+        for i in 0..280 {
+            let t0 = match i {
+                0..150 => 1.0,
+                150..200 => 1.05,
+                // A single unflagged 30 ms spike: jitter, not a move of the line.
+                260 => 1.08,
+                _ => 1.05,
+            };
+            let mut pk = packet(&s, i, t0, i != 150);
+            pk.flags.discontinuity = i == 150;
+            p.push_packet(&pk);
+        }
+        // Packet 151, the first stamp after the flag, restarted the segment; packet 260,
+        // once the new segment has 109 points, was only rejected.
+        assert_eq!(shared.resets.get(), 1);
+        assert_eq!(shared.reanchors.get(), 1);
+        assert_eq!(shared.outliers.get(), 1);
     }
 }

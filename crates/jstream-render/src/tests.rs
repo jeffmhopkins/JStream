@@ -849,6 +849,121 @@ fn the_cache_frees_after_the_frame_fence() {
     assert_eq!(cache.drain().len(), 1);
 }
 
+/// A GPU frame in a new `Rgba8UnormSrgb` texture of one colour, with a hold that counts
+/// its stages.
+fn counted_frame(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> (GpuFrame, Arc<AtomicUsize>) {
+    let count = Arc::new(AtomicUsize::new(0));
+    let info = VideoFrameInfo {
+        size: FrameSize::new(width, height).unwrap(),
+        format: PixelFormat::Rgba8,
+        color: ColorInfo {
+            range: jstream_media::ColorRange::Full,
+            ..ColorInfo::default()
+        },
+        pts: MediaTime::zero(Timebase::NANOS),
+    };
+    let texture = srgb_texture(compositor, width, height, rgba);
+    let frame = GpuFrame::new(texture, info, Arc::new(CountSync(Arc::clone(&count))));
+    (frame, count)
+}
+
+/// One cached frame of `frame` under `"capture"`, drawn at the canvas origin: imports,
+/// renders, ends the frame. Returns the pixel at (0, 0) and how many images the frame
+/// handed back.
+fn show(
+    compositor: &mut Compositor,
+    cache: &mut ResourceCache<&'static str>,
+    frame: &GpuFrame,
+) -> ([u8; 4], usize) {
+    cache.begin_frame();
+    let image = cache.import(compositor, &"capture", frame).expect("import");
+    let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(compositor, 2, 2, Color::BLACK, &items);
+    let freed = cache.end_frame(compositor).map_or(0, |freed| freed.len());
+    let pixel = snapshot.pixel(0, 0).expect("inside");
+    ([pixel[0], pixel[1], pixel[2], pixel[3]], freed)
+}
+
+/// A GPU frame is sampled through the cache with no copy. Each frame stages its own
+/// hold, and the cache lets go of it when the frame ends, so the platform can reuse
+/// the texture. A ring of textures is imported once per texture; a new size retires
+/// the imports of the old one.
+#[test]
+fn the_cache_imports_gpu_frames_without_keeping_their_holds() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&'static str> = ResourceCache::new();
+    let (red, red_stages) = counted_frame(compositor, 2, 2, [255, 0, 0, 255]);
+    let (green, green_stages) = counted_frame(compositor, 2, 2, [0, 255, 0, 255]);
+
+    assert_eq!(show(compositor, &mut cache, &red), ([255, 0, 0, 255], 0));
+    assert_eq!(red_stages.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        Arc::strong_count(red.sync()),
+        1,
+        "nothing but the frame holds it once the frame has ended"
+    );
+
+    assert_eq!(show(compositor, &mut cache, &green), ([0, 255, 0, 255], 0));
+    assert_eq!(green_stages.load(Ordering::SeqCst), 1);
+    assert_eq!(Arc::strong_count(green.sync()), 1);
+    assert_eq!((cache.live(), cache.kept_imports(&"capture")), (1, 1));
+
+    // The ring comes round to the first texture again: its import is reused.
+    assert_eq!(show(compositor, &mut cache, &red), ([255, 0, 0, 255], 0));
+    assert_eq!(
+        red_stages.load(Ordering::SeqCst),
+        2,
+        "each frame stages again"
+    );
+    assert_eq!(
+        cache.get(&"capture").map(|image| image.texture().clone()),
+        Some(red.texture().clone())
+    );
+    assert_eq!(
+        (
+            cache.live(),
+            cache.kept_imports(&"capture"),
+            cache.pending()
+        ),
+        (1, 1, 0)
+    );
+
+    // A frame of another size: both 2x2 imports are retired.
+    let (blue, _) = counted_frame(compositor, 4, 4, [0, 0, 255, 255]);
+    let (pixel, early) = show(compositor, &mut cache, &blue);
+    assert_eq!(pixel, [0, 0, 255, 255]);
+    assert_eq!(cache.kept_imports(&"capture"), 0);
+    compositor
+        .device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let late = cache.reclaim().map_or(0, |freed| freed.len());
+    assert_eq!(early + late, 2, "both 2x2 imports come back");
+    assert_eq!(Arc::strong_count(blue.sync()), 1);
+
+    // An upload under the same key replaces the import, and the import retires.
+    cache.begin_frame();
+    let _ = cache
+        .upload(compositor, &"capture", 1, 1, 1, &[255, 255, 255, 255])
+        .expect("upload");
+    drop(cache.end_frame(compositor));
+    assert_eq!((cache.live(), cache.kept_imports(&"capture")), (1, 0));
+    assert!(
+        cache
+            .get(&"capture")
+            .is_some_and(|image| image.texture() != blue.texture()),
+        "the upload replaced the import"
+    );
+}
+
 /// An image of equal-width vertical bands, one colour each, `height` rows tall.
 pub(crate) fn bands(
     compositor: &Compositor,

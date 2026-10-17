@@ -101,13 +101,24 @@ impl Image {
         self.sync.as_ref()
     }
 
+    /// Replaces the hold staged on each frame that draws the image. The cache keeps an
+    /// import across frames and attaches each frame's hold only while that frame uses it.
+    pub(crate) fn set_sync(&mut self, sync: Option<Arc<dyn FrameSync>>) {
+        self.sync = sync;
+    }
+
+    /// Whether this is an import ([`import`]), sampled as straight alpha.
+    pub(crate) fn is_import(&self) -> bool {
+        self.alpha == Alpha::Straight
+    }
+
     /// The view a layer is drawn into; `None` unless the image is a layer.
     pub(crate) fn target(&self) -> Option<&wgpu::TextureView> {
         self.target.as_ref()
     }
 
     /// Whether this is an upload, which [`rewrite`] can refill in place.
-    fn is_upload(&self) -> bool {
+    pub(crate) fn is_upload(&self) -> bool {
         self.alpha == Alpha::Premultiplied
             && self.target.is_none()
             && self.texture.format() == UPLOAD_FORMAT
