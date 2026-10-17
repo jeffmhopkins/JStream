@@ -241,6 +241,30 @@ pub(crate) fn restamp_merge(
         .collect()
 }
 
+/// The stamp `docs verify --renote` writes on a fresh section: the entries this branch
+/// wrote (those that differ from `base`, the section's stamp where the branch left its
+/// upstream) get this `by` and `note`, keeping their hashes; the rest are kept as they were.
+/// `None` when the branch wrote none.
+pub(crate) fn renote(old: &Stamp, base: Option<&Stamp>, by: &str, note: &str) -> Option<Stamp> {
+    let mut any = false;
+    let stamp = old
+        .iter()
+        .map(|(k, e)| {
+            if base.and_then(|b| b.get(k)) == Some(e) {
+                return (k.clone(), e.clone());
+            }
+            any = true;
+            let e = Entry {
+                hash: e.hash.clone(),
+                by: Some(by.to_owned()),
+                note: Some(note.to_owned()),
+            };
+            (k.clone(), e)
+        })
+        .collect();
+    any.then_some(stamp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -535,5 +559,29 @@ mod tests {
             merge_note(Some(&format!("{m}earlier")), "now"),
             "merge: now"
         );
+    }
+
+    #[test]
+    fn renote_rewrites_only_the_branch_entries() {
+        let e = |h: &str, n: &str| Entry {
+            hash: h.to_owned(),
+            by: Some("agent:x".to_owned()),
+            note: Some(n.to_owned()),
+        };
+        let base = Stamp::from([("body".to_owned(), e("b3:1", "main"))]);
+        let old = Stamp::from([
+            ("body".to_owned(), e("b3:1", "main")),
+            ("file:a".to_owned(), e("b3:2", "thin")),
+        ]);
+        let new = renote(&old, Some(&base), "agent:y", "better").expect("branch entry");
+        assert_eq!(new["body"], old["body"]);
+        let a = &new["file:a"];
+        assert_eq!(
+            (a.hash.as_str(), a.by.as_deref(), a.note.as_deref()),
+            ("b3:2", Some("agent:y"), Some("better"))
+        );
+        assert!(renote(&base, Some(&base), "agent:y", "better").is_none());
+        // With no stamp at the base, every entry is the branch's.
+        assert_eq!(renote(&old, None, "agent:y", "n").expect("all").len(), 2);
     }
 }

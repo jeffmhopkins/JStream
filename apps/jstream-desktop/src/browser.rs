@@ -28,8 +28,8 @@ pub fn backend(data: &Path, clock: Arc<dyn MediaClock>) -> Option<Arc<dyn Browse
     };
     config.log_file = Some(data.join("logs").join("cef.log"));
     let backend = CefBackend::new(config, clock);
-    // The media adapter's device, as the engine's own media work opens it (ADR-0004);
-    // the engine doesn't hand out its device yet.
+    // The media adapter's device, as the engine's own media work opens it (ADR-0004),
+    // for paints before a program stage; the stage lends its own context in its place.
     match jstream_platform_windows::WindowsGpu::new().open_device() {
         Ok(gpu) => backend.use_device(Some(&gpu)),
         Err(error) => {

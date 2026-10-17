@@ -1395,7 +1395,7 @@ fn output_stop_during_start_cancels_the_pipeline() {
         FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
         FakeVideoDevices,
     };
-    use jstream_platform::{Backends, Capture, CaptureTarget, PlatformError};
+    use jstream_platform::{Backends, GpuInterop, PlatformError};
 
     struct Hold {
         ready: Mutex<bool>,
@@ -1423,24 +1423,25 @@ fn output_stop_during_start_cancels_the_pipeline() {
         }
     }
 
-    struct HoldCapture {
-        inner: FakeCapture,
+    struct HoldGpu {
         entered: Arc<Hold>,
         release: Arc<Hold>,
     }
 
-    impl Capture for HoldCapture {
-        fn targets(&self) -> Result<Vec<jstream_platform::CaptureTargetInfo>, PlatformError> {
-            self.inner.targets()
-        }
-
-        fn start(
-            &self,
-            target: &CaptureTarget,
-        ) -> Result<Box<dyn jstream_platform::CaptureStream>, PlatformError> {
+    /// Holds the start in the output's first platform call, opening the GPU device.
+    impl GpuInterop for HoldGpu {
+        fn open_device(&self) -> Result<jstream_platform::GpuContext, PlatformError> {
             self.entered.signal();
             self.release.wait();
-            self.inner.start(target)
+            FakeGpuInterop.open_device()
+        }
+
+        fn encode_target(
+            &self,
+            context: &jstream_platform::GpuContext,
+            size: FrameSize,
+        ) -> Result<jstream_platform::GpuFrame, PlatformError> {
+            FakeGpuInterop.encode_target(context, size)
         }
     }
 
@@ -1452,14 +1453,13 @@ fn output_stop_during_start_cancels_the_pipeline() {
     let backends = Backends {
         clock: Arc::new(clock.clone()),
         video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
-        capture: Arc::new(HoldCapture {
-            inner: FakeCapture::new(clock, size),
+        capture: Arc::new(FakeCapture::new(clock, size)),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(HoldGpu {
             entered: Arc::clone(&entered),
             release: Arc::clone(&release),
         }),
-        audio: Arc::new(audio),
-        codecs: Arc::new(FakeCodecs),
-        gpu: Arc::new(FakeGpuInterop),
         media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
@@ -1898,8 +1898,8 @@ fn output_state(control: &dyn Control, output: &str) -> OutputState {
 }
 
 /// Edits and stored frames republish the render snapshot only when the program mix
-/// changes. A `display` source shows the pipeline's capture until a frame is stored
-/// for it, and a frame for a source nothing on program shows publishes nothing.
+/// changes. A `display` source shows what the pipeline captures for it until a frame is
+/// stored for it, and a frame for a source nothing on program shows publishes nothing.
 #[test]
 fn the_render_snapshot_follows_the_program_mix() {
     let engine = Engine::new();
@@ -1923,26 +1923,33 @@ fn the_render_snapshot_follows_the_program_mix() {
         ends_gesture: None,
     };
     batch(&control, edits).expect("batch");
-    assert_eq!(generation(), 2);
-    assert!(
-        hub.load().shot().uses_capture(),
-        "no stored frame: the capture"
+    assert!(engine.settle_sources(), "the display source was built");
+    // The scene, then the display source's build.
+    assert_eq!(generation(), 3);
+    let primary = std::collections::BTreeSet::from([jstream_sources::CaptureSpec::Display(None)]);
+    assert_eq!(
+        hub.load().shot().captures(),
+        &primary,
+        "no stored frame: the primary display's capture"
     );
 
     engine
         .set_source_frame(&SourceId::new("elsewhere"), 1, 1, &[0, 0, 0, 255])
         .expect("frame");
-    assert_eq!(generation(), 2, "nothing on program shows that source");
+    assert_eq!(generation(), 3, "nothing on program shows that source");
 
     engine
         .set_source_frame(&SourceId::new("screen"), 1, 1, &[0, 0, 0, 255])
         .expect("frame");
-    assert_eq!(generation(), 3);
-    assert!(!hub.load().shot().uses_capture(), "a stored frame wins");
+    assert_eq!(generation(), 4);
+    assert!(
+        hub.load().shot().captures().is_empty(),
+        "a stored frame wins"
+    );
     engine
         .set_source_frame(&SourceId::new("screen"), 1, 1, &[9, 9, 9, 255])
         .expect("frame");
-    assert_eq!(generation(), 4, "a new frame is a new version");
+    assert_eq!(generation(), 5, "a new frame is a new version");
 }
 
 /// The render thread's program mix follows program: a switch republishes it with the
@@ -2411,6 +2418,8 @@ fn deleting_a_source_drops_its_frame() {
 // any machine. The GPU path itself is covered by the tests above.
 
 mod cpu_pipeline {
+    mod captures;
+
     use super::{
         batch, block_on, code, connected, drain, edits, output_call, output_state, output_steps,
         query,
@@ -2510,11 +2519,11 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, size, capture, out, at| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push(shot.program().cloned());
-                    inner(shot, live, size, capture, out, at)
+                    inner(shot, live, captures, frames, at)
                 });
                 Ok(draw)
             })
@@ -3129,9 +3138,9 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, size, rgba, out, at| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, live, size, rgba, out, at)
+                    inner(shot, live, captures, frames, at)
                 });
                 Ok(draw)
             })
@@ -4392,6 +4401,77 @@ mod cpu_pipeline {
         assert_eq!(encoder_status(&control, "yt").2, 0);
     }
 
+    /// A recording with an audio chain of its own (ADR-0027) gets an output tap and its
+    /// own audio encode, while its video still shares the stream's session; both
+    /// outputs get audio, and the recording's file finishes.
+    #[test]
+    fn an_output_with_an_audio_chain_encodes_its_own_audio() {
+        let dir = TempDir::new("own-audio");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        batch(
+            &control,
+            edits(vec![Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Output {
+                    output_id: OutputId::new("rec"),
+                },
+                chain: jstream_protocol::FilterChain::Audio,
+                filter_id: jstream_protocol::FilterId::new("trim"),
+                kind: "gain".into(),
+                settings: [("gain_db", serde_json::json!(-6.0))].into_iter().collect(),
+                enabled: None,
+                index: None,
+            }]),
+        )
+        .expect("filter.add");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (state, encoder, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(state, OutputState::Active);
+        assert_eq!(
+            encoder.map(|encoder| encoder.shared_with),
+            Some(vec![OutputId::new("yt")]),
+            "the video session is still shared"
+        );
+        assert_eq!(sessions, 1);
+        let audio_tags = || {
+            publish
+                .tags()
+                .iter()
+                .filter(|tag| tag.tag_type == TagType::Audio)
+                .count()
+        };
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats_of(&OutputId::new("rec"))
+                    .is_some_and(|stats| {
+                        stats.video_subscriber.delivered >= 70
+                            && stats.audio_subscriber.delivered >= 10
+                    })
+                    && audio_tags() >= 10
+            }),
+            "audio never reached both outputs"
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        let before = audio_tags();
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || audio_tags() >= before + 10),
+            "the stream's audio stopped with the recording"
+        );
+
+        let bytes = std::fs::read(&path).expect("the finished recording");
+        let found = boxes(&bytes);
+        assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
+        assert!(found.iter().any(|name| name == "moof"), "{found:?}");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
     /// A program-stage failure fails every output on it. A start after that waits for
     /// the failed stage to go and opens a new one.
     #[test]
@@ -4404,9 +4484,9 @@ mod cpu_pipeline {
             Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, size, rgba, out, at| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, live, size, rgba, out, at)
+                    inner(shot, live, captures, frames, at)
                 });
                 Ok(draw)
             })
@@ -4484,6 +4564,87 @@ mod cpu_pipeline {
         assert_eq!(
             rec.map(|encoder| (encoder.profile_id, encoder.shared_with)),
             Some((Some(EncoderProfileId::new("hq")), vec![]))
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
+    /// An output on a video mix gets an encoder session of its own, not shared with the
+    /// program's, fed at the mix's rate: the recording on a half-rate mix gets at most
+    /// one frame per two base ticks, and isn't starved while the stream on program draws.
+    /// A mix an output shows can't be deleted.
+    #[test]
+    fn an_output_on_a_mix_encodes_it_at_its_rate() {
+        use jstream_protocol::{MixInput, MixResolution, VideoMix, VideoMixId};
+
+        let dir = TempDir::new("mix");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &dir.join("show.mp4"));
+        batch(
+            &control,
+            edits(vec![
+                Edit::VideoMixCreate {
+                    mix_id: VideoMixId::new("half"),
+                    name: "Half rate".into(),
+                    mix: VideoMix {
+                        input: MixInput::Program,
+                        resolution: MixResolution {
+                            width: 32,
+                            height: 18,
+                        },
+                        fps_divisor: 2,
+                    },
+                },
+                Edit::OutputSetVideoMix {
+                    output_id: OutputId::new("rec"),
+                    mix_id: Some(VideoMixId::new("half")),
+                },
+            ]),
+        )
+        .expect("mix edits");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (_, rec, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(sessions, 2);
+        assert_eq!(rec.map(|encoder| encoder.shared_with), Some(vec![]));
+
+        let recorded = |engine: &Engine| {
+            engine
+                .output_stats_of(&OutputId::new("rec"))
+                .map_or(0, |stats| stats.video_subscriber.delivered)
+        };
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || video_tags(&publish) >= 90),
+            "the stream never got its frames"
+        );
+        let (full, half) = (video_tags(&publish) as u64, recorded(&engine));
+        // The pump moves the clock faster than a debug render thread draws, so most
+        // base ticks are skipped and both mixes are drawn on nearly every tick that is:
+        // the half-rate mix is held to at most one frame per two base ticks and never
+        // more than the program. However many ticks are skipped it gets at least about
+        // one frame for every two of the program's, so an overrun doesn't starve it. Its
+        // rate on ticks that aren't skipped is checked by
+        // `frames_draw_each_feed_once_on_its_ticks`.
+        let micros = jstream_platform::MediaClock::now(&fakes.clock).ticks();
+        let base = u64::try_from(micros / 33_333).expect("clock after zero");
+        assert!(
+            half + 6 >= full / 2 && half <= full + 2 && half <= base / 2 + 2,
+            "{half} recorded frames against {full} streamed over {base} base ticks"
+        );
+
+        let refused = batch(
+            &control,
+            edits(vec![Edit::VideoMixDelete {
+                mix_id: VideoMixId::new("half"),
+            }]),
+        );
+        assert_eq!(
+            refused.as_ref().err().and_then(code),
+            Some("invalid_argument")
         );
         block_on(control.call(output_call("rec", false))).expect("rec stop");
         block_on(control.call(output_call("yt", false))).expect("yt stop");
@@ -4570,10 +4731,12 @@ mod cpu_pipeline {
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move |_| {
-            let draw: DrawFn = Box::new(move |_, _, size: FrameSize, _, out: &mut Vec<u8>, _| {
-                out.clear();
-                for _ in 0..size.width() as usize * size.height() as usize {
-                    out.extend_from_slice(&rgba);
+            let draw: DrawFn = Box::new(move |_, _, _, frames, _| {
+                for frame in frames.iter_mut().filter(|frame| frame.due) {
+                    frame.out.clear();
+                    for _ in 0..frame.size.width() as usize * frame.size.height() as usize {
+                        frame.out.extend_from_slice(&rgba);
+                    }
                 }
                 Ok(None)
             });
@@ -4940,6 +5103,8 @@ fn output_edits_configure_the_collection() {
             output_id: OutputId::new("out_yt"),
             kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
             encoder_profile: None,
+            filters: Default::default(),
+            video_mix: None,
         }]
     );
     assert_eq!(
@@ -4964,6 +5129,8 @@ fn output_edits_configure_the_collection() {
                 output_id: OutputId::new("out_yt"),
                 kind: rtmp_output("rtmps://a.rtmps.youtube.com:443/live2"),
                 encoder_profile: None,
+                filters: Default::default(),
+                video_mix: None,
             }]
         ),
         other => panic!("not a state: {other:?}"),
