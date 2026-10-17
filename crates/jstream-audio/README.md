@@ -58,7 +58,8 @@ stamped on the clock, and no device is the master.
 - `Mixer::add_bus` and `MixerControl::add_bus` add a stereo bus and return its
   `BusControl`; `BusControl::remove` removes it, and `Mixer::bus` is the master's,
   which can't be removed. Like inputs, buses change through the command queue while
-  `poll` runs. At most 16 buses, the master included. A bus's `BusId` is never reused,
+  `poll` runs. At most 16 buses (`MAX_BUSES`, which `jstream-core` holds equal to the
+  protocol's limit), the master included. A bus's `BusId` is never reused,
   so a send to a removed bus stays inert even after a new bus takes its buffer. It is
   also tagged with its mixer, so an input ignores another mixer's bus,
   `Mixer::bus_block` answers `None` for one and `add_output_tap` refuses one
@@ -104,7 +105,11 @@ stamped on the clock, and no device is the master.
   the clock. A mixer that falls more than half a ring behind the clock jumps to the
   newest due block and counts the skipped frames. `Mixer::bus_block(bus)` reads any
   bus's output for the last block mixed, before the master chain: what a monitor
-  hears.
+  hears. `Mixer::input_block(input)` reads one input's signal in the last block mixed,
+  after its chain, fader, mute and activity gain and before its sends: what that input
+  contributes to the mix before each send's gain, which `jstream-core` draws for a
+  `waveform` or `spectrum` source that names the source (ADR-0028 defines a sidechain
+  key's signal at the same point).
 - `InputControl` and `BusControl` set the fader (linear or dB, 0 to +24 dB) and mute,
   ramped over one block. They read meters (per channel, post-fader, so an input's is
   before its sends: the peak held until read, and the last block's RMS) and counters
@@ -131,8 +136,11 @@ not start. No variant allocates.
   zero delay, output rate under a correction, long silences;
 - the controller, drift fit, continuity and downmix coefficients, ported from S3 with
   S3's tests;
-- the input's anchoring, outlier runs, discontinuities and silent packets;
+- the input's anchoring, outlier runs, discontinuities (one whose stamp is off the line
+  re-anchors at once; unflagged outliers still wait for the run) and silent packets;
 - the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
+- each input's own block after its fader, mute and activity gain, unaffected by its
+  send gains, and gone once the input is removed;
 - the send matrix: post-fader sends into each bus, each bus's own fader, mute and
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses
@@ -170,7 +178,8 @@ be.
 
 `tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
 under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send,
-filter, master-chain, output-tap and CLAP-filter changes
+filter, master-chain, output-tap and CLAP-filter changes, reading each output tap's and
+each input's block after every block
 ([Real-time design](#realtime)).
 `tests/cost.rs` is an ignored measurement of what a block costs
 ([Real-time design](#realtime)).
@@ -248,7 +257,8 @@ and its measured tuning):
   `discontinuity` flag (except on the first packet) makes the input re-anchor.
 - **Drift fit.** A segmented least-squares fit of device position against stamp time.
   It rejects stamps more than 20 ms off the line (after 100 points); a run of 50 outliers
-  restarts the segment. It also reports drift and jitter.
+  restarts the segment. The first stamp after a `discontinuity` flag is never rejected:
+  off the line, it restarts the segment at once. It also reports drift and jitter.
 - **Anchoring.** An input is placed on the time line at its first accepted stamp, and
   again after a restart. A forward jump reads as silence; an overlap with audio already
   written is skipped and counted as late. Packets before the first stamp are dropped and
@@ -265,8 +275,10 @@ inputs line up with each other. Its sign is flipped because `u` scales the input
 not rubato's output ratio.
 
 **Mixer** (`mixer.rs`): per block, reads each ring, runs each input's filter chain and
-compensation delay, ramps its fader and meters it, then adds it into every bus it sends
-to, ramping each send's gain. For each bus it then runs the bus chain and compensation
+compensation delay, ramps its fader and meters it, copies it into the input's own
+block with its activity gain ramped (`input_block`; the block is allocated with the
+input on the control plane, travels in its add command and goes to the collector with
+it), then adds it into every bus it sends to, ramping each send's gain. For each bus it then runs the bus chain and compensation
 delay, ramps the bus fader, replaces any non-finite sample with 0 and meters the output.
 Each bus that feeds an output then runs its copy of the master chain on a second
 buffer, so the first keeps the pre-master output for monitoring (`bus_block`), and each
@@ -373,7 +385,8 @@ and a keyed compressor and the meters on each mixed block run inside an
 `assert_no_alloc` scope. Any allocation or free
 there fails the test, in debug and release builds alike. Five inputs (mono 44.1 kHz,
 stereo 48 and 96 kHz, 5.1, and 32 kHz added while running) drift and jitter. The checked phase also
-covers timestamp outliers and missing stamps, lost packets, a discontinuity, a stalled
+covers timestamp outliers and missing stamps, lost packets, a discontinuity (and one
+whose stamp is off the clock line, which restarts the drift fit's segment), a stalled
 audio thread that catches up, a 3 s device gap that resets the mapping, silent and
 non-finite packets, a mixer stall long enough to overrun the rings and skip frames,
 an input added and one removed while the mixer runs, a bus added, sent to, given a
@@ -381,7 +394,8 @@ limiter and removed, filters on an input and the master edited every 0.5 s, and 
 limiter added to and removed from an input (so the compensation delays move), master
 filters edited every 0.5 s and one added to both fed buses and removed, an output tap
 on the aux bus with its own chain (edited every 0.5 s, outliving its bus) whose block is
-read after each mix, and a tap on the master added and removed. The test
+read after each mix, a tap on the master added and removed, and every input's own
+block read after each mix. The test
 checks that each of those paths ran. Control-plane calls and dropping a producer (stream teardown) run
 outside the scope. Locks, blocking and logging are still left to review.
 
@@ -395,11 +409,25 @@ with 8 stereo 48 kHz inputs. Measured on a cloud container (4 vCPUs of an Intel 
   bus, a gain and 3 ms limiter master chain on all 8 buses, and 7 output taps each with
   a gain and 5 ms limiter (62 filters): 957 µs (4.5%; p99 1.6 ms).
 
+Keeping each input's own block (`input_block`) costs one copy and gain pass per input
+per block: measured on a cloud container (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux
+6.18), release build, the master-only case went from 47 to 54 µs mean, and the other
+two moved within their run-to-run noise.
+
 Run it on the target machine with
 `cargo test --release -p jstream-audio --test cost -- --ignored --nocapture`.
 
+**Benchmarks** (`benches/mix.rs`, criterion). `mix_block` times the same three mixer
+scenarios per block, and `input_push` times one engine block's worth of device frames (1024 at 48 kHz, 940 or 941
+at 44.1 kHz) through `InputProducer::push_packet` (downmix and adaptive resampling).
+Measured on a cloud container (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release
+build, mean: `input_push` about 200 µs at either rate (0.9% of the block period). The
+`bench` workflow records them on every push to `main`
+([R-GIT-003](../../docs/RULES.md#R-GIT-003)). Run them with
+`cargo bench -p jstream-audio --bench mix`.
+
 **Not yet enforced or measured:**
-- The cost on Windows hardware, and of resampling, is not measured.
+- The cost on Windows hardware is not measured.
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
 

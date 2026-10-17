@@ -7,10 +7,13 @@ use crate::event::OutputState;
 use crate::filter::FilterChains;
 use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
-use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::hotkey::HotkeyBinding;
+use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
+use crate::live::GestureInfo;
 use crate::output::OutputInfo;
 use crate::settings::Settings;
+use crate::youtube::{BroadcastInfo, BroadcastListStatus, BroadcastType, StreamInfo, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -43,8 +46,8 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, every output, every encoder profile, and the buses and sends) at one
-    /// revision: what a client
+    /// items, every output, every encoder profile, the buses and sends, and every hotkey
+    /// binding) at one revision: what a client
     /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
     /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
@@ -79,15 +82,49 @@ pub enum Query {
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
+    /// Lists the open live-value gestures (ADR-0032), every client's, ordered by client
+    /// and gesture ID, with the values each holds now: what a client that connects
+    /// during a drag reads to show it. Live values are runtime state, not collection
+    /// state, so the result carries no `rev`.
+    #[serde(rename = "live.list")]
+    LiveList,
+    /// Whether the engine is signed in to YouTube. Never calls YouTube.
+    #[serde(rename = "youtube.status")]
+    YoutubeStatus,
+    /// Lists the signed-in channel's broadcasts, one page of up to 50 at a time, in
+    /// YouTube's order. Calls the Live API, so it fails with `action_failed` when not
+    /// signed in or YouTube refuses (including when the day's quota is used up).
+    #[serde(rename = "youtube.list_broadcasts")]
+    YoutubeListBroadcasts {
+        /// Which broadcasts, by state. Omitted means `all`.
+        #[serde(default)]
+        status: BroadcastListStatus,
+        /// Which broadcasts, by type. Omitted means `all`, which includes the channel's
+        /// persistent ("Stream now") broadcast.
+        #[serde(default)]
+        broadcast_type: BroadcastType,
+        /// The `next_page_token` of an earlier page, for the page after it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_token: Option<String>,
+    },
+    /// Lists the signed-in channel's streams, one page of up to 50 at a time. Their keys
+    /// are never reported. Fails like `youtube.list_broadcasts`.
+    #[serde(rename = "youtube.list_streams")]
+    YoutubeListStreams {
+        /// The `next_page_token` of an earlier page, for the page after it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_token: Option<String>,
+    },
     /// Lists the collection's audio buses, ordered by ID, and every send into them.
     #[serde(rename = "bus.list")]
     BusList,
-    /// The batch that deletes a scene or source together with everything that refers to
-    /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
-    /// lists those `blockers`). The plan removes the items that place a deleted source,
+    /// The batch that deletes a scene, source or bus together with everything that
+    /// refers to it, which `scene.delete`, `source.delete` and `bus.delete` alone refuse
+    /// (their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,
     /// deletes the `scene` sources that show a deleted scene (and their items), and sets
     /// settings references to the target to `null`, keeping the sources that hold them.
-    /// The client shows it, then sends its `edits` as an ordinary batch with
+    /// It also lists the hotkey bindings the delete removes with what they name
+    /// (ADR-0040 §3), which need no edit of their own. The client shows it, then sends its `edits` as an ordinary batch with
     /// `expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with
     /// `not_found` if the target doesn't exist.
     #[serde(rename = "delete.plan")]
@@ -95,9 +132,22 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
+    /// Lists the displays and windows the engine can capture now: what a `display` or
+    /// `window` source's `target` setting can name. They are runtime state, not
+    /// collection state, so the result carries no `rev`, and a window closed since may
+    /// still be named by a source. Fails with `action_failed` when the engine has no
+    /// capture backend, or the OS refuses to list them.
+    #[serde(rename = "capture.targets")]
+    CaptureTargets,
+    /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
+    /// paired and was last used, never its token. Answered by the server that admits
+    /// clients, not the engine: a `Control` with no server in front fails with
+    /// `unsupported`.
+    #[serde(rename = "device.list")]
+    DeviceList,
 }
 
-/// What a `delete.plan` deletes: a scene or a source.
+/// What a `delete.plan` deletes: a scene, a source or (since 0.24) a bus.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -111,6 +161,11 @@ pub enum DeleteTarget {
     Source {
         /// The source to delete.
         source_id: SourceId,
+    },
+    /// A bus other than the master. Since 0.24.
+    Bus {
+        /// The bus to delete.
+        bus_id: BusId,
     },
 }
 
@@ -129,8 +184,14 @@ impl Query {
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
+            Query::LiveList => "live.list",
+            Query::YoutubeStatus => "youtube.status",
+            Query::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
+            Query::YoutubeListStreams { .. } => "youtube.list_streams",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::CaptureTargets => "capture.targets",
+            Query::DeviceList => "device.list",
         }
     }
 }
@@ -222,6 +283,10 @@ pub enum QueryResult {
         /// than 0.19) parses as empty.
         #[serde(default)]
         sends: Vec<SendInfo>,
+        /// Every hotkey binding, ordered by chord. Missing (from a server older than
+        /// 0.25) parses as empty.
+        #[serde(default)]
+        hotkeys: Vec<HotkeyBinding>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -273,6 +338,36 @@ pub enum QueryResult {
         /// The profiles, ordered by ID.
         encoders: Vec<EncoderProfileInfo>,
     },
+    /// The result of `live.list`.
+    #[serde(rename = "live.list")]
+    LiveList {
+        /// The open gestures, ordered by client ID, then gesture ID.
+        gestures: Vec<GestureInfo>,
+    },
+    /// The result of `youtube.status`. Runtime state, so it carries no `rev`.
+    #[serde(rename = "youtube.status")]
+    YoutubeStatus {
+        /// Whether the engine is signed in.
+        auth: YoutubeAuth,
+    },
+    /// The result of `youtube.list_broadcasts`.
+    #[serde(rename = "youtube.list_broadcasts")]
+    YoutubeListBroadcasts {
+        /// This page's broadcasts.
+        broadcasts: Vec<BroadcastInfo>,
+        /// The token for the next page, if there is one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_page_token: Option<String>,
+    },
+    /// The result of `youtube.list_streams`.
+    #[serde(rename = "youtube.list_streams")]
+    YoutubeListStreams {
+        /// This page's streams.
+        streams: Vec<StreamInfo>,
+        /// The token for the next page, if there is one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_page_token: Option<String>,
+    },
     /// The result of `bus.list`.
     #[serde(rename = "bus.list")]
     BusList {
@@ -294,6 +389,25 @@ pub enum QueryResult {
         /// deleted object to `null`, `source.delete` for the `scene` sources that show a deleted scene, and last the
         /// delete of the target itself.
         edits: Vec<Edit>,
+        /// The hotkey bindings the batch removes because their action names an object it
+        /// deletes, ordered by chord, so the client can say "this also removes the hotkey
+        /// Ctrl+Digit1". The deletes remove them; undo restores them. Omitted when there
+        /// are none, and missing (from a server older than 0.25) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        hotkeys: Vec<HotkeyBinding>,
+    },
+    /// The result of `capture.targets`.
+    #[serde(rename = "capture.targets")]
+    CaptureTargets {
+        /// The displays, then the windows, in the order the OS lists them.
+        targets: Vec<CaptureTargetInfo>,
+    },
+    /// The result of `device.list`. Devices are not collection state, so it carries no
+    /// `rev`.
+    #[serde(rename = "device.list")]
+    DeviceList {
+        /// The paired devices, ordered by ID.
+        devices: Vec<DeviceInfo>,
     },
 }
 
@@ -312,10 +426,69 @@ impl QueryResult {
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::LiveList { .. } => "live.list",
+            QueryResult::YoutubeStatus { .. } => "youtube.status",
+            QueryResult::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
+            QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::CaptureTargets { .. } => "capture.targets",
+            QueryResult::DeviceList { .. } => "device.list",
         }
     }
+}
+
+/// One paired device, as `device.list` reports it. Its token is never reported.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DeviceInfo {
+    /// The device's ID, which `device.revoke` takes.
+    pub device_id: DeviceId,
+    /// The name it gave when it paired. The audit log names its sessions
+    /// `device:<name>`.
+    pub name: String,
+    /// When it paired, in seconds since the Unix epoch (UTC).
+    pub paired_at: u64,
+    /// When its token was last presented, in seconds since the Unix epoch (UTC), to the
+    /// hour. A token unused for 30 days lapses and the device is dropped.
+    pub last_used_at: u64,
+}
+
+/// One display or window in a `capture.targets` result.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CaptureTargetInfo {
+    /// Whether it is a display or a window: the kind of source that captures it.
+    pub kind: CaptureTargetKind,
+    /// Its capture target ID, the value of that source's `target` setting.
+    pub target: String,
+    /// A name to show: the display's name or the window's title.
+    pub name: String,
+    /// Its size in pixels now, when the OS reports it without capturing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PixelSize>,
+    /// Whether it is the primary display, which a `display` source with an empty
+    /// `target` captures. Omitted when `false`, and always `false` for a window.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub primary: bool,
+}
+
+/// What a capture target is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum CaptureTargetKind {
+    /// A whole display, captured by a `display` source.
+    Display,
+    /// One top-level window, captured by a `window` source.
+    Window,
+}
+
+/// A size in whole pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PixelSize {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
 }
 
 /// One scene in a `scene.list` result.

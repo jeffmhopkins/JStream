@@ -6,7 +6,8 @@
 //! - **Delete rejection:** after every batch, no reference dangles, and a plain delete of
 //!   each scene, source and encoder profile is refused exactly when something still
 //!   refers to it and changes nothing when refused; a scene's or source's refusal names
-//!   every referrer as a blocker.
+//!   every referrer as a blocker. Hotkey bindings are never blockers: a delete that
+//!   applies takes the bindings naming its target with it (ADR-0040 §3), so none dangles.
 //!
 //! Edits are drawn from small ID pools, so they often hit existing objects, collide with
 //! them or miss them, with names, numbers and settings values drawn freely. The seed is
@@ -17,10 +18,10 @@
 use jstream_graph::Graph;
 use jstream_protocol::Edit;
 use jstream_protocol::{
-    Blocker, Crop, EncoderProfile, EncoderProfileId, EntityKind, Finite32, FitMode, ItemGeometry,
-    ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
+    Action, Blocker, Chord, Crop, EncoderProfile, EncoderProfileId, EntityKind, Finite32, FitMode,
+    ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
     ParamDescriptor, ParamType, ProtocolError, RateControl, RecordContainer, Reference, RtmpTarget,
-    SceneId, SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
+    SceneId, SceneRole, SecretString, Settings, Size, SourceId, SourceKind, Vec2,
 };
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
@@ -213,6 +214,35 @@ fn output_id() -> BoxedStrategy<OutputId> {
 
 fn profile_id() -> BoxedStrategy<EncoderProfileId> {
     id(&["e0", "e1"]).prop_map(EncoderProfileId::new).boxed()
+}
+
+/// A chord from a small pool, one of them misspelt.
+fn chord() -> BoxedStrategy<Chord> {
+    proptest::sample::select(
+        &[
+            "F1",
+            "Ctrl+KeyA",
+            "Shift+F2",
+            "Ctrl+Digit1",
+            "Shift+Ctrl+KeyA",
+        ][..],
+    )
+    .prop_map(Chord::new)
+    .boxed()
+}
+
+/// An action to bind, sometimes one that can't be bound.
+fn action() -> BoxedStrategy<Action> {
+    prop_oneof![
+        3 => scene_id().prop_map(|scene_id| Action::SceneSwitch { scene_id }),
+        2 => output_id().prop_map(|output_id| Action::OutputStart { output_id }),
+        1 => output_id().prop_map(|output_id| Action::OutputStop { output_id }),
+        1 => output_id().prop_map(|output_id| Action::OutputSetKey {
+            output_id,
+            key: SecretString::new("k"),
+        }),
+    ]
+    .boxed()
 }
 
 /// Mostly short plain names; sometimes empty, long or anything.
@@ -510,6 +540,8 @@ fn edit() -> BoxedStrategy<Edit> {
         1 => profile_id().prop_map(|profile_id| Edit::EncoderDelete { profile_id }),
         1 => (prop_oneof![3 => 1u32..4000, 1 => any::<u32>()], prop_oneof![3 => 1u32..4000, 1 => any::<u32>()])
             .prop_map(|(width, height)| Edit::CanvasSetSize { width, height }),
+        3 => (chord(), action()).prop_map(|(chord, action)| Edit::HotkeySet { chord, action }),
+        1 => chord().prop_map(|chord| Edit::HotkeyClear { chord }),
     ]
     .boxed()
 }
@@ -568,6 +600,17 @@ fn assert_no_dangling(graph: &Graph) {
             );
         }
     }
+    for (chord, action) in state.hotkeys() {
+        for (entity, id) in action.named_objects() {
+            let exists = match entity {
+                EntityKind::Scene => state.scene(&SceneId::new(id)).is_some(),
+                EntityKind::Output => state.output(&OutputId::new(id)).is_some(),
+                EntityKind::Source => state.source(&SourceId::new(id)).is_some(),
+                _ => false,
+            };
+            assert!(exists, "hotkey `{chord}` names missing {entity} `{id}`");
+        }
+    }
 }
 
 /// What still refers to a scene or source, worked out from the state independently of
@@ -622,10 +665,13 @@ fn blocker_set(blockers: &[Blocker]) -> Referrers {
 fn check_delete(graph: &Graph, edit: Edit, expected: &Referrers) {
     let mut copy = graph.clone();
     match copy.apply(std::slice::from_ref(&edit), None) {
-        Ok(_) => assert!(
-            expected.is_empty(),
-            "{edit:?} applied while referred to by {expected:?}"
-        ),
+        Ok(_) => {
+            assert!(
+                expected.is_empty(),
+                "{edit:?} applied while referred to by {expected:?}"
+            );
+            assert_no_dangling(&copy);
+        }
         Err(ProtocolError::InvalidArgument { blockers, .. }) if !expected.is_empty() => {
             assert_eq!(&copy, graph, "a refused {edit:?} changed the graph");
             assert_eq!(&blocker_set(&blockers), expected, "blockers of {edit:?}");
@@ -634,7 +680,7 @@ fn check_delete(graph: &Graph, edit: Edit, expected: &Referrers) {
     }
 }
 
-/// Every scene, source and encoder profile delete, on copies of `graph`.
+/// Every scene, source, output and encoder profile delete, on copies of `graph`.
 fn check_deletes(graph: &Graph) {
     let state = graph.state();
     for scene in state.scenes() {
@@ -654,6 +700,13 @@ fn check_deletes(graph: &Graph) {
             source_id: source.id().clone(),
         };
         check_delete(graph, edit, &referrers(graph, &target));
+    }
+    // Nothing blocks an output's delete (none runs here); it takes its bindings with it.
+    for output in state.outputs() {
+        let edit = Edit::OutputDelete {
+            output_id: output.id().clone(),
+        };
+        check_delete(graph, edit, &Referrers::new());
     }
     for encoder in state.encoders() {
         let users: Vec<_> = state

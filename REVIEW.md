@@ -59,6 +59,10 @@ depends_on = ["docs/adr/0019-review-gate-v2.md"]
    the PR re-verified, with their notes.
 4. Read enough of the surrounding code to understand callers and invariants. The diff
    alone is not enough.
+5. **A wave PR** (head `wave/*`, base `main`; [ADR-0055](docs/adr/0055-wave-branches.md))
+   carries PRs you already passed into the wave. Review what they didn't see: the sync
+   merge commits that brought `main` in and their conflict resolutions
+   (`git show --remerge-diff <merge>`). The full CI on the wave PR covers the rest.
 
 <a id="checks"></a>
 ## Step 2: Review
@@ -92,7 +96,7 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
    - New crates or modules that no section covers, missing `Docs:` back-references, and
      unregistered external URLs.
 5. **Governance.** A Dependabot PR that only changes pinned `uses:` references is
-   pre-approved by [ADR-0018](docs/adr/0018-ci-supply-chain-policy.md). Confirm the diff is
+   pre-approved by [ADR-0056](docs/adr/0056-ci-supply-chain-policy-v2.md). Confirm the diff is
    limited to that, and for a major bump read the action's changelog against how we use it.
    Otherwise, if the PR loosens any check (lint/deny config, `#[allow]`, narrowed
    `covers` or `applies_to`, retired rules, CI edits, this file), it needs the
@@ -119,7 +123,8 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
   (e.g. `accepted` when the maintainer rejected it). A maintainer-tier ADR still **awaiting** a valid
   decision is not a blocking finding: it gets `escalate` (see the verdict table);
 - a security problem;
-- a red required CI check caused by this PR.
+- a red required CI check caused by this PR. On a PR into a `wave/*` branch, a red `fmt`,
+  `clippy (ubuntu-latest)`, `docs` or `pr-title` counts as required too.
 
 **Non-blocking** (doesn't prevent `pass`): style, naming, suggestions, questions, and
 **pre-existing problems** the PR didn't introduce. List those as follow-ups, which the
@@ -168,6 +173,11 @@ those, the **highest round** decides, and within it any `fail` or `escalate` bea
 - a re-review of the same head (for example after a maintainer decision) uses the next round number.
 
 The marker must be on its own line, exactly in this format.
+
+A `success` on the head SHA also makes `review-gate` dispatch the Windows, macOS and
+end-to-end CI jobs for that SHA ([ADR-0054](docs/adr/0054-platform-ci-after-review.md)). The PR
+merges once the required Windows checks pass. A PR into a `wave/*` branch gets no such run; the
+wave's PR into `main` does ([ADR-0055](docs/adr/0055-wave-branches.md)).
 
 <a id="rounds"></a>
 ## Re-review rounds and disputes

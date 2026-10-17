@@ -27,7 +27,8 @@ Contents (a first cut):
   call: the handshake, queries, a batch of edits, actions, and the event stream
   ([Usage](#usage)).
 - **Running** (`run.rs`): opens a session through a connector (the engine's WebSocket
-  API through `jstream-control`'s `WsControl`, or the mock), runs the call, and writes
+  API through `jstream-control`'s `WsControl`, or the mock), runs the call (an edit
+  batch may first read `state.get`, to fit new capture items, see [Design](#design)), and writes
   human or `--json` output through the `Write` handles it is given (`mcp`, and
   `output set-key` for the stream key, also read the `BufRead` it is given).
 - **Exit codes** (`exit.rs`): one per failure kind, including one per protocol error code.
@@ -83,6 +84,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene list` | query `scene.list` |
 | `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
 | `studio get` | query `studio.get` (the scene on program) |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -91,6 +93,9 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
 | `output set-key <id> [--key-file <path>]` | action `output.set_key`, with the key read from the file or stdin |
 | `output clear-key <id>` | action `output.clear_key` |
+| `pair` | action `pairing.start`: prints a one-time code to enter on the device |
+| `device list` | query `device.list` |
+| `device revoke <device-id>` | action `device.revoke` (also closes the device's connections) |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
 | `events [--count <n>]` | the event subscription |
 | `mcp` | serves MCP on stdin and stdout; each tool call is one protocol call (see **MCP** below) |
@@ -107,8 +112,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `output.set_encoder` and the `filter.*` edits need a JSON argument form the CLI
   doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
-  default encoder (MCP and the WebSocket API take them). `item.add` sends neither
-  placement, so its item is a legacy one; place it with `item.set_geometry <item-id>
+  default encoder (MCP and the WebSocket API take them). `item.add` of a
+  `display`, `window` or `webcam` source sends a `geometry` covering the canvas with
+  `fit`, so the whole capture is in frame; the canvas is the batch's latest
+  `canvas.set_size`, else `state.get`'s, which the CLI also reads for the kind of a
+  source the batch didn't create. Any other `item.add` sends neither placement, so its
+  item is a legacy one at 1:1. Place either with `item.set_geometry <item-id>
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
   are always sent neutral, since the engine refuses anything else until it draws 3D,
@@ -127,12 +136,18 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine accepts only `normal` until it draws the
-  others. Several edits on one line go as **one atomic batch**: one new
+  others.
+  `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
+  `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
+  output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
+  Applying a batch prints `removed hotkey <chord>` for each binding its deletes
+  removed. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
   which is the whole target of a generic RTMP output. The CLI has no form for a
-  recording output yet. An argument without an `rtmp` or `rtmps` scheme is a usage
+  recording output or a YouTube-bound one yet, and none of protocol 0.23's YouTube
+  actions and queries. An argument without an `rtmp` or `rtmps` scheme is a usage
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
@@ -141,14 +156,23 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   command is a new client, so a one-shot `undo` would always find nothing to undo.
   `mcp` is one client for its whole run: its `history` tool undoes and redoes the
   agent's own edits.
+- **No live-value command.** A gesture belongs to its client and expires when the
+  session ends ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so a one-shot
+  `live.set` would be undone as the command exits. `mcp`'s `live` tool keeps one open
+  for the agent's run. `events` shows other clients' gestures: human output prints
+  `live.changed <gesture> by <client>: <setters>` and `live.ended <gesture> by
+  <client> <outcome> [rev N]`.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
-  and press Ctrl-D; the terminal shows what is typed). Surrounding whitespace, such as
-  a final newline, is dropped. Anything else after the output ID is a usage error that
-  doesn't repeat it. An empty key, an unreadable file, or input over 4096 bytes (no
-  stream key is that long; it is refused before it is buffered or sent) is a usage
-  error too, and the key is read before connecting. Neither the CLI nor the engine prints a key back: the
+  and press Ctrl-D; the terminal shows what is typed). A leading byte-order mark
+  (Windows PowerShell 5.1 writes one on a pipe; Notepad's "UTF-8 with BOM" starts a
+  file with one) and surrounding whitespace, such as a final newline, are dropped.
+  Anything else after the output ID is a usage error that doesn't repeat it. An empty
+  key, a key with a control or non-ASCII character (no streaming service issues one),
+  an unreadable file, or input over 4096 bytes (no stream key is that long; it is
+  refused before it is buffered or sent) is a usage error too, and the key is read
+  before connecting. Neither the CLI nor the engine prints a key back: the
   reply is `output.set_key accepted for <id> (<request>)`, and `output status` says
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
@@ -166,15 +190,26 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   that set them; for an item placed with a geometry, those columns show the
   protocol's deprecated transform view of it, and only `--json` shows its `geometry`
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
-  server URL, as `output.create` takes it). `state get` prints the sources, then each
+  server URL, as `output.create` takes it; for any other output, its kind as JSON).
+  `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs; only `--json` shows the sources' audio, the
-  buses and the sends. `output status` prints
+  (<name>):` by its role, then the outputs, then a `hotkeys:` table (`CHORD`,
+  `ACTION`) when any are bound; only `--json` shows the sources' audio, the buses and
+  the sends. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
+- **Pairing** ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): `pair`
+  prints `pairing code: XXXX-XXXX` and how long it stays open; the user enters it on the
+  device, which posts it to the server's `/api/v1/pair` for a device token of its own
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). The code is
+  printed because it is the answer, and is never logged. `device list` prints a table
+  of `ID`, `NAME` and when each was paired and last used (Unix seconds), or `no paired
+  devices`; `device revoke <id>` prints `device <id> revoked (<request>)`. The server
+  answers these calls, so the engine must be reached through `--url`; `--mock` answers
+  `unsupported` (exit 20).
 - **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
   when it is an engine error (``error: scene `x` does not exist (not_found)``). With
   `--json` (found among the global options even when parsing fails): an object
@@ -236,7 +271,7 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine), and `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send |
+| 20 | an error code this CLI doesn't know (from a newer engine); `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send; and `unsupported`, which `pair` and `device` get from an engine with no server in front (`--mock`) |
 
 <a id="design"></a>
 ## Design
@@ -291,6 +326,17 @@ depends_on = ["crates/jstream-control/README.md#design"]
   while the transport keeps going until the MCP client closes stdin. Exiting instead
   would surface to the agent only as a crashed server. The proxy doesn't reconnect by
   itself ([open question 6](#design)).
+- **New capture items fit the canvas.** The protocol's placement for an `item.add`
+  that sends none is the legacy 1:1 one (ADR-0022), which shows only the top-left
+  corner of a display larger than the canvas. Changing that default would change the
+  wire meaning of an omitted field, so the CLI chooses instead: before sending a batch,
+  `fit_captures` gives each such `item.add` of a `display`, `window` or `webcam` source
+  `ItemGeometry::covering_canvas` (`fit`). The canvas is the batch's latest
+  `canvas.set_size` before the item; a source created earlier in the batch gives its
+  kind. Anything else comes from one `state.get`, read only when an item needs it. An
+  unknown source or a zero canvas is left for the engine to reject. MCP clients write
+  their own edits, so the protocol's `item.add` doc tells them to send the same
+  geometry.
 - **Errors are typed, not `anyhow`.** Each failure must map to its own exit code, so
   `CliError` keeps the `ControlError` (and its protocol code) instead of erasing it.
   `jstream-mcp` reports a failed read and a failed write as the same transport error,

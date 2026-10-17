@@ -7,9 +7,9 @@
 
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, Batch, BlendMode, Crop, Edit, Finite32, FitMode, IdempotencyKey, ItemGeometry, ItemId,
-    ItemTransform, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, Size,
-    SourceId, SourceKind, Vec2,
+    Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, Finite32, FitMode, IdempotencyKey,
+    ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId,
+    SceneRole, Size, SourceId, SourceKind, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -39,6 +39,8 @@ Commands:
   scene switch <scene-id>          put a scene on program, with a cut (action
                                    scene.switch)
   studio get                       print the scene on program (query studio.get)
+  capture targets                  list the displays and windows a source can capture
+                                   (query capture.targets)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -53,6 +55,11 @@ Commands:
                                    stdin; never from the command line
   output clear-key <output-id>     remove the output's stream key (action
                                    output.clear_key)
+  pair                             start pairing a device and print its one-time
+                                   code, open for 2 minutes (action pairing.start)
+  device list                      list the paired devices (query device.list)
+  device revoke <device-id>        revoke a paired device and close its
+                                   connections (action device.revoke)
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
@@ -87,8 +94,15 @@ Edits (each is its protocol command name followed by its arguments):
   output.create <output-id> <rtmp-url>
   output.set_target <output-id> <rtmp-url>
   output.delete <output-id>
+  hotkey.set <chord> <action> <id>
+                    bind a chord such as Ctrl+Digit1 or F1 to scene.switch
+                    <scene-id>, or to output.start, output.stop or
+                    output.clear_key <output-id>
+  hotkey.clear <chord>
   An <rtmp-url> is the ingest server, rtmp://host[:port]/app or rtmps://...,
   without the stream key: set that with `output set-key`.
+  item.add fits a display, window or webcam source to the canvas, and places any
+  other source at 1:1; item.set_geometry in the same batch overrides either.
 
 Exit codes: 0 ok, 1 output error, 2 usage, 3 disconnected, 10-20 engine errors
 (see the README for the full table).
@@ -263,6 +277,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             scene_id: SceneId::new(*id),
         }),
         ["studio", "get"] => Command::Query(Query::StudioGet),
+        ["capture", "targets"] => Command::Query(Query::CaptureTargets),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -282,13 +297,18 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["output", "clear-key", id] => Command::Action(Action::OutputClearKey {
             output_id: OutputId::new(*id),
         }),
+        ["pair"] => Command::Action(Action::PairingStart),
+        ["device", "list"] => Command::Query(Query::DeviceList),
+        ["device", "revoke", id] => Command::Action(Action::DeviceRevoke {
+            device_id: DeviceId::new(*id),
+        }),
         ["edit", rest @ ..] => Command::Edit(parse_batch(rest)?),
         ["events", rest @ ..] => parse_events(rest)?,
         ["mcp"] => Command::Mcp,
         [word, ..] => {
             let known = [
                 "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "studio", "edit", "events", "mcp",
+                "studio", "edit", "events", "mcp", "pair", "device",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -370,17 +390,18 @@ fn parse_batch(mut args: &[&str]) -> Result<Batch, CliError> {
         edits,
         expected_rev,
         idempotency_key,
+        ends_gesture: None,
     })
 }
 
 /// How many arguments each edit takes, after its name.
 fn arity(name: &str) -> Option<usize> {
     Some(match name {
-        "scene.delete" | "source.delete" | "item.remove" | "output.delete" => 1,
+        "scene.delete" | "source.delete" | "item.remove" | "output.delete" | "hotkey.clear" => 1,
         "scene.create" | "scene.rename" | "scene.reorder" | "scene.set_role" | "source.rename"
         | "item.reorder" | "item.set_visible" | "item.set_source" | "item.set_opacity"
         | "item.set_blend" | "output.create" | "output.set_target" | "canvas.set_size" => 2,
-        "source.create" | "source.duplicate" | "item.add" | "item.move" => 3,
+        "source.create" | "source.duplicate" | "item.add" | "item.move" | "hotkey.set" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
         "item.set_geometry" => 7,
@@ -586,9 +607,42 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         ("output.delete", [id]) => Edit::OutputDelete {
             output_id: OutputId::new(*id),
         },
+        ("hotkey.set", [chord, action, id]) => Edit::HotkeySet {
+            chord: Chord::new(*chord),
+            action: hotkey_action(action, id)?,
+        },
+        ("hotkey.clear", [chord]) => Edit::HotkeyClear {
+            chord: Chord::new(*chord),
+        },
         _ => return Err(usage(format!("cannot parse `{name}`"))),
     };
     Ok((edit, rest))
+}
+
+/// The action `hotkey.set` binds: one that names a single scene or output. A stream key
+/// is never bound, so `output.set_key` is not offered.
+fn hotkey_action(name: &str, id: &str) -> Result<Action, CliError> {
+    let output_id = || OutputId::new(id);
+    Ok(match name {
+        "scene.switch" => Action::SceneSwitch {
+            scene_id: SceneId::new(id),
+        },
+        "output.start" => Action::OutputStart {
+            output_id: output_id(),
+        },
+        "output.stop" => Action::OutputStop {
+            output_id: output_id(),
+        },
+        "output.clear_key" => Action::OutputClearKey {
+            output_id: output_id(),
+        },
+        other => {
+            return Err(usage(format!(
+                "`hotkey.set` binds scene.switch, output.start, output.stop or \
+                 output.clear_key, not `{other}`"
+            )));
+        }
+    })
 }
 
 fn scene_role(text: &str) -> Result<SceneRole, CliError> {
@@ -660,8 +714,9 @@ mod tests {
     use super::{Command, Connection, Invocation, parse};
     use crate::exit::CliError;
     use jstream_control::protocol::{
-        Action, Batch, BlendMode, Crop, Edit, Finite32, FitMode, IdempotencyKey, ItemId, OutputId,
-        OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind,
+        Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, Finite32, FitMode, IdempotencyKey,
+        ItemId, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, SourceId,
+        SourceKind,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -773,6 +828,23 @@ mod tests {
             Command::Query(Query::StudioGet)
         );
         assert!(err(&["studio"]).starts_with("wrong arguments for `"));
+        assert_eq!(ok(&["pair"]).command, Command::Action(Action::PairingStart));
+        assert!(err(&["pair", "now"]).starts_with("wrong arguments for `"));
+        assert_eq!(
+            ok(&["device", "list"]).command,
+            Command::Query(Query::DeviceList)
+        );
+        assert_eq!(
+            ok(&["device", "revoke", "dev_1"]).command,
+            Command::Action(Action::DeviceRevoke {
+                device_id: DeviceId::new("dev_1")
+            })
+        );
+        assert!(err(&["device"]).starts_with("wrong arguments for `"));
+        assert_eq!(
+            ok(&["capture", "targets"]).command,
+            Command::Query(Query::CaptureTargets)
+        );
     }
 
     #[test]
@@ -994,6 +1066,7 @@ mod tests {
                 ],
                 expected_rev: Some(Rev(4)),
                 idempotency_key: Some(IdempotencyKey::new("k1")),
+                ends_gesture: None,
             }
         );
     }
@@ -1052,6 +1125,12 @@ mod tests {
             "item.set_blend",
             "i",
             "screen",
+            "hotkey.set",
+            "Ctrl+Digit1",
+            "scene.switch",
+            "s",
+            "hotkey.clear",
+            "F1",
         ];
         let Command::Edit(batch) = ok(&line).command else {
             panic!("not an edit");
@@ -1064,7 +1143,7 @@ mod tests {
             }
         );
         assert_eq!(
-            batch.edits[12..],
+            batch.edits[12..14],
             [
                 Edit::ItemSetOpacity {
                     item_id: ItemId::new("i"),
@@ -1077,6 +1156,15 @@ mod tests {
                     blend: BlendMode::Screen,
                 },
             ]
+        );
+        assert_eq!(
+            batch.edits[14],
+            Edit::HotkeySet {
+                chord: Chord::new("Ctrl+Digit1"),
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("s"),
+                },
+            }
         );
         let names: Vec<&str> = batch.edits.iter().map(Edit::name).collect();
         assert_eq!(
@@ -1096,6 +1184,8 @@ mod tests {
                 "item.set_source",
                 "item.set_opacity",
                 "item.set_blend",
+                "hotkey.set",
+                "hotkey.clear",
             ]
         );
         assert_eq!(
@@ -1268,6 +1358,11 @@ mod tests {
         assert_eq!(
             err(&["edit", "scene.create", "s"]),
             "`scene.create` takes 2 arguments; try `jstream-cli help`"
+        );
+        assert_eq!(
+            err(&["edit", "hotkey.set", "F1", "output.set_key", "o"]),
+            "`hotkey.set` binds scene.switch, output.start, output.stop or output.clear_key, \
+             not `output.set_key`"
         );
         assert_eq!(
             err(&["edit", "item.set_visible", "i", "yes"]),

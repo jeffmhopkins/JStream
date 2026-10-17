@@ -53,6 +53,8 @@ impl Host {
         let token = new_token()?;
         let mut config = ServerConfig::new(Token::new(token.clone())?);
         config.extra_origins = vec![origin.to_owned()];
+        // The engine serves only this webview, so it pairs no device (ADR-0047).
+        config.pairing = false;
         let connector: Connector = Arc::new(move || Box::new(engine.connect()));
         let server: Server = runtime
             .block_on(Server::bind(config, connector))
@@ -126,29 +128,117 @@ fn new_token() -> anyhow::Result<String> {
 /// time), saved on every change, with `audit` recording every batch and action.
 ///
 /// On Windows it is live, as the daemon's is: the OS backends, stream keys in
-/// Credential Manager, and RTMP(S) publishing on `output.start`. Elsewhere there are
-/// no backends yet.
+/// Credential Manager, and RTMP(S) publishing on `output.start`, plus the virtual
+/// camera (`WindowsVcam`) unless `vcam` is false (`--no-vcam`). With the `cef` feature
+/// it also opens browser sources' pages, keeping CEF's cache and log under `data`
+/// (`browser::backend`). Elsewhere there are no backends yet.
 ///
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows when a
 /// backend can't be created (the QPC clock).
-pub fn engine(collection: &Path, audit: Arc<dyn AuditSink>) -> anyhow::Result<Arc<Engine>> {
+pub fn engine(
+    collection: &Path,
+    data: &Path,
+    audit: Arc<dyn AuditSink>,
+    vcam: bool,
+) -> anyhow::Result<Arc<Engine>> {
     let engine = Engine::new()
         .with_audit(audit)
         .with_collection_file(collection)
         .context("could not open the collection")?;
     #[cfg(windows)]
-    let engine = live(engine, windows_backends()?);
+    let engine = {
+        let backends = windows_backends(vcam)?;
+        #[cfg(feature = "cef")]
+        let browser = crate::browser::backend(data, Arc::clone(&backends.clock));
+        #[cfg(not(feature = "cef"))]
+        let browser = {
+            let _ = data;
+            None
+        };
+        live(engine, backends, browser)
+    };
     #[cfg(not(windows))]
-    let engine = Arc::new(engine);
+    let engine = {
+        let _ = (data, vcam);
+        Arc::new(engine)
+    };
     Ok(engine)
 }
 
-/// The Windows backends, as the daemon creates them. Creating them opens no device.
+/// What the app tells the UI about its virtual camera.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VcamStatus {
+    /// Registered for the DLL beside the exe: a `virtual_cam` output can start.
+    Registered,
+    /// Not registered, or the registration couldn't be read: `jstream-daemon
+    /// --register-vcam` registers it.
+    NotRegistered,
+    /// Registered for another folder, such as one the app was moved from.
+    Moved,
+    /// Turned off with `--no-vcam`: the engine has no camera.
+    Off,
+    /// No virtual camera on this platform.
+    Unavailable,
+}
+
+impl VcamStatus {
+    /// The value the bootstrap script hands the UI (`jstream-ui`'s `Vcam::from_host`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            VcamStatus::Registered => "registered",
+            VcamStatus::NotRegistered => "not_registered",
+            VcamStatus::Moved => "moved",
+            VcamStatus::Off => "off",
+            VcamStatus::Unavailable => "unavailable",
+        }
+    }
+}
+
+/// The virtual camera's status: off when `enabled` is false, else on Windows whether
+/// the media source is registered for the DLL beside the exe (`exe_dir`), read from
+/// the registry with no elevation.
+pub fn vcam_status(exe_dir: Option<&Path>, enabled: bool) -> VcamStatus {
+    if !enabled {
+        return VcamStatus::Off;
+    }
+    #[cfg(windows)]
+    {
+        use jstream_platform_windows::{VCAM_DLL, VcamRegistration, vcam_registration};
+        let Some(dll) = exe_dir.map(|dir| dir.join(VCAM_DLL)) else {
+            return VcamStatus::NotRegistered;
+        };
+        match vcam_registration(&dll) {
+            Ok(VcamRegistration::Current) => VcamStatus::Registered,
+            Ok(VcamRegistration::Missing) => VcamStatus::NotRegistered,
+            Ok(VcamRegistration::Moved { registered }) => {
+                tracing::warn!(
+                    registered = %registered.display(),
+                    "the virtual camera is registered for another folder"
+                );
+                VcamStatus::Moved
+            }
+            Err(error) => {
+                tracing::warn!(%error, "could not read the virtual camera's registration");
+                VcamStatus::NotRegistered
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = exe_dir;
+        VcamStatus::Unavailable
+    }
+}
+
+/// The Windows backends, as the daemon creates them, plus the virtual camera when
+/// `vcam` is true. Creating them opens no device: the camera checks its registration
+/// and opens only on `output.start`.
 #[cfg(windows)]
-fn windows_backends() -> anyhow::Result<Backends> {
+fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
     use jstream_platform_windows::{
-        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+        MfCodecs, MfMediaDecoders, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+        WindowsVcam,
     };
     Ok(Backends {
         clock: Arc::new(QpcClock::new().context("could not open the QPC media clock")?),
@@ -157,24 +247,32 @@ fn windows_backends() -> anyhow::Result<Backends> {
         audio: Arc::new(WasapiAudio::new()),
         codecs: Arc::new(MfCodecs::new()),
         gpu: Arc::new(WindowsGpu::new()),
-        vcam: None,
+        vcam: vcam.then(|| Box::new(WindowsVcam::new()) as Box<dyn jstream_platform::VcamSink>),
+        media: Arc::new(MfMediaDecoders::new()),
     })
 }
 
-/// Makes `engine` live on `backends`, with keys in Credential Manager and a publish
-/// opener that connects RTMP(S). The opener holds the engine weakly, so the engine
-/// still drops when the server lets go of it. The same wiring as the daemon's
-/// `serve::live` (apps/jstream-daemon/src/serve.rs), whose tests cover the opener.
+/// Makes `engine` live on `backends`, with keys in Credential Manager, a publish
+/// opener that connects RTMP(S) and, when there is one, `browser` for browser sources.
+/// The opener holds the engine weakly, so the engine still drops when the server lets
+/// go of it. The same wiring as the daemon's `live::live`
+/// (apps/jstream-daemon/src/live.rs), whose tests cover the opener.
 #[cfg(windows)]
-fn live(engine: Engine, backends: Backends) -> Arc<Engine> {
+fn live(
+    engine: Engine,
+    backends: Backends,
+    browser: Option<Arc<dyn jstream_sources::BrowserBackend>>,
+) -> Arc<Engine> {
     let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_windows::WindowsCredentials);
     let handle = Arc::new(OnceLock::new());
-    let engine = Arc::new(
-        engine
-            .with_key_store(Arc::clone(&keys))
-            .with_backends(backends)
-            .with_publish_opener(opener(Arc::clone(&handle), keys)),
-    );
+    let engine = engine
+        .with_key_store(Arc::clone(&keys))
+        .with_backends(backends)
+        .with_publish_opener(opener(Arc::clone(&handle), keys));
+    let engine = Arc::new(match browser {
+        Some(browser) => engine.with_browser(browser),
+        None => engine,
+    });
     // The cell is new, so this is its only value.
     let _ = handle.set(Arc::downgrade(&engine));
     engine
@@ -221,7 +319,7 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{Host, engine, new_token};
+    use super::{Host, VcamStatus, engine, new_token, vcam_status};
     use crate::ui::ORIGIN;
     use jstream_control::protocol::{Hello, PROTOCOL_VERSION};
     use jstream_control::{Control, WsConfig, WsControl};
@@ -229,6 +327,36 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpStream;
     use std::sync::Arc;
+
+    /// `--no-vcam` is off whatever the registry says; the UI reads these exact values.
+    #[test]
+    fn the_vcam_status_names_what_the_ui_reads() {
+        assert_eq!(vcam_status(None, false), VcamStatus::Off);
+        let names: Vec<&str> = [
+            VcamStatus::Registered,
+            VcamStatus::NotRegistered,
+            VcamStatus::Moved,
+            VcamStatus::Off,
+            VcamStatus::Unavailable,
+        ]
+        .into_iter()
+        .map(VcamStatus::as_str)
+        .collect();
+        assert_eq!(
+            names,
+            [
+                "registered",
+                "not_registered",
+                "moved",
+                "off",
+                "unavailable"
+            ]
+        );
+        #[cfg(not(windows))]
+        assert_eq!(vcam_status(None, true), VcamStatus::Unavailable);
+        #[cfg(windows)]
+        assert_eq!(vcam_status(None, true), VcamStatus::NotRegistered);
+    }
 
     #[test]
     fn tokens_are_fresh_lowercase_hex() {
@@ -247,8 +375,13 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&collection);
-        let engine = engine(&collection, Arc::new(AuditMemory::new()))
-            .unwrap_or_else(|e| panic!("an engine: {e:#}"));
+        let engine = engine(
+            &collection,
+            &std::env::temp_dir(),
+            Arc::new(AuditMemory::new()),
+            true,
+        )
+        .unwrap_or_else(|e| panic!("an engine: {e:#}"));
         let host = Host::start(engine, "http://jstream.localhost")
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert!(
@@ -319,8 +452,13 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&collection);
-        let engine = engine(&collection, Arc::new(AuditMemory::new()))
-            .unwrap_or_else(|e| panic!("an engine: {e:#}"));
+        let engine = engine(
+            &collection,
+            &std::env::temp_dir(),
+            Arc::new(AuditMemory::new()),
+            false,
+        )
+        .unwrap_or_else(|e| panic!("an engine: {e:#}"));
         let host = Host::start(engine, ORIGIN).unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
         assert_eq!(upgrade_status(&host, "http://evil.example"), "HTTP/1.1 403");

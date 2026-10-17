@@ -77,6 +77,11 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// A paired device: one browser or other client admitted with its own device token
+    /// (ADR-0044). Assigned by the server when the device pairs.
+    DeviceId
+);
+opaque_id!(
     /// An audio bus in the collection (ADR-0028). [`BusId::master`] names the master
     /// bus, which every collection has.
     BusId
@@ -89,6 +94,11 @@ opaque_id!(
 opaque_id!(
     /// Chosen by the client for each request and echoed in its response or error.
     RequestId
+);
+opaque_id!(
+    /// A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by
+    /// the client that opens it, and unique among that client's open gestures.
+    GestureId
 );
 opaque_id!(
     /// Makes a retried batch safe: the engine applies a batch with a given key at most

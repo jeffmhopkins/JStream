@@ -15,6 +15,7 @@ mod audio;
 mod deps;
 mod encoder;
 mod filter;
+mod hotkey;
 mod model;
 mod persist;
 mod plan;
