@@ -21,7 +21,7 @@ use jstream_protocol::{
     Rev, SceneId,
 };
 use std::fmt::Write as _;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -184,7 +184,8 @@ pub const QUEUE_ENTRIES: usize = 1024;
 /// When a line would take the file past its size limit, the file is renamed to
 /// `audit.1.jsonl` (replacing the one before) and a new one is started, so the log uses
 /// at most about twice the limit. A failed write is logged at `warn` and the entry lost:
-/// the audit log never fails a call. On Unix the file is created with mode `0600`.
+/// the audit log never fails a call. The file is created user-only: mode `0600` on Unix,
+/// a protected DACL for SYSTEM and the user on Windows.
 ///
 /// Dropping it lets the writer finish what is queued, then joins it.
 pub struct AuditFile {
@@ -328,14 +329,7 @@ impl Writer {
 }
 
 fn append(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    options.open(path)
+    crate::private_file::open_append(path)
 }
 
 fn dropped_line(time: SystemTime, dropped: u64) -> String {

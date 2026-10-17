@@ -35,6 +35,7 @@ mod kinds;
 mod live;
 mod outputs;
 mod preview;
+mod private_file;
 mod runtime;
 mod session;
 mod snapshot;
