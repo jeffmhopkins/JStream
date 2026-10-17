@@ -16,9 +16,10 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    BlendMode, BusId, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
-    FilterOwner, Finite32, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind,
-    ProtocolError, Rev, SceneId, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
+    Action, BlendMode, BusId, Canvas, Chord, Crop, Edit, EncoderProfile, EncoderProfileId,
+    FilterChain, FilterId, FilterOwner, Finite32, ItemGeometry, ItemId, ItemTransform, OutputId,
+    OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings, SourceAudio, SourceId,
+    SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -121,6 +122,10 @@ struct File {
     /// one with no audio), every channel source keeps its default master send.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sends: Option<Vec<FileSend>>,
+    /// Hotkey bindings (ADR-0024 §5), ordered by chord; omitted when there are none, so
+    /// a collection without hotkeys saves as it did before they existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hotkeys: Vec<FileHotkey>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -251,6 +256,15 @@ struct FileSend {
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct FileHotkey {
+    chord: Chord,
+    /// The action request, as `hotkey.set` takes it. A stream key is never bound, so
+    /// none is saved.
+    action: Action,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FileEncoder {
     id: EncoderProfileId,
     name: String,
@@ -354,6 +368,14 @@ impl Graph {
                 .collect(),
             buses: file_buses(state),
             sends: file_sends(state),
+            hotkeys: state
+                .hotkeys
+                .iter()
+                .map(|(chord, action)| FileHotkey {
+                    chord: chord.clone(),
+                    action: action.clone(),
+                })
+                .collect(),
         };
         let mut json = serde_json::to_string_pretty(&file).expect(
             "invariant: the file holds only strings, finite numbers, bools, and maps with \
@@ -497,7 +519,8 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 /// sources its settings refer to; then every source's filters; then items, encoder
 /// profiles, and outputs, each with its profile; then the sends (the sources made their
 /// default master sends, so when the file lists sends a source without one has it
-/// removed), and each source's audio settings.
+/// removed), and each source's audio settings; and last the hotkey bindings, whose
+/// actions name scenes and outputs.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -630,6 +653,15 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         }
     }
     rebuild_audio(graph, file, &mut edits);
+    for hotkey in &file.hotkeys {
+        edits.push((
+            format!("hotkey `{}`", hotkey.chord),
+            Edit::HotkeySet {
+                chord: hotkey.chord.clone(),
+                action: hotkey.action.clone(),
+            },
+        ));
+    }
     Ok(edits)
 }
 

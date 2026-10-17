@@ -359,8 +359,8 @@ fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
         seen.lock()
             .unwrap_or_else(PoisonError::into_inner)
             .on_context = Some(context.is_some());
-        let draw: DrawFn = Box::new(move |shot, size, capture, out| {
-            let freed = inner(shot, size, capture, out)?;
+        let draw: DrawFn = Box::new(move |shot, live, size, capture, out| {
+            let freed = inner(shot, live, size, capture, out)?;
             if let Some(pixel) = out.first_chunk::<4>() {
                 seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(*pixel);
             }

@@ -58,7 +58,7 @@ use jstream_platform::{
     HardwarePreference, MediaClock, RateControl, VcamFormat, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
-    EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
+    EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
     RateControl as ProfileRate, VideoCodec,
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
@@ -78,7 +78,7 @@ use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_came
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
 };
-use crate::snapshot::{self, CaptureImage, Captures, GpuKey, Shot};
+use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
@@ -103,14 +103,19 @@ pub(crate) const STOP_DRAIN: Duration = Duration::from_secs(2);
 const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 
 /// Composites one frame on the render thread: the program mix of the render snapshot's
-/// [`Shot`] at `size`, with `display` and `window` sources showing their captures (or,
-/// with no program scene, the primary display's filling the frame, or black when there
-/// is none yet), read back as
-/// RGBA8 into `out` (replacing its contents). Returns the GPU images its cache let go
-/// of, for the collector. Created on the render thread and kept there, so it need not
-/// be `Send`.
+/// [`Shot`] at `size`, with the live values in [`LiveParams`] applied and `display` and
+/// `window` sources showing their captures (or, with no program scene, the primary
+/// display's filling the frame, or black when there is none yet), read back as RGBA8
+/// into `out` (replacing its contents). Returns the GPU images its cache let go of, for
+/// the collector. Created on the render thread and kept there, so it need not be `Send`.
 pub(crate) type DrawFn = Box<
-    dyn FnMut(&Shot, FrameSize, &dyn Captures, &mut Vec<u8>) -> Result<Option<Reclaimed>, String>,
+    dyn FnMut(
+        &Shot,
+        &LiveParams,
+        FrameSize,
+        &dyn Captures,
+        &mut Vec<u8>,
+    ) -> Result<Option<Reclaimed>, String>,
 >;
 
 /// Opens the render thread's [`DrawFn`], on that thread, on the platform's GPU context
@@ -127,7 +132,11 @@ pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, Str
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|_: Option<&GpuContext>| {
         let draw: DrawFn = Box::new(
-            |shot: &Shot, size: FrameSize, captures: &dyn Captures, out: &mut Vec<u8>| {
+            |shot: &Shot,
+             _: &LiveParams,
+             size: FrameSize,
+             captures: &dyn Captures,
+             out: &mut Vec<u8>| {
                 out.clear();
                 let first = shot
                     .captures()
@@ -280,6 +289,11 @@ pub(crate) struct Pending {
     pub(crate) generation: u64,
     /// `output.stop` won this generation. The start must not settle `active`.
     pub(crate) cancel: bool,
+    /// The output's kind when the start checked its key (#343): what
+    /// [`Engine::output_kind`](crate::Engine::output_kind) answers for this output
+    /// until the start settles, so a retarget that lands while the host's opener runs
+    /// can't give it the new server's URL with the old server's key.
+    pub(crate) kind: Option<OutputKind>,
 }
 
 impl MediaHost {
@@ -819,11 +833,19 @@ pub(crate) fn gpu_draw() -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
-        let draw: DrawFn = Box::new(move |shot, size, captures, out| {
+        let draw: DrawFn = Box::new(move |shot, live, size, captures, out| {
             cache.begin_frame();
-            snapshot::compose(&mut compositor, &mut cache, shot, captures, size, true)
-                .and_then(|output| copy_pixels(&output, out))
-                .map_err(|err| err.to_string())?;
+            snapshot::compose(
+                &mut compositor,
+                &mut cache,
+                shot,
+                live,
+                captures,
+                size,
+                true,
+            )
+            .and_then(|output| copy_pixels(&output, out))
+            .map_err(|err| err.to_string())?;
             // A failed frame skips this: what it retired waits for the next frame's
             // fence, which also covers it, so nothing is freed on this thread.
             Ok(cache.end_frame(&compositor))
@@ -1449,10 +1471,11 @@ impl Frames {
         &mut self,
         draw: &mut DrawFn,
         shot: &Shot,
+        live: &LiveParams,
         size: FrameSize,
         captures: &RenderCaptures,
     ) -> Result<Option<Reclaimed>, String> {
-        let freed = draw(shot, size, captures, &mut self.scratch)?;
+        let freed = draw(shot, live, size, captures, &mut self.scratch)?;
         std::mem::swap(&mut self.scratch, &mut self.shown);
         Ok(freed)
     }
@@ -1460,9 +1483,9 @@ impl Frames {
 
 /// Composites on every base-rate tick of the media clock.
 ///
-/// Each tick first adopts the render snapshot the control side published last, which
-/// costs a pointer compare unless a new one arrived ([`RenderReader::adopt`]); the
-/// thread never takes the collection lock. Its generation is stamped as the thread
+/// Each tick first adopts the render snapshot the control side published last, then the
+/// live values on the parameter channel, which costs two pointer compares unless a new
+/// one arrived ([`RenderReader::adopt`]); the thread never takes the collection lock. Its generation is stamped as the thread
 /// starts and whenever it changes. The stopped marker is published when the loop ends,
 /// and when a fatal error stops the drawing.
 ///
@@ -1553,9 +1576,11 @@ fn render_loop(job: RenderJob) {
         skipped = skipped.saturating_add(missed);
         if !broken {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
-                let shot = reader.adopt().shot();
+                reader.adopt();
+                let (snapshot, live) = reader.held();
+                let shot = snapshot.shot();
                 captures.tick(shot.captures(), now);
-                frames.draw(&mut draw, shot, size, &captures)
+                frames.draw(&mut draw, shot, live, size, &captures)
             }));
             match tick {
                 Ok(Ok(freed)) => {

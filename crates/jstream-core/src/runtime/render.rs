@@ -10,6 +10,11 @@
 //! stamps the generation it adopted in [`RenderHub`]'s reader slot, so the control side
 //! can tell when a committed change is on screen; a snapshot it lets go of goes to the
 //! pipeline's collector thread to be freed (R-RT-003).
+//!
+//! Beside the snapshot sits the render parameter channel: the live values of open
+//! gestures ([`LiveParams`], ADR-0032), published the same way whenever they change.
+//! The render thread reads it after the snapshot on every tick, so a live value is drawn
+//! from the next tick with no new snapshot.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering, fence};
@@ -22,7 +27,7 @@ use jstream_render::Reclaimed;
 
 use crate::audio::ScopeTap;
 use crate::runtime::vcam::VcamTap;
-use crate::snapshot::Shot;
+use crate::snapshot::{LiveParams, Shot};
 
 /// The reader slot's value while no render thread is adopting snapshots: the thread is
 /// stopped, or never ran. A gesture waits on nothing while it is set.
@@ -56,6 +61,8 @@ impl RenderSnapshot {
 /// with the program stage's render thread while any output runs.
 pub(crate) struct RenderHub {
     current: ArcSwap<RenderSnapshot>,
+    /// The parameter channel: the live values every reader applies to the snapshot.
+    live: ArcSwap<LiveParams>,
     /// The generation the render thread adopted last, or [`STOPPED`] / [`STARTING`].
     adopted: AtomicU64,
 }
@@ -67,6 +74,7 @@ impl Default for RenderHub {
                 generation: 1,
                 shot: Shot::default(),
             }),
+            live: ArcSwap::from_pointee(LiveParams::default()),
             adopted: AtomicU64::new(STOPPED),
         }
     }
@@ -96,6 +104,25 @@ impl RenderHub {
         self.current.load_full()
     }
 
+    /// The render generation published last.
+    pub(crate) fn generation(&self) -> u64 {
+        self.current.load().generation
+    }
+
+    /// Publishes `live` on the parameter channel, unless it holds what the channel
+    /// holds already. Called with the collection lock held, like [`publish`](Self::publish).
+    pub(crate) fn publish_live(&self, live: LiveParams) {
+        if **self.live.load() != live {
+            self.live.store(Arc::new(live));
+        }
+    }
+
+    /// The live values on the parameter channel, for a reader that is not a real-time
+    /// thread.
+    pub(crate) fn load_live(&self) -> Arc<LiveParams> {
+        self.live.load_full()
+    }
+
     /// Whether the render thread has adopted `generation` or a later one, or is not
     /// adopting snapshots at all (stopped, or never started). The control side polls
     /// this to release a gesture's live values (ADR-0032); the render thread never waits
@@ -104,9 +131,6 @@ impl RenderHub {
     /// The fence pairs with the one in [`RenderReader::start`]: the caller published
     /// the snapshot before asking, and the thread cleared its marker before loading, so
     /// at least one of them sees the other's store.
-    ///
-    /// Only tests poll it until live edits exist, so it is compiled for them alone.
-    #[cfg(test)]
     pub(crate) fn caught_up(&self, generation: u64) -> bool {
         fence(Ordering::SeqCst);
         match self.adopted.load(Ordering::SeqCst) {
@@ -120,6 +144,8 @@ impl RenderHub {
 pub(crate) struct RenderReader {
     hub: Arc<RenderHub>,
     held: Option<Arc<RenderSnapshot>>,
+    /// The live values it read last, loaded after `held`.
+    live: Option<Arc<LiveParams>>,
     collector: Collector,
 }
 
@@ -128,6 +154,7 @@ impl RenderReader {
         Self {
             hub,
             held: None,
+            live: None,
             collector,
         }
     }
@@ -144,6 +171,11 @@ impl RenderReader {
     /// call, this adopts it: stamps its generation in the slot (one atomic store) and
     /// hands the one it held to the collector. Otherwise it only compares a pointer. It
     /// never takes the collection lock or waits.
+    ///
+    /// Then it reads the parameter channel the same way, after the snapshot, as the
+    /// live-value handover needs: once the control side has seen this generation and
+    /// released a gesture's live values, the values read here no longer hold them, and
+    /// the snapshot already shows the committed ones. [`held`](Self::held) returns both.
     pub(crate) fn adopt(&mut self) -> &RenderSnapshot {
         let guard = self.hub.current.load();
         let fresh = !self
@@ -159,9 +191,30 @@ impl RenderReader {
                 self.collector.free(Garbage::Snapshot(old));
             }
         }
+        let live = self.hub.live.load();
+        let fresh = !self
+            .live
+            .as_ref()
+            .is_some_and(|held| Arc::ptr_eq(held, &live));
+        if fresh && let Some(old) = self.live.replace(arc_swap::Guard::into_inner(live)) {
+            self.collector.free(Garbage::Live(old));
+        }
         self.held
             .as_deref()
             .expect("invariant: the first adopt always stores a snapshot")
+    }
+
+    /// The snapshot and the live values the last [`adopt`](Self::adopt) read.
+    pub(crate) fn held(&self) -> (&RenderSnapshot, &LiveParams) {
+        let snapshot = self
+            .held
+            .as_deref()
+            .expect("invariant: held is only called after adopt");
+        let live = self
+            .live
+            .as_deref()
+            .expect("invariant: adopt always stores live values");
+        (snapshot, live)
     }
 
     /// GPU images the render thread's cache let go of, freed on the collector thread.
@@ -176,6 +229,9 @@ impl RenderReader {
         if let Some(held) = self.held.take() {
             self.collector.free(Garbage::Snapshot(held));
         }
+        if let Some(live) = self.live.take() {
+            self.collector.free(Garbage::Live(live));
+        }
     }
 }
 
@@ -189,6 +245,8 @@ impl Drop for RenderReader {
 pub(crate) enum Garbage {
     /// A render snapshot the render thread replaced; it may hold the last reference.
     Snapshot(Arc<RenderSnapshot>),
+    /// Live values the render thread replaced, for the same reason.
+    Live(Arc<LiveParams>),
     /// GPU images whose last frame the GPU has finished.
     Images(Reclaimed),
     /// A finished encoder session's video input, let go of by the render thread. Once
@@ -245,6 +303,7 @@ fn collect(rx: Receiver<Garbage>) {
     for garbage in rx {
         match garbage {
             Garbage::Snapshot(snapshot) => drop(snapshot),
+            Garbage::Live(live) => drop(live),
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),
             Garbage::Audio(input) => drop(input),

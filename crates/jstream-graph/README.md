@@ -27,8 +27,11 @@ codes, so the engine passes them to clients unchanged.
   collection state, and `Graph::new()` describes none.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
-  keyed by ID, the `buses`, keyed by ID and always holding the master, and the `sends`,
-  keyed by bus and source.
+  keyed by ID, the `buses`, keyed by ID and always holding the master, the `sends`,
+  keyed by bus and source, and the `hotkeys`: each `Chord` bound to the protocol
+  `Action` it fires
+  ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
+  §3). A binding always names objects that exist.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -196,6 +199,17 @@ the batch **touched**.
   addressing. No keyframe overrides exist yet, so no edit drops any
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §1 applies once they do).
+- **Hotkeys** (`hotkey.rs`): `hotkey.set` binds a chord to an action and
+  `hotkey.clear` unbinds it, checked in this order: the chord's spelling
+  (`invalid_argument` on `chord`), whether it is already bound (`already_exists`) or
+  bound at all (`not_found`, entity `hotkey`), an action that can't be bound
+  (`Action::bind_problem`: `output.set_key`, whose key is never stored, and the
+  session-only (preview and live), server-answered and YouTube actions), and the objects the action names
+  (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
+  `hotkey.set` in one batch. Deleting a scene, source, output or encoder profile removes
+  the bindings that name it, so none dangles: the result's `removed_hotkeys` lists them,
+  and the delete's inverse ends with a `hotkey.set` for each, after the object is back.
+  The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
   scenes, sources and buses its settings, or its filters' settings, refer to. A bus
@@ -219,12 +233,12 @@ target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the 
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
 to `null` (one `source.set_settings` per source, and one `filter.set_settings` per
-filter), and the target's own delete comes last. A bus's plan only clears references
+filter), and the target's own delete comes last. The plan also lists the hotkey bindings those deletes remove. A bus's plan only clears references
 (its `bus.delete` takes its sends); the master's is `invalid_argument`. Sources come
 ordered by ID, scenes in
 display order, items bottom first, outputs, encoder profiles and buses ordered by
-ID, and sends by bus and then source. `state.get` carries the canvas, the buses and
-the sends, and an audio source's info its `audio`. A geometry item reads its `geometry`, and the deprecated `transform` view the
+ID, and sends by bus and then source. `state.get` carries the canvas, the buses, the
+sends and the hotkey bindings ordered by chord, and an audio source's info its `audio`. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
@@ -246,7 +260,8 @@ filter with its `kind_version` and settings, and `enabled` only when false), out
 ID, omitted when there are none, `buses` (omitted while the master is the only one and
 at its defaults) and `sends`, written whenever there is a send or a source with a
 channel of its own (so an empty list means every master send was removed) and omitted
-otherwise. A source's `audio` is saved
+otherwise, and the `hotkeys` ordered by chord, omitted when there are none (so no
+`schema_version` bump: an older file has none). A source's `audio` is saved
 only where it differs from its kind's defaults. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
@@ -266,7 +281,7 @@ the engine's; this crate does no I/O.
   and blend, then encoder profiles, then outputs with their profiles, then each
   source's audio and the sends (with a `send.remove` of a default master send the file
   doesn't list; a file without `sends`, such as one saved before sends existed, keeps
-  every default master send). A
+  every default master send), then hotkeys (`` hotkey `F1` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -294,7 +309,8 @@ cycles, blockers and plans, and the collection file), audio defaults by kind, a
 duplicate's audio and a delete's restore, a bus deleted with its sends and undone
 exactly, bus references (#362: `a_bus_reference_must_name_a_bus`,
 `a_drawn_bus_is_deleted_only_with_its_references_cleared`, and in `persist/tests.rs`
-`a_source_drawing_a_bus_round_trips`), exact inverses,
+`a_source_drawing_a_bus_round_trips`), hotkey checks, rebinds and the bindings
+deletes remove (and restore on undo), exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
@@ -318,7 +334,7 @@ The collection file's tests (`persist/tests.rs`): saving the parity collection (
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
 scene `b` made a group, a clone, a `duplicated_from` naming a missing source,
 opacities, a desktop audio source with two gain filters, one disabled, and the
-fixture's buses, sends and source audio, less the virtual camera the parity collection
+fixture's buses, sends and source audio, less the virtual camera and the hotkeys the parity collection
 gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
@@ -327,7 +343,7 @@ moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none; a file
 without `sends`, `buses` or source `audio` (as saved before audio existed) keeping
 its audio sources' master sends at 0 dB; a removed master send's round trip; a profile's
-round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
+round trip; a virtual camera's round trip; hotkeys' round trip, and a file whose binding names a missing scene refused; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that

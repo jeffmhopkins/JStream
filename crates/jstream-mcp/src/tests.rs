@@ -227,8 +227,10 @@ fn handshake_list_and_call_round_trip() {
             "events",
             "filter",
             "history",
+            "hotkey",
             "item",
             "kind",
+            "live",
             "output",
             "pairing",
             "preview",
@@ -295,7 +297,7 @@ fn handshake_list_and_call_round_trip() {
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
                "outputs": [], "encoders": [],
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
-               "sends": []})
+               "sends": [], "hotkeys": []})
     );
     let started = f.call_tool(
         "output",
@@ -414,7 +416,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(23));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(25));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(

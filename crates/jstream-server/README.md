@@ -371,8 +371,8 @@ task speaks the envelope
   at a time, while the task keeps reading the client and draining the session's events.
   So a client that reads slowly leaves nothing piling up in the engine's subscription
   queue, and never slows the engine or other clients. The outbox holds at most 1024
-  events (`EVENT_BUFFER`): about 100 KB of today's events, 17 seconds of a 60 Hz live
-  drag. When one more arrives, every queued event is dropped, one `events.dropped
+  events (`EVENT_BUFFER`): about 100 KB of today's events, or 34 seconds of one
+  gesture's `live.changed`, which the engine sends at most 30 times a second. When one more arrives, every queued event is dropped, one `events.dropped
   {count}` notice is queued at the end, and the new event after it; while that notice
   is still unsent, later drops add to its count instead of queuing another. Replies
   (`welcome`, `response`, `error`) are never dropped, and what remains keeps its order,
@@ -387,7 +387,11 @@ task speaks the envelope
   message text.
 - The connection ends when the client closes it, when the session's event stream ends
   (the engine went away; close code 1001), when the session reports `Disconnected`
-  (close code 1011), or when the server shuts down.
+  (close code 1011), or when the server shuts down. Dropping the session expires the
+  client's open live-value gestures
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). A connection that dies
+  without a close keeps them until a read or write on the socket fails: the
+  ping-based liveness check ADR-0032 asks for is not built yet.
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
@@ -470,6 +474,11 @@ alone.
   same way. The test
   `gate::tests::refusals_are_logged_without_the_token` checks this with a capturing
   subscriber, and `jstream-daemon`'s end-to-end test checks its stderr.
+- **Stream keys** pass through on their way to the engine and are never logged or sent
+  back ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): not in `output.set_key`'s answer,
+  the errors for a key of the wrong shape or a frame that doesn't parse, an event, or an
+  MCP tool result. The test `tests::stream_keys_are_never_echoed_or_logged` checks this
+  over a raw WebSocket and the MCP endpoint, with a capturing subscriber.
 - **Failed credentials** (a missing or wrong token, or a refused device cookie) are
   logged that way only up to 10 in a minute, counted from the first, for every peer
   together, since on loopback a peer address tells no one apart. The 11th logs `too
