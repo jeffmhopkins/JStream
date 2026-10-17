@@ -8,6 +8,8 @@
 -->
 <plist version="1.0">
 <dict>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.jeffmhopkins.jstream.daemon</string>
 	<key>CFBundleName</key>
 	<string>JStream</string>
 	<key>NSMicrophoneUsageDescription</key>
