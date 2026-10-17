@@ -423,6 +423,29 @@ fn a_rendered_image_is_refused_by_another_compositor() {
     ));
 }
 
+/// An opaque import reads every texel's alpha as 1, so half-transparent red over black
+/// is full red, as a capture should draw (#451), still faded by the item's opacity. A
+/// filter over it sees an opaque input too.
+#[test]
+fn an_opaque_import_ignores_the_textures_alpha() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let srgb = srgb_texture(&opened.compositor, 2, 2, [255, 0, 0, 128]);
+    let image = opened.compositor.import_opaque(srgb, None).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &items);
+    near(&snapshot, 1, 1, [255, 0, 0, 255], 2);
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 0.5)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &items);
+    let red = (linear_to_srgb(0.5) * 255.0).round() as u8;
+    near(&snapshot, 1, 1, [red, 0, 0, 255], 2);
+
+    let mut identity = crate::filter::testing::filter("color_correction", serde_json::json!({}));
+    let out = crate::filter::testing::run(&mut opened, &mut identity, &image, 0.0);
+    near(&out, 1, 1, [255, 0, 0, 255], 2);
+}
+
 /// An imported sRGB texture is straight alpha, so at a texel centre half-transparent red
 /// over black is linear red 0.5, not the full red a premultiplied read would give.
 #[test]
@@ -1062,6 +1085,40 @@ fn show_as(
     let freed = cache.end_frame(compositor).map_or(0, |freed| freed.len());
     let pixel = snapshot.pixel(0, 0).expect("inside");
     ([pixel[0], pixel[1], pixel[2], pixel[3]], freed)
+}
+
+/// The cache's opaque import reads the frame's alpha as 1 and is reused frame to frame,
+/// and an import of the same texture under the same key as straight alpha replaces it.
+#[test]
+fn the_cache_imports_a_capture_as_opaque() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&'static str> = ResourceCache::new();
+    let (frame, _) = counted_frame(compositor, 2, 2, [255, 0, 0, 128]);
+    let mut pixel = |cache: &mut ResourceCache<&'static str>, opaque: bool| {
+        cache.begin_frame();
+        let image = if opaque {
+            cache.import_opaque(compositor, &"capture", &frame)
+        } else {
+            cache.import(compositor, &"capture", &frame)
+        }
+        .expect("import");
+        let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
+        let snapshot = draw(compositor, 2, 2, Color::BLACK, &items);
+        drop(cache.end_frame(compositor));
+        let pixel = snapshot.pixel(0, 0).expect("inside");
+        [pixel[0], pixel[1], pixel[2], pixel[3]]
+    };
+    assert_eq!(pixel(&mut cache, true), [255, 0, 0, 255]);
+    assert_eq!(pixel(&mut cache, true), [255, 0, 0, 255], "reused");
+    let half = (linear_to_srgb(128.0 / 255.0) * 255.0).round() as u8;
+    let straight = pixel(&mut cache, false);
+    assert!(
+        straight[0].abs_diff(half) <= 2,
+        "a straight import of the same texture: {straight:?}"
+    );
 }
 
 /// A GPU frame is sampled through the cache with no copy. Each frame stages its own

@@ -233,7 +233,8 @@ state machine. Contents:
   window on program, sharing one between sources, stopping it when its source leaves
   and starting it again after a failed start or a lost target
   (`src/tests/cpu_pipeline/captures.rs`), which capture path an output takes and each
-  fallback, an output compositing GPU capture frames, and a browser page painting on
+  fallback, an output compositing GPU capture frames (opaque, whatever alpha the
+  texture holds), and a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, on a software device that stands in for the platform's
   (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
@@ -694,7 +695,8 @@ transition at that time.
 render, snapshot and preview threads through a `jstream-render` `ResourceCache` keyed
 by `GpuKey`: a source's upload (or the import of a `browser` page's texture, see
 *Live sources*), each capture's (an upload of a CPU frame, or an import of the
-platform's texture, `ResourceCache::import`), a nested scene's layer at its depth, and
+platform's texture, `ResourceCache::import_opaque`; a capture is opaque on both paths,
+its alpha read as 255, #451), a nested scene's layer at its depth, and
 the mix's scene at the canvas size. An unchanged frame is not uploaded again, and each
 nested scene is redrawn into the layer it had (`render_into`), so a steady frame
 allocates no texture. On a render tick, a mix that isn't due claims its layers without
@@ -1354,7 +1356,8 @@ keeps each capture's newest `GpuFrame` until a newer one replaces it, and the ca
 frame's hold only to the frame that draws it, so a held capture slot is the frame on
 screen and nothing more. On the CPU path it converts each capture's newest frame to
 RGBA8 (RGBA copied, BGRA swizzled, NV12, which Windows' capture delivers, converted
-with its frame's matrix and range); only what the program mix shows is captured, so
+with its frame's matrix and range), opaque: alpha is 255 on every pixel, as the GPU
+path reads a capture's (#451); only what the program mix shows is captured, so
 a program without a `display` or `window` source converts nothing. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
