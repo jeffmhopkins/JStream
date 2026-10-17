@@ -893,7 +893,9 @@ released the engine removes those keys from the store and unmarks each one remov
 after the batch never reads the old key for the new server. A start that checked the
 key just before the batch is covered by `Engine::output_kind`: until the start settles
 it answers the kind the start checked (kept in its `Pending`), so a host's opener reads
-the server the key was set for, never the new one with the old key. A store that refuses
+that server, never the new one with the old key. For the same reason `output.set_key`
+fails with `action_failed` while that output's start is opening: a key sent for the new
+server then can't be read with the old one. A store that refuses
 leaves the output marked (the batch still succeeds, and a warning is logged) until an
 `output.set_key` or `output.clear_key` succeeds. The key is write-only
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): every reason is fixed text, nothing logs

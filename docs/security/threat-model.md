@@ -271,7 +271,8 @@ intercepted connection.
   or deleting it, removes its key, and the output can't start until that removal has
   happened. A start already past that check when the retarget lands opens the target
   it checked, not the new one, so a retarget never sends the old key to the new host
-  (#343).
+  (#343). While that start is opening, `output.set_key` is refused, so a key sent for
+  the new server isn't read with the old one either.
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
 

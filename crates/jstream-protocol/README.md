@@ -480,6 +480,9 @@ credential store, and refuses that output's `output.start` with `action_failed` 
 the key is gone. So a retarget never sends the old key to the new server, and an output
 re-created with a deleted one's ID starts with no key. Undoing the delete or the
 retarget restores the target but not the secret: set it again with `output.set_key`.
+A start already opening when the retarget lands opens the server it checked, so while
+an output's `output.start` is opening, `output.set_key` for it fails with
+`action_failed`: a key sent for the new server waits until the start has settled.
 The two stay edits under the classification rule above: their effect on the collection
 state, and its inverse, are unchanged, and the key, which is not collection state, is
 removed by the engine guarding it, as a deleted output's runtime state is dropped.

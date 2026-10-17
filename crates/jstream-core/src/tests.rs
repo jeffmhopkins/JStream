@@ -2611,7 +2611,9 @@ mod cpu_pipeline {
     /// opener reads the target (#343) doesn't pair the new server with the old key:
     /// while the start is opening, `Engine::output_kind` answers the kind the start
     /// checked, so the opener sees the server the key was set for. The store refuses
-    /// the removal here, so the old key is still there when the opener reads it.
+    /// the removal here, so the old key is still there when the opener reads it. An
+    /// `output.set_key` sent while the start is opening is refused, so the new server's
+    /// key can't be read with the old server either; once the start settles it is taken.
     #[test]
     fn a_retarget_during_the_opener_does_not_send_the_old_key_to_the_new_server() {
         use super::{rtmp_output, set_key};
@@ -2625,8 +2627,8 @@ mod cpu_pipeline {
         let store = MemoryKeyStore::new();
         // The engine and a client for the opener to retarget with, set once both exist.
         type Slot = Mutex<Option<(Engine, InProcessControl)>>;
-        // The kind the opener read, and whether the store still had a key then.
-        type Seen = Mutex<Option<(Option<OutputKind>, bool)>>;
+        // The kind the opener read, and the key the store held then.
+        type Seen = Mutex<Option<(Option<OutputKind>, Option<String>)>>;
         let slot: Arc<Slot> = Arc::new(Mutex::new(None));
         let seen: Arc<Seen> = Arc::new(Mutex::new(None));
         let open: OpenPublish = {
@@ -2644,8 +2646,16 @@ mod cpu_pipeline {
                 )
                 .expect("the retarget applies while the output starts");
                 store.set_failing(false);
+                // A key set for the new server now would be read with the old server.
+                let refused = block_on(control.call(set_key(output_id.as_str(), "new-key")))
+                    .expect_err("set_key is refused while the output starts");
+                assert_eq!(code(&refused), Some("action_failed"), "{refused}");
+                assert!(!refused.to_string().contains("new-key"), "{refused}");
                 let kind = engine.output_kind(output_id);
-                let key = store.get(output_id.as_str()).expect("get").is_some();
+                let key = store
+                    .get(output_id.as_str())
+                    .expect("get")
+                    .map(|key| key.expose().to_owned());
                 *seen.lock().expect("seen") = Some((kind, key));
                 Err(crate::PublishError::new("no server in this test"))
             })
@@ -2671,7 +2681,11 @@ mod cpu_pipeline {
         let failed = block_on(control.call(output_call("yt", true))).expect_err("no server");
         assert!(!failed.to_string().contains("yt-key"), "{failed}");
         let (kind, key) = seen.lock().expect("seen").take().expect("the opener ran");
-        assert!(key, "the refused removal left the old key in the store");
+        assert_eq!(
+            key.as_deref(),
+            Some("yt-key"),
+            "the refused removal left the old key, and the refused set_key stored nothing"
+        );
         assert_eq!(
             kind,
             Some(rtmp_output(OLD)),
@@ -2682,6 +2696,7 @@ mod cpu_pipeline {
             Some(rtmp_output(NEW)),
             "once the start settled, the retarget shows"
         );
+        block_on(control.call(set_key("yt", "new-key"))).expect("set_key once settled");
         // The opener holds the engine; drop that so the engine isn't kept alive.
         slot.lock().expect("slot").take();
     }

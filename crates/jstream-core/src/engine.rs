@@ -312,19 +312,26 @@ impl Engine {
     /// the old server's key: the opener connects to the server the start was checked
     /// for, and the next start sees the new target.
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
-        if let Some(host) = &self.media {
-            let gate = lock(&host.gate);
-            if let Some(pending) = gate.pending.as_ref()
-                && pending.output_id == *output_id
-            {
-                return pending.kind.clone();
-            }
+        if let Some(kind) = self.starting_kind(output_id) {
+            return kind;
         }
         lock(&self.shared.state)
             .graph
             .state()
             .output(output_id)
             .map(|output| output.kind().clone())
+    }
+
+    /// The kind an `output.start` of this output saw when it checked the output's key,
+    /// while that start is opening (#343); `None` when no start of it is pending. Takes
+    /// the gate lock alone.
+    fn starting_kind(&self, output_id: &OutputId) -> Option<Option<OutputKind>> {
+        let host = self.media.as_ref()?;
+        let gate = lock(&host.gate);
+        gate.pending
+            .as_ref()
+            .filter(|pending| pending.output_id == *output_id)
+            .map(|pending| pending.kind.clone())
     }
 
     /// Injects platform backends. `output.start` then runs the media pipeline
@@ -894,6 +901,17 @@ impl Engine {
                     });
                 }
                 check_key(&key)?;
+                // The opener of a start that is opening reads the server the start
+                // checked (`output_kind`), which a retarget since may have changed, so
+                // a key set now could be paired with the old server (#343).
+                if self.starting_kind(&output_id).is_some() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!(
+                            "output `{output_id}` is starting: set its key once the start \
+                             has settled"
+                        ),
+                    });
+                }
                 let store = self.key_store().ok_or_else(no_key_store)?;
                 store
                     .set(output_id.as_str(), &Secret::new(key.expose()))
