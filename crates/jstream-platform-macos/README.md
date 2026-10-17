@@ -144,8 +144,8 @@ It has:
   a stream whose device is gone or changed format with `DeviceLost`. `input_format`
   plans the same way without opening. **The Microphone permission**: without it macOS
   would record silence, so `open_input` checks it (`AVCaptureDevice`'s authorization
-  status for audio) once the device is found and its format planned, so an unknown
-  device is `NotFound` without a prompt. When macOS hasn't asked yet, the backend asks once
+  status for audio) once the device is found and its format planned: an unknown device
+  is `NotFound` without a prompt. When macOS hasn't asked yet, the backend asks once
   (`requestAccessForMediaType:`, which prompts) and returns a `PlatformError::Os` naming
   System Settings › Privacy & Security › Microphone; a refused permission gets that error
   without asking again, and a restricted one (a configuration profile or Screen Time) an

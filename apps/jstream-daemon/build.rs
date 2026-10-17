@@ -52,6 +52,7 @@ fn main() {
         let dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
         // The binary and its unit-test harness, as above; `-sectcreate` copies the file
         // into the section as is. The path can't hold a comma, which `-Wl` splits on.
+        // The README's Purpose describes this embedding; Design, the delay-load above.
         println!("cargo:rustc-link-arg-bins=-Wl,-sectcreate,__TEXT,__info_plist,{dir}/Info.plist");
     }
 }
