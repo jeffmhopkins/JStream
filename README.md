@@ -77,6 +77,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | E2b | Privacy screen and encoder sharing key | M2 | ❔ not set |  | #317 |
 | D8p | Audio chain protocol fields | M2 | 🌊 its wave lands | #303 merged into wave/m1-2 | #303 |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
+| B11 | Folders and labels | M2 | ❔ not set |  | #323 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🌊 its wave lands, then 🔨 build | hotkeys #319 merged into wave/m1-2; organisation metadata draft #323 | #319 |
 | F6 | HEVC and AV1 encode | M3 | ❔ not set |  | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🌊 its wave lands, then 🔨 build | effect packs #368 land with wave/m1-2; full 3D transforms to build | #359, #368 |
@@ -235,6 +236,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | D8p | Audio chain protocol fields | 🔍 in review: #303 merged into wave/m1-2 | #303 |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
+| B11 | Folders and labels | 🔍 in review | #323 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned: hotkeys #319 merged into wave/m1-2; organisation metadata draft #323 | #319 |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 

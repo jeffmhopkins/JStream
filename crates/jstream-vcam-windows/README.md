@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -20,7 +20,7 @@ Windows camera Frame Server loads, which serves the frames the engine publishes 
 the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract. Layer 2,
 and one of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001));
 it depends only on layer-0 crates and Microsoft's `windows` bindings
-([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). On other platforms it
+([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). On other platforms it
 builds only its pixel helpers, the sample pacer and the control-block trust rule,
 which are tested everywhere.
 

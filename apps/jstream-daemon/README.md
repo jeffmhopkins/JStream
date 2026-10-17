@@ -82,7 +82,7 @@ only there), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
-Why a crate: it is a host binary of its own (ADR-0020 ships `jstream-daemon.exe` next
+Why a crate: it is a host binary of its own (ADR-0066 ships `jstream-daemon.exe` next
 to the desktop app), and only an app may link both `jstream-core` and `jstream-server`
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)).
 
@@ -153,7 +153,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   directory is `logs` in the data directory: `%APPDATA%\JStream` on Windows,
   `~/Library/Application Support/JStream` on macOS, `$XDG_DATA_HOME/jstream` (else
   `~/.local/share/jstream`) elsewhere, or a `data` folder beside the exe when a file
-  named `portable` sits there (ADR-0020). At `info` and above, the first line logged
+  named `portable` sits there (ADR-0066). At `info` and above, the first line logged
   names the file. A log directory that can't be created, or a data directory that can't
   be found (no portable marker, and no `HOME` or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
@@ -439,7 +439,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `FILE_SHARE_DELETE`, so the same is expected, untested).
 - **The data directory** comes from `jstream-platform`'s `paths` module, the desktop
   app's too: `%APPDATA%\JStream`, or a `data` folder beside the exe when a `portable`
-  marker file sits there ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md),
+  marker file sits there ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md),
   [jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)). The panic
   hook, installed as soon as the log directory exists, writes the daemon and protocol
@@ -498,7 +498,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    question 5).
 2. **Default token file location.** The platform config directory
    ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence); `%APPDATA%\JStream`
-   or the portable folder per [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)),
+   or the portable folder per [ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)),
    once the engine's settings code locates it. Until then the path is required, and the
    same variable serves the daemon and the CLI.
 3. **Windows ACL.** On Windows the new file gets its directory's ACL, which is
@@ -514,7 +514,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    an out-of-process monitor (`crash-handler` and `minidumper`), whose attach call is
    `unsafe` too and which adds a helper process. Either needs testing on Windows.
 5. **Data directory.** The log directory's default is `logs` in the data directory
-   (`jstream-platform`'s `paths`, which handles ADR-0020's `portable` marker), and
+   (`jstream-platform`'s `paths`, which handles ADR-0066's `portable` marker), and
    `--log-dir` overrides it. The token file (question 2) and the collection
    (question 6) don't default to it yet.
 6. **Default collection file.** Without `--collection` the collection is not saved.

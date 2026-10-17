@@ -51,7 +51,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
-  `transition.set_default`, `scene.set_transitions`, `item.set_transition`), with
+  `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
+  `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `label.create`,
+  `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set`,
@@ -92,10 +95,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
   the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
   a `meters.tick` carries.
+- **Organisation** (`organise.rs`,
+  [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): `FolderInfo`,
+  `LabelInfo`, `SceneMeta` and `SourceMeta`, and the colour and icon checks every
+  implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `video_mix.list`, `bus.list`,
   `video.snapshot`, `kind.list`,
-  `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus),
+  `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
+  folder or a label),
   `studio.get`, `privacy.get`, `device.list`, `live.list` and `capture.targets`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo` and
   `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and
@@ -151,9 +159,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.31 because of the
-  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`) and the `dedicated`
-  flag on an output's encoder session; 0.30 added
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.31 because of
+  folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
+  `scene.set_folder`, `scene.set_meta`, `source.set_meta`, `state.get`'s `folders` and
+  `labels`, `SceneInfo`'s `folder` and `meta`, `SourceInfo`'s `meta`, the `folder` and
+  `label` `delete.plan` targets, entity kinds and blockers); 0.30 added
   transition presets and studio mode's preview (the `transition.*` edits,
   `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
   `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
@@ -246,8 +256,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":31},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":31},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":32},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":32},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -623,6 +633,27 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
 
+Folders, labels and organisation metadata are collection state too
+([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4). They change no
+rendering, switching or nesting. Folders organise the scene list as a tree: an ordered
+list of `{ folder_id, name, parent? }`, where a folder's children show in folder order,
+and a scene names at most one folder (`scene.set_folder`) while keeping its place in the
+flat display order. `folder.set_parent` refuses a parent that would put the folder
+inside itself. Labels are an ordered list of `{ label_id, name, color, icon? }`, and a
+source carries a set of them, with a favourite flag (`source.set_meta`); they belong to
+the source, so every item placing it shares them, and `source.duplicate` copies them.
+A scene's `SceneMeta` (`scene.set_meta`) is its `icon`, `color`, `favourite` and
+`show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
+the whole metadata, so a field left out takes its default. Colours are sRGB `#rrggbb`;
+an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
+bytes). A folder that holds a scene or folder, and a label a source carries, can't be deleted:
+the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`), and
+`delete.plan` with a `folder` or `label` target returns the batch that moves what the
+folder holds up to its parent, or takes the label off its sources, then deletes it.
+`state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
+`state.get` and `source.list` report each scene's and source's fields, each omitted
+while it has its default, so an older client reads the collection as before.
+
 Video mixes (0.28) are collection state too: what an output's video shows.
 `video_mix.create` and `video_mix.update` take a `mix_id`, a `name` and a `VideoMix`: an
 `input` (`program`, the scene on program; `preview`, which still shows the program,
@@ -709,10 +740,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
   parses as empty), the master stage (`master`, with its filter chains; omitted while
-  it has none, so missing, also from a pre-0.29 server, parses as empty), and the
+  it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
-  it parses as the one initial `cut`). A client reads it on connecting, and again
-  after a `state.changed` it didn't cause.
+  it parses as the one initial `cut`), and the `folders` and `labels` in their orders
+  (each omitted when empty, so it parses as empty from an older server). A client reads
+  it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
@@ -731,7 +763,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `false`). While it runs, `encoder` names its session's profile (absent for the
   default), the other running outputs that share the session (`shared_with`, by ID),
   whether the session is a hardware one, and whether it is `dedicated` to this output
-  because the output has its own video chain (0.31; omitted when false), so it can
+  because the output has its own video chain (0.32; omitted when false), so it can
   never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
@@ -752,13 +784,15 @@ Queries read and never change `rev`. Those that read the collection state carry 
   source can still name a window closed since. `action_failed` when the engine has no
   capture backend or the OS refuses the list. Added in 0.27.
 - `privacy.get`: whether the privacy screen is on (`on`). Runtime state, so no `rev`.
-  Added in 0.31.
+  Added in 0.32.
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
-  `{"type":"bus","bus_id":…}`) with everything that refers to it, as `edits` and the
+  `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
+  `{"type":"label","label_id":…}`; their plans are described with folders and labels
+  above), with everything that refers to it, as `edits` and the
   `rev` it was planned at, or `not_found` for a missing target (and
   `invalid_argument` on `target.bus_id` for the master, which is never deleted). In order, the edits remove the items that place a
   deleted source, set every settings reference to a deleted object to `null` (one
@@ -976,7 +1010,7 @@ After `welcome`, the server pushes every event to every client.
   emits nothing. A client that subscribes while the screen is on gets this event first,
   naming the client that turned it on and with no `request_id`, so it never shows an
   uncovered picture. Runtime state, so no `rev`
-  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Added in 0.31.
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Added in 0.32.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -1119,7 +1153,8 @@ after 1.0:
   the `KindCategory` value `transition`, which `kind.list` reports for every transition
   kind, so a client older than 0.30 can't parse `kind.list` from a 0.30 server. From
   0.30 `KindCategory` parses an unknown value as `Unknown`, so a later category won't
-  break a 0.30 client. The encoder enums (`VideoCodec`,
+  break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
+  `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or

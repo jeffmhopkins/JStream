@@ -1721,6 +1721,7 @@ fn fitting_reads_the_state_only_when_needed() {
                 duplicated_from: None,
                 audio: None,
                 filters: Default::default(),
+                meta: Default::default(),
             }],
         ))
     })
