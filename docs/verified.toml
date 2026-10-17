@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:f0e8cbc5a816b3b7", by = "agent:wave-owner", note = "main into wave/m1-2: main's CLAP rows (platform PluginHosts, platform-windows launcher, plugin-clap, core supervisor, apps plugin-host) from wave/m3's landing beside the wave's effects row drawing through render's filter harness" }
+stamp = { hash = "b3:ef2ab8309e14c317", by = "agent:claude-567", note = "Added the layer-2 jstream-crash row (depends on jstream-platform and jstream-protocol, both L1; no unsafe); the apps row link list is not exhaustive and still holds | merge: The merge (wave/m1-2's landing, #545) changes ARCH only below the crate map (data model, threads, protocol, GPU and browser sections); re-read the table as merged: the jstream-crash L2 row this branch adds is intact and still matches its manifest, and the other rows are main's." }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -27,10 +27,10 @@ stamp = { hash = "b3:963d560e94ad3155", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:dbacb2dd7907964d" }
 
 ["ARCH#crate-map"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:daa370c4ed6a1057", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the daemon Cargo.toml only (jstream-youtube as a Windows dependency plus its fake dev-dep); the crate map's rows hold" }
+stamp = { hash = "b3:737044768803b493", by = "agent:claude-crash-558", note = "Added the layer-2 jstream-crash row (depends on jstream-platform and jstream-protocol, both L1; no unsafe); the apps row link list is not exhaustive and still holds" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:6cac3568cd2ba0a3", by = "agent:desktop-panic-hook", note = "Re-read the apps/* row against jstream-desktop's manifest: it now links jstream-protocol (layer 1) on every platform rather than on Windows only, and blake3 (external); both are strictly lower layers and the row's summary (core, server, the OS platform crate, sources, browser with cef) still holds." }
+stamp = { hash = "b3:96d9ee9867cf1a5d", by = "agent:claude-crash-558", note = "Added the layer-2 jstream-crash row (depends on jstream-platform and jstream-protocol, both L1; no unsafe); the apps row link list is not exhaustive and still holds" }
 
 ["ARCH#crate-map"."file:apps/jstream-plugin-host/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "Rows changed: jstream-platform adds PluginHosts, jstream-platform-windows the plugin block and launcher, jstream-core CLAP kinds and the supervisor, apps/* jstream-plugin-host's links; each matches the crate's Cargo.toml metadata; lint-deps passes" }
@@ -49,6 +49,9 @@ stamp = { hash = "b3:e5fef95eb12cb895" }
 
 ["ARCH#crate-map"."file:crates/jstream-core/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:4d55defdee16ff6a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The table, against wave/m3, gains main's text: platform lists MediaDecoders and paths (ADR-0020) beside PluginHosts; youtube and sources cite ADR-0058; platform-windows drops the CEF browser backend main moved to jstream-browser and keeps the CLAP launcher; main's jstream-browser row (L3, unsafe); the outputs row (RTMP publish client and recording sink, Output trait planned, the vcam output in core's runtime); and the apps row's desktop, daemon and browser-helper text beside the plugin host clause. Inputs: core's jstream metadata gains main's jstream-youtube dependency (L2 under core's L5), the jstream-browser and jstream-youtube fake dev-dependencies and the Windows-only jstream-platform-windows dev-dependency, beside wave/m3's jstream-plugin-proto; platform's summary gains paths, matching its row; plugin-clap's metadata is wave/m3's, unchanged. lint-deps passes." }
+
+["ARCH#crate-map"."file:crates/jstream-crash/Cargo.toml#jstream-meta"]
+stamp = { hash = "b3:e3cd576eec4a2901", by = "agent:claude-crash-558", note = "Added the layer-2 jstream-crash row (depends on jstream-platform and jstream-protocol, both L1; no unsafe); the apps row link list is not exhaustive and still holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-effects/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:3effb533ae8ee473", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; the jstream-effects row now says it draws through jstream-render's filter harness with no GPU device of its own, matching its Cargo.toml (L3, depends on protocol and render L2); lint-deps passes" }
@@ -657,16 +660,16 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:fe92cdacb6278716" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:daa370c4ed6a1057", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
+stamp = { hash = "b3:737044768803b493", by = "agent:claude-crash-558", note = "Re-read the desktop and daemon rows: they describe hosting, not crash reports, and still hold with jstream-crash as a dependency" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the daemon row keeps the wave's browser sources clause and adds YouTube sign-in with JStream's own client, linked to ADR-0058" }
+stamp = { hash = "b3:b7b79c50e790bbee", by = "agent:claude-567", note = "Round 1: both apps' main.rs only gain a crash_line notifier for jstream_crash::install; the rows describe hosting, not crash reports, and still hold." }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:6cac3568cd2ba0a3", by = "agent:desktop-panic-hook", note = "Re-read the jstream-desktop row against main.rs installing the crash hook and Cargo.toml's new dependencies (blake3, jstream-protocol on every platform): the row describes the shell, the in-process engine and the token, which hold; crash reports are detailed in the app's README." }
+stamp = { hash = "b3:96d9ee9867cf1a5d", by = "agent:claude-crash-558", note = "Re-read the desktop and daemon rows: they describe hosting, not crash reports, and still hold with jstream-crash as a dependency" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:56c10ca01f4636ae", by = "agent:desktop-panic-hook", note = "Re-read the jstream-desktop row against main.rs installing the crash hook and Cargo.toml's new dependencies (blake3, jstream-protocol on every platform): the row describes the shell, the in-process engine and the token, which hold; crash reports are detailed in the app's README." }
+stamp = { hash = "b3:196f4589c6849efc", by = "agent:claude-567", note = "Round 1: both apps' main.rs only gain a crash_line notifier for jstream_crash::install; the rows describe hosting, not crash reports, and still hold." }
 
 ["ARCH#shape"."file:apps/jstream-plugin-host/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "Adds the jstream-plugin-host row (not an engine host; one process per CLAP filter instance, shared block and control channel only, no protocol connection), matching apps/jstream-plugin-host's Cargo metadata and main.rs" }
@@ -1523,8 +1526,32 @@ stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmE
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/vcam.rs"]
 stamp = { hash = "b3:20b9282859764b8b" }
 
+["CRATE-jstream-crash#purpose"."body"]
+stamp = { hash = "b3:473c9dbb65c8adc7", by = "agent:claude-567", note = "Round 1 B1/N1: install now takes notify (Notify = fn(&str)) and the hook hands it the redacted, truncated line instead of writing stderr itself, so the library never prints (R-RS-005). Re-read the whole section against lib.rs and tests.rs: the install bullet names notify, the Tests paragraph says the child's notifier writes the line to stderr (the leak checks still read it there), and the rest (modes, cut, withheld message, Redacting, cap of 10) is unchanged. ADR-0067 now records the R-RS-005 decision and no longer credits user-only folders to the desktop's copy." }
+
+["CRATE-jstream-crash#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-crash"]
+stamp = { hash = "b3:977b310ef8a4ea94", by = "agent:claude-crash-558", note = "New section, written against lib.rs and tests.rs: install, Secrets without global state, redaction order, Redacting registration rules, the 10-report cap and the tests listed" }
+
+["CRATE-jstream-crash#purpose"."dep:docs/RULES.md#R-RS-008"]
+stamp = { hash = "b3:35b55e6c08986cc7", by = "agent:claude-crash-558", note = "New section, written against lib.rs and tests.rs: install, Secrets without global state, redaction order, Redacting registration rules, the 10-report cap and the tests listed" }
+
+["CRATE-jstream-crash#purpose"."dep:docs/RULES.md#R-SEC-001"]
+stamp = { hash = "b3:69c6131f3f1bd0fd", by = "agent:claude-crash-558", note = "New section, written against lib.rs and tests.rs: install, Secrets without global state, redaction order, Redacting registration rules, the 10-report cap and the tests listed" }
+
+["CRATE-jstream-crash#purpose"."dep:docs/RULES.md#R-SEC-004"]
+stamp = { hash = "b3:f3e3a293b719fe8d", by = "agent:claude-crash-558", note = "New section, written against lib.rs and tests.rs: install, Secrets without global state, redaction order, Redacting registration rules, the 10-report cap and the tests listed" }
+
+["CRATE-jstream-crash#purpose"."dep:docs/adr/0067-shared-crash-reports.md"]
+stamp = { hash = "b3:434dc3a92e9a3802", by = "agent:claude-567", note = "Round 1 B1/N1: install now takes notify (Notify = fn(&str)) and the hook hands it the redacted, truncated line instead of writing stderr itself, so the library never prints (R-RS-005). Re-read the whole section against lib.rs and tests.rs: the install bullet names notify, the Tests paragraph says the child's notifier writes the line to stderr (the leak checks still read it there), and the rest (modes, cut, withheld message, Redacting, cap of 10) is unchanged. ADR-0067 now records the R-RS-005 decision and no longer credits user-only folders to the desktop's copy." }
+
+["CRATE-jstream-crash#purpose"."file:crates/jstream-crash/src/lib.rs"]
+stamp = { hash = "b3:21352a9dc4ca1cb0", by = "agent:claude-567", note = "Round 1 B1/N1: install now takes notify (Notify = fn(&str)) and the hook hands it the redacted, truncated line instead of writing stderr itself, so the library never prints (R-RS-005). Re-read the whole section against lib.rs and tests.rs: the install bullet names notify, the Tests paragraph says the child's notifier writes the line to stderr (the leak checks still read it there), and the rest (modes, cut, withheld message, Redacting, cap of 10) is unchanged. ADR-0067 now records the R-RS-005 decision and no longer credits user-only folders to the desktop's copy." }
+
+["CRATE-jstream-crash#purpose"."file:crates/jstream-crash/src/tests.rs"]
+stamp = { hash = "b3:c6c4db08fd70381a", by = "agent:claude-567", note = "Round 1 B1/N1: install now takes notify (Notify = fn(&str)) and the hook hands it the redacted, truncated line instead of writing stderr itself, so the library never prints (R-RS-005). Re-read the whole section against lib.rs and tests.rs: the install bullet names notify, the Tests paragraph says the child's notifier writes the line to stderr (the leak checks still read it there), and the rest (modes, cut, withheld message, Redacting, cap of 10) is unchanged. ADR-0067 now records the R-RS-005 decision and no longer credits user-only folders to the desktop's copy." }
+
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:fadc1ade8fc5506d", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
+stamp = { hash = "b3:e2f1eb663f2c7b2d", by = "agent:claude-567", note = "Round 1 B2: the Dependencies bullet no longer says jstream-crash is in the tree through core and the server; it is named separately as a workspace crate only the two apps use (ADR-0067). The Crash reports bullet now says main.rs's crash_line prints the hook's redacted line. Re-read both against main.rs and Cargo.toml. | merge: The merge moves scan_clap_plugins within serve.rs (no change in behaviour) and rewrites the browser sources bullet (the engine lends the stage's GPU context, Engine::use_gpu); the crash reports bullet and this branch's Dependencies fix are unaffected." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:90414bf561410e34", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
@@ -1536,16 +1563,13 @@ stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:45b49bbc44d9e315", by = "agent:t1-studio", note = "Option list matches args.rs, now including --youtube-client; core#design and persistence deps re-read" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
-stamp = { hash = "b3:8699127a64ebe169", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
+stamp = { hash = "b3:13f3cdef7a917581", by = "agent:claude-crash-558", note = "Crash reports now come from jstream-crash with a Secrets list made in main and passed to token.rs and serve.rs; Redacting is jstream_crash::Redacting; the blake3 dep and the fake-store tests moved to the crate; logs.rs keeps only compact" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/components.rs"]
 stamp = { hash = "b3:a750642233d72b2c" }
-
-["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/crash.rs"]
-stamp = { hash = "b3:55919ae71cf6d6c8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#353: Live on Windows and Crash reports say the key store reaches live() behind crash::Redacting. After #485 moved live() into the library (which can't see the binary's crash module), serve.rs's live_redacting does the wrapping and serve::engine calls it on Windows. The Crash reports bullet now also says with_youtube hands YouTube WindowsCredentials behind Redacting (the serve.rs change after #312 wired YouTube), and that a YouTube-bound output's ingest key and the access token go through neither store (N1, left open). crash.rs: Redacting over both traits, registered before set and after a successful get, nothing from is_set or a failed read, the plain-code module-doc mention, and its tests, matching both bullets. The publish-opener bullet keeps #485's live.rs text and adds that Redacting stays in the binary. The YouTube bullet now says the token store is behind Redacting. Dependencies (N4) adds crash.rs's MemoryKeyStore and MemoryTokenStore tests. The server design dep changed with #484 (TCP cap, in-flight cap): the daemon sets neither, so Listening holds. clippy and cargo doc -D warnings pass" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/lib.rs"]
 stamp = { hash = "b3:3452a33a8b6b712b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
@@ -1554,25 +1578,25 @@ stamp = { hash = "b3:3452a33a8b6b712b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/logs.rs"]
-stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data-directory bullet now names jstream-platform's paths module (portable marker handled), Dependencies lists the data directory under jstream-platform, open question 5 says the log default uses it and the token/collection don't yet; matches logs.rs; sits beside main's #328 delay-load text without overlap" }
+stamp = { hash = "b3:41cad34f2b3ecc73", by = "agent:claude-crash-558", note = "Crash reports now come from jstream-crash with a Secrets list made in main and passed to token.rs and serve.rs; Redacting is jstream_crash::Redacting; the blake3 dep and the fake-store tests moved to the crate; logs.rs keeps only compact" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
+stamp = { hash = "b3:b7b79c50e790bbee", by = "agent:claude-567", note = "Round 1 B2: the Dependencies bullet no longer says jstream-crash is in the tree through core and the server; it is named separately as a workspace crate only the two apps use (ADR-0067). The Crash reports bullet now says main.rs's crash_line prints the hook's redacted line. Re-read both against main.rs and Cargo.toml." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:34c8d3ddfb1f04f1", by = "agent:wave-owner", note = "Body and serve.rs: main's jstream-clap-scan paragraph sits beside the YouTube sign-in and live.rs text; serve.rs keeps one copy of with_youtube (both sides had moved it; the resolution is main's file) and calls scan_clap_plugins after live_redacting, as written. Dep core#design: wave/m1-2 brought video mixes and per-mix render passes, T1 brought transitions in the per-mix snapshot and Look-based pairing for display and window sources; the daemon's wiring of one engine, backends, browser use_gpu and MCP is unchanged by either; holds." }
+stamp = { hash = "b3:9a8b6462871a6d84", by = "agent:claude-567", note = "Crash reports now come from jstream-crash with a Secrets list made in main and passed to token.rs and serve.rs; Redacting is jstream_crash::Redacting; the blake3 dep and the fake-store tests moved to the crate; logs.rs keeps only compact | merge: The merge moves scan_clap_plugins within serve.rs (no change in behaviour) and rewrites the browser sources bullet (the engine lends the stage's GPU context, Engine::use_gpu); the crash reports bullet and this branch's Dependencies fix are unaffected." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
+stamp = { hash = "b3:813a816def2abc43", by = "agent:claude-crash-558", note = "Crash reports now come from jstream-crash with a Secrets list made in main and passed to token.rs and serve.rs; Redacting is jstream_crash::Redacting; the blake3 dep and the fake-store tests moved to the crate; logs.rs keeps only compact" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/youtube.rs"]
 stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:b2c1df1a08c66049", by = "agent:wave-owner", note = "main into wave/m1-2: hand-resolved Serving bullet: the wave's live engine through live.rs plus main's CLAP plugin scan; serve.rs keeps the wave's with_youtube and main's scan_clap_plugins thread, both called from engine()" }
+stamp = { hash = "b3:1a0c1d9b34b14c4d", by = "agent:claude-567", note = "crash.rs moved to jstream-crash (ADR-0067); Contents now names the crate hook, and the Tests bullet drops the crash.rs tests and names the token and key registration tests | merge: The merge only moves scan_clap_plugins within serve.rs and rejoins one wrapped line in Contents; this branch's crash-report contents still hold." }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: the token file now names the device file beside it, live mode with the cef feature opens browser sources, the end-to-end MCP test sets the canvas to the fake display's size, and YouTube sign-in is not here because the daemon doesn't call Engine::with_youtube yet, beside wave/m3's CLAP scan. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. The daemon's own link matches its Cargo.toml (jstream-browser always, cef = jstream-browser/cef). serve.rs, against wave/m3, gains MfMediaDecoders, the CEF wiring (cef_browser, browse) and its test, and passes main.rs's device file to the server through bind's device_file parameter, beside the clap-scan thread." }
@@ -1583,9 +1607,6 @@ stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUV
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/components.rs"]
 stamp = { hash = "b3:a750642233d72b2c" }
 
-["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/crash.rs"]
-stamp = { hash = "b3:55919ae71cf6d6c8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#353: crash.rs gains crash::Redacting over StreamKeyStore and OAuthTokenStore. It registers a secret before set and after a successful get, and nothing from is_set, clear or a failed read. The module doc names Redacting as plain code (it is cfg(any(windows, test))), and the Redacting doc now says it wraps YouTube's token store. The Tests bullet names the crash-hook child test (key and refresh token loaded through Redacting) and serve.rs's a_failing_rtmp_publish_never_names_the_key, which now runs through serve::live_redacting with the library's rtmp() and checks registration right after the first output.set_key (N2). Merges of wave/m1-2: #485 moved live() and the opener tests into live.rs, so the Tests bullet now keeps both (opener and live engine in live.rs, the RTMP leak test in serve.rs). #312's YouTube Contents bullet holds beside it. Crash reports still describes a redacted report. cargo test -p jstream-daemon: lib 3, bin 32, daemon 9, e2e 1" }
-
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/lib.rs"]
 stamp = { hash = "b3:3452a33a8b6b712b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
 
@@ -1593,19 +1614,19 @@ stamp = { hash = "b3:3452a33a8b6b712b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/logs.rs"]
-stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: logs.rs's default dir now comes from jstream_platform::paths::data_dir (its own data_dir() removed); the Startup bullet's 'creates the log directory' still holds; main's WindowsVcam/delay-load text unaffected" }
+stamp = { hash = "b3:41cad34f2b3ecc73", by = "agent:claude-crash-558", note = "crash.rs moved to jstream-crash (ADR-0067); Contents now names the crate hook, and the Tests bullet drops the crash.rs tests and names the token and key registration tests" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
+stamp = { hash = "b3:b7b79c50e790bbee", by = "agent:claude-567", note = "Round 1: main.rs gains crash_line, the stderr notifier it passes to jstream_crash::install; Contents and Tests still match." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:34c8d3ddfb1f04f1", by = "agent:wave-owner", note = "main into wave/m1-2: hand-resolved Serving bullet: the wave's live engine through live.rs plus main's CLAP plugin scan; serve.rs keeps the wave's with_youtube and main's scan_clap_plugins thread, both called from engine()" }
+stamp = { hash = "b3:9a8b6462871a6d84", by = "agent:claude-567", note = "crash.rs moved to jstream-crash (ADR-0067); Contents now names the crate hook, and the Tests bullet drops the crash.rs tests and names the token and key registration tests | merge: The merge only moves scan_clap_plugins within serve.rs and rejoins one wrapped line in Contents; this branch's crash-report contents still hold." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:813a816def2abc43", by = "agent:claude-crash-558", note = "crash.rs moved to jstream-crash (ADR-0067); Contents now names the crate hook, and the Tests bullet drops the crash.rs tests and names the token and key registration tests" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/youtube.rs"]
 stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Superseded ADR-0041 mentions in serve.rs and youtube.rs dropped or moved to ADR-0058; the YouTube bullet still matches them" }
@@ -1626,13 +1647,13 @@ stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
+stamp = { hash = "b3:b7b79c50e790bbee", by = "agent:claude-567", note = "Round 1: main.rs's crash_line prints the same redacted crash line to stderr the crate used to, so nothing user-visible changed." }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:813a816def2abc43", by = "agent:claude-crash-558", note = "Re-read against main.rs and token.rs taking a Secrets: crash reports land in the log dir as before, newest 10 kept; no option or output changed" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:af4c8423f73930ba", by = "agent:wave-owner", note = "This builds wave/m1-3's main sync from T1 on wave/m1-2 plus #552. The body now holds both wave/m1-2's C8b5 Browser sources bullet (pages paint on the stage's lent context, taken back at stop) and #552's Crash reports bullet (crash.rs hook, Redacting key store, 10-report pruning). I re-read both against browser.rs, crash.rs, main.rs and host.rs. Neither bullet touches the other, and both hold." }
+stamp = { hash = "b3:61ef336672668a24", by = "agent:claude-567", note = "Round 1: the crash-report bullet now says main.rs's crash_line prints the hook's redacted line; re-read against main.rs, the rest of the section is unchanged. | merge: The merge rewrites the browser sources bullet (pages paint on the stage's GPU context while it runs); the crash-report bullet this branch changes is unaffected." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1653,7 +1674,7 @@ stamp = { hash = "b3:6dd7b2e82dbb7b02", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:e24d9e7516312d41", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after 741cfc28: a rustfmt-only line wrap of the engine call in app.rs; nothing the section says changed; holds" }
+stamp = { hash = "b3:835a9cb93977b8e4", by = "agent:claude-crash-558", note = "Crash reports now say both apps use jstream-crash; main.rs makes the Secrets and passes it through app::start to the host; report contents and redaction unchanged" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
@@ -1661,20 +1682,17 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/browser.rs"]
 stamp = { hash = "b3:79c52e0bc8185aad", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): edited the Browser sources bullet: pages paint on the app's media-adapter device until a program stage runs, then on the stage's context the engine lends (Engine::use_gpu), so the mix draws them, taken back at stop; browser.rs comment matches; holds" }
 
-["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/crash.rs"]
-stamp = { hash = "b3:4b066e60073231fd", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
-
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:d50eefc191f0f160", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
+stamp = { hash = "b3:95f1eb66d1f4b129", by = "agent:claude-crash-558", note = "Crash reports now say both apps use jstream-crash; main.rs makes the Secrets and passes it through app::start to the host; report contents and redaction unchanged" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:31883e742359be7a", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
+stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude-crash-558", note = "Crash reports now say both apps use jstream-crash; main.rs makes the Secrets and passes it through app::start to the host; report contents and redaction unchanged" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:56c10ca01f4636ae", by = "agent:desktop-panic-hook", note = "Re-read against crash.rs, main.rs's install call, Host::start registering the token and live() wrapping WindowsCredentials in crash::Redacting; the new Crash reports bullet states what a report holds and leaves out, what is redacted and how (length and BLAKE3 digest), pruning that spares the log file and audit log, and why the module is a copy of the daemon's (both layer 6). The other bullets are unaffected." }
+stamp = { hash = "b3:196f4589c6849efc", by = "agent:claude-567", note = "Round 1: the crash-report bullet now says main.rs's crash_line prints the hook's redacted line; re-read against main.rs, the rest of the section is unchanged." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/shell.rs"]
 stamp = { hash = "b3:ee281b0fbf540f66" }
@@ -1689,13 +1707,13 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:36f856b5137a45f7", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
+stamp = { hash = "b3:d45fa2ae7057ff6a", by = "agent:claude-crash-558", note = "crash.rs moved to jstream-crash (ADR-0067); Contents and Tests now name the crate hook and Redacting, and the host test checks the token is registered" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map's apps/* row, against wave/m3, gains main's text (jstream-desktop also linking sources and jstream-browser with its cef feature, jstream-daemon always linking jstream-browser for a browser backend, CEF's with its cef feature, and the jstream-browser-helper clause) beside wave/m3's plugin host clause. The desktop's purpose says it links core and server, still true, and its contents already list browser sources (browser.rs, cef feature), matching main's sources and jstream-browser links." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after 741cfc28: a rustfmt-only line wrap of the engine call in app.rs; nothing the section says changed; holds" }
+stamp = { hash = "b3:835a9cb93977b8e4", by = "agent:claude-crash-558", note = "crash.rs moved to jstream-crash (ADR-0067); Contents and Tests now name the crate hook and Redacting, and the host test checks the token is registered" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): contents list matches app.rs, host.rs (vcam_status), bootstrap.rs (vcam in the global) and ui.rs" }
@@ -1703,20 +1721,17 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/browser.rs"]
 stamp = { hash = "b3:79c52e0bc8185aad", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): browser.rs changed only in its comment on the device it opens (now: covers paints before a program stage, the stage lends its own context); Purpose's browser-sources bullet says only which backend is used; holds" }
 
-["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/crash.rs"]
-stamp = { hash = "b3:4b066e60073231fd", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
-
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:d50eefc191f0f160", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
+stamp = { hash = "b3:95f1eb66d1f4b129", by = "agent:claude-crash-558", note = "crash.rs moved to jstream-crash (ADR-0067); Contents and Tests now name the crate hook and Redacting, and the host test checks the token is registered" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:31883e742359be7a", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
+stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude-crash-558", note = "crash.rs moved to jstream-crash (ADR-0067); Contents and Tests now name the crate hook and Redacting, and the host test checks the token is registered" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:56c10ca01f4636ae", by = "agent:desktop-panic-hook", note = "Re-read against the new crash.rs (panic hook and Redacting key store), its tests (child-process hook test) and the token registration in host.rs; Contents lists crash.rs, Tests names the hook test, and Not here yet now names native crash dumps instead of crash reports." }
+stamp = { hash = "b3:196f4589c6849efc", by = "agent:claude-567", note = "Round 1: main.rs gains crash_line (Windows), the stderr notifier passed to jstream_crash::install; the section's contents still hold." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/shell.rs"]
 stamp = { hash = "b3:ee281b0fbf540f66" }
@@ -1731,16 +1746,16 @@ stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:cc23c34fcf6ae592", by = "agent:desktop-panic-hook", note = "Re-read against main.rs installing crash::install into the data folder's logs folder before the log file, and Cargo.toml's new blake3, jstream-protocol (now on every platform) and the fake platform dev-dependency; the new Crash reports bullet gives the file name, the cap of 10 and R-SEC-004. The options table and other bullets are unchanged." }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:bb0a5383be276737", by = "agent:desktop-panic-hook", note = "Re-read against main.rs installing crash::install into the data folder's logs folder before the log file, and Cargo.toml's new blake3, jstream-protocol (now on every platform) and the fake platform dev-dependency; the new Crash reports bullet gives the file name, the cap of 10 and R-SEC-004. The options table and other bullets are unchanged." }
+stamp = { hash = "b3:b02a3868305bc338", by = "agent:claude-crash-558", note = "Re-read against app::start and main.rs taking a Secrets: the crash report location, naming and cap of 10 are unchanged" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after 741cfc28: a rustfmt-only line wrap of the engine call in app.rs; nothing the section says changed; holds" }
+stamp = { hash = "b3:835a9cb93977b8e4", by = "agent:claude-crash-558", note = "Re-read against app::start and main.rs taking a Secrets: the crash report location, naming and cap of 10 are unchanged" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:56c10ca01f4636ae", by = "agent:desktop-panic-hook", note = "Re-read against main.rs installing crash::install into the data folder's logs folder before the log file, and Cargo.toml's new blake3, jstream-protocol (now on every platform) and the fake platform dev-dependency; the new Crash reports bullet gives the file name, the cap of 10 and R-SEC-004. The options table and other bullets are unchanged." }
+stamp = { hash = "b3:196f4589c6849efc", by = "agent:claude-567", note = "Round 1 (and N2): main.rs passes crash_line to install; nothing user-visible changed. This PR's manifest change, re-read for this section: blake3 and the jstream-platform fake dev-dependency dropped, jstream-crash added, the jstream-protocol comment narrowed; the section states nothing about dependencies, so it holds." }
 
 ["CRATE-jstream-effects#purpose"."body"]
 stamp = { hash = "b3:3466907ce4516fb9", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B3: re-read the whole section; restored the wave's shader-path bullet (asset-path rules under the collection root, DOS device names refused, symlink out refused), which matches manifest.rs check_shader_path; the dependency and Drawing paragraphs still match pack.rs" }
@@ -2157,7 +2172,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:e6f240cc14ed9d3d", by = "agent:t1-studio", note = "Merged the wave's browser-page frames and hardware-first adapter wording with this branch's note that render composites one scene or a transition between two on the media device; rest of the section unchanged." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:f0e8cbc5a816b3b7", by = "agent:wave-owner", note = "main into wave/m1-2: re-read against ARCH crate map (CLAP rows from wave/m3) and gpu-pipeline (hardware first, #437): this section already says render opens hardware first with the software fallback, and the wave's effect-pack text doesn't touch it" }
+stamp = { hash = "b3:ef2ab8309e14c317", by = "agent:claude-567", note = "Only the crate map gained a jstream-crash row; nothing about GPU frames or the platform crates changed | merge: The merge rewrites GPU frames for browser pages and GpuContext::key, and the crate map only gains this branch's jstream-crash row, which this section doesn't rely on." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:4e05a3682ccc0058", by = "agent:t1-studio", note = "Merged the wave's browser-page frames and hardware-first adapter wording with this branch's note that render composites one scene or a transition between two on the media device; rest of the section unchanged." }
