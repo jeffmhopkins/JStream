@@ -234,7 +234,10 @@ fn chord() -> BoxedStrategy<Chord> {
 /// An action to bind, sometimes one that can't be bound.
 fn action() -> BoxedStrategy<Action> {
     prop_oneof![
-        3 => scene_id().prop_map(|scene_id| Action::SceneSwitch { scene_id }),
+        3 => scene_id().prop_map(|scene_id| Action::SceneSwitch {
+            scene_id,
+            preset_id: None,
+        }),
         2 => output_id().prop_map(|output_id| Action::OutputStart { output_id }),
         1 => output_id().prop_map(|output_id| Action::OutputStop { output_id }),
         1 => output_id().prop_map(|output_id| Action::OutputSetKey {

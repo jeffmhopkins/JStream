@@ -9,11 +9,11 @@ use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
     CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
     EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32, FitMode,
-    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
-    OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
-    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
-    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
-    Vec2, Welcome, json_schema,
+    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo, OutputId,
+    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
+    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -26,11 +26,17 @@ use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAud
 use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
+    Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
+    TransitionPresetInfo, TransitionStarted, TransitionsInfo,
+};
+use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
+use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
+use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -268,6 +274,162 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::EncoderDelete {
             profile_id: EncoderProfileId::new("enc_old"),
         },
+        Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: "Smooth move".into(),
+            kind: "move".into(),
+            duration_ms: 600,
+            easing: Easing::EaseInOut,
+            settings: [("unmatched", json!("slide"))].into_iter().collect(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: Some("Springy move".into()),
+            kind: None,
+            duration_ms: Some(800),
+            easing: Some(Easing::Spring),
+            patch: [("stagger_ms", json!(40))].into_iter().collect(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_fade"),
+            name: None,
+            kind: Some("fade".into()),
+            duration_ms: None,
+            easing: Some(Easing::EaseOut),
+            patch: Settings::new(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_fade"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::Linear),
+            patch: Settings::new(),
+        },
+        Edit::TransitionSetDefault {
+            preset_id: TransitionPresetId::new("tr_move"),
+        },
+        Edit::TransitionDelete {
+            preset_id: TransitionPresetId::new("tr_old"),
+        },
+        Edit::SceneSetTransitions {
+            scene_id: SceneId::new("scn_1"),
+            transition_in: Some(TransitionPresetId::new("tr_fade")),
+            transition_out: None,
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_1"),
+            transition: ItemTransition {
+                delay_ms: 120,
+                easing: ItemEasing::Spring,
+                glide: Glide::Never,
+                appear: TransitionEffect::Scale,
+                disappear: TransitionEffect::None,
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_2"),
+            transition: ItemTransition {
+                easing: ItemEasing::EaseOut,
+                appear: TransitionEffect::Slide,
+                disappear: TransitionEffect::Fade,
+                ..ItemTransition::default()
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_3"),
+            transition: ItemTransition {
+                easing: ItemEasing::Linear,
+                ..ItemTransition::default()
+            },
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_4"),
+            transition: ItemTransition {
+                easing: ItemEasing::EaseInOut,
+                ..ItemTransition::default()
+            },
+        },
+        Edit::VideoMixCreate {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Camera".into(),
+            mix: camera_mix(),
+        },
+        Edit::VideoMixUpdate {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Program 720p".into(),
+            mix: program_mix(),
+        },
+        Edit::OutputSetVideoMix {
+            output_id: OutputId::new("out_rec"),
+            mix_id: Some(VideoMixId::new("mix_cam")),
+        },
+        Edit::OutputSetVideoMix {
+            output_id: OutputId::new("out_yt"),
+            mix_id: None,
+        },
+        Edit::VideoMixDelete {
+            mix_id: VideoMixId::new("mix_old"),
+        },
+        Edit::FolderCreate {
+            folder_id: FolderId::new("fld_shows"),
+            name: "Shows".into(),
+            parent: None,
+        },
+        Edit::FolderCreate {
+            folder_id: FolderId::new("fld_intro"),
+            name: "Intros".into(),
+            parent: Some(FolderId::new("fld_shows")),
+        },
+        Edit::FolderRename {
+            folder_id: FolderId::new("fld_intro"),
+            name: "Openers".into(),
+        },
+        Edit::FolderSetParent {
+            folder_id: FolderId::new("fld_intro"),
+            parent: None,
+        },
+        Edit::FolderReorder {
+            folder_id: FolderId::new("fld_intro"),
+            index: 0,
+        },
+        Edit::FolderDelete {
+            folder_id: FolderId::new("fld_old"),
+        },
+        Edit::SceneSetFolder {
+            scene_id: SceneId::new("scn_1"),
+            folder_id: Some(FolderId::new("fld_shows")),
+        },
+        Edit::SceneSetMeta {
+            scene_id: SceneId::new("scn_1"),
+            meta: scene_meta(),
+        },
+        Edit::LabelCreate {
+            label_id: LabelId::new("lbl_sponsor"),
+            name: "Sponsor".into(),
+            color: "#ff8800".into(),
+            icon: Some("megaphone".into()),
+        },
+        Edit::LabelUpdate {
+            label_id: LabelId::new("lbl_sponsor"),
+            name: "Sponsors".into(),
+            color: "#ffaa00".into(),
+            icon: None,
+        },
+        Edit::LabelReorder {
+            label_id: LabelId::new("lbl_sponsor"),
+            index: 0,
+        },
+        Edit::LabelDelete {
+            label_id: LabelId::new("lbl_old"),
+        },
+        Edit::SourceSetMeta {
+            source_id: SourceId::new("src_cam"),
+            meta: SourceMeta {
+                labels: vec![LabelId::new("lbl_sponsor")],
+                favourite: true,
+            },
+        },
         Edit::SourceSetAudio {
             source_id: SourceId::new("src_mic"),
             enabled: Some(true),
@@ -311,6 +473,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             chord: Chord::new("Ctrl+Digit1"),
             action: Action::SceneSwitch {
                 scene_id: SceneId::new("scn_1"),
+                preset_id: None,
             },
         },
         Edit::HotkeyClear {
@@ -326,7 +489,8 @@ pub(crate) fn edits() -> Vec<Edit> {
     edits
 }
 
-/// The filter edits (ADR-0026), on both chains.
+/// The filter edits (ADR-0026), on both chains of a source, and on the master stage's
+/// and an output's audio chains (ADR-0027).
 fn filter_edits() -> Vec<Edit> {
     let mic = || FilterOwner::Source {
         source_id: SourceId::new("src_mic"),
@@ -373,6 +537,86 @@ fn filter_edits() -> Vec<Edit> {
             owner: mic(),
             filter_id: FilterId::new("flt_gain"),
         },
+        Edit::FilterAdd {
+            owner: FilterOwner::Master,
+            chain: FilterChain::Audio,
+            filter_id: FilterId::new("flt_limit"),
+            kind: "limiter".into(),
+            settings: Settings::new(),
+            enabled: None,
+            index: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Output {
+                output_id: OutputId::new("out_rec"),
+            },
+            chain: FilterChain::Audio,
+            filter_id: FilterId::new("flt_quiet"),
+            kind: "gain".into(),
+            settings: quieter(),
+            enabled: None,
+            index: None,
+        },
+    ]
+}
+
+/// A limiter's settings, complete as the engine reports them.
+fn limiter() -> Settings {
+    let mut settings = Settings::new();
+    settings.insert("ceiling_db", serde_json::json!(-1.0));
+    settings.insert("lookahead_ms", serde_json::json!(5.0));
+    settings.insert("release_ms", serde_json::json!(60.0));
+    settings
+}
+
+/// A gain filter's settings, 6 dB down.
+fn quieter() -> Settings {
+    let mut gain = Settings::new();
+    gain.insert("gain_db", serde_json::json!(-6.0));
+    gain
+}
+
+/// One scene at 1280×720 and half the base rate.
+fn camera_mix() -> VideoMix {
+    VideoMix {
+        input: MixInput::Scene {
+            scene_id: SceneId::new("scn_cam"),
+        },
+        resolution: MixResolution {
+            width: 1280,
+            height: 720,
+        },
+        fps_divisor: 2,
+    }
+}
+
+/// The program at 1280×720 and the base rate.
+fn program_mix() -> VideoMix {
+    VideoMix {
+        input: MixInput::Program,
+        resolution: MixResolution {
+            width: 1280,
+            height: 720,
+        },
+        fps_divisor: 1,
+    }
+}
+
+fn mix_infos() -> Vec<VideoMixInfo> {
+    vec![
+        VideoMixInfo {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Camera".into(),
+            mix: camera_mix(),
+        },
+        VideoMixInfo {
+            mix_id: VideoMixId::new("mix_preview"),
+            name: "Preview".into(),
+            mix: VideoMix {
+                input: MixInput::Preview,
+                ..program_mix()
+            },
+        },
     ]
 }
 
@@ -413,6 +657,16 @@ fn send_infos() -> Vec<SendInfo> {
     ]
 }
 
+/// A scene's metadata with every field away from its default.
+fn scene_meta() -> SceneMeta {
+    SceneMeta {
+        icon: Some("star".into()),
+        color: Some("#1e1e2e".into()),
+        favourite: true,
+        show_in_multiview: false,
+    }
+}
+
 /// The bindings the fixtures report: a scene switch and an output start.
 fn hotkey_bindings() -> Vec<HotkeyBinding> {
     vec![
@@ -420,6 +674,7 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
             Chord::new("Ctrl+Digit1"),
             &Action::SceneSwitch {
                 scene_id: SceneId::new("scn_1"),
+                preset_id: None,
             },
         ),
         HotkeyBinding::new(
@@ -460,7 +715,14 @@ fn encoder_infos() -> Vec<EncoderProfileInfo> {
         EncoderProfileInfo {
             profile_id: EncoderProfileId::new("enc_stream"),
             name: "Stream".into(),
-            profile: EncoderProfile::DEFAULT,
+            // The default on the software encoder, so a fixture uses `avoid`.
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    hardware: HardwarePreference::Avoid,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
         },
     ]
 }
@@ -481,11 +743,23 @@ fn output_infos() -> Vec<OutputInfo> {
                 container: RecordContainer::Mp4,
             },
             encoder_profile: Some(EncoderProfileId::new("enc_rec")),
+            filters: FilterChains {
+                video: vec![],
+                audio: vec![FilterInfo {
+                    filter_id: FilterId::new("flt_quiet"),
+                    kind: "gain".into(),
+                    enabled: true,
+                    settings: quieter(),
+                }],
+            },
+            video_mix: Some(VideoMixId::new("mix_cam")),
         },
         OutputInfo {
             output_id: OutputId::new("out_yt"),
             kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
             encoder_profile: None,
+            filters: FilterChains::default(),
+            video_mix: None,
         },
     ]
 }
@@ -552,6 +826,14 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
+            preset_id: None,
+        },
+        Action::SceneSwitch {
+            scene_id: SceneId::new("scn_1"),
+            preset_id: Some(TransitionPresetId::new("tr_move")),
+        },
+        Action::StudioSetPreview {
+            scene_id: SceneId::new("scn_1"),
         },
         Action::PairingStart,
         Action::DeviceRevoke {
@@ -600,6 +882,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::VideoMixList,
         Query::CaptureTargets,
         Query::LiveList,
         Query::YoutubeStatus,
@@ -635,6 +918,16 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::DeletePlan {
             target: DeleteTarget::Source {
                 source_id: SourceId::new("src_cam"),
+            },
+        },
+        Query::DeletePlan {
+            target: DeleteTarget::Folder {
+                folder_id: FolderId::new("fld_shows"),
+            },
+        },
+        Query::DeletePlan {
+            target: DeleteTarget::Label {
+                label_id: LabelId::new("lbl_sponsor"),
             },
         },
         Query::DeletePlan {
@@ -816,6 +1109,7 @@ fn source_infos() -> Vec<SourceInfo> {
             settings: color_settings(),
             duplicated_from: None,
             filters: Default::default(),
+            meta: Default::default(),
             audio: None,
         },
         SourceInfo {
@@ -827,6 +1121,10 @@ fn source_infos() -> Vec<SourceInfo> {
             settings: Settings::new(),
             duplicated_from: None,
             filters: Default::default(),
+            meta: SourceMeta {
+                labels: vec![LabelId::new("lbl_sponsor")],
+                favourite: true,
+            },
             audio: None,
         },
         SourceInfo {
@@ -846,6 +1144,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 }],
                 audio: vec![],
             },
+            meta: Default::default(),
             audio: Some(SourceAudio {
                 enabled: false,
                 ..SourceAudio::new(AudioFollow::WhenShown)
@@ -860,6 +1159,7 @@ fn source_infos() -> Vec<SourceInfo> {
             settings: Settings::new(),
             duplicated_from: None,
             filters: Default::default(),
+            meta: Default::default(),
             audio: Some(SourceAudio::new(AudioFollow::WhenShown)),
         },
         SourceInfo {
@@ -876,6 +1176,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 ..SourceAudio::new(AudioFollow::Always)
             }),
             filters: Default::default(),
+            meta: Default::default(),
         },
     ]
 }
@@ -905,6 +1206,7 @@ fn item_infos() -> Vec<ItemInfo> {
             visible: true,
             opacity: Finite32::new(0.5).expect("finite"),
             blend: BlendMode::Normal,
+            transition: ItemTransition::default(),
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -925,8 +1227,32 @@ fn item_infos() -> Vec<ItemInfo> {
             visible: false,
             opacity: Finite32::ONE,
             blend: BlendMode::Normal,
+            transition: ItemTransition {
+                delay_ms: 80,
+                glide: Glide::Never,
+                ..ItemTransition::default()
+            },
         },
     ]
+}
+
+fn transitions_info() -> TransitionsInfo {
+    TransitionsInfo {
+        presets: vec![
+            crate::initial_preset(),
+            TransitionPresetInfo {
+                preset_id: TransitionPresetId::new("tr_move"),
+                name: "Smooth move".into(),
+                kind: "move".into(),
+                duration_ms: 600,
+                easing: Easing::EaseInOut,
+                settings: [("stagger_ms", json!(0)), ("unmatched", json!("fade"))]
+                    .into_iter()
+                    .collect(),
+            },
+        ],
+        default: TransitionPresetId::new("tr_move"),
+    }
 }
 
 pub(crate) fn query_results() -> Vec<QueryResult> {
@@ -938,6 +1264,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 name: "Main".into(),
                 role: SceneRole::Scene,
                 item_count: 2,
+                folder: None,
+                meta: Default::default(),
             }],
         },
         QueryResult::OutputStatus {
@@ -970,19 +1298,58 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
                     role: SceneRole::Scene,
+                    transition_in: Some(TransitionPresetId::new("tr_move")),
+                    transition_out: None,
                     items: item_infos(),
+                    folder: Some(FolderId::new("fld_shows")),
+                    meta: scene_meta(),
                 },
                 SceneInfo {
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),
                     role: SceneRole::Group,
+                    transition_in: None,
+                    transition_out: Some(TransitionPresetId::new("cut")),
                     items: vec![],
+                    folder: None,
+                    meta: Default::default(),
                 },
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
+            transitions: Box::new(transitions_info()),
+            video_mixes: mix_infos(),
+            folders: vec![
+                FolderInfo {
+                    folder_id: FolderId::new("fld_shows"),
+                    name: "Shows".into(),
+                    parent: None,
+                },
+                FolderInfo {
+                    folder_id: FolderId::new("fld_intro"),
+                    name: "Intros".into(),
+                    parent: Some(FolderId::new("fld_shows")),
+                },
+            ],
+            labels: vec![LabelInfo {
+                label_id: LabelId::new("lbl_sponsor"),
+                name: "Sponsor".into(),
+                color: "#ff8800".into(),
+                icon: Some("megaphone".into()),
+            }],
             buses: bus_infos(),
             sends: send_infos(),
+            master: Box::new(MasterInfo {
+                filters: FilterChains {
+                    video: vec![],
+                    audio: vec![FilterInfo {
+                        filter_id: FilterId::new("flt_limit"),
+                        kind: "limiter".into(),
+                        enabled: true,
+                        settings: limiter(),
+                    }],
+                },
+            }),
             hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
@@ -1008,6 +1375,12 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     name: "Gain".into(),
                     version: 1,
                 },
+                KindSummary {
+                    kind_id: "move".into(),
+                    category: KindCategory::Transition,
+                    name: "Move".into(),
+                    version: 1,
+                },
             ],
         },
         QueryResult::KindDescribe {
@@ -1020,13 +1393,19 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         },
         QueryResult::StudioGet {
             program_scene: Some(SceneId::new("scn_2")),
+            preview_scene: Some(SceneId::new("scn_1")),
         },
         QueryResult::StudioGet {
             program_scene: None,
+            preview_scene: None,
         },
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
+        },
+        QueryResult::VideoMixList {
+            rev: Rev(12),
+            video_mixes: mix_infos(),
         },
         QueryResult::CaptureTargets {
             targets: vec![
@@ -1109,6 +1488,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 Chord::new("F5"),
                 &Action::SceneSwitch {
                     scene_id: SceneId::new("scn_mask"),
+                    preset_id: None,
                 },
             )],
         },
@@ -1165,11 +1545,18 @@ pub(crate) fn events() -> Vec<Event> {
     }
     events.push(Event::StudioChanged {
         program_scene: Some(SceneId::new("scn_2")),
+        preview_scene: Some(SceneId::new("scn_1")),
+        transition: Some(TransitionStarted {
+            preset_id: TransitionPresetId::new("tr_move"),
+            duration_ms: 640,
+        }),
         client_id: ClientId::new("cli_7"),
         request_id: Some(RequestId::new("r2")),
     });
     events.push(Event::StudioChanged {
         program_scene: None,
+        preview_scene: None,
+        transition: None,
         client_id: ClientId::new("cli_8"),
         request_id: None,
     });
@@ -1297,6 +1684,11 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
                     id: "src_cam".into(),
                     field: "settings.mask".into(),
                 },
+                Blocker {
+                    entity: EntityKind::VideoMix,
+                    id: "mix_mask".into(),
+                    field: "mix.input.scene_id".into(),
+                },
             ],
         },
         ProtocolError::UndoConflict {
@@ -1326,6 +1718,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Source,
         EntityKind::Output,
         EntityKind::Encoder,
+        EntityKind::VideoMix,
         EntityKind::Filter,
         EntityKind::Bus,
         EntityKind::Device,
