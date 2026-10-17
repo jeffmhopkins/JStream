@@ -276,9 +276,10 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
 }
 
 /// `docs verify <DOC#anchor> --by <who> --merge <text>`: the same after `docs merge-main`,
-/// for a section the merge left stale. Each rewritten entry keeps the note this branch had
-/// written on it before the merge and adds `text`, what the merge changed in the section's
-/// inputs (docs/DOCS.md#notes). It refuses when the file of a rewritten input changed after
+/// for a section the merge left stale. An input whose hash equals the merged side's entry
+/// gets that entry unchanged (#596). Each other rewritten entry keeps the note this branch
+/// had written on it before the merge and adds `text`, what the merge changed in the
+/// section's inputs (docs/DOCS.md#notes). It refuses when the file of a rewritten input changed after
 /// the merge: the branch's earlier note doesn't cover that edit, so it needs `--note`.
 fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
     let text = check_stamp(by, text)?;
@@ -287,11 +288,16 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
          first, or verify with --note)",
     )?;
     let branch = merge::branch_entries(root, &point)?;
+    let merged = merge::merged_ledger(root, &point)?;
     stamp_section(root, target, &|doc, key, old, inputs| {
-        let stamp = ledger::restamp_merge(old, inputs, branch.get(key), by, text);
+        let theirs = merged.sections.get(key);
+        let stamp = ledger::restamp_merge(old, inputs, branch.get(key), theirs, by, text);
+        // An entry taken as it is from the merged side carries no note of this branch's, so
+        // a later edit to its file doesn't refuse it.
         let rewritten: Vec<(&String, String)> = stamp
             .iter()
             .filter(|(k, e)| old.and_then(|o| o.get(*k)) != Some(*e))
+            .filter(|(k, e)| theirs.and_then(|t| t.get(*k)) != Some(*e))
             .map(|(k, _)| (k, merge::input_path(doc, k)))
             .collect();
         let mut paths: Vec<String> = rewritten.iter().map(|(_, p)| p.clone()).collect();
@@ -1388,6 +1394,74 @@ mod tests {
         verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
         assert_eq!(note("file:src/a.rs"), joined(second));
         assert!(work.diags("is stale").is_empty());
+    }
+
+    /// #596: on an input whose hash after the merge equals the merged side's entry,
+    /// `docs verify --merge` keeps that entry byte for byte, even when the branch had
+    /// written its own entry there before the merge (#539 N3, #323). The branch's note is
+    /// still kept and extended on the input the branch changed.
+    #[test]
+    fn verify_merge_keeps_the_merged_entry_on_inputs_the_branch_leaves_alone() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([
+            ("S.md", s),
+            ("src/a.rs", "a1\n\n\n\n\na5\n"),
+            ("src/b.rs", "b1\n\n\n\n\nb5\n"),
+        ]);
+        let (origin, work) = origin_and_clone("verify-merge-theirs", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+
+        // The branch changes a.rs, and makes an edit to b.rs that the wave also makes (as
+        // when part of the branch's work lands in the wave through another PR).
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        work.write("src/b.rs", "b1 new\n\n\n\n\nb5\n");
+        let pr = "the branch's a1 and b1 edits, which the section text still describes";
+        verify(&work.0, "S#a", "agent:work", pr).expect("S verifies on work");
+        commit_all(&work, "work: a1 and b1");
+        // The wave changes a5, and b.rs to a version that contains the branch's edit, and
+        // restamps both with its own note.
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 wave\n");
+        origin.write("src/b.rs", "b1 new\n\n\n\n\nb5 wave\n");
+        let wave = "the wave's a5 and b edits, which the section text still describes";
+        verify(&origin.0, "S#a", "agent:wave-owner", wave).expect("S verifies on the wave");
+        commit_all(&origin, "wave: a5 and b");
+        let theirs = ledger::Ledger::read(&origin.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        merge::merge_main(&work.0, "main").expect("merges");
+        let merged_b =
+            std::fs::read_to_string(work.0.join("src/b.rs")).expect("invariant: written");
+        assert_eq!(merged_b, "b1 new\n\n\n\n\nb5 wave\n", "b.rs is the wave's");
+
+        let first = "the wave's a5 edit is outside what the text says about a.rs";
+        verify_merge(&work.0, "S#a", "agent:work", first).expect("S verifies after the merge");
+        let entries = ledger::Ledger::read(&work.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        assert_eq!(entries["file:src/b.rs"], theirs["file:src/b.rs"]);
+        let a = &entries["file:src/a.rs"];
+        assert_eq!(
+            a.note.as_deref(),
+            Some(format!("{pr}{}{first}", ledger::MERGE_MARK).as_str())
+        );
+        assert_eq!(a.by.as_deref(), Some("agent:work"));
+        assert!(work.diags("is stale").is_empty());
+        // The ledger's text on b.rs is the wave's, byte for byte.
+        let text = |root: &Path| {
+            let t = std::fs::read_to_string(root.join(ledger::PATH)).expect("invariant: written");
+            t.lines()
+                .skip_while(|l| !l.contains("file:src/b.rs"))
+                .take_while(|l| !l.trim().is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(text(&work.0), text(&origin.0));
+        assert!(!text(&work.0).is_empty());
     }
 
     /// #525: `docs verify --merge` refuses a section when the file of an input it would
