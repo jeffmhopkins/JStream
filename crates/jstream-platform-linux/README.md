@@ -50,11 +50,16 @@ It has:
   into the frames, `persist_mode` 2 with the last restore token), `Start` (the picker;
   `start` blocks while it is open, up to five minutes) and `OpenPipeWireRemote`. Each
   request's `Response` is matched on the request path computed before the call, or on
-  the handle the call returns. A cancelled picker is an `Os` error with code 1. The
+  the handle the call returns. Only the portal is listened to: its unique bus name
+  (from `GetNameOwner`) must be the sender of every reply and signal the flow takes,
+  and the match rules name it, so another process on the session bus can't forge a
+  response or end the session. A cancelled picker is an `Os` error with code 1. The
   flow is a state machine without I/O (`portal/handshake.rs`), tested message by
   message. The new restore token `Start` returns replaces the spent one, in memory and,
-  with `PortalCapture::with_token_dir`, in a file only the user can read, so the next
-  start skips the picker. A thread keeps the portal's connection open for the session's
+  with `PortalCapture::with_token_dir`, in a file only the user can read: written 0600
+  to a fresh file and renamed into place, and read only from a regular file the user
+  owns that no one else can read or write. So the next start skips the picker. A
+  thread keeps the portal's connection open for the session's
   life and reports the portal closing it (sharing stopped, grant revoked) as
   `DeviceLost`.
 - **The D-Bus client** (`dbus.rs`) is the crate's own: the wire format in both byte

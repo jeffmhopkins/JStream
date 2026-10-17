@@ -142,8 +142,10 @@ mod backend {
     };
 
     use super::PortalPick;
-    use super::handshake::{self, Granted, Handshake, Next, PortalInfo, QUICK, REQUEST, SESSION};
-    use crate::dbus::bus::Bus;
+    use super::handshake::{
+        self, DESTINATION, Granted, Handshake, Next, PortalInfo, QUICK, REQUEST, SESSION,
+    };
+    use crate::dbus::bus::{BUS, Bus};
     use crate::dbus::{add_match, match_rule};
     use crate::pipewire::stream::{Shared, VideoStream};
     use crate::{PipeWire, Session, SessionKind};
@@ -184,13 +186,15 @@ mod backend {
             {
                 return Some(t.clone());
             }
-            let text = fs::read_to_string(self.file(pick)?).ok()?;
+            let text = read_private(&self.file(pick)?)?;
             let token = text.trim();
             plausible(token).then(|| token.to_owned())
         }
 
         /// Keeps `token`, replacing the spent one. Writing the file is best effort: a
-        /// failure costs only a prompt next time.
+        /// failure costs only a prompt next time. The token goes to a fresh file created
+        /// 0600, renamed over the old one, so the file is only ever the user's whatever
+        /// mode or owner an old one had, and a reader never sees half a token.
         fn put(&self, pick: PortalPick, token: &str) {
             if !plausible(token) {
                 return;
@@ -201,16 +205,49 @@ mod backend {
             let (Some(dir), Some(file)) = (&self.dir, self.file(pick)) else {
                 return;
             };
-            let _ = fs::create_dir_all(dir).and_then(|()| {
+            let mut tmp = file.clone().into_os_string();
+            tmp.push(".tmp");
+            let tmp = PathBuf::from(tmp);
+            let written = fs::create_dir_all(dir).and_then(|()| {
+                match fs::remove_file(&tmp) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e),
+                }
                 let mut f = fs::OpenOptions::new()
                     .write(true)
-                    .create(true)
-                    .truncate(true)
+                    .create_new(true)
                     .mode(0o600)
-                    .open(file)?;
-                f.write_all(token.as_bytes())
+                    .open(&tmp)?;
+                f.write_all(token.as_bytes())?;
+                fs::rename(&tmp, &file)
             });
+            if written.is_err() {
+                let _ = fs::remove_file(&tmp);
+            }
         }
+    }
+
+    /// The file at `path`, only when it is a regular file (not a symlink) that this
+    /// user owns and no one else can read or write. A token file anyone else could
+    /// read has leaked, and one anyone else could write may be planted.
+    fn read_private(path: &std::path::Path) -> Option<String> {
+        use std::io::Read;
+        use std::os::unix::fs::MetadataExt;
+
+        let mut f = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)
+            .ok()?;
+        let meta = f.metadata().ok()?;
+        let me = fs::metadata("/proc/self").ok()?.uid();
+        if !meta.is_file() || meta.uid() != me || meta.mode() & 0o077 != 0 {
+            return None;
+        }
+        let mut text = String::new();
+        f.read_to_string(&mut text).ok()?;
+        Some(text)
     }
 
     /// Display and window capture through the ScreenCast portal (ADR-0060 §3).
@@ -270,6 +307,8 @@ mod backend {
 
     /// Runs the handshake to the end, returning the grant and the PipeWire socket.
     fn run(bus: &mut Bus, h: &mut Handshake) -> Result<(Granted, OwnedFd), PlatformError> {
+        let portal = h.portal().to_owned();
+        let from = Some(portal.as_str());
         loop {
             match h.next()? {
                 Next::Request {
@@ -277,7 +316,7 @@ mod backend {
                     what,
                     timeout,
                 } => {
-                    let reply = bus.call(call, what, QUICK)?;
+                    let reply = bus.call(call, from, what, QUICK)?;
                     h.on_handle(&reply.msg);
                     let deadline = Instant::now() + timeout;
                     let response = bus
@@ -288,7 +327,7 @@ mod backend {
                     h.on_response(&response)?;
                 }
                 Next::OpenRemote { call, what } => {
-                    let reply = bus.call(call, what, QUICK)?;
+                    let reply = bus.call(call, from, what, QUICK)?;
                     let granted = h.granted(&reply.msg)?;
                     let fd = reply.fds.into_iter().next().ok_or_else(|| {
                         no_answer(what, "the PipeWire file descriptor didn't arrive")
@@ -348,19 +387,47 @@ mod backend {
             // A missing PipeWire fails before the user is shown a picker.
             let pw = PipeWire::load()?;
             let mut bus = Bus::session()?;
-            let info = bus.call(
-                PortalInfo::query(),
-                "org.freedesktop.DBus.Properties.GetAll",
+            // The first call starts the portal if it isn't running; then its owner is
+            // known, and only that connection's replies and signals count, so another
+            // process on the session bus can't answer for it.
+            let get_all = "org.freedesktop.DBus.Properties.GetAll";
+            let info = bus.call(PortalInfo::query(), None, get_all, QUICK)?;
+            let owner = bus.call(
+                handshake::portal_owner_query(),
+                Some(BUS),
+                "org.freedesktop.DBus.GetNameOwner",
                 QUICK,
             )?;
+            let portal = owner
+                .msg
+                .body
+                .first()
+                .and_then(crate::dbus::Value::as_str)
+                .filter(|name| name.starts_with(':'))
+                .map(str::to_owned)
+                .ok_or_else(|| no_answer(get_all, "the portal's bus name has no owner"))?;
+            if info.msg.sender.as_deref() != Some(portal.as_str()) {
+                return Err(no_answer(get_all, "the reply didn't come from the portal"));
+            }
             let info = PortalInfo::from_reply(&info.msg.body)?;
             for rule in [
-                match_rule(REQUEST, "Response"),
-                match_rule(SESSION, "Closed"),
+                match_rule(DESTINATION, REQUEST, "Response"),
+                match_rule(DESTINATION, SESSION, "Closed"),
             ] {
-                bus.call(add_match(&rule), "org.freedesktop.DBus.AddMatch", QUICK)?;
+                bus.call(
+                    add_match(&rule),
+                    Some(BUS),
+                    "org.freedesktop.DBus.AddMatch",
+                    QUICK,
+                )?;
             }
-            let mut h = Handshake::new(pick, info, bus.unique_name(), self.tokens.get(pick))?;
+            let mut h = Handshake::new(
+                pick,
+                info,
+                bus.unique_name(),
+                &portal,
+                self.tokens.get(pick),
+            )?;
             let (granted, fd) = match run(&mut bus, &mut h) {
                 Ok(done) => done,
                 Err(e) => {
@@ -380,7 +447,7 @@ mod backend {
                     return Err(e);
                 }
             };
-            let watcher = Watcher::spawn(bus, granted.session, Arc::clone(&shared))?;
+            let watcher = Watcher::spawn(bus, granted.session, portal, Arc::clone(&shared))?;
             Ok(Box::new(PortalStream {
                 video: Some(video),
                 watcher: Some(watcher),
@@ -404,6 +471,7 @@ mod backend {
         fn spawn(
             mut bus: Bus,
             session: String,
+            portal: String,
             shared: Arc<Shared>,
         ) -> Result<Self, PlatformError> {
             let stop = Arc::new(AtomicBool::new(false));
@@ -413,9 +481,9 @@ mod backend {
                 .spawn(move || {
                     while !flag.load(Ordering::Acquire) {
                         let deadline = Instant::now() + Duration::from_millis(200);
-                        match bus
-                            .wait_signal(deadline, |m| handshake::is_session_closed(m, &session))
-                        {
+                        match bus.wait_signal(deadline, |m| {
+                            handshake::is_session_closed(m, &session, &portal)
+                        }) {
                             Ok(None) => {}
                             Ok(Some(_)) => {
                                 shared.lose("screen sharing was stopped in the desktop");
@@ -524,6 +592,51 @@ mod backend {
             // A replacement token wins, in memory and on disk.
             again.put(PortalPick::Display, "next");
             assert_eq!(again.get(PortalPick::Display).as_deref(), Some("next"));
+
+            // A token file others can read is refused, and the next write makes it
+            // private again, though it already existed.
+            let file = dir.join("screencast-window.token");
+            std::fs::write(&file, "leaked").expect("written");
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+            let fresh = RestoreTokens {
+                dir: Some(dir.clone()),
+                ..RestoreTokens::default()
+            };
+            assert_eq!(
+                fresh.get(PortalPick::Window),
+                None,
+                "a readable file is refused"
+            );
+            fresh.put(PortalPick::Window, "private");
+            let mode = std::fs::metadata(&file)
+                .expect("there")
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600, "an existing file is made private");
+            let reread = RestoreTokens {
+                dir: Some(dir.clone()),
+                ..RestoreTokens::default()
+            };
+            assert_eq!(reread.get(PortalPick::Window).as_deref(), Some("private"));
+            assert!(!dir.join("screencast-window.token.tmp").exists());
+
+            // A symlink is never followed.
+            let target = dir.join("elsewhere");
+            std::fs::write(&target, "planted").expect("written");
+            std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))
+                .expect("chmod");
+            let link = dir.join("screencast-display.token");
+            std::fs::remove_file(&link).expect("removed");
+            std::os::unix::fs::symlink(&target, &link).expect("linked");
+            let linked = RestoreTokens {
+                dir: Some(dir.clone()),
+                ..RestoreTokens::default()
+            };
+            assert_eq!(
+                linked.get(PortalPick::Display),
+                None,
+                "a symlink is refused"
+            );
             let _ = std::fs::remove_dir_all(&dir);
 
             let memory = RestoreTokens::default();
