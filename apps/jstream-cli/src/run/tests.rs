@@ -348,7 +348,7 @@ fn state_get_golden() {
             item("cam_2"),
             item("cam_1"),
             r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"video_mixes":[],"#,
-            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[]}}}"#,
+            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[],"transitions":{"presets":[{"preset_id":"cut","name":"Cut","kind":"cut","duration_ms":300,"easing":"ease_in_out"}],"default":"cut"}}}}"#,
         ))
     );
     assert_eq!(
@@ -870,7 +870,7 @@ fn program_scene_golden() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "studio", "get"]),
-        ok("program: main\n")
+        ok("program: main\npreview: main\n")
     );
     let control = session(&engine);
     let events = control.events();
@@ -882,7 +882,7 @@ fn program_scene_golden() {
         run_on(&engine, &["--json", "--mock", "studio", "get"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"studio.get","#,
-            r#""program_scene":"brb"}}}"#,
+            r#""program_scene":"brb","preview_scene":"main"}}}"#,
             "\n"
         ))
     );
@@ -891,11 +891,11 @@ fn program_scene_golden() {
     stream_events(events, Some(1), false, &mut out).expect("one event");
     assert_eq!(
         String::from_utf8_lossy(&out),
-        "studio.changed program brb by mock_4 (req_1)\n"
+        "studio.changed program brb preview main transition cut 0ms by mock_4 (req_1)\n"
     );
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "studio", "get"]),
-        ok("program: none (no scenes)\n")
+        ok("program: none (no scenes)\npreview: none (no scenes)\n")
     );
 }
 

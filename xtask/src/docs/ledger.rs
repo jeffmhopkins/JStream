@@ -194,6 +194,77 @@ pub(crate) fn restamp(
         .collect()
 }
 
+/// Where a note written by `docs verify --merge` turns from this branch's note to what the
+/// merge changed. A later merge's `--merge` drops everything from here on before adding its
+/// own: what an earlier merge brought in is part of the base by then, not this branch's
+/// change.
+pub(crate) const MERGE_MARK: &str = " | merge: ";
+
+/// The note `docs verify --merge` writes on an entry: the branch's `earlier` note, without
+/// any earlier merge's addendum, then `merge`, what this merge changed in the input.
+pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
+    let own = earlier
+        .map(|n| n.split_once(MERGE_MARK).map_or(n, |(own, _)| own).trim())
+        .filter(|n| !n.is_empty());
+    match own {
+        Some(own) => format!("{own}{MERGE_MARK}{merge}"),
+        None => format!("merge: {merge}"),
+    }
+}
+
+/// The stamp `docs verify --merge` writes after `docs merge-main`. `branch` is the entries
+/// this branch had written itself before the merge. Each entry that `restamp` would rewrite,
+/// and each the branch had written whose input the merge has since changed (as when a
+/// re-verify after the merge replaced the branch's note), gets [`merge_note`] of the branch's
+/// note on it. The rest are kept, and removed inputs dropped, as `restamp` does.
+pub(crate) fn restamp_merge(
+    old: Option<&Stamp>,
+    inputs: &BTreeMap<String, String>,
+    branch: Option<&Stamp>,
+    by: &str,
+    merge: &str,
+) -> Stamp {
+    inputs
+        .iter()
+        .map(|(k, h)| {
+            let own = branch.and_then(|b| b.get(k));
+            let e = match old.and_then(|o| o.get(k)) {
+                Some(e) if &e.hash == h && own.is_none_or(|o| &o.hash == h) => e.clone(),
+                _ => Entry {
+                    hash: h.clone(),
+                    by: Some(by.to_owned()),
+                    note: Some(merge_note(own.and_then(|o| o.note.as_deref()), merge)),
+                },
+            };
+            (k.clone(), e)
+        })
+        .collect()
+}
+
+/// The stamp `docs verify --renote` writes on a fresh section: the entries this branch
+/// wrote (those that differ from `base`, the section's stamp where the branch left its
+/// upstream) get this `by` and `note`, keeping their hashes; the rest are kept as they were.
+/// `None` when the branch wrote none.
+pub(crate) fn renote(old: &Stamp, base: Option<&Stamp>, by: &str, note: &str) -> Option<Stamp> {
+    let mut any = false;
+    let stamp = old
+        .iter()
+        .map(|(k, e)| {
+            if base.and_then(|b| b.get(k)) == Some(e) {
+                return (k.clone(), e.clone());
+            }
+            any = true;
+            let e = Entry {
+                hash: e.hash.clone(),
+                by: Some(by.to_owned()),
+                note: Some(note.to_owned()),
+            };
+            (k.clone(), e)
+        })
+        .collect();
+    any.then_some(stamp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +544,44 @@ mod tests {
             }
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merge_notes_keep_the_branch_part() {
+        let m = MERGE_MARK;
+        assert_eq!(merge_note(Some("pr part"), "now"), format!("pr part{m}now"));
+        assert_eq!(
+            merge_note(Some(&format!("pr part{m}earlier")), "now"),
+            format!("pr part{m}now")
+        );
+        assert_eq!(merge_note(None, "now"), "merge: now");
+        assert_eq!(
+            merge_note(Some(&format!("{m}earlier")), "now"),
+            "merge: now"
+        );
+    }
+
+    #[test]
+    fn renote_rewrites_only_the_branch_entries() {
+        let e = |h: &str, n: &str| Entry {
+            hash: h.to_owned(),
+            by: Some("agent:x".to_owned()),
+            note: Some(n.to_owned()),
+        };
+        let base = Stamp::from([("body".to_owned(), e("b3:1", "main"))]);
+        let old = Stamp::from([
+            ("body".to_owned(), e("b3:1", "main")),
+            ("file:a".to_owned(), e("b3:2", "thin")),
+        ]);
+        let new = renote(&old, Some(&base), "agent:y", "better").expect("branch entry");
+        assert_eq!(new["body"], old["body"]);
+        let a = &new["file:a"];
+        assert_eq!(
+            (a.hash.as_str(), a.by.as_deref(), a.note.as_deref()),
+            ("b3:2", Some("agent:y"), Some("better"))
+        );
+        assert!(renote(&base, Some(&base), "agent:y", "better").is_none());
+        // With no stamp at the base, every entry is the branch's.
+        assert_eq!(renote(&old, None, "agent:y", "n").expect("all").len(), 2);
     }
 }

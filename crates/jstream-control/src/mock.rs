@@ -7,12 +7,15 @@
 //! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
-//! stream-key actions, `scene.switch` and the program scene it sets (`studio.get`),
+//! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
+//! scenes they set (`studio.get`),
 //! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`]),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
-//! session. It does no persistence or real output work.
+//! session. It does no persistence or real output work, and knows no transition preset
+//! but the initial `cut` (ADR-0029): every switch cuts, and the `transition.*` edits are
+//! not mocked.
 //!
 //! The mock has no render thread, so a gesture's values are released the moment it ends,
 //! and it sends one `live.changed` per `live.set` instead of coalescing them: the engine
@@ -32,12 +35,13 @@ use jstream_protocol::{
     Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
     CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
     EncoderProfileInfo, EntityKind, Event, Finite32, GeometryError, GestureId, GestureInfo, Hello,
-    HistoryCall, HistoryDirection, HotkeyBinding, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
-    ItemTransform, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo,
-    OutputKind, OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo,
-    SourceKind, VideoMix, VideoMixId, VideoMixInfo, Welcome, is_live_adjustable,
+    HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET, IdempotencyKey, ItemGeometry,
+    ItemId, ItemInfo, ItemTransform, ItemTransition, LiveOutcome, MAX_GESTURES_PER_CLIENT,
+    MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PixelSize,
+    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
+    SourceAudio, SourceId, SourceInfo, SourceKind, TransitionPresetId, TransitionStarted,
+    TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo, Welcome, is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -269,6 +273,8 @@ struct State {
     /// rules (ADR-0030): the first scene created goes on program, and a deleted program
     /// scene gives way to the first scene left.
     program: Option<SceneId>,
+    /// The scene on preview, which follows the same rules.
+    preview: Option<SceneId>,
     /// Every client's open gestures, with the value of each parameter each holds.
     gestures: BTreeMap<(ClientId, GestureId), BTreeMap<Param, Edit>>,
     /// Which gesture holds each parameter: at most one.
@@ -753,24 +759,34 @@ impl State {
             request_id: Some(request_id.clone()),
             cause,
         });
-        // Edits that deleted the program scene, or created the first scene, move
-        // program; that event follows their `state.changed` (ADR-0030).
-        let kept = self
-            .program
-            .as_ref()
-            .is_some_and(|id| self.collection.scene_index(id).is_some());
-        if !kept {
-            let first = self.collection.scenes.first().map(|scene| scene.id.clone());
-            if first != self.program {
-                self.program = first;
-                self.emit_program(client_id, request_id);
+        // Edits that deleted the program or preview scene, or created the first scene,
+        // move them; that event follows their `state.changed` (ADR-0030).
+        let first = self.collection.scenes.first().map(|scene| scene.id.clone());
+        let mut moved = false;
+        for slot in [&mut self.program, &mut self.preview] {
+            let kept = slot
+                .as_ref()
+                .is_some_and(|id| self.collection.scene_index(id).is_some());
+            if !kept && *slot != first {
+                *slot = first.clone();
+                moved = true;
             }
+        }
+        if moved {
+            self.emit_studio(client_id, request_id, None);
         }
     }
 
-    fn emit_program(&mut self, client_id: &ClientId, request_id: &RequestId) {
+    fn emit_studio(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        transition: Option<TransitionStarted>,
+    ) {
         self.emit(Event::StudioChanged {
             program_scene: self.program.clone(),
+            preview_scene: self.preview.clone(),
+            transition,
             client_id: client_id.clone(),
             request_id: Some(request_id.clone()),
         });
@@ -808,11 +824,31 @@ impl State {
         action: Action,
     ) -> Result<CallResult, ProtocolError> {
         let (output_id, start) = match action {
-            Action::SceneSwitch { scene_id } => {
+            Action::SceneSwitch {
+                scene_id,
+                preset_id,
+            } => {
                 self.collection.existing_scene(&scene_id)?;
+                // The only preset the mock knows is the initial `cut`.
+                let initial = TransitionPresetId::new(INITIAL_PRESET);
+                if let Some(id) = preset_id.filter(|id| *id != initial) {
+                    return Err(not_found(EntityKind::Transition, id.as_str()));
+                }
                 if self.program.as_ref() != Some(&scene_id) {
                     self.program = Some(scene_id);
-                    self.emit_program(client_id, request_id);
+                    let started = TransitionStarted {
+                        preset_id: initial,
+                        duration_ms: 0,
+                    };
+                    self.emit_studio(client_id, request_id, Some(started));
+                }
+                return Ok(CallResult::action());
+            }
+            Action::StudioSetPreview { scene_id } => {
+                self.collection.existing_scene(&scene_id)?;
+                if self.preview.as_ref() != Some(&scene_id) {
+                    self.preview = Some(scene_id);
+                    self.emit_studio(client_id, request_id, None);
                 }
                 return Ok(CallResult::action());
             }
@@ -932,6 +968,8 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         items: self.collection.item_infos(scene),
+                        transition_in: None,
+                        transition_out: None,
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
@@ -948,6 +986,7 @@ impl State {
                     .iter()
                     .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
                     .collect(),
+                transitions: TransitionsInfo::default(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
@@ -955,6 +994,7 @@ impl State {
             },
             Query::StudioGet => QueryResult::StudioGet {
                 program_scene: self.program.clone(),
+                preview_scene: self.preview.clone(),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
@@ -1805,6 +1845,8 @@ impl Collection {
                         EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
                         EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
                         EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
+                        // The mock has only the `cut` preset every collection starts with.
+                        EntityKind::Transition => id == INITIAL_PRESET,
                         _ => false,
                     };
                     if !exists {
@@ -2031,6 +2073,7 @@ impl Collection {
                     visible: item.visible,
                     opacity: item.opacity,
                     blend: item.blend,
+                    transition: ItemTransition::default(),
                 })
             })
             .collect()
@@ -2577,7 +2620,8 @@ mod tests {
         HistoryDirection, HistoryOp, IdempotencyKey, ItemId, ItemTransform, MixInput,
         MixResolution, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION,
         ProtocolError, ProtocolVersion, Query, QueryResult, Rev, RtmpTarget, SceneId, SceneRole,
-        SecretString, Settings, SourceId, SourceKind, VideoMix, VideoMixId, parity,
+        SecretString, Settings, SourceId, SourceKind, TransitionsInfo, VideoMix, VideoMixId,
+        parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -2979,6 +3023,7 @@ mod tests {
                 buses,
                 sends,
                 hotkeys,
+                transitions,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -2992,6 +3037,7 @@ mod tests {
                 buses,
                 sends,
                 hotkeys,
+                transitions,
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -3201,6 +3247,7 @@ mod tests {
                 sends: vec![],
                 master: Default::default(),
                 hotkeys: vec![],
+                transitions: TransitionsInfo::default(),
             }
         );
         drain(&mut events);
@@ -4237,6 +4284,8 @@ mod tests {
             },
             Event::StudioChanged {
                 program_scene: Some(SceneId::new("a")),
+                preview_scene: Some(SceneId::new("a")),
+                transition: None,
                 client_id: ClientId::new("mock_2"),
                 request_id: Some(response.id),
             },

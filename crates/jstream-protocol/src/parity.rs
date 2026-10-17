@@ -9,6 +9,7 @@
 //!
 //! Docs: crates/jstream-protocol/README.md#purpose
 
+use crate::ItemTransition;
 use crate::{
     Action, AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Chord, Crop, Edit, EncoderProfile,
     EncoderProfileId, EncoderProfileInfo, EntityKind, FilterChain, FilterChains, FilterId,
@@ -16,7 +17,8 @@ use crate::{
     ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, MasterInfo, OutputId,
     OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query,
     QueryResult, RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
-    SceneSummary, Size, SourceId, SourceInfo, SourceKind, Vec2, VideoCodec, VideoEncoding,
+    SceneSummary, Size, SourceId, SourceInfo, SourceKind, TransitionsInfo, Vec2, VideoCodec,
+    VideoEncoding,
 };
 use crate::{AudioFollow, BusId, BusInfo, MAX_BUSES, SendInfo, SourceAudio};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
@@ -482,12 +484,16 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         scene_id: scene("b"),
                         name: "B".into(),
                         role: SceneRole::Group,
+                        transition_in: None,
+                        transition_out: None,
                         items: items_of_b(),
                     },
                     SceneInfo {
                         scene_id: scene("a"),
                         name: "A".into(),
                         role: SceneRole::Scene,
+                        transition_in: None,
+                        transition_out: None,
                         items: items_of_a(),
                     },
                 ],
@@ -501,6 +507,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     }]),
                 },
                 encoders: encoders(),
+                transitions: TransitionsInfo::default(),
                 video_mixes: video_mixes(),
                 buses: buses(),
                 sends: sends(),
@@ -1387,6 +1394,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 chord: Chord::new("F2"),
                 action: Action::SceneSwitch {
                     scene_id: SceneId::new("ghost"),
+                    preset_id: None,
                 },
             }),
             ProtocolError::NotFound {
@@ -1645,6 +1653,7 @@ fn filter_add(source: &str, id: &str, chain: FilterChain, index: Option<u32>) ->
 fn switch_to_a() -> Action {
     Action::SceneSwitch {
         scene_id: SceneId::new("a"),
+        preset_id: None,
     }
 }
 
@@ -2005,6 +2014,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         visible: true,
         opacity: Finite32::ONE,
         blend: BlendMode::Normal,
+        transition: ItemTransition::default(),
     };
     vec![
         ItemInfo {
@@ -2017,6 +2027,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             visible: false,
             opacity: QUARTER,
             blend: BlendMode::Normal,
+            transition: ItemTransition::default(),
         },
         plain("i1", "cam_copy"),
         plain("i2", "b_src"),
@@ -2035,5 +2046,6 @@ fn items_of_b() -> Vec<ItemInfo> {
         visible: true,
         opacity: HALF,
         blend: BlendMode::Normal,
+        transition: ItemTransition::default(),
     }]
 }

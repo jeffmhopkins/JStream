@@ -85,7 +85,8 @@ pub(crate) const FRAME_NUM: u32 = 1;
 pub(crate) const FRAME_DEN: u32 = 30;
 const SAMPLE_RATE: u32 = 48_000;
 /// How long `output.start` waits for the render thread to open the compositor, on the
-/// platform's GPU context or, without one, on the software adapter, unless the engine
+/// platform's GPU context or, without one, hardware first with the software adapter as
+/// the fallback, unless the engine
 /// was given another bound. It only keeps a stuck adapter from blocking the call
 /// forever; a slower open is not a pipeline fault.
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -106,15 +107,17 @@ const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 /// render snapshot's [`Shot`] at the frame's size, with the live values in [`LiveParams`]
 /// applied and `display` and `window` sources showing their captures (or, with no scene
 /// to draw, the primary display's filling the canvas fitted to the frame, or black when
-/// there is none yet), read back as RGBA8 into its `out` (replacing its contents).
-/// Returns the GPU images its cache let go of, for the collector. Created on the render
-/// thread and kept there, so it need not be `Send`.
+/// there is none yet), read back as RGBA8 into its `out` (replacing its contents), as it
+/// is at the tick's time on the media clock (a running transition samples it). Returns
+/// the GPU images its cache let go of, for the collector. Created on the render thread
+/// and kept there, so it need not be `Send`.
 pub(crate) type DrawFn = Box<
     dyn FnMut(
         &Shot,
         &LiveParams,
         &dyn Captures,
         &mut [MixFrame],
+        MediaTime,
     ) -> Result<Option<Reclaimed>, String>,
 >;
 
@@ -139,7 +142,7 @@ pub(crate) struct MixFrame {
 
 /// Opens the render thread's [`DrawFn`], on that thread, on the platform's GPU context
 /// when the pipeline has one. The engine's opens the wgpu compositor on that context,
-/// or on the software adapter without one ([`gpu_draw`]). Tests inject [`cpu_draw`]
+/// or without one on a hardware adapter first ([`gpu_draw`]). Tests inject [`cpu_draw`]
 /// (or a variant) so the pipeline runs without an adapter.
 pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, String> + Send + Sync>;
 
@@ -152,7 +155,11 @@ pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, Str
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|_: Option<&GpuContext>| {
         let draw: DrawFn = Box::new(
-            |shot: &Shot, _: &LiveParams, captures: &dyn Captures, frames: &mut [MixFrame]| {
+            |shot: &Shot,
+             _: &LiveParams,
+             captures: &dyn Captures,
+             frames: &mut [MixFrame],
+             _: MediaTime| {
                 let first = shot
                     .captures()
                     .first()
@@ -1021,7 +1028,9 @@ pub(crate) fn parts_from(
 }
 
 /// The wgpu compositor, reading every frame back to the CPU: on the platform's GPU
-/// context when there is one, else on the software adapter. Its [`ResourceCache`] keeps
+/// context when there is one, else on a hardware adapter, or the software one when there
+/// is none (`OpenOptions::hardware`; WARP missed the 1/30 s budget at 720p, about 10 fps,
+/// #433). Its [`ResourceCache`] keeps
 /// the uploads, the imported capture textures and the nested-scene layers from tick to
 /// tick.
 pub(crate) fn gpu_draw() -> OpenDraw {
@@ -1029,7 +1038,7 @@ pub(crate) fn gpu_draw() -> OpenDraw {
         let mut compositor = match context {
             Some(context) => Compositor::on_context(context),
             None => {
-                Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?
+                Compositor::open(OpenOptions::hardware()).map_err(|err| render_open_error(&err))?
             }
         };
         tracing::info!(
@@ -1038,7 +1047,7 @@ pub(crate) fn gpu_draw() -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
+        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
             // this tick claims its layers without drawing, so they aren't retired and
@@ -1058,7 +1067,7 @@ pub(crate) fn gpu_draw() -> OpenDraw {
                 snapshot::compose(
                     &mut compositor,
                     &mut cache,
-                    shot,
+                    (shot, at),
                     frame.mix.as_ref(),
                     live,
                     captures,
@@ -1599,9 +1608,9 @@ fn video_config(feed: &Feed, profile: &EncoderProfile) -> Result<VideoEncoderCon
         _ => return Err("the encoder profile's rate control is not one this engine knows".into()),
     };
     let hardware = match video.hardware {
-        ProfileHardware::Prefer => HardwarePreference::Prefer,
+        ProfileHardware::Avoid => HardwarePreference::Avoid,
         ProfileHardware::Require => HardwarePreference::Require,
-        _ => HardwarePreference::Avoid,
+        _ => HardwarePreference::Prefer,
     };
     Ok(VideoEncoderConfig {
         codec: video_codec(profile)?,
@@ -1815,17 +1824,18 @@ impl Frames {
         due
     }
 
-    /// Composites the due mixes of `shot`, with the live values `live` applied, and, on
-    /// success, makes each the shown frame. Returns the GPU images the compositor let go
-    /// of.
+    /// Composites the due mixes of `shot` as it is at `at`, with the live values `live`
+    /// applied, and, on success, makes each the shown frame. Returns the GPU images the
+    /// compositor let go of.
     fn draw(
         &mut self,
         draw: &mut DrawFn,
         shot: &Shot,
         live: &LiveParams,
         captures: &RenderCaptures,
+        at: MediaTime,
     ) -> Result<Option<Reclaimed>, String> {
-        let freed = draw(shot, live, captures, &mut self.mixes)?;
+        let freed = draw(shot, live, captures, &mut self.mixes, at)?;
         for (frame, shown) in self.mixes.iter_mut().zip(&mut self.shown) {
             if frame.due {
                 std::mem::swap(&mut frame.out, shown);
@@ -1955,7 +1965,7 @@ fn render_loop(job: RenderJob) {
                 // The shot's captures cover every mix's passes, so a display or window
                 // only a video mix shows is started too.
                 captures.tick(shot.captures(), now);
-                frames.draw(&mut draw, shot, live, &captures)
+                frames.draw(&mut draw, shot, live, &captures, due)
             }));
             match tick {
                 Ok(Ok(freed)) => {
@@ -2553,7 +2563,7 @@ mod tests {
         let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.rate_control, RateControl::Cbr { kbps: 2500 });
         assert_eq!(config.keyframe_interval, 60);
-        assert_eq!(config.hardware, HardwarePreference::Avoid);
+        assert_eq!(config.hardware, HardwarePreference::Prefer);
 
         let mut profile = EncoderProfile::DEFAULT;
         profile.video.rate_control = ProfileRate::Vbr {
@@ -2576,6 +2586,9 @@ mod tests {
         profile.video.hardware = ProfileHardware::Prefer;
         let config = video_config(size, &profile).expect("prefer");
         assert_eq!(config.hardware, HardwarePreference::Prefer);
+        profile.video.hardware = ProfileHardware::Avoid;
+        let config = video_config(size, &profile).expect("avoid");
+        assert_eq!(config.hardware, HardwarePreference::Avoid);
         profile.video.rate_control = ProfileRate::Unknown;
         assert!(video_config(size, &profile).is_err());
 

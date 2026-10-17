@@ -5,6 +5,7 @@ use crate::command::Edit;
 use crate::history::HistoryDirection;
 use crate::id::{ClientId, GestureId, OutputId, RequestId, Rev, SceneId};
 use crate::live::LiveOutcome;
+use crate::transition::TransitionStarted;
 use crate::youtube::{HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -41,16 +42,24 @@ pub enum Event {
         /// Its new state.
         state: OutputState,
     },
-    /// The scene on program changed: after a `scene.switch`, or after a batch, undo or
-    /// redo deleted the program scene (program moves to the first remaining scene) or
-    /// created the collection's first scene (it goes on program). Studio state is runtime state
-    /// (ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits
-    /// comes first.
+    /// The scene on program or on preview changed: after a `scene.switch` or a
+    /// `studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives
+    /// way to the first remaining scene) or created the collection's first scene (it goes
+    /// on program and on preview). Studio state is runtime state (ADR-0030), so the event
+    /// carries no `rev`; a `state.changed` for the same edits comes first.
     #[serde(rename = "studio.changed")]
     StudioChanged {
         /// The scene now on program. Omitted when the collection has no scene left.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
+        /// The scene now on preview. Omitted when the collection has no scene left, and
+        /// by a server older than 0.30.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preview_scene: Option<SceneId>,
+        /// The transition a `scene.switch` started: the preset the engine chose and how
+        /// long it runs. Omitted when program did not change by a switch.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transition: Option<TransitionStarted>,
         /// The client whose request caused it.
         client_id: ClientId,
         /// That client's request ID, so it can match the event to its own response.
