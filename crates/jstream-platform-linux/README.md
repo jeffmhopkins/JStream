@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose"]
 -->
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -50,11 +50,16 @@ It has:
   into the frames, `persist_mode` 2 with the last restore token), `Start` (the picker;
   `start` blocks while it is open, up to five minutes) and `OpenPipeWireRemote`. Each
   request's `Response` is matched on the request path computed before the call, or on
-  the handle the call returns. A cancelled picker is an `Os` error with code 1. The
+  the handle the call returns. Only the portal is listened to: its unique bus name
+  (from `GetNameOwner`) must be the sender of every reply and signal the flow takes,
+  and the match rules name it, so another process on the session bus can't forge a
+  response or end the session. A cancelled picker is an `Os` error with code 1. The
   flow is a state machine without I/O (`portal/handshake.rs`), tested message by
   message. The new restore token `Start` returns replaces the spent one, in memory and,
-  with `PortalCapture::with_token_dir`, in a file only the user can read, so the next
-  start skips the picker. A thread keeps the portal's connection open for the session's
+  with `PortalCapture::with_token_dir`, in a file only the user can read: written 0600
+  to a fresh file and renamed into place, and read only from a regular file the user
+  owns that no one else can read or write. So the next start skips the picker. A
+  thread keeps the portal's connection open for the session's
   life and reports the portal closing it (sharing stopped, grant revoked) as
   `DeviceLost`.
 - **The D-Bus client** (`dbus.rs`) is the crate's own: the wire format in both byte
@@ -84,8 +89,7 @@ It has:
   refuses other codecs and a software-only request (no software encoder until Cisco's
   OpenH264 download lands, [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), and reports a machine with no H.264
   encode driver as a missing component with the distributions' packages (ADR-0060 §6).
-  Audio encoding reports `Unsupported` until the Rust AAC-LC encoder exists (ADR-0061),
-  and decoding is out of the ADR's scope.
+  Decoding is out of the ADR's scope.
 - **The VA-API H.264 session** (`VideoEncoder`) opens its own display on the chosen
   node: a config with the rate-control mode (CBR or VBR, refused if the driver lacks it),
   a context, four input surfaces with a coded buffer each, and three reconstructed
@@ -101,6 +105,20 @@ It has:
   to four frames are in flight, and a fifth is refused as busy. The libva structs are
   hand-written and checked against libva 2.20.0's headers, with their sizes and offsets
   asserted at compile time.
+- **`RustAacEncoder`** (`AudioEncoder`): AAC encoding, which `VaapiCodecs` lists and
+  opens. It wraps JStream's own AAC-LC encoder,
+  [`jstream-aac`](../jstream-aac/README.md#purpose)
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md), within
+  [ADR-0062](../../docs/adr/0062-aac-lc-encoder-patent-check.md)'s limits), for 44.1 or
+  48 kHz, mono or stereo, interleaved or planar `f32`, at 16 to 256 kbps per channel
+  (`aac_config` says why it refuses anything else). As with the Media Foundation encoder,
+  each packet is one raw access unit of 1024 frames without ADTS, a keyframe, and timed
+  from the first buffer's `pts` plus the frames before it. The muxers write the matching
+  `AudioSpecificConfig` from the format. The decoder's output lags by the usual AAC
+  priming of 1024 frames. It is built with the `aac-encoder` feature, which is on by
+  default. ADR-0062's re-check switches the encoder off in a release by taking that
+  feature out of the defaults. Without it, `jstream-aac` leaves the build, the list has
+  no AAC encoder, and opening one reports `Unsupported`.
 
 Not here yet, in roughly the order they follow:
 - DMA-BUF frames imported into the engine's Vulkan device (`Capture::on_context`), in
