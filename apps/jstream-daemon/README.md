@@ -11,7 +11,7 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
+covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**", "apps/jstream-daemon/Info.plist", "apps/jstream-daemon/build.rs"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
 -->
 
@@ -215,7 +215,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <a id="design"></a>
 ## Design
 <!-- @section
-covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
+covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml", "apps/jstream-daemon/build.rs"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
 -->
 

@@ -4,7 +4,7 @@
   Embedded in the macOS daemon binary's __TEXT,__info_plist section by build.rs, so the
   camera, microphone and system audio recording prompts have the usage strings macOS
   requires (ADR-0063 §11). No app bundle is needed.
-  Docs: apps/jstream-daemon/README.md#design
+  Docs: apps/jstream-daemon/README.md#purpose
 -->
 <plist version="1.0">
 <dict>
