@@ -17,7 +17,7 @@
 //! platform-independent pixel helpers, the sample pacer and the control-block trust rule,
 //! which are tested everywhere.
 //!
-//! Docs: crates/jstream-vcam-windows/README.md#purpose, crates/jstream-vcam-windows/README.md#hardware-check, docs/ARCHITECTURE.md#crate-map, docs/adr/0066-portable-windows-distribution-v2.md
+//! Docs: crates/jstream-vcam-windows/README.md#purpose, crates/jstream-vcam-windows/README.md#hardware-check, docs/ARCHITECTURE.md#crate-map, docs/adr/0066-portable-windows-distribution-v2.md, docs/security/threat-model.md#vcam
 
 pub mod pace;
 pub mod pixels;
