@@ -19,8 +19,8 @@ use std::sync::Arc;
 /// thread can hold one past the next update. Most make their frames when created or
 /// updated; a `media` file decodes them ahead on a thread of its own and hands each
 /// over under a short lock; a source whose frames follow something live (the
-/// `waveform` and `spectrum` kinds) draws them in its [`Painter`] instead, and `frame`
-/// hands out the one painted last.
+/// `waveform`, `spectrum` and `chat_message` kinds) draws them in its [`Painter`]
+/// instead, and `frame` hands out the one painted last.
 pub trait Source: Send {
     /// The frame to show at `at`, the time since the source started on the media clock
     /// (ADR-0014, docs/adr/0014-media-clock.md). A time before the start shows the

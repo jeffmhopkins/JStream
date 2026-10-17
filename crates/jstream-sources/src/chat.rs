@@ -7,13 +7,13 @@ use crate::describe::{asset, kind, param};
 use crate::source::{self, changed_non_live, setting};
 use crate::text::raster::{render, stack};
 use crate::text::{Align, DEFAULT_FONT, Style, bad, color, parse, pixels};
-use crate::{Context, Limits, Source, SourceError, SourceKind};
+use crate::{Context, Limits, Painter, Source, SourceError, SourceKind};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings};
 use serde_json::{Value, json};
 use std::borrow::Cow;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 /// The most characters of a featured message's text drawn.
 pub const MAX_CHAT_TEXT: usize = 1000;
@@ -195,43 +195,36 @@ impl SourceKind for ChatKind {
         let frame = show(&font, message.as_deref(), settings, &ctx.limits)?;
         Ok(Box::new(ChatSource {
             descriptor: self.0.clone(),
-            settings: settings.clone(),
-            limits: ctx.limits,
-            feature: ctx.chat.clone(),
-            font,
-            revision,
-            frame,
+            painter: Arc::new(ChatPainter {
+                limits: ctx.limits,
+                feature: ctx.chat.clone(),
+                font,
+                drawing: Mutex::new(()),
+                ready: Mutex::new(Ready {
+                    settings: settings.clone(),
+                    style: 0,
+                    revision,
+                    frame,
+                }),
+            }),
         }))
     }
 }
 
-/// A running `chat_message` source. It redraws when the featured message or its
-/// settings change.
+/// A running `chat_message` source. Its [`Painter`] redraws when another message is
+/// featured; `frame` only hands out the frame drawn last, so a caller holding a lock
+/// while it asks never waits on drawing.
 struct ChatSource {
     descriptor: KindDescriptor,
-    settings: Settings,
-    limits: Limits,
-    feature: ChatFeature,
-    /// The font file, already checked by [`parse`].
-    font: Cow<'static, [u8]>,
-    /// The slot's revision the frame shows.
-    revision: u64,
-    frame: Arc<VideoFrame>,
+    painter: Arc<ChatPainter>,
 }
 
 impl Source for ChatSource {
-    /// Hands out the drawn frame, redrawing first if another message was featured
-    /// since. Only that redraw allocates. Never fails, as the built-in kinds promise: a
-    /// message these settings and limits can't draw (too wide unwrapped, or over the
-    /// memory cap) shows nothing, once, until another message is featured.
+    /// Hands out the frame drawn last, by [`create`](SourceKind::create),
+    /// [`update`](Source::update) or the painter. It neither draws nor allocates, and
+    /// never fails.
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        if self.feature.revision() != self.revision {
-            let (revision, message) = self.feature.read();
-            self.frame = draw(&self.font, message.as_deref(), &self.settings, &self.limits)
-                .or_else(|_| blank())?;
-            self.revision = revision;
-        }
-        Ok(Arc::clone(&self.frame))
+        Ok(Arc::clone(&lock(&self.painter.ready).frame))
     }
 
     /// The featured message can change at any time, so the source is looked at again
@@ -245,21 +238,88 @@ impl Source for ChatSource {
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
-        if let Some(param) = changed_non_live(&self.descriptor, &self.settings, settings) {
+        let painter = &self.painter;
+        let _drawing = lock(&painter.drawing);
+        let old = lock(&painter.ready).settings.clone();
+        if let Some(param) = changed_non_live(&self.descriptor, &old, settings) {
             return Err(SourceError::NotLive {
                 param: param.to_owned(),
             });
         }
-        let (revision, message) = self.feature.read();
-        self.frame = show(&self.font, message.as_deref(), settings, &self.limits)?;
-        self.revision = revision;
-        self.settings = settings.clone();
+        let (revision, message) = painter.feature.read();
+        let frame = show(&painter.font, message.as_deref(), settings, &painter.limits)?;
+        let mut ready = lock(&painter.ready);
+        ready.settings = settings.clone();
+        ready.style = ready.style.wrapping_add(1);
+        ready.revision = revision;
+        ready.frame = frame;
         Ok(())
+    }
+
+    fn painter(&self) -> Option<Arc<dyn Painter>> {
+        let painter: Arc<dyn Painter> = self.painter.clone();
+        Some(painter)
     }
 }
 
+/// A `chat_message` source's drawing, shared between the source and whoever paints it.
+struct ChatPainter {
+    limits: Limits,
+    feature: ChatFeature,
+    /// The font file, already checked by [`parse`].
+    font: Cow<'static, [u8]>,
+    /// Held while a frame is drawn, so paints and updates take turns.
+    drawing: Mutex<()>,
+    /// What the frame drawn last shows. Held only to copy or swap it, so
+    /// [`Source::frame`] never waits on drawing.
+    ready: Mutex<Ready>,
+}
+
+struct Ready {
+    settings: Settings,
+    /// Bumped by every update, so a paint that started under older settings is dropped.
+    style: u64,
+    /// The slot's revision the frame shows.
+    revision: u64,
+    frame: Arc<VideoFrame>,
+}
+
+impl Painter for ChatPainter {
+    /// Redraws if another message was featured since the frame drawn last. Only that
+    /// redraw allocates. A message these settings and limits can't draw (too wide
+    /// unwrapped, or over the memory cap) shows nothing, once, until another message is
+    /// featured.
+    fn paint(&self, _: MediaTime) {
+        if self.feature.revision() == lock(&self.ready).revision {
+            return;
+        }
+        let _drawing = lock(&self.drawing);
+        let (style, settings) = {
+            let ready = lock(&self.ready);
+            (ready.style, ready.settings.clone())
+        };
+        let (revision, message) = self.feature.read();
+        let Ok(frame) =
+            draw(&self.font, message.as_deref(), &settings, &self.limits).or_else(|_| blank())
+        else {
+            return;
+        };
+        let mut ready = lock(&self.ready);
+        if ready.style == style {
+            ready.revision = revision;
+            ready.frame = frame;
+        }
+    }
+}
+
+/// Locks `mutex`; a panic while it was held leaves nothing half-done that matters for
+/// drawing, so a poisoned lock is used as it is.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 /// Checks `settings`, then draws `message` with them. Only the settings can fail it: a
-/// message they or the limits can't draw shows [`blank`], as [`ChatSource::frame`]
+/// message they or the limits can't draw shows [`blank`], as the painter
 /// does, since it is a viewer's text and not the settings being applied.
 fn show(
     font: &[u8],

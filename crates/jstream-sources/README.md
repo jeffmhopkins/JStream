@@ -28,11 +28,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   reading and decoding a file, so it never runs on a real-time thread.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
-  `Arc<VideoFrame>`. For the built-in kinds `frame` never blocks on I/O and allocates
-  only when `chat_message` redraws for a newly featured message, and a frame handed out
-  stays valid after an update. Most make their frames
+  `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
+  allocates, and a frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
-  the `waveform` and `spectrum` kinds draw theirs in a `Painter` instead, and `frame`
+  the `waveform`, `spectrum` and `chat_message` kinds draw theirs in a `Painter`
+  instead, and `frame`
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
   says the program mix shows the source again after plans that didn't reach it; a kind
@@ -281,15 +281,16 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   does; stacking them counts the frame and the blocks it is drawn from. A message these
   settings or limits can't draw (too wide with no wrapping, or over the memory cap)
   shows the one transparent pixel instead, and the next message featured is drawn
-  again. `frame` never fails, as for every built-in kind, and `create` and `update`
-  fail only for the settings themselves, never for the featured message. The bundled
+  again. `frame` and the painter never fail, and `create` and `update` fail only for
+  the settings themselves, never for the featured message. The bundled
   font covers Latin text only, so other scripts need a `font`. Every field is a
   stranger's text and is drawn as plain text: line breaks and other control characters
   become spaces, and text is cut to 1000 characters and the name, badge and amount to
   100 each. With nothing featured the frame is one transparent pixel. The slot changes
-  outside the source, so `next_change` asks to be looked at again every 100 ms, and
-  `frame` takes the slot's lock and redraws (and so allocates) only when another
-  message was featured since. Every setting but `font` is live.
+  outside the source, so `next_change` asks to be looked at again every 100 ms; the
+  source's `Painter` takes the slot's lock and redraws (and so allocates) only when
+  another message was featured since, and `frame` hands out the frame drawn last
+  without drawing. Every setting but `font` is live.
 - `display`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.
