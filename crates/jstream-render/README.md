@@ -187,8 +187,10 @@ Both passes are one command buffer and one `queue.submit`. `FrameSync::stage` ru
 before that submit, for every distinct hold the scene samples, and the command buffer
 ends by transitioning each of those textures to `PRESENT` (on D3D12 the `COMMON` state
 the platform's other APIs read a shared texture in), which `stage` requires of the
-submit. `render_into` does the same. The compositor lets go of the holds after the
-submit, so it keeps no platform texture busy between frames. The output texture is the
+submit. `render_into` does the same. Staging comes after every other step that can
+fail (targets, vertex buffer, readback buffer), so a refused canvas or readback stages
+nothing. The compositor lets go of the holds after the submit, so it keeps no platform
+texture busy between frames. The output texture is the
 compositor's own, not a shared encode target, so nothing transitions it.
 
 ### Resources kept across frames
@@ -522,7 +524,8 @@ a non-axis-aligned box turning about its centre.
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
-staged once per submit and not staged when the item is hidden. Nested scenes
+staged once per submit, and not staged when the item is hidden or when a readback
+too large for a buffer refuses the render. Nested scenes
 (`render_image`), three pixel tests and an ownership check: an image placed in
 another scene lands where its scene put the item and is transparent elsewhere, and
 survives a later `render`; a half-opaque item stays exact in linear light; images

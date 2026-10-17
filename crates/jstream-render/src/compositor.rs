@@ -139,6 +139,8 @@ impl Compositor {
         } else {
             None
         };
+        // Last, so no error between the staging and the submit it arms (#391).
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -260,6 +262,7 @@ impl Compositor {
             });
         }
         self.load(scene)?;
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -607,12 +610,12 @@ impl Compositor {
         Ok(())
     }
 
-    /// Validates `scene`, builds its vertices, stages its frame holds and writes the
-    /// vertex buffer: everything before the passes are recorded.
+    /// Validates `scene`, builds its vertices and writes the vertex buffer. The caller
+    /// stages the frame holds after this and every other step that can fail, so an
+    /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         color::validate(scene.background)?;
         self.prepare(scene)?;
-        self.stage_sources(scene)?;
         self.ensure_vertex_buffer()?;
         if !self.vertices.is_empty() {
             self.gpu
@@ -692,6 +695,14 @@ impl Compositor {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         }))
+    }
+}
+
+#[cfg(test)]
+impl Compositor {
+    /// Lowers the buffer limit, as a smaller adapter's would be.
+    pub(crate) fn cap_buffer_size(&mut self, bytes: u64) {
+        self.gpu.max_buffer_size = bytes;
     }
 }
 
