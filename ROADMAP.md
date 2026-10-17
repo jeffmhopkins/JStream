@@ -153,8 +153,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   limit, so an oversized batch fails cleanly.
 - macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
   A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
-- Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
-  which needs root, so it gets its own ADR too).
+- Linux: the platform crate per [ADR-0060](docs/adr/0060-linux-platform-support.md)
+  (portal and PipeWire capture, VA-API encode). The virtual camera via v4l2loopback needs
+  root, so it gets its own ADR.
 
 <a id="later"></a>
 ## Later

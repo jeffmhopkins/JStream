@@ -2,14 +2,14 @@
 id = "ADR-0060"
 title = "Linux platform support: portal and PipeWire capture, VA-API encode"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0060: Linux platform support: portal and PipeWire capture, VA-API encode
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -55,7 +55,9 @@ The forces:
   build time and degrades to a clear "not installed" error.
 - **CI** already runs on Linux ([ADR-0054](0054-platform-ci-after-review.md)): `fmt`,
   `clippy`, `test`, `doc`, `deny`, `lint-deps` and `docs` run on `ubuntu-latest` for every
-  PR. Those runners have no GPU, no desktop session and no PipeWire daemon.
+  PR into `main`, wave landings included; PRs into a `wave/*` branch and drafts get only
+  `fmt`, `clippy`, `lint-deps` and `docs` ([ADR-0055](0055-wave-branches.md)).
+  Those runners have no GPU, no desktop session and no PipeWire daemon.
 
 <a id="decision"></a>
 ## Decision
@@ -142,7 +144,7 @@ The hand-written declarations cover only the calls the crate makes.
   reaches it.
 
 **10. CI.** Linux CI stays as it is and now also builds, lints and unit-tests
-`jstream-platform-linux`; nothing in it needs a system library. Tests that need a desktop
+`jstream-platform-linux` (unit tests on `main` and at wave landings); nothing in it needs a system library. Tests that need a desktop
 session, PipeWire or a VA-API GPU sit behind the crate's `hw-tests` feature and
 `#[ignore]`, as on Windows, and run on a Linux machine by hand. A headless PipeWire daemon
 in CI for the audio tests is a follow-up.
@@ -151,6 +153,10 @@ in CI for the audio tests is a follow-up.
 ## Questions for the maintainer
 Accepting this ADR accepts decisions 1 to 10. These two are left open on purpose; each
 answer becomes its own ADR, because either "yes" changes ADR-0031 and R-DEP-002.
+
+**Answered:** on acceptance the maintainer chose the recommendation on both (Cisco's
+binary for question 1, the Rust AAC-LC encoder after a patent check for question 2). They
+take effect only through the follow-up ADR that supersedes ADR-0031.
 
 1. **A software H.264 fallback on Linux?** The options:
    - **No fallback** (this ADR's default): no hardware encoder means no streaming.

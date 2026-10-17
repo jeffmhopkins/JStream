@@ -264,7 +264,7 @@ depends_on = ["docs/adr/0008-windows-support-policy.md"]
 |---|---|---|
 | Windows | Primary target | Runs on Windows 11 build 22000<!--fact:min-windows-build--> and later; supported on the versions Microsoft currently services ([ADR-0008](docs/adr/0008-windows-support-policy.md)) |
 | macOS | Later (M3) | To be decided in the macOS ADR |
-| Linux | Later (M3) | Codec path to be decided in an ADR first ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)) |
+| Linux | Later (M3) | Per [ADR-0060](docs/adr/0060-linux-platform-support.md): GNOME or KDE Plasma on Wayland, current Ubuntu LTS and Fedora |
 
 <a id="documentation"></a>
 ## Documentation
