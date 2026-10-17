@@ -97,11 +97,17 @@ It has:
   its first playback stream. A stream is fixed to interleaved `f32` at the graph's rate
   in the device's layout (mono, stereo or 5.1; any other count, or a default with no
   device, as stereo; `spa/audio.rs` builds and parses the format pods), so PipeWire
-  converts and the handler never sees a format change. `process` runs on the stream's
-  own loop thread: input packets carry their device position and a media-clock time
-  from `pw_stream_get_time_n` (the capture time, before the device's delay), a
-  corrupted buffer marks a discontinuity and its frames still count in the position, an
-  empty one (nothing playing into the source) is a silent packet, and output
+  converts and the handler never sees a format change. The stream is connected with
+  `RT_PROCESS`, so `process` runs on its context's own data loop, PipeWire's real-time
+  thread (with real-time priority from `module-rt` where the system grants it), while
+  registry, metadata and the stream's state and format events stay on the loop thread.
+  `process` touches only the stream's own state, shared with the loop thread through
+  atomics (`Gate`: it calls the handler only while the stream hasn't failed, and failing
+  it waits for a running call to return), so it doesn't allocate, lock or wait: input
+  packets carry their device position and a media-clock time from
+  `pw_stream_get_time_n` (the capture time, before the device's delay), a corrupted
+  buffer marks a discontinuity and its frames still count in the position, an empty one
+  (nothing playing into the source) is a silent packet, and output
   asks the handler to fill each buffer. A named device or process whose node is
   removed is `DeviceLost`; a default follows the session manager. The callbacks catch
   panics (R-UNSAFE-005): a panicking handler is told once, with `InvalidState`, and
@@ -192,7 +198,8 @@ platform-independent. The Linux ones (the clock, loading libc through the loader
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes) pass with or without those libraries installed and need no GPU, session
 or daemon; a missing daemon is tried on a socket name nothing listens on. The registry
-reading and stream planning (`pipewire/graph.rs`) and the audio format pods are
+reading and stream planning (`pipewire/graph.rs`), the audio format pods and the
+`process` gate's hand-off between threads (`pipewire/audio.rs`) are
 platform-independent too. The OpenH264 tests use a fake download and a fake encoder
 behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
@@ -200,5 +207,5 @@ recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
 GNOME or KDE session with PipeWire, VA-API H.264 encodes on a GPU with an encode
-driver, and `PipeWireAudio` recording, playing and looping back on a PipeWire daemon
-(`pipewire/audio_tests.rs`; null nodes are enough, no sound card).
+driver, and `PipeWireAudio` recording (on the data loop), playing and looping back on
+a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes are enough, no sound card).

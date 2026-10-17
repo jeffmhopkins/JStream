@@ -62,6 +62,8 @@ struct Seen {
     peak: f32,
     times: Vec<MediaTime>,
     errors: Vec<String>,
+    /// The name of the thread the first packet came on.
+    thread: Option<String>,
 }
 
 struct Recorder {
@@ -72,6 +74,10 @@ struct Recorder {
 impl AudioInputHandler for Recorder {
     fn on_packet(&mut self, packet: &AudioPacket<'_>) {
         let mut s = self.seen.lock().expect("the seen lock");
+        if s.thread.is_none() {
+            let comm = std::fs::read_to_string("/proc/thread-self/comm");
+            s.thread = Some(comm.expect("the thread's name").trim().to_owned());
+        }
         if !packet.samples.len().is_multiple_of(self.channels) {
             s.ragged += 1;
         }
@@ -215,6 +221,10 @@ fn recording_the_default_input_delivers_continuous_timed_packets() {
     let s = seen.lock().unwrap();
     assert_eq!((s.gaps, s.ragged), (0, 0), "{s:?}");
     assert!(s.errors.is_empty(), "{s:?}");
+    // On PipeWire's data loop (`RT_PROCESS`: `pw-data-loop`, `data-loop.0` in newer
+    // releases), not the connection's thread loop (`jstream-audio`).
+    let thread = s.thread.as_deref().unwrap();
+    assert!(thread.contains("data-loop"), "{thread}");
     let end = clock.now();
     // Times are on the media clock, in order, and about now (within a second of the
     // recording, allowing for the device's delay).
