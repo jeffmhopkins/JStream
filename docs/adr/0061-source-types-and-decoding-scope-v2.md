@@ -2,14 +2,14 @@
 id = "ADR-0061"
 title = "Source types and decoding scope v2: Linux's software H.264 and AAC"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0061: Source types and decoding scope v2: Linux's software H.264 and AAC
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0031](0031-source-types-and-decoding-scope.md).

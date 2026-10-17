@@ -80,7 +80,7 @@ wgpu adapter skips the ones that need a context, except on CI.
 ## Design
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
-depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md"]
 -->
 
 ### Threads and pacing

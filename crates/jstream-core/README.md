@@ -322,7 +322,7 @@ Live API client behind the YouTube commands and `youtube` outputs), `serde_json`
 values: the audio filter kinds' defaults and what the mixer kernels read from a filter's
 settings), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
-[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
+[ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
 source scopes)

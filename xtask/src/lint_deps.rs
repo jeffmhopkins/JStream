@@ -551,7 +551,7 @@ fn native(meta: &Value, packages: &[Value], findings: &mut Vec<Finding>) {
                 at,
                 rule: "R-DEP-002",
                 msg: format!(
-                    "native code ({}) is not on the lint-deps allowlist (ADR-0031)",
+                    "native code ({}) is not on the lint-deps allowlist (ADR-0061)",
                     why.join(", ")
                 ),
             }),
@@ -851,7 +851,7 @@ mod tests {
             got,
             [
                 "native 0.0.0: R-DEP-002: native code (`links = \"foo\"`) is not on the \
-              lint-deps allowlist (ADR-0031)"
+              lint-deps allowlist (ADR-0061)"
             ]
         );
     }
@@ -920,7 +920,7 @@ mod tests {
             f.findings(),
             [
                 "x 0.0.0: R-DEP-002: native code (build-depends on `cxx-build`, which depends \
-                 on `cc`) is not on the lint-deps allowlist (ADR-0031)"
+                 on `cc`) is not on the lint-deps allowlist (ADR-0061)"
             ]
         );
     }

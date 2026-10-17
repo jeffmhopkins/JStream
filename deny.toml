@@ -112,7 +112,7 @@ skip = [
     { crate = "windows_x86_64_msvc@0.42.2", reason = "windows-targets 0.42, for jni (Android only, under Tauri)" },
 ]
 deny = [
-    # R-DEP-002 / ADR-0031: no FFmpeg, GStreamer or bundled C codec libraries.
+    # R-DEP-002 / ADR-0061: no FFmpeg, GStreamer or bundled C codec libraries.
     # Name lists are incomplete by nature; xtask lint-deps also checks `links =` crates.
     { crate = "ffmpeg-next", reason = "R-DEP-002" },
     { crate = "ffmpeg-sys-next", reason = "R-DEP-002" },

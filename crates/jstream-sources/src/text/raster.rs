@@ -3,7 +3,7 @@
 //!
 //! There is no shaping and no kerning: each character is its font's glyph for that
 //! code point, placed by its advance. Ligatures, kerning, complex scripts and
-//! right-to-left text need a shaper, which ADR-0031 leaves for when they are wanted.
+//! right-to-left text need a shaper, which ADR-0061 leaves for when they are wanted.
 
 use super::{Align, Style};
 use crate::{Limits, SourceError};
