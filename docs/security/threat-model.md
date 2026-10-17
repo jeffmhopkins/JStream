@@ -308,8 +308,13 @@ it, and checks every texture's format.
 needs full access; `Global\` blocks, which only an administrator or service can create,
 are trusted.
 
+**Controls (in flight, #540):** the producer refuses a control mapping that already
+existed unless its owner is the user, SYSTEM or Administrators and its DACL lets no one
+but them and LOCAL SERVICE in; the DLL checks the owner of a session block's textures and fence as it does the
+block's.
+
 **Gaps:** a user-writable registered DLL runs in Frame Server (#242); a control mapping
-created before the producer's keeps its own DACL (#356).
+created before the producer's keeps its own DACL (#356, fix in flight in #540).
 
 <a id="gaps"></a>
 ## Known gaps

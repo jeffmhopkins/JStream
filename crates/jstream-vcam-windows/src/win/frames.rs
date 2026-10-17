@@ -14,7 +14,10 @@
 //! open the block must still be live and name the same producer. Before any of that, a
 //! block found in a session's namespace is used only if the session is active and the
 //! block's owner is that session's user, SYSTEM or Administrators ([`trust`](crate::trust),
-//! #180), so another logged-on user's engine can't feed this camera.
+//! #180), so another logged-on user's engine can't feed this camera. The ring textures and
+//! the fence it names must have an owner the same rule accepts (#356): each is opened by
+//! name as an NT handle, its owner checked, and the D3D11 object opened from that handle,
+//! so what is checked is what is used.
 
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -31,9 +34,7 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Direct3D12::{D3D12CreateDevice, ID3D12Device};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
-use windows::Win32::Graphics::Dxgi::{
-    CreateDXGIFactory1, DXGI_SHARED_RESOURCE_READ, IDXGIAdapter, IDXGIFactory4,
-};
+use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIAdapter, IDXGIFactory4};
 use windows::Win32::Media::MediaFoundation::{
     IMFSample, MFCreateMemoryBuffer, MFCreateSample, MFVideoFormat_NV12,
 };
@@ -47,7 +48,7 @@ use jstream_vcam_proto::{
 
 use super::log::{host_flags, log, session_id};
 use super::session;
-use super::shared::{Mapping, OwnedHandle, qpc, qpc_freq};
+use super::shared::{Mapping, OwnedHandle, owner_sid, qpc, qpc_freq};
 use crate::pixels::{bgra_to_nv12, copy_bgra, nv12_size, test_pattern};
 use crate::trust::{check_session_block, session_of};
 
@@ -75,10 +76,13 @@ enum Shared {
     Absent,
 }
 
-/// The control block, and the name it was opened by.
+/// The control block, the name it was opened by, and, for a block in a session's
+/// namespace, the SID of that session's user, whom the shared objects' owner is checked
+/// against.
 struct Link {
     mapping: Mapping,
     name: String,
+    session_user: Option<String>,
 }
 
 pub(crate) struct FrameSource {
@@ -259,7 +263,7 @@ impl FrameSource {
                 return Ok(Shared::Hold);
             }
             self.next_gpu_try = now + RETRY;
-            let gpu = Gpu::open(c, &link.name)?;
+            let gpu = Gpu::open(c, &link.name, link.session_user.as_deref())?;
             // The producer may have restarted while the objects were being opened.
             if !c.is_live() || c.producer_pid.load(Ordering::Acquire) != gpu.producer_pid {
                 log("frames: producer changed while opening its objects; retrying");
@@ -285,10 +289,13 @@ impl FrameSource {
             match Mapping::open(&name) {
                 Ok(mapping) => {
                     // Checked before anything is written into the block.
-                    if let Err(why) = trust(&mapping, &name) {
-                        failures.push(format!("{name}: refused, {why}"));
-                        continue;
-                    }
+                    let session_user = match trust(&mapping, &name) {
+                        Ok(user) => user,
+                        Err(why) => {
+                            failures.push(format!("{name}: refused, {why}"));
+                            continue;
+                        }
+                    };
                     let c = mapping.control();
                     c.consumer_pid.store(std::process::id(), Ordering::Release);
                     c.consumer_session_id
@@ -301,7 +308,11 @@ impl FrameSource {
                         failures.join("; ")
                     ));
                     self.last_no_link_log = None;
-                    return Some(Link { mapping, name });
+                    return Some(Link {
+                        mapping,
+                        name,
+                        session_user,
+                    });
                 }
                 Err(e) => failures.push(format!("{name}: {:#010x}", e.code().0)),
             }
@@ -323,20 +334,39 @@ impl FrameSource {
 
 /// Whether the block opened as `name` may be used: `Global\` blocks always (only
 /// administrators and services can create them), a `Session\<id>\` block only under
-/// [`check_session_block`]. `Err` says why not, for the log.
-fn trust(mapping: &Mapping, name: &str) -> std::result::Result<(), String> {
+/// [`check_session_block`]. `Ok` carries the session's user for a session block (`None`
+/// for a global one); `Err` says why not, for the log.
+fn trust(mapping: &Mapping, name: &str) -> std::result::Result<Option<String>, String> {
     let Some(id) = session_of(name) else {
-        return Ok(());
+        return Ok(None);
     };
     let owner = mapping
         .owner_sid()
         .map_err(|e| format!("its owner is unreadable ({:#010x})", e.code().0))?;
-    check_session_block(
-        &owner,
-        session::user_sid(id).as_deref(),
-        session::is_active(id),
-    )
-    .map_err(|d| format!("{} (owner {owner})", d.as_str()))
+    let user = session::user_sid(id);
+    check_session_block(&owner, user.as_deref(), session::is_active(id))
+        .map_err(|d| format!("{} (owner {owner})", d.as_str()))?;
+    Ok(user)
+}
+
+/// Checks that the shared object `name`, open as `handle`, is owned by `session_user`,
+/// SYSTEM or Administrators, as [`check_session_block`] asks of the block itself. Objects
+/// of a global block (`session_user` is `None`) aren't checked, as the block isn't.
+fn trust_object(
+    handle: &OwnedHandle,
+    name: &str,
+    session_user: Option<&str>,
+) -> std::result::Result<(), windows_core::Error> {
+    let Some(user) = session_user else {
+        return Ok(());
+    };
+    let owner = owner_sid(handle).map_err(|e| annotate(e, &format!("the owner of {name}")))?;
+    // The session was found active when the block was trusted; only the owner is new.
+    check_session_block(&owner, Some(user), true).map_err(|_| {
+        fail(format!(
+            "{name} is owned by {owner}, not the session's user"
+        ))
+    })
 }
 
 /// The producer's ring and fence, opened on this process's own D3D11 device.
@@ -349,8 +379,9 @@ struct Gpu {
 }
 
 impl Gpu {
-    /// Opens the objects the live block `c`, found under `control_name`, points at.
-    fn open(c: &Control, control_name: &str) -> Result<Self> {
+    /// Opens the objects the live block `c`, found under `control_name`, points at, and
+    /// checks their owners against `session_user` ([`trust_object`]).
+    fn open(c: &Control, control_name: &str, session_user: Option<&str>) -> Result<Self> {
         if !c.format_matches() {
             return Err(fail(format!(
                 "producer format {}x{} dxgi {} ring {} is not the contract's {WIDTH}x{HEIGHT} \
@@ -395,12 +426,20 @@ impl Gpu {
         let mut textures = Vec::new();
         for slot in 0..RING {
             let name = scope.open_name(session, &texture_base(pid, slot));
-            // SAFETY: plain call with a valid wide string; the texture holds its own
-            // reference to the shared resource.
-            let tex: ID3D11Texture2D = unsafe {
-                device1.OpenSharedResourceByName(&HSTRING::from(&name), DXGI_SHARED_RESOURCE_READ.0)
-            }
-            .map_err(|e| annotate(e, &format!("OpenSharedResourceByName {name}")))?;
+            // SAFETY: `ID3D12Device::OpenSharedHandleByName(LPCWSTR, DWORD, HANDLE*) ->
+            // HRESULT`: a valid wide string and the only access it accepts, GENERIC_ALL
+            // (which includes READ_CONTROL, for the owner check); the handle is closed by
+            // OwnedHandle.
+            let handle: HANDLE =
+                unsafe { d3d12.OpenSharedHandleByName(&HSTRING::from(&name), GENERIC_ALL.0) }
+                    .map_err(|e| annotate(e, &format!("OpenSharedHandleByName {name}")))?;
+            let handle = OwnedHandle(handle);
+            trust_object(&handle, &name, session_user)?;
+            // SAFETY: `ID3D11Device1::OpenSharedResource1(HANDLE, REFIID, void**) ->
+            // HRESULT`: `handle.0` is a live NT handle to the shared texture just checked;
+            // the texture holds its own reference, so the handle can close afterwards.
+            let tex: ID3D11Texture2D = unsafe { device1.OpenSharedResource1(handle.0) }
+                .map_err(|e| annotate(e, &format!("OpenSharedResource1 {name}")))?;
             let mut desc = D3D11_TEXTURE2D_DESC::default();
             // SAFETY: `desc` is a valid out-pointer.
             unsafe { tex.GetDesc(&mut desc) };
@@ -420,6 +459,7 @@ impl Gpu {
             unsafe { d3d12.OpenSharedHandleByName(&HSTRING::from(&fence_name), GENERIC_ALL.0) }
                 .map_err(|e| annotate(e, &format!("OpenSharedHandleByName {fence_name}")))?;
         let handle = OwnedHandle(handle);
+        trust_object(&handle, &fence_name, session_user)?;
         let mut fence: Option<ID3D11Fence> = None;
         // SAFETY: `handle.0` is a live NT handle to a shared fence; `fence` is a valid
         // out-pointer. D3D11 takes its own reference, so the handle can close afterwards.

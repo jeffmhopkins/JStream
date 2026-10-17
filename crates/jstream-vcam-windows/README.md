@@ -56,7 +56,11 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   services can create them. The DLL then requires the contract's format
   (`format_matches`), requires the scope and session the block names to be the
   namespace it was found in, and after opening the shared objects re-checks that the
-  block is still live for the same producer.
+  block is still live for the same producer. The ring textures and the fence of a
+  session block pass the same owner rule (#356): each is opened by name as an NT handle
+  (`ID3D12Device::OpenSharedHandleByName`), its owner read with `GetSecurityInfo`, and
+  the D3D11 object opened from that handle (`OpenSharedResource1`, `OpenSharedFence`),
+  so the object checked is the object used.
 - **Panics.** Every COM method and export runs inside a panic guard that returns
   `E_UNEXPECTED` and logs ([R-UNSAFE-005](../../docs/RULES.md#R-UNSAFE-005)).
 - **Log.** Frame Server gives the DLL no `tracing` subscriber, so it writes short lines

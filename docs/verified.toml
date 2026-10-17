@@ -2250,16 +2250,16 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:f6eb3695c90eeb37", by = "agent:wave-owner", note = "main into wave/m1-2: main's PluginBlock, ProAudioThread and WindowsPluginHosts bullet sits beside the wave's text; nothing in either contradicts the other" }
+stamp = { hash = "b3:6f7eee6b09a89948", by = "agent:claude", note = "Re-read against #356: the vcam Start/One-producer bullets now say a reused control mapping's owner and DACL are read back with GetSecurityInfo and checked by the new pure security module; the rest (clock, audio, capture, codecs, credentials, registration) is unchanged by this diff | merge: merging wave/m1-3 (main sync) brought the plugin_block and plugin_hosts modules beside this branch's security module in lib.rs; the vcam One-producer bullet's #356 text still matches sink.rs and security.rs" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:31e736b29ac2b01a", by = "agent:wave-owner", note = "re-read against platform#purpose after wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync; the CLAP launcher and capture text hold" }
+stamp = { hash = "b3:31e736b29ac2b01a", by = "agent:claude", note = "C8b5 on wave/m1-2: stale via platform#purpose only; Windows backends unchanged by C8b5; holds | merge: merging wave/m1-3 (main sync) brought the plugin_block and plugin_hosts modules beside this branch's security module in lib.rs; the vcam One-producer bullet's #356 text still matches sink.rs and security.rs" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:2214bbe1a9c063d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's WgcCapture through Capture::on_context, the CPU H.264 encoder taking RGBA and BGRA, the GPU H.264 path (Codecs::on_context, encode targets copied into allocator samples, fence sync), MfMediaDecoders (Source Reader, frames, audio with the gapless cut, seeking, threads), WindowsGpu's release fence, mfreadwrite delay-loaded for MfMediaDecoders, the not-yet line naming packet-level video decoders, and the GPU encode and media-file tests, beside wave/m3's CLAP PluginBlock and ProAudioThread section. Inputs: lib.rs's docs list MfMediaDecoders, and it gains the decode module and that re-export, beside the CLAP items. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. This crate implements MediaDecoders and the on_context seams. The crate-map row drops the CEF browser backend (ADR-0021) main moved to jstream-browser and keeps wave/m3's CLAP launcher and shared block. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Neither the preview thread nor the CLAP sentence contradicts this crate's text." }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:100d1063c61d4a12", by = "agent:wave-owner", note = "main into wave/m1-2 (#523), now also carrying wave/m1-2's #259 (E2 video mixes, 0.28): main's PluginBlock, ProAudioThread and WindowsPluginHosts bullet beside the wave's capture text; re-read against ARCH#threading: main's CLAP plugin-host paragraph (host process, launcher and HostSupervisor built; filters not run; quarter-block sleep) beside #244's jstream-live thread, and #259's render row compositing each video mix due on a base tick and the collector taking a dropped mix's frame buffers; the launcher text matches the threading section" }
+stamp = { hash = "b3:100d1063c61d4a12", by = "agent:claude", note = "Stale only via ARCH#threading; WGC, WASAPI and MF encoder text unaffected by per-mix rendering or live values; holds | merge: merging wave/m1-3 (main sync) brought the plugin_block and plugin_hosts modules beside this branch's security module in lib.rs; the vcam One-producer bullet's #356 text still matches sink.rs and security.rs" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/RULES.md#real-time"]
 stamp = { hash = "b3:c60cba487fc0a5e5" }
@@ -2358,7 +2358,7 @@ stamp = { hash = "b3:a962082ddbf74417" }
 stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
-stamp = { hash = "b3:b515ab6b211c849d", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Body, against wave/m3: gains main's WgcCapture through Capture::on_context, the CPU H.264 encoder taking RGBA and BGRA, the GPU H.264 path (Codecs::on_context, encode targets copied into allocator samples, fence sync), MfMediaDecoders (Source Reader, frames, audio with the gapless cut, seeking, threads), WindowsGpu's release fence, mfreadwrite delay-loaded for MfMediaDecoders, the not-yet line naming packet-level video decoders, and the GPU encode and media-file tests, beside wave/m3's CLAP PluginBlock and ProAudioThread section. Inputs: lib.rs's docs list MfMediaDecoders, and it gains the decode module and that re-export, beside the CLAP items. jstream-platform's purpose, against wave/m3, gains main's GPU seams (FrameSync::platform, Capture::on_context, Codecs::on_context), Media files (MediaDecoders, MediaDecoder, MediaInfo), the Data folder (paths::data_dir, ADR-0020), FakeMediaDecoders among the fakes and the reworded not-yet line, beside wave/m3's PluginHosts and its fake. This crate implements MediaDecoders and the on_context seams. The crate-map row drops the CEF browser backend (ADR-0021) main moved to jstream-browser and keeps wave/m3's CLAP launcher and shared block. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). Neither the preview thread nor the CLAP sentence contradicts this crate's text." }
+stamp = { hash = "b3:7c0be0d8cdde1d31", by = "agent:claude", note = "Re-read against #356: the vcam Start/One-producer bullets now say a reused control mapping's owner and DACL are read back with GetSecurityInfo and checked by the new pure security module; the rest (clock, audio, capture, codecs, credentials, registration) is unchanged by this diff | merge: merging wave/m1-3 (main sync) brought the plugin_block and plugin_hosts modules beside this branch's security module in lib.rs; the vcam One-producer bullet's #356 text still matches sink.rs and security.rs" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/n_edition.rs"]
 stamp = { hash = "b3:ede57dd335c2eec0" }
@@ -2369,6 +2369,9 @@ stamp = { hash = "b3:7f14b3bb7eb52944", by = "agent:claude", note = "Adds the Pl
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/plugin_hosts.rs"]
 stamp = { hash = "b3:51ed695e06830a27", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
+["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/security.rs"]
+stamp = { hash = "b3:a1bef25f0a2483a1", by = "agent:claude", note = "Re-read against #356: the vcam Start/One-producer bullets now say a reused control mapping's owner and DACL are read back with GetSecurityInfo and checked by the new pure security module; the rest (clock, audio, capture, codecs, credentials, registration) is unchanged by this diff | merge: merging wave/m1-3 (main sync) brought the plugin_block and plugin_hosts modules beside this branch's security module in lib.rs; the vcam One-producer bullet's #356 text still matches sink.rs and security.rs" }
+
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/format.rs"]
 stamp = { hash = "b3:04540a625ddb78d5" }
 
@@ -2376,10 +2379,10 @@ stamp = { hash = "b3:04540a625ddb78d5" }
 stamp = { hash = "b3:57ee2cd8b8984db0", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/shared.rs"]
-stamp = { hash = "b3:518cf8d8efd63e59", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
+stamp = { hash = "b3:3ca0e169f953f32d", by = "agent:claude", note = "Re-read against #356: the vcam Start/One-producer bullets now say a reused control mapping's owner and DACL are read back with GetSecurityInfo and checked by the new pure security module; the rest (clock, audio, capture, codecs, credentials, registration) is unchanged by this diff | merge: merging wave/m1-3 (main sync) brought the plugin_block and plugin_hosts modules beside this branch's security module in lib.rs; the vcam One-producer bullet's #356 text still matches sink.rs and security.rs" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/sink.rs"]
-stamp = { hash = "b3:2fcb7bb950608efc" }
+stamp = { hash = "b3:236e602c403fbac8", by = "agent:claude", note = "Re-read against #356: the vcam Start/One-producer bullets now say a reused control mapping's owner and DACL are read back with GetSecurityInfo and checked by the new pure security module; the rest (clock, audio, capture, codecs, credentials, registration) is unchanged by this diff | merge: merging wave/m1-3 (main sync) brought the plugin_block and plugin_hosts modules beside this branch's security module in lib.rs; the vcam One-producer bullet's #356 text still matches sink.rs and security.rs" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam_register.rs"]
 stamp = { hash = "b3:6306e460290304f4" }
@@ -3741,7 +3744,7 @@ stamp = { hash = "b3:741967485a750fec" }
 stamp = { hash = "b3:52b22e31260a816a" }
 
 ["CRATE-jstream-vcam-windows#purpose"."body"]
-stamp = { hash = "b3:c640c2439b8b37f8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only: the daemon registers until the desktop app has --register-vcam): the Registration bullet's jstream-daemon --register-vcam still holds; rest unchanged" }
+stamp = { hash = "b3:6402550d4c70cb63", by = "agent:claude", note = "Re-read against #356: the Trust bullet now says the ring textures and fence of a session block pass the same owner rule, opened by name as NT handles then as D3D11 objects from those handles; Global blocks still unchecked, tests paragraph still accurate | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's #356 texture and fence owner check still matches frames.rs and shared.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:crates/jstream-vcam-proto/README.md#purpose"]
 stamp = { hash = "b3:b6a3f609729e0f1f" }
@@ -3783,7 +3786,7 @@ stamp = { hash = "b3:9c3a291d17eb2496" }
 stamp = { hash = "b3:d9ce3ae1ef818d95" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/frames.rs"]
-stamp = { hash = "b3:22be68cdd50e8dd9" }
+stamp = { hash = "b3:e05ea2179dead4cb", by = "agent:claude", note = "Re-read against #356: the Trust bullet now says the ring textures and fence of a session block pass the same owner rule, opened by name as NT handles then as D3D11 objects from those handles; Global blocks still unchecked, tests paragraph still accurate | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's #356 texture and fence owner check still matches frames.rs and shared.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/log.rs"]
 stamp = { hash = "b3:4442f4b5cabff0d9" }
@@ -3798,7 +3801,7 @@ stamp = { hash = "b3:c28895e1e4c38b31" }
 stamp = { hash = "b3:8bfe86421fa75457" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/shared.rs"]
-stamp = { hash = "b3:5ae80ee249a7723b" }
+stamp = { hash = "b3:e7d9c0932f9a6565", by = "agent:claude", note = "Re-read against #356: the Trust bullet now says the ring textures and fence of a session block pass the same owner rule, opened by name as NT handles then as D3D11 objects from those handles; Global blocks still unchecked, tests paragraph still accurate | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's #356 texture and fence owner check still matches frames.rs and shared.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/source.rs"]
 stamp = { hash = "b3:63e42e67393d20f4" }
@@ -4275,7 +4278,7 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
 ["THREAT-MODEL#vcam"."body"]
-stamp = { hash = "b3:22d241d0aeefeac2", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+stamp = { hash = "b3:056fbce9528dd967", by = "agent:claude", note = "Re-read the vcam section after review N4: the in-flight #540 control now says the DACL may let in only the user, SYSTEM, Administrators and LOCAL SERVICE, matching security::check with LOCAL_SERVICE_SID; the rest unchanged | merge: the sync brought only the Secrets section's #353 wording and gap row (taken from the wave); the vcam section's in-flight #540 control and #356 gap still match this branch" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
