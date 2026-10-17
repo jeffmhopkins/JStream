@@ -129,9 +129,11 @@ impl OpenH264Store {
         self.dir.join(self.pin.file_name)
     }
 
-    /// Whether the library has been downloaded. It is checked again when it is loaded.
+    /// Whether the library has been downloaded: the pin has a library hash to check it
+    /// against, and the file is there. Its hash is checked when it is loaded, not here,
+    /// so listing codecs doesn't read the whole file.
     pub fn is_installed(&self) -> bool {
-        self.library_path().is_file()
+        self.pin.library_sha256.is_some() && self.library_path().is_file()
     }
 
     /// Downloads the pinned release from Cisco through `fetch`, checks it and stores it.

@@ -26,17 +26,29 @@ pub(super) const FRAME_TYPE_SKIP: c_int = 4;
 pub(super) const FRAME_TYPE_INVALID: c_int = 0;
 /// `ENCODER_OPTION_IDR_INTERVAL` (an `int`, in frames).
 pub(super) const OPTION_IDR_INTERVAL: c_int = 1;
-/// `ENCODER_OPTION_MAX_BITRATE` (an `int`, in bits per second).
+/// `ENCODER_OPTION_MAX_BITRATE` (an `SBitrateInfo`, [`BitrateInfo`]).
 pub(super) const OPTION_MAX_BITRATE: c_int = 6;
+/// `LAYER_NUM::SPATIAL_LAYER_ALL`: a setting for every spatial layer.
+pub(super) const SPATIAL_LAYER_ALL: c_int = 4;
 /// `ENCODER_OPTION_RC_FRAME_SKIP` (a `bool`).
 pub(super) const OPTION_RC_FRAME_SKIP: c_int = 9;
-/// `ENCODER_OPTION_TRACE_LEVEL` (an `int`).
+/// `ENCODER_OPTION_TRACE_LEVEL` (a `uint32_t`; the levels fit in `c_int`, the same size).
 pub(super) const OPTION_TRACE_LEVEL: c_int = 25;
 /// `WELS_LOG_QUIET`: the library writes nothing to stdout or stderr (R-RS-005); every
 /// failure still comes back as a return code.
 pub(super) const WELS_LOG_QUIET: c_int = 0;
 /// `MAX_LAYER_NUM_OF_FRAME`.
 pub(super) const MAX_LAYERS: usize = 128;
+
+/// `SBitrateInfo`, the value of [`OPTION_MAX_BITRATE`].
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(super) struct BitrateInfo {
+    /// A `LAYER_NUM`, here [`SPATIAL_LAYER_ALL`].
+    pub layer: c_int,
+    /// Bits per second.
+    pub bitrate: c_int,
+}
 
 /// `SEncParamBase`.
 #[repr(C)]

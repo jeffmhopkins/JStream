@@ -17,9 +17,10 @@ use jstream_platform::{
 };
 
 use super::ffi::{
-    Api, CAMERA_VIDEO_REAL_TIME, EncParamBase, Encoder, FRAME_TYPE_IDR, FRAME_TYPE_INVALID,
-    FRAME_TYPE_SKIP, FrameBsInfo, OPTION_IDR_INTERVAL, OPTION_MAX_BITRATE, OPTION_RC_FRAME_SKIP,
-    OPTION_TRACE_LEVEL, RC_BITRATE_MODE, SourcePicture, VIDEO_FORMAT_I420, WELS_LOG_QUIET,
+    Api, BitrateInfo, CAMERA_VIDEO_REAL_TIME, EncParamBase, Encoder, FRAME_TYPE_IDR,
+    FRAME_TYPE_INVALID, FRAME_TYPE_SKIP, FrameBsInfo, OPTION_IDR_INTERVAL, OPTION_MAX_BITRATE,
+    OPTION_RC_FRAME_SKIP, OPTION_TRACE_LEVEL, RC_BITRATE_MODE, SPATIAL_LAYER_ALL, SourcePicture,
+    VIDEO_FORMAT_I420, WELS_LOG_QUIET,
 };
 
 /// The name the encoder lists under. It names Cisco, as its licence asks.
@@ -93,7 +94,8 @@ fn bps(kbps: u32) -> Result<c_int, PlatformError> {
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for a codec other than H.264, an input format other
-/// than NV12 or I420, an odd frame size, or a bit rate that doesn't fit.
+/// than NV12 or I420, an odd frame size, a keyframe interval of 0, or a bit rate that
+/// doesn't fit.
 pub(super) fn params(config: &VideoEncoderConfig) -> Result<EncParamBase, PlatformError> {
     if config.codec != Codec::H264 {
         return Err(PlatformError::Unsupported {
@@ -114,8 +116,17 @@ pub(super) fn params(config: &VideoEncoderConfig) -> Result<EncParamBase, Platfo
             what: format!("an odd frame size ({w}x{h}) for OpenH264's 4:2:0 input"),
         });
     }
+    if config.keyframe_interval == 0 {
+        return Err(PlatformError::Unsupported {
+            what: "a keyframe interval of 0 frames for OpenH264".into(),
+        });
+    }
     let target = match config.rate_control {
-        RateControl::Cbr { kbps } | RateControl::Vbr { kbps, .. } => bps(kbps)?,
+        RateControl::Cbr { kbps } => bps(kbps)?,
+        RateControl::Vbr { kbps, max_kbps } => {
+            bps(max_kbps)?;
+            bps(kbps)?
+        }
         _ => {
             return Err(PlatformError::Unsupported {
                 what: "this rate control with OpenH264".into(),
@@ -185,7 +196,10 @@ impl OpenH264Encoder {
         let mut skip = false;
         this.set_option(OPTION_RC_FRAME_SKIP, (&raw mut skip).cast())?;
         if let RateControl::Vbr { max_kbps, .. } = config.rate_control {
-            let mut max = bps(max_kbps)?;
+            let mut max = BitrateInfo {
+                layer: SPATIAL_LAYER_ALL,
+                bitrate: bps(max_kbps)?,
+            };
             this.set_option(OPTION_MAX_BITRATE, (&raw mut max).cast())?;
         }
         Ok(this)

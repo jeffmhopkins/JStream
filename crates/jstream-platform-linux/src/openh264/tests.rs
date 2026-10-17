@@ -272,5 +272,15 @@ fn downloads_the_pinned_release_from_cisco() {
     store
         .video_encoder(&config(HardwarePreference::Avoid))
         .expect("opens an encoder on Cisco's library");
+    let vbr = VideoEncoderConfig {
+        rate_control: RateControl::Vbr {
+            kbps: 2500,
+            max_kbps: 4000,
+        },
+        ..config(HardwarePreference::Avoid)
+    };
+    store
+        .video_encoder(&vbr)
+        .expect("opens a VBR encoder on Cisco's library");
     let _ = std::fs::remove_dir_all(dir);
 }
