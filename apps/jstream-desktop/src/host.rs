@@ -51,6 +51,7 @@ impl Host {
             .build()
             .context("could not start the async runtime")?;
         let token = new_token()?;
+        crate::crash::register_secret(&token);
         let mut config = ServerConfig::new(Token::new(token.clone())?);
         config.extra_origins = vec![origin.to_owned()];
         // The engine serves only this webview, so it pairs no device (ADR-0047).
@@ -252,7 +253,8 @@ fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
     })
 }
 
-/// Makes `engine` live on `backends`, with keys in Credential Manager, a publish
+/// Makes `engine` live on `backends`, with keys in Credential Manager (behind
+/// [`Redacting`](crate::crash::Redacting)), a publish
 /// opener that connects RTMP(S) and, when there is one, `browser` for browser sources.
 /// The opener holds the engine weakly, so the engine still drops when the server lets
 /// go of it. The same wiring as the daemon's `live::live`
@@ -263,7 +265,11 @@ fn live(
     backends: Backends,
     browser: Option<Arc<dyn jstream_sources::BrowserBackend>>,
 ) -> Arc<Engine> {
-    let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_windows::WindowsCredentials);
+    // Behind `Redacting`, so each key is registered with the crash reports' redaction
+    // as it is stored or read (#353).
+    let keys: Arc<dyn StreamKeyStore> = Arc::new(crate::crash::Redacting(Arc::new(
+        jstream_platform_windows::WindowsCredentials,
+    )));
     let handle = Arc::new(OnceLock::new());
     let engine = engine
         .with_key_store(Arc::clone(&keys))
@@ -390,6 +396,10 @@ mod tests {
             host.ws_url()
         );
         assert!(host.ws_url().ends_with("/api/v1/ws"));
+        assert!(
+            crate::crash::is_registered(host.token()),
+            "the token is redacted from crash reports (#353)"
+        );
         let origin = host.ws_origin();
         assert!(host.ws_url().starts_with(&origin) && !origin.ends_with('/'));
 

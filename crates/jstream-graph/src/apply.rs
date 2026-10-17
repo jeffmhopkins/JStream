@@ -326,6 +326,9 @@ fn apply_edit(
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::mix::apply(state, edit, at) {
+        return applied;
+    }
     if let Some(applied) = crate::filter::apply(state, kinds, edit, at) {
         return applied;
     }
@@ -765,6 +768,8 @@ fn apply_edit(
                     id: output_id.clone(),
                     kind: kind.clone(),
                     encoder_profile: None,
+                    filters: Chains::default(),
+                    video_mix: None,
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -800,14 +805,21 @@ fn apply_edit(
                 .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
             let mut inverse = vec![Edit::OutputCreate {
                 output_id: output.id.clone(),
-                kind: output.kind,
+                kind: output.kind.clone(),
             }];
-            if let Some(profile_id) = output.encoder_profile {
+            if let Some(profile_id) = &output.encoder_profile {
                 inverse.push(Edit::OutputSetEncoder {
-                    output_id: output.id,
-                    profile_id: Some(profile_id),
+                    output_id: output.id.clone(),
+                    profile_id: Some(profile_id.clone()),
                 });
             }
+            if let Some(mix_id) = output.video_mix.clone() {
+                inverse.push(Edit::OutputSetVideoMix {
+                    output_id: output.id.clone(),
+                    mix_id: Some(mix_id),
+                });
+            }
+            inverse.extend(crate::filter::restore_output(&output));
             Ok(inverse)
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
@@ -1048,7 +1060,8 @@ fn restore_item(
     Ok(edits)
 }
 
-/// The complete settings of a new source (`owner`) or preset (`None`) of kind
+/// The complete settings of a new source (`owner`), or of a preset or a filter of the
+/// master stage or an output (`None`), of kind
 /// `descriptor`: `given`, checked, with every parameter it leaves out (or sends as
 /// `null`, outside reference parameters) at its default. `prefix` names the field
 /// (`settings` or `patch`).
@@ -1162,10 +1175,11 @@ fn set_settings(
     }])
 }
 
-/// Checks one settings value for `param` of source `source_id` (`None` for a preset's):
-/// its type and constraints, that a referenced scene, source or bus exists (`not_found`
-/// if not), and that a referenced source produces what the parameter needs. A source may
-/// name itself here; [`check_reference_cycles`] rejects that as a cycle.
+/// Checks one settings value for `param` of source `source_id` (`None` for a preset's,
+/// or for a filter of the master stage or an output): its type and constraints, that a
+/// referenced scene, source or bus exists (`not_found` if not), and that a referenced
+/// source produces what the parameter needs. A source may name itself here;
+/// [`check_reference_cycles`] rejects that as a cycle.
 pub(crate) fn check_value(
     state: &State,
     kinds: &Kinds,
