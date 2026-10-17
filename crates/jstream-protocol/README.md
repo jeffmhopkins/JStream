@@ -46,10 +46,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
-  `output.set_target`, `output.set_encoder`, `output.delete`, `encoder.create`,
-  `encoder.update`, `encoder.delete`, `source.set_audio`, `bus.create`, `bus.rename`,
-  `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`, `hotkey.set`, `hotkey.clear`,
-  `transition.create`, `transition.update`, `transition.delete`,
+  `output.set_target`, `output.set_encoder`, `output.set_video_mix`, `output.delete`,
+  `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
+  `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
+  `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`, `hotkey.set`,
+  `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
@@ -62,11 +63,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
-  `FilterInfo` and `FilterChains`, the chains `SourceInfo` reports, and
-  `MAX_CHAIN_FILTERS` (8).
+  `FilterOwner` (tagged `type`: `source`, `master` and `output`), `FilterChain`
+  (`video`, `audio`), `FilterInfo` and `FilterChains`, the chains `SourceInfo` and
+  `OutputInfo` report, and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
+  master stage as `state.get` reports it
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
-  (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+  (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo` (with the `video_mix` it shows), and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). `OutputKind::key_server` names the
   server a stream key is bound to (scheme, host and port), which the engine and the
@@ -79,6 +82,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+- **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
+  (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
+  base frame rate, with its range checks (`VideoMix::problem`, shared by every
+  implementation), and `VideoMixInfo`.
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   `SourceAudio` and `AudioFollow`, a source's audio settings; `BusInfo` and `SendInfo`,
   the buses and the send matrix as reads report them; the fader range and its shared
@@ -86,11 +93,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
   a `meters.tick` carries.
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
+  `output.list`, `output.status`, `encoder.list`, `video_mix.list`, `bus.list`,
+  `video.snapshot`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus),
-  `studio.get`, `device.list` and `live.list`, with `QueryResult` and the
-  `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo` shapes the
-  reads report. `state.get` carries the `Canvas`, and `ItemInfo`
+  `studio.get`, `device.list`, `live.list` and `capture.targets`, with `QueryResult`
+  and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo` and
+  `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and
+  `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
@@ -145,14 +154,18 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   transition presets and studio mode's preview (the `transition.*` edits,
   `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
   `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
-  `transition` entity kind and kind category); 0.26 added live values
-  ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the `live.changed`
-  and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
+  `transition` entity kind and kind category); 0.29 added the master stage's and
+  outputs' filter chains (the `master` and `output` filter owners,
+  `OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes
+  (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and the mixes in
+  `state.get` and `output.list`); 0.27 added the `capture.targets` query;
+  0.26 added live values ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the
+  `live.changed` and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
   hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
   `hotkeys` and the batch result's `removed_hotkeys`); 0.24 added bus
   references (the `bus` parameter type and reference, which the `waveform` and
   `spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
-  `bus.delete` refused while one refers to its bus); 0.23 added YouTube
+  `bus.delete` refused while one refers to its bus), 0.23 YouTube
   ([YouTube](#design): the `youtube.*` commands and events, the `youtube`
   RTMP target, and the YouTube actions' `ActionResult`s,
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), 0.22
@@ -182,17 +195,20 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
   canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output, two
-  encoder profiles and two hotkeys, one of them rebound), the exact answer to every collection read of it (`output.list`
+  encoder profiles, two video mixes and two hotkeys, one of them rebound), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path and encoder profile and hotkey checks, and `item.set_source` and
+  URL, recording path, encoder profile, video mix and hotkey checks, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
-  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a desktop
-  audio source with an audio chain of two gain filters, one disabled, and audio: a
-  microphone with its fader, mute and sends, two buses (one deleted again with its
-  send), a renamed and faded bus, a duplicated microphone with a send removed, and a
-  disabled nested scene. The rejected batches cover the bus limit, the master bus,
-  fader ranges, and sources with no audio or no fader of their own.
+  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a
+  desktop audio source with an audio chain of two gain filters, one disabled, a gain
+  filter each on the master stage's audio chain and on the recording output's, and
+  audio: a microphone with its fader, mute and sends, two buses (one deleted again with
+  its send), a renamed and faded bus, a duplicated microphone with a send removed, and
+  a disabled nested scene. The rejected batches also cover an audio filter on the
+  virtual camera, a reference in a master filter's settings (refused before its
+  index), the bus limit, the master bus, fader ranges, and sources with no audio or no
+  fader of their own.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -227,8 +243,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":26},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":26},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":29},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":29},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -364,9 +380,9 @@ reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), 
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
-an audio routing cycle can't be expressed. Filter chains (0.22) belong only to
-sources (`FilterOwner` is `source`), so none feeds one bus from another either; a
-routing check comes with the first thing that could. `follow`'s activity gain is the engine's (D6); the
+an audio routing cycle can't be expressed. Filter chains (a source's from 0.22, the
+master stage's and outputs' from 0.29) hold no reference that could feed one bus from
+another either; a routing check comes with the first thing that could. `follow`'s activity gain is the engine's (D6); the
 protocol only stores it.
 
 Levels and loudness are runtime state: `meters.tick` carries them (see
@@ -436,11 +452,12 @@ never a type per kind.
 - **Deletes are refused while anything refers to the target**, with no cascading edit
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
-  `scene` source shows the scene; either, and `bus.delete` (0.24), is refused while a
-  setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
-  `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
-  or the source whose setting refers to it (`settings.<param>`, or
-  `filters.<filter_id>.<param>` for a filter's setting). `delete.plan` returns
+  `scene` source or a video mix shows the scene; either, and `bus.delete` (0.24), is
+  refused while a setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`),
+  the video mix (`mix.input.scene_id`) or the source whose setting refers to it
+  (`settings.<param>`, or `filters.<filter_id>.<param>` for a filter's setting).
+  `delete.plan` returns
   the batch that removes them with the target (see [Queries](#design)). Hotkey
   bindings are never blockers: a delete removes the bindings that name its target
   (below).
@@ -469,6 +486,21 @@ audio and is not a `scene` source; `kind` must be a `video_filter` or `audio_fil
 kind for that chain (`invalid_argument` on `edits.N.kind`), and a chain holds at most
 8 filters (`edits.N.chain`). A missing filter is `not_found` with entity `filter`.
 `SourceInfo.filters { video, audio }` reports them, each omitted while empty.
+
+From 0.29 the master stage and each output own chains too
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), with the owners
+`{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
+master's audio chain runs on every bus that feeds an output, after that bus's own chain;
+an output's runs after it, for that output only, and gives the output its own audio
+encode from its next start (edits to a chain it started with apply live). Only their
+audio chains hold filters so far: a video filter is `invalid_argument` on
+`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
+carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+`output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
+`invalid_argument` on the parameter), since the delete checks follow only a source's
+references. `output.delete`'s
+inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
+`master { filters }` report them, each omitted while empty.
 
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
@@ -588,6 +620,23 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
 
+Video mixes (0.28) are collection state too: what an output's video shows.
+`video_mix.create` and `video_mix.update` take a `mix_id`, a `name` and a `VideoMix`: an
+`input` (`program`, the scene on program; `preview`, which still shows the program,
+since no mix draws studio mode's preview scene yet; or `scene` with a `scene_id`, one scene whatever is on
+program), a `resolution` whose sides are even and 16..=8192, and an `fps_divisor` of
+1..=60 (missing, it parses as 1): the mix renders on every `fps_divisor`th tick of the
+engine's base frame rate. The canvas is fitted inside the resolution, centred, with
+black bars where the aspect ratios differ, never stretched
+([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Anything else,
+including an input a newer server sent as `unknown`, is refused with `invalid_argument`
+naming the field (`edits.N.mix.resolution.width`), and a missing scene with
+`not_found`. `video_mix.delete` is refused while an output shows the mix.
+`output.set_video_mix` points an output at a mix, or with no `mix_id` back at the
+program at the engine's canvas size and base rate. A running output follows a change
+of its mix's `input` from the next frame; a new resolution, rate or mix applies from
+its next `output.start`, like an encoder profile.
+
 ### Transitions and studio mode
 
 [ADR-0029](../../docs/adr/0029-transitions.md) and
@@ -651,14 +700,16 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `state.get`: the whole collection at one revision: the `canvas` (missing from a
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
-  server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty), the `buses` and `sends`
-  (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
+  server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
+  missing from a pre-0.13 server, it parses as empty), every video mix (`video_mixes`,
+  ordered by ID; missing from a pre-0.28 server, it parses as empty), the `buses` and
+  `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
-  parses as empty), and the transition presets with the default (`transitions`;
-  missing from a pre-0.30 server, it parses as the one initial `cut`). A client reads
-  it on connecting, and again after a
-  `state.changed` it didn't cause.
+  parses as empty), the master stage (`master`, with its filter chains; omitted while
+  it has none, so missing, also from a pre-0.29 server, parses as empty), and the
+  transition presets with the default (`transitions`; missing from a pre-0.30 server,
+  it parses as the one initial `cut`). A client reads it on connecting, and again
+  after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
@@ -668,8 +719,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
-  its `OutputKind` and `encoder_profile` (absent for the default), at a `rev`.
+  its `OutputKind`, `encoder_profile` (absent for the default), `video_mix` (absent
+  for the program) and its own `filters` (omitted while empty; 0.29), at a `rev`.
 - `encoder.list`: the encoder profiles, ordered by ID, at a `rev` (0.13).
+- `video_mix.list`: the video mixes, ordered by ID, at a `rev` (0.28).
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
   `false`). While it runs, `encoder` names its session's profile (absent for the
@@ -686,6 +739,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
+- `capture.targets`: the displays and windows the engine can capture now, displays
+  first, each with its `kind` (`display` or `window`, the source kind that captures
+  it), its `target` (the value for that source's `target` setting), a `name` to show,
+  its `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
+  for the display an empty `display` target captures. Runtime state, so no `rev`; a
+  source can still name a window closed since. `action_failed` when the engine has no
+  capture backend or the OS refuses the list. Added in 0.27.
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
@@ -697,7 +757,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   deleted source, set every settings reference to a deleted object to `null` (one
   `source.set_settings` per source, which keeps the source, and one
   `filter.set_settings` per filter), delete the `scene` sources
-  that show a deleted scene, and last delete the target. Deleting a scene deletes the
+  that show a deleted scene, point every video mix that shows it at `program` (one
+  `video_mix.update`, which keeps the mix), and last delete the target. Deleting a
+  scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
   deletes no scene. A bus is held only by settings references, which the plan clears;
   its `bus.delete` takes its sends. A target nothing refers to plans just its own
@@ -705,7 +767,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   by chord (0.25; omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
-- `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
+- `video.snapshot`: the current program mix as a PNG, never a video mix (there is no
+  per-mix snapshot yet). `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
   Source pixels are runtime state and can change without a new `rev`. The query takes

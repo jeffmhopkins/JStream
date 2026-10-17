@@ -69,7 +69,15 @@ pub(crate) struct MergePoint {
     theirs: String,
     /// Their merge base.
     base: String,
+    /// The commit `docs merge-main` left the branch at: the merge, or the `docs migrate`
+    /// commit it made right after it. What changed since is the branch's own later work.
+    after: String,
 }
+
+/// The subject of the commit `docs merge-main` makes after a merge for what `docs migrate`
+/// moved.
+pub(crate) const MIGRATE_SUBJECT: &str =
+    "docs: move inline verified stamps to docs/verified.toml (ADR-0053)";
 
 fn git(root: &Path, args: &[&str]) -> Result<Output> {
     Command::new("git")
@@ -96,9 +104,7 @@ fn git_ok(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
 /// conflicts, and commits the merge when nothing else conflicts. `branch` is `main`, or a
 /// `wave/*` branch for a PR into a wave.
 pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
-    if branch != BRANCH && !branch.strip_prefix("wave/").is_some_and(|w| !w.is_empty()) {
-        bail!("can only merge `{BRANCH}` or a `wave/<name>` branch, not `{branch}`");
-    }
+    check_branch(branch, "can only merge")?;
     if git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
         .status
         .success()
@@ -203,11 +209,18 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
 
 /// The ledger as it was at `rev`; empty when the file is missing or doesn't parse there.
 fn ledger_at(root: &Path, rev: &str) -> Result<ledger::Ledger> {
+    Ok(ledger_text_at(root, rev)?
+        .and_then(|text| ledger::Ledger::parse(&text).ok())
+        .unwrap_or_default())
+}
+
+/// The ledger's text at `rev`; `None` when the file is missing there.
+fn ledger_text_at(root: &Path, rev: &str) -> Result<Option<String>> {
     let out = git(root, &["show", &format!("{rev}:{}", ledger::PATH)])?;
-    if !out.status.success() {
-        return Ok(ledger::Ledger::default());
-    }
-    Ok(ledger::Ledger::parse(&String::from_utf8_lossy(&out.stdout)).unwrap_or_default())
+    Ok(out
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned()))
 }
 
 /// The latest merge on this branch's first-parent chain, unless it is already on
@@ -244,7 +257,86 @@ pub(crate) fn last_merge(root: &Path) -> Result<Option<MergePoint>> {
     let (ours, theirs) = (rev(&format!("{merge}^1"))?, rev(&format!("{merge}^2"))?);
     let base = git_ok(root, &["merge-base", &ours, &theirs])?;
     let base = String::from_utf8_lossy(&base).trim().to_owned();
-    Ok(Some(MergePoint { ours, theirs, base }))
+    // The first commit after the merge on the first-parent chain, if it is the one
+    // `merge-main` makes for `docs migrate`, as `<hash> <parent> <subject>`.
+    let next = git_ok(
+        root,
+        &[
+            "log",
+            "--first-parent",
+            "--reverse",
+            "--format=%H %P %s",
+            &format!("{merge}..HEAD"),
+        ],
+    )?;
+    let after = String::from_utf8_lossy(&next)
+        .lines()
+        .next()
+        .and_then(|l| {
+            let (hash, rest) = l.split_once(' ')?;
+            let (parent, subject) = rest.split_once(' ')?;
+            (parent == merge && subject == MIGRATE_SUBJECT).then(|| hash.to_owned())
+        })
+        .unwrap_or(merge);
+    Ok(Some(MergePoint {
+        ours,
+        theirs,
+        base,
+        after,
+    }))
+}
+
+/// Which of `paths` differ in the working tree, committed or not, from what `docs
+/// merge-main` left at `point`: the files this branch changed after its merge.
+pub(crate) fn changed_after(
+    root: &Path,
+    point: &MergePoint,
+    paths: &[String],
+) -> Result<Vec<String>> {
+    let mut out = Vec::new();
+    for path in paths {
+        let diff = git(root, &["diff", "--quiet", &point.after, "--", path])?;
+        match diff.status.code() {
+            Some(0) => {}
+            Some(1) => out.push(path.clone()),
+            _ => bail!(
+                "`git diff --quiet {} -- {path}` failed: {}",
+                point.after,
+                String::from_utf8_lossy(&diff.stderr).trim()
+            ),
+        }
+    }
+    Ok(out)
+}
+
+/// The ledger at the merge base of `HEAD` and `origin/<branch>` (`main`, or the `wave/*`
+/// branch a PR targets): the entries this branch didn't write are the ones equal to it.
+/// Empty when the ledger doesn't exist there; an error when it doesn't parse, since an
+/// empty base would make every entry look like this branch's own.
+pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
+    check_branch(branch, "can only compare against")?;
+    let upstream = format!("{REMOTE}/{branch}");
+    let base = git_ok(root, &["merge-base", "HEAD", &upstream])
+        .with_context(|| format!("finding where this branch left `{upstream}`"))?;
+    let base = String::from_utf8_lossy(&base).trim().to_owned();
+    match ledger_text_at(root, &base)? {
+        None => Ok(ledger::Ledger::default()),
+        Some(text) => ledger::Ledger::parse(&text).map_err(|e| {
+            anyhow::anyhow!(
+                "{} where this branch left `{upstream}` ({base}) doesn't parse: {e}",
+                ledger::PATH
+            )
+        }),
+    }
+}
+
+/// Refuses any branch but `main` and `wave/<name>`; `refusal` says what the caller does
+/// with it, as in "`refusal` `main` or a `wave/<name>` branch".
+fn check_branch(branch: &str, refusal: &str) -> Result<()> {
+    if branch != BRANCH && !branch.strip_prefix("wave/").is_some_and(|w| !w.is_empty()) {
+        bail!("{refusal} `{BRANCH}` or a `wave/<name>` branch, not `{branch}`");
+    }
+    Ok(())
 }
 
 /// The ledger entries this branch had written itself before `point`'s merge: those of
@@ -316,15 +408,7 @@ fn migrate_inline(root: &Path) -> Result<Option<super::Migrate>> {
     {
         return Ok(None);
     }
-    git_ok(
-        root,
-        &[
-            "commit",
-            "-q",
-            "-m",
-            "docs: move inline verified stamps to docs/verified.toml (ADR-0053)",
-        ],
-    )?;
+    git_ok(root, &["commit", "-q", "-m", MIGRATE_SUBJECT])?;
     Ok(Some(m))
 }
 
@@ -542,7 +626,7 @@ fn stale_map(root: &Path) -> Result<BTreeMap<String, Vec<(String, String)>>> {
 
 /// The file a ledger input lives in: the doc itself for `body`, the covered file for
 /// `file:<path>[#view]`, and the target doc for `dep:<path>[#anchor[/key]]`.
-fn input_path(doc: &str, input: &str) -> String {
+pub(crate) fn input_path(doc: &str, input: &str) -> String {
     let path = match input.split_once(':') {
         Some(("file" | "dep", rest)) => rest,
         _ => doc,
