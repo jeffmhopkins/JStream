@@ -1764,7 +1764,7 @@ stamp = { hash = "b3:e6d9d1baef424463", by = "agent:claude@session_01GC9edrfYrhX
 stamp = { hash = "b3:c605dc3799e8d4cc" }
 
 ["CRATE-jstream-encode#design"."body"]
-stamp = { hash = "b3:9abb2b5acc27b6d8", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (70d5ce5) into #325: re-read E3c's GPU frames subsection and Not yet beside main's benchmarks (benches/session.rs) text; both hold" }
+stamp = { hash = "b3:5869a64f852f0161", by = "agent:claude-443", note = "Round 1 B1: the handles sentence now names the two set-once OnceLock cells the encode thread sets (the stream end and the fallback codec behind VideoSession::codec), which handles read without waiting; re-read the rest of the section against session.rs and video.rs: pacing, drops and codec configuration unchanged, and the loop allocates only on the one codec change." }
 
 ["CRATE-jstream-encode#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -2229,7 +2229,7 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:1607aa08c82783ce", by = "agent:claude-443", note = "Re-read the video encoder bullets: added the first-frame fallback (FirstFrameFallback, #443), the new codec/fallback.rs, and the tracing dependency it logs through; the PROCESS_INPUT call name is shared with MfVideoEncoder::encode." }
+stamp = { hash = "b3:2f9469289aa6311b", by = "agent:claude-443", note = "Round 1 N2: the First-frame fallback bullet now names codec/fallback.rs and the tracing dependency, and the Tests paragraph lists the codec::fallback tests; re-read both against fallback.rs and mod.rs." }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:144628a7f41bfeb3", by = "agent:claude-443", note = "Re-read the video encoder bullets: added the first-frame fallback (FirstFrameFallback, #443), the new codec/fallback.rs, and the tracing dependency it logs through; the PROCESS_INPUT call name is shared with MfVideoEncoder::encode." }

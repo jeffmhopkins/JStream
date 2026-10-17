@@ -99,10 +99,12 @@ and polls again, leaving inputs in the queue. It never waits on the control plan
 and the packet and subscriber vectors are reused, so this crate's loop does not
 allocate per frame (the encoder itself may).
 
-Handles talk to the thread through `std::sync::mpsc` channels and atomics only: a
-bounded channel for inputs, an unbounded one for new subscribers, atomic counters, and
-`finishing`/`aborting` flags, with a `Wake` message and `unpark` so a flag is seen
-without waiting out the interval. `std` covers this; the workspace has no channel
+Handles talk to the thread through `std::sync::mpsc` channels, atomics and two set-once
+`OnceLock` cells only: a bounded channel for inputs, an unbounded one for new
+subscribers, atomic counters, and `finishing`/`aborting` flags, with a `Wake` message
+and `unpark` so a flag is seen without waiting out the interval. The encode thread sets
+the cells, the stream's end and the codec a fallback moved to (`VideoSession::codec`),
+and reading one never waits on it. `std` covers this; the workspace has no channel
 crate.
 
 ### Queues and drop policies (R-RT-004)
