@@ -1534,8 +1534,40 @@ mod tests {
         assert_eq!(after["file:src/b.rs"], before["file:src/b.rs"]);
         assert_eq!(after["body"], before["body"]);
         assert!(work.diags("is stale").is_empty());
+        // The refusal fits --renote, which merges nothing (#534).
         let err = verify_renote(&work.0, "S#a", "agent:work", better, "dev").expect_err("branch");
-        assert!(format!("{err:#}").contains("can only merge"), "{err:#}");
+        let err = format!("{err:#}");
+        assert!(
+            err.contains("can only compare against `main` or a `wave/<name>` branch, not `dev`"),
+            "{err}"
+        );
+        assert!(!err.contains("merge"), "{err}");
+    }
+
+    /// `docs verify --renote` fails when the ledger where the branch left main doesn't
+    /// parse, rather than reading it as empty and taking every entry for the branch's own
+    /// (#534).
+    #[test]
+    fn verify_renote_refuses_an_unparsable_base_ledger() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([("S.md", s), ("src/a.rs", "a\n")]);
+        let (origin, work) = origin_and_clone("verify-renote-bad-base", &files);
+        origin.write(ledger::PATH, "this is [not a ledger\n");
+        commit_all(&origin, "broken ledger");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        std::fs::remove_file(work.0.join(ledger::PATH)).expect("invariant: pulled");
+        verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies");
+        commit_all(&work, "work: a fresh ledger");
+        let before = std::fs::read_to_string(work.0.join(ledger::PATH)).expect("written");
+        let better = "a.rs is unchanged and the section's sentence on it still holds";
+        let err = verify_renote(&work.0, "S#a", "agent:review", better, "main")
+            .expect_err("the base ledger doesn't parse");
+        let err = format!("{err:#}");
+        assert!(err.contains("doesn't parse"), "{err}");
+        assert!(err.contains(ledger::PATH), "{err}");
+        let after = std::fs::read_to_string(work.0.join(ledger::PATH)).expect("written");
+        assert_eq!(before, after, "nothing was written");
     }
 
     /// ADR-0053 transition: a branch from before the ledger re-stamped a section inline and
