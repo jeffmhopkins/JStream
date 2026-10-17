@@ -7,6 +7,10 @@
 //! that names a DLL. Delay-loaded, each DLL is loaded on the first call into it, which
 //! comes only after the startup check has passed.
 //!
+//! On macOS it embeds `Info.plist` in the binary's `__TEXT,__info_plist` section, so the
+//! camera, microphone and system audio recording prompts have the usage strings macOS
+//! requires, with no app bundle (ADR-0063 §11).
+//!
 //! Docs: apps/jstream-daemon/README.md#design
 
 use std::env;
@@ -42,5 +46,12 @@ fn main() {
         }
         // The delay-load helper that resolves the imports on first call.
         println!("cargo:rustc-link-arg-bins=delayimp.lib");
+    }
+    if os == "macos" {
+        println!("cargo:rerun-if-changed=Info.plist");
+        let dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+        // The binary and its unit-test harness, as above; `-sectcreate` copies the file
+        // into the section as is. The path can't hold a comma, which `-Wl` splits on.
+        println!("cargo:rustc-link-arg-bins=-Wl,-sectcreate,__TEXT,__info_plist,{dir}/Info.plist");
     }
 }

@@ -16,6 +16,8 @@ mod hal;
 mod input;
 #[cfg(any(target_os = "macos", test))]
 mod layout;
+#[cfg(any(target_os = "macos", test))]
+mod permission;
 
 use jstream_platform::{AudioInputTarget, PlatformError};
 
@@ -53,6 +55,9 @@ mod backend {
     };
 
     use super::input::{self, Which};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use super::permission::{self, MicStep};
     use super::{check_input, hal};
     use crate::{Feature, MacosVersion, check_floor};
 
@@ -82,10 +87,13 @@ mod backend {
     /// through the HAL. Desktop and application audio, which need process taps, are
     /// refused before 14.2 and report `Unsupported` after, as playing does, for now.
     ///
-    /// Without the Microphone permission macOS records silence rather than failing.
+    /// Recording an input needs the Microphone permission: without it macOS would record
+    /// silence, so opening one checks it first and asks macOS to prompt once.
     #[derive(Debug)]
     pub struct CoreAudioIo {
         version: MacosVersion,
+        /// Whether this backend already asked macOS to prompt for the Microphone permission.
+        asked_microphone: AtomicBool,
     }
 
     impl CoreAudioIo {
@@ -96,7 +104,25 @@ mod backend {
         pub fn new() -> Result<Self, PlatformError> {
             let version = MacosVersion::current();
             check_floor(version)?;
-            Ok(Self { version })
+            Ok(Self {
+                version,
+                asked_microphone: AtomicBool::new(false),
+            })
+        }
+
+        /// Checks the Microphone permission before recording an input, asking macOS to
+        /// prompt the first time it isn't determined.
+        fn check_microphone(&self) -> Result<(), PlatformError> {
+            let status = permission::authorization_status();
+            match permission::mic_step(status, self.asked_microphone.load(Ordering::SeqCst)) {
+                MicStep::Proceed => Ok(()),
+                MicStep::Refuse => Err(permission::microphone_denied(status, false)),
+                MicStep::Ask => {
+                    self.asked_microphone.store(true, Ordering::SeqCst);
+                    permission::request_access();
+                    Err(permission::microphone_denied(status, true))
+                }
+            }
         }
     }
 
@@ -121,7 +147,9 @@ mod backend {
             handler: Box<dyn AudioInputHandler>,
         ) -> Result<Box<dyn AudioStream>, PlatformError> {
             check_input(target, self.version)?;
-            input::open(which(target)?, handler)
+            let which = which(target)?;
+            self.check_microphone()?;
+            input::open(which, handler)
         }
 
         fn open_output(
@@ -199,6 +227,12 @@ mod macos_tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn reads_the_microphone_status_without_prompting() {
+        let status = super::permission::authorization_status();
+        assert!((0..=3).contains(&status), "{status}");
     }
 
     #[test]

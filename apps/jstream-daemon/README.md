@@ -46,7 +46,11 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   registers the media source DLL shipped beside the daemon, and startup logs a warning
   when the registration names another folder ([Design](#design)).
 - **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
-  (MSVC), so that check can run at all.
+  (MSVC), so that check can run at all. On macOS it embeds `Info.plist`, the camera,
+  microphone and system audio recording usage strings, in the binary's
+  `__TEXT,__info_plist` section (ADR-0063 §11), so macOS can show those permission
+  prompts without an app bundle. A daemon started from a terminal is attributed to the
+  terminal app, which then needs the grant.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
 - **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
@@ -65,7 +69,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   received and the recorded MP4. The binary has no backends off Windows, so it runs
   in process; `tests/delay_load.rs`,
   Windows MSVC only, which reads the built binary's PE headers to check that the
-  backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
+  backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
+  `tests/info_plist.rs`, which checks on every OS that `Info.plist` has each usage
+  string, and on macOS that the built binary carries it).
 
 Not here yet: YouTube sign-in (the daemon doesn't call `Engine::with_youtube` yet), a default collection file, a
 default port and a default token file

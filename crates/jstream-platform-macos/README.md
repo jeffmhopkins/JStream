@@ -25,7 +25,7 @@ wrapped here behind safe APIs, with RAII types for what the system hands back
 **Bindings are maintained crates** (ADR-0063 §12, [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)).
 Apple's frameworks are called through the objc2 framework crates, at the versions wgpu's
 Metal backend already uses (`objc2-foundation`, `-core-foundation`, `-core-media`,
-`-core-video`, `-video-toolbox`, `-audio-toolbox`, `-core-audio`, `-core-audio-types`,
+`-core-video`, `-video-toolbox`, `-audio-toolbox`, `-av-foundation`, `-core-audio`, `-core-audio-types`,
 `-screen-capture-kit`, `-core-graphics` and `-security` so far, with `objc2`, `block2` and `dispatch2`
 for ScreenCaptureKit's classes, blocks and queues), and Mach time through `mach2`. They
 carry their generated bindings and link frameworks with `#[link]`, so the crate type-checks from any host with `cargo clippy -p jstream-platform-macos --target aarch64-apple-darwin`; linking and the
@@ -142,8 +142,16 @@ It has:
   500 ms, stops the IOProc before changing anything: it moves a default stream to a new
   default with the same format (positions carry on, flagged as a discontinuity) and ends
   a stream whose device is gone or changed format with `DeviceLost`. `input_format`
-  plans the same way without opening. Without the Microphone permission macOS records
-  silence rather than failing. Desktop and application audio are refused before 14.2
+  plans the same way without opening. **The Microphone permission**: without it macOS
+  would record silence, so `open_input` checks it first (`AVCaptureDevice`'s
+  authorization status for audio). When macOS hasn't asked yet, the backend asks once
+  (`requestAccessForMediaType:`, which prompts) and returns a `PlatformError::Os` naming
+  System Settings › Privacy & Security › Microphone; a refused permission gets that error
+  without asking again, and a restricted one (a configuration profile or Screen Time) an
+  error saying whoever manages the Mac has to allow it. A grant counts from the next
+  open; nothing retries on its own. Listing devices and `input_format` need no
+  permission. The prompt's usage string is in the daemon's embedded `Info.plist`
+  ([jstream-daemon](../../apps/jstream-daemon/README.md#purpose)). Desktop and application audio are refused before 14.2
   (`check_input`) and, like `processes` and playing audio (`open_output`), report
   `Unsupported` for now.
 
@@ -164,8 +172,9 @@ layouts and statuses, permission steps, the keychain item names and the error ma
 platform independent. The macOS ones (the clock, reading the release, encoding with
 VideoToolbox, which falls back to Apple's software encoder on a Mac without a hardware
 one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
-the login keychain with uniquely named items, deleted afterwards, and listing audio
-devices and their input formats) need no permission, so they run in the `macos` CI
+the login keychain with uniquely named items, deleted afterwards, listing audio
+devices and their input formats, and reading the Microphone status without prompting)
+need no permission, so they run in the `macos` CI
 job. The `hw-tests` feature is for tests that need the Screen Recording,
 Camera, Microphone or system audio recording permission (listing and capturing a display,
 the missing-permission error, and recording the default input), or the hardware encoders, which run by hand on a Mac.

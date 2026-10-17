@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Embedded in the macOS daemon binary's __TEXT,__info_plist section by build.rs, so the
+  camera, microphone and system audio recording prompts have the usage strings macOS
+  requires (ADR-0063 §11). No app bundle is needed.
+  Docs: apps/jstream-daemon/README.md#design
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>JStream</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>JStream records the microphones and audio inputs you add to a scene.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>JStream shows the cameras you add to a scene.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>JStream records desktop and application audio you add to a scene.</string>
+</dict>
+</plist>
