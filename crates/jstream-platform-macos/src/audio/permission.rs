@@ -1,4 +1,5 @@
-//! The Microphone permission (ADR-0063 §4, §11).
+//! The Microphone permission (ADR-0063 §4, §11), and the hint for the system audio
+//! recording permission.
 //!
 //! Without it macOS doesn't refuse a Core Audio input: it records silence. So recording a
 //! microphone or line input checks it first, through `AVCaptureDevice`'s authorization
@@ -8,7 +9,14 @@
 //! report it without asking again, and nothing retries on its own. A grant takes effect
 //! for the next open.
 //!
-//! The steps and errors are platform independent, so they are tested on every platform.
+//! Desktop and application audio need the system audio recording permission instead,
+//! which has no public API to read: macOS prompts when a tap first runs, and without the
+//! grant the tap records silence. JStream accepts that silence. It doesn't guess from
+//! the samples or read the private TCC database; it logs [`SYSTEM_AUDIO_HINT`] when a tap
+//! opens.
+//!
+//! The steps, errors and hint are platform independent, so they are tested on every
+//! platform.
 
 use jstream_platform::PlatformError;
 
@@ -74,6 +82,14 @@ pub(crate) fn microphone_denied(status: isize, asked_now: bool) -> PlatformError
     }
 }
 
+/// Logged when a process tap opens: where the system audio recording permission is
+/// granted, since a tap without it records silence and nothing reports a refusal.
+pub(crate) const SYSTEM_AUDIO_HINT: &str = "desktop and application audio are silent \
+    unless JStream, or the terminal app it runs from, is allowed to record system audio: \
+    macOS asks the first time a tap runs, and the setting is in System Settings > \
+    Privacy & Security > Screen & System Audio Recording, under System Audio Recording \
+    Only";
+
 #[cfg(target_os = "macos")]
 pub(crate) use system::{authorization_status, request_access};
 
@@ -126,6 +142,16 @@ mod tests {
             assert_eq!(mic_step(status, true), MicStep::Refuse, "{status}");
         }
         assert_eq!(mic_step(7, false), MicStep::Proceed, "a status added later");
+    }
+
+    #[test]
+    fn the_system_audio_hint_names_the_settings_pane() {
+        assert!(
+            SYSTEM_AUDIO_HINT
+                .contains("Privacy & Security > Screen & System Audio Recording"),
+            "{SYSTEM_AUDIO_HINT}"
+        );
+        assert!(!SYSTEM_AUDIO_HINT.contains("  "), "{SYSTEM_AUDIO_HINT}");
     }
 
     #[test]
