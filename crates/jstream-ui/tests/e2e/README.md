@@ -35,7 +35,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   Basic, the token as the password, as a person's browser does when the daemon serves
   the UI; the connect form's token field can then stay empty. `connect` opens the page
   and connects; `disconnect` disconnects through the header's File menu; `rev` reads the
-  revision the header last heard of; `inspectorPage` opens one of the inspector's tabs.
+  revision the header last heard of; `showPanel` makes sure a docked panel's tab is the
+  shown one.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -65,12 +66,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   item; selecting an item opens its properties. The mock engine lists no kinds and makes
   no delete plans, so new-kind sources, the properties form's fields and deletes are
   tested natively.
-- **Outputs** (`outputs.spec.js`, on the inspector's Outputs page and the header): adding a stream and a recording; a stream can't start
+- **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; the header's Record starts and stops a
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
+- **Docking** (`docking.spec.js`): the Editing layout's zones, with empty zones hidden;
+  the View menu hiding and adding a panel, and the layout marked "(modified)"; dragging
+  a tab onto a tab strip groups it, and onto an empty zone, which shows while dragging,
+  docks it there; a lone panel collapses by its title, and closes on a second click of
+  its ×; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
+  the Layout menu switches to Live and resets to Editing.
 - **Canvas** (`canvas.spec.js`): the program scene's box is drawn where the seed put it;
   a drag sends nothing until the drop, then one edit that undo and redo reverse; arrow
   keys nudge (Shift by 10) and Ctrl+Z undoes; a second client sees a move.

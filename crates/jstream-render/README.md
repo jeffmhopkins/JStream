@@ -39,7 +39,8 @@ and calls this crate.
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
   - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
     source pixels, fitted into the box by its fit mode (`stretch`, `fit` or `fill`,
-    which is clipped to the box), and rotated clockwise about the box's centre;
+    which is clipped to the box), mirrored inside the box by `flip_h` and `flip_v`, and
+    rotated clockwise about the box's centre;
   - a **legacy 0.3 placement** (decision 5): crop in source pixels, then scale the
     remaining rectangle by `scale` relative to the source's current size, put its
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
@@ -74,7 +75,7 @@ and calls this crate.
   endpoint at a time since the start, or nothing once the item is invisible; it is a
   pure function, so the render thread and the control thread that retargets a running
   transition get the same answer. Angles take the shortest way round, discrete fields
-  (fit mode, a perspective present at one end) switch halfway, and after easing the
+  (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
   opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
   perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
   `jstream-core`'s.
@@ -271,9 +272,11 @@ what the compositor draws and what a UI overlay computes cannot disagree.
 **Geometry.** `ItemGeometry::content` gives the cropped image's rectangle in the box's
 local frame (origin at the box centre, before rotation) and its UVs: the whole box for
 `stretch`, the centred largest rectangle of the crop's aspect ratio for `fit`, the
-centred smallest covering one for `fill`. `place` intersects that rectangle with the
+centred smallest covering one for `fill`. `flip_h` and `flip_v` swap that rectangle's
+`u` or `v` pair, which mirrors the cropped, fitted image about the box centre without
+moving the box. `place` intersects that rectangle with the
 box, which only changes `fill`, and cuts the UVs in proportion, so the clip needs no
-scissor or shader change. Clipping in the local frame is exact for any in-plane
+scissor or shader change, and a flipped `fill` keeps the mirror of the same middle. Clipping in the local frame is exact for any in-plane
 rotation. `ItemGeometry::place` then maps the four clipped corners: rotation about the
 centre, then `center` added. With 3D neutral that mapping is affine, so linear UVs
 across the quad are correct; a non-neutral 3D field would need perspective-correct
@@ -572,7 +575,10 @@ the expected layout in the diff. These are not R-TEST-003's golden PNGs under
 `tests/golden/`, which wait for `cargo xtask golden`. The grids cover `fit`
 (letterboxed), `fill` (clipped to the box, the middle of the image showing), `stretch`
 rotated 90° about the box centre, crop before fitting, a legacy item beside them, and
-a non-axis-aligned box turning about its centre.
+a non-axis-aligned box turning about its centre. A flip grid draws a four-quadrant
+image unflipped, with `flip_h`, `flip_v` and both, flipped then turned 90° (the mirror
+is in the box's own frame), and a flipped `fill`; another checks that a legacy
+negative scale and the geometry `from_legacy` makes of it draw the same grid.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an

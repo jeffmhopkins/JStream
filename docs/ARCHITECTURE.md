@@ -220,8 +220,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   collection's `canvas` is every scene's coordinate space, in pixels, and a `VideoMix`
   scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
-  and 3D tilt, turn, depth and per-item perspective, drawn in stacking order with no
-  depth buffer. `crop` is in source pixels. A source's current size is runtime state,
+  horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
+  turn, depth and per-item perspective, drawn in stacking order with no depth buffer. `crop` is in source pixels. A source's current size is runtime state,
   not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
   protocol 0.3's transform as written, which the compositor evaluates against the
   source's current size every frame. Only an explicit `item.set_geometry` turns it into
@@ -617,7 +617,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
-  `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
+  `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
+  0.32). `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
   `video_mix.create`, `video_mix.update` and `video_mix.delete` configure video mixes
@@ -687,7 +688,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
   rather than overwrite another client's later change (protocol 0.10).
-- **Privacy screen** (protocol 0.32): the action `privacy.set { on }` on the master
+- **Privacy screen** (protocol 0.33): the action `privacy.set { on }` on the master
   stage, never undoable or batchable and with no `rev` change; every change emits
   `privacy.changed { on }`, naming the client and request, to every client, and every
   `privacy.set` goes to the audit log with the state it asked for
@@ -701,7 +702,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   stage yet, so every preview stream is uncovered.
 - **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
   its encoder session's profile, the other outputs sharing it and whether the session is
-  dedicated to it because of its own video chain (0.32), plus the sessions and hardware
+  dedicated to it because of its own video chain (0.33), plus the sessions and hardware
   sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
   outputs on different mixes never share one. Planned: when the encoder refuses a
@@ -826,7 +827,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 665 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 667 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -899,7 +900,7 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
 is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's forms: a
 geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
-which is clipped to the box, then rotated about the box centre), or a legacy 0.3
+which is clipped to the box, mirrored by its flips, then rotated about the box centre), or a legacy 0.3
 transform through `legacy_quad` (crop, scale against the current source size,
 top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
@@ -1079,7 +1080,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
   migrations, a source, filter or preset saved at another version is refused on load.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
-  `normal`, a disabled filter's `enabled` only when false, and the reserved `effects[]`
+  `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
   must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.

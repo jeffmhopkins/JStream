@@ -1,12 +1,12 @@
-// The outputs panel and the header: adding outputs, the write-only stream key, start and
+// The Outputs panel and the header: adding outputs, the write-only stream key, start and
 // stop, Go Live and Record in the header,
 // the encoder profile and deleting, through a real browser and the WebSocket API.
-import { test, expect, connect, inspectorPage } from '../fixtures.js';
+import { test, expect, connect, showPanel } from '../fixtures.js';
 
 /** Connects and opens the inspector's Outputs page. */
 async function openOutputs(page, daemon) {
   await connect(page, daemon);
-  await inspectorPage(page, 'Outputs');
+  await showPanel(page, 'Outputs');
 }
 
 /** The card of output `id`. */

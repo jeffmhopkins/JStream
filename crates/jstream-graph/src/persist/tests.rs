@@ -686,6 +686,38 @@ fn placements_and_the_canvas_are_checked() {
     );
 }
 
+/// `i4`'s stored geometry in a loaded collection.
+fn i4_geometry(graph: &Graph) -> jstream_protocol::ItemGeometry {
+    match graph
+        .state()
+        .scenes
+        .first()
+        .and_then(|scene| scene.items.first())
+        .map(|item| item.placement)
+    {
+        Some(crate::Placement::Geometry(geometry)) => geometry,
+        other => panic!("`i4` has a geometry, not {other:?}"),
+    }
+}
+
+/// A geometry's flips are stored only when set, and a file without them loads unflipped.
+#[test]
+fn a_geometry_flip_round_trips_and_defaults_to_false() {
+    let graph = load(V1).expect("the fixture loads");
+    let geometry = i4_geometry(&graph);
+    assert!(geometry.flip_h && !geometry.flip_v);
+
+    let unflipped = edit_file(|v| {
+        v["scenes"][0]["items"][0]["geometry"]
+            .as_object_mut()
+            .map(|o| o.remove("flip_h"));
+    });
+    let graph = load(&unflipped).expect("loads without the flip");
+    let geometry = i4_geometry(&graph);
+    assert!(!geometry.flip_h && !geometry.flip_v);
+    assert!(!graph.to_collection_json().contains("flip_"));
+}
+
 /// An item's opacity and blend load through `item.add`'s checks, and its reserved
 /// `effects` loads only empty (ADR-0023 §1).
 #[test]
