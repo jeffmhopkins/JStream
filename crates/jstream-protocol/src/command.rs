@@ -17,8 +17,8 @@ use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::hotkey::Chord;
 use crate::id::{
-    BusId, DeviceId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId, Rev, SceneId,
-    SourceId,
+    BusId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId, OutputId, Rev,
+    SceneId, SourceId,
 };
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::preview::PreviewCodec;
@@ -677,7 +677,7 @@ impl Edit {
 /// the action was accepted, with an [`ActionResult`](crate::ActionResult) for the
 /// actions that return something (a YouTube sign-in's consent URL, a broadcast); how
 /// it goes is reported by events (`output.state_changed`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum Action {
@@ -718,6 +718,32 @@ pub enum Action {
     OutputClearKey {
         /// The output whose key to remove.
         output_id: OutputId,
+    },
+    /// Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):
+    /// each overrides one parameter of the collection on output, from the next render
+    /// tick, without changing `rev`. A value replaces the gesture's previous value for
+    /// the same parameter, and takes the parameter over from any other gesture that held
+    /// it. Values are validated as a batch's edits are (`not_found`, `invalid_argument`
+    /// with the field `values.<n>.<field>`); a value that is not a live-adjustable
+    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or
+    /// over-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a
+    /// rejected message is applied. The gesture ends with a batch carrying
+    /// `ends_gesture`, with `live.cancel`, or when its client's session ends.
+    #[serde(rename = "live.set")]
+    LiveSet {
+        /// The gesture, chosen by the client and unique among its open gestures.
+        gesture_id: GestureId,
+        /// The values, as setter edits: the same edits the committing batch carries.
+        #[schemars(length(min = 1, max = 256))]
+        values: Vec<Edit>,
+    },
+    /// Ends one of the client's gestures without a commit: its parameters show their
+    /// collection values again, and no edit is made. Succeeds when the client has no
+    /// such gesture open, so a retry is safe.
+    #[serde(rename = "live.cancel")]
+    LiveCancel {
+        /// The gesture to cancel.
+        gesture_id: GestureId,
     },
     /// Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4, kept by ADR-0058) and
     /// returns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens
@@ -873,6 +899,8 @@ impl Action {
             Action::OutputStop { .. } => "output.stop",
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
+            Action::LiveSet { .. } => "live.set",
+            Action::LiveCancel { .. } => "live.cancel",
             Action::YoutubeSignIn => "youtube.sign_in",
             Action::YoutubeSignOut => "youtube.sign_out",
             Action::YoutubeCreateBroadcast { .. } => "youtube.create_broadcast",
@@ -898,8 +926,11 @@ impl Action {
                 vec![(EntityKind::Output, output_id.as_str())]
             }
             Action::SceneSwitch { scene_id } => vec![(EntityKind::Scene, scene_id.as_str())],
-            // Broadcasts, preview channels and devices are not collection objects.
+            // Broadcasts, preview channels and devices are not collection objects, and a
+            // live action can't be bound (`bind_problem`).
             Action::AudioResetLoudness {}
+            | Action::LiveSet { .. }
+            | Action::LiveCancel { .. }
             | Action::YoutubeSignIn
             | Action::YoutubeSignOut
             | Action::YoutubeCreateBroadcast { .. }
@@ -928,6 +959,11 @@ impl Action {
             Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
+            )),
+            Action::LiveSet { .. } | Action::LiveCancel { .. } => Some((
+                "type",
+                "a live action can't be bound: its gesture belongs to the session that sends \
+                 it (ADR-0032)",
             )),
             Action::PairingStart | Action::DeviceRevoke { .. } => Some((
                 "type",
@@ -970,16 +1006,31 @@ pub struct Batch {
     /// client is not applied again, and gets the original result.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<IdempotencyKey>,
+    /// Commits one of the client's open gestures (ADR-0032): when the batch applies, the
+    /// gesture ends in the same step, and its live values give way to the committed
+    /// state. A gesture the client has not open is `invalid_argument` (field
+    /// `ends_gesture`), and nothing is applied. A batch that fails leaves the gesture
+    /// open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ends_gesture: Option<GestureId>,
 }
 
 impl Batch {
-    /// A batch of one edit, with no `expected_rev` and no idempotency key.
+    /// A batch of one edit, with no `expected_rev`, no idempotency key and no gesture.
     pub fn single(edit: Edit) -> Self {
         Batch {
             edits: vec![edit],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         }
+    }
+
+    /// Sets the gesture the batch commits.
+    #[must_use]
+    pub fn ending_gesture(mut self, gesture_id: GestureId) -> Self {
+        self.ends_gesture = Some(gesture_id);
+        self
     }
 
     /// Sets `expected_rev`.

@@ -3886,6 +3886,9 @@ mod hotkeys {
         // Session-only, server-answered and YouTube actions can't be bound either.
         for action in [
             Action::PreviewUnsubscribe { channel: 1 },
+            Action::LiveCancel {
+                gesture_id: jstream_protocol::GestureId::new("drag"),
+            },
             Action::PairingStart,
             Action::YoutubeSignOut,
         ] {

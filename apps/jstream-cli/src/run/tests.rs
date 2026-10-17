@@ -5,9 +5,9 @@ use crate::args::Connection;
 use crate::block::block_on;
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
-    Batch, Call, Canvas, ClientId, DropCounts, Edit, Event, Hello, ItemGeometry, ItemId,
-    ItemTransform, OutputId, OutputState, PROTOCOL_VERSION, Response, Rev, SceneId, SourceId,
-    SourceInfo, SourceKind, Welcome,
+    Batch, Call, Canvas, ClientId, Crop, DropCounts, Edit, Event, GestureId, Hello, ItemGeometry,
+    ItemId, ItemTransform, LiveOutcome, OutputId, OutputState, PROTOCOL_VERSION, Response, Rev,
+    SceneId, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use serde_json::{Value, json};
@@ -131,6 +131,7 @@ fn populated() -> MockEngine {
         ],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     block_on(setup.call(Call::Batch(batch))).expect("setup batch");
     engine
@@ -974,6 +975,30 @@ fn events_golden_dropped_notice() {
     );
 
     let events = control.events();
+    engine.emit(Event::LiveChanged {
+        gesture_id: GestureId::new("drag"),
+        client_id: ClientId::new("mock_1"),
+        values: vec![Edit::ItemSetCrop {
+            item_id: ItemId::new("cam"),
+            scene_id: None,
+            crop: Crop::NONE,
+        }],
+    });
+    engine.emit(Event::LiveEnded {
+        gesture_id: GestureId::new("drag"),
+        client_id: ClientId::new("mock_1"),
+        outcome: LiveOutcome::Committed,
+        rev: Some(Rev(3)),
+    });
+    let mut out = Vec::new();
+    stream_events(events, Some(2), false, &mut out).expect("two events");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "live.changed drag by mock_1: item.set_crop\n\
+         live.ended drag by mock_1 committed rev 3\n"
+    );
+
+    let events = control.events();
     engine.emit(Event::EventsDropped { count: 3 });
     let mut out = Vec::new();
     stream_events(events, Some(1), true, &mut out).expect("one event");
@@ -1624,6 +1649,7 @@ fn fitting_reads_the_state_only_when_needed() {
         edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     let unread = || -> Result<(Canvas, Vec<SourceInfo>), CliError> { panic!("read the state") };
 

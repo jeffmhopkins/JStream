@@ -76,7 +76,7 @@ use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_came
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
 };
-use crate::snapshot::{self, CaptureFrame, CaptureImage, GpuKey, Shot};
+use crate::snapshot::{self, CaptureFrame, CaptureImage, GpuKey, LiveParams, Shot};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
@@ -102,14 +102,15 @@ pub(crate) const STOP_DRAIN: Duration = Duration::from_secs(2);
 const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 
 /// Composites one frame on the render thread: the program mix of the render snapshot's
-/// [`Shot`] at `size`, with `display` sources showing the capture (or, with no program
-/// scene, the capture filling the frame, or black when there is none yet), read back as
-/// RGBA8 into `out` (replacing its contents). Returns the GPU images its cache let go
-/// of, for the collector. Created on the render thread and kept there, so it need not
-/// be `Send`.
+/// [`Shot`] at `size`, with the live values in [`LiveParams`] applied and `display`
+/// sources showing the capture (or, with no program scene, the capture filling the
+/// frame, or black when there is none yet), read back as RGBA8 into `out` (replacing its
+/// contents). Returns the GPU images its cache let go of, for the collector. Created on
+/// the render thread and kept there, so it need not be `Send`.
 pub(crate) type DrawFn = Box<
     dyn FnMut(
         &Shot,
+        &LiveParams,
         FrameSize,
         Option<&CaptureFrame<'_>>,
         &mut Vec<u8>,
@@ -129,7 +130,11 @@ pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, Str
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|_: Option<&GpuContext>| {
         let draw: DrawFn = Box::new(
-            |_: &Shot, size: FrameSize, capture: Option<&CaptureFrame<'_>>, out: &mut Vec<u8>| {
+            |_: &Shot,
+             _: &LiveParams,
+             size: FrameSize,
+             capture: Option<&CaptureFrame<'_>>,
+             out: &mut Vec<u8>| {
                 out.clear();
                 match capture.map(|capture| capture.image) {
                     Some(CaptureImage::Rgba { size: own, rgba }) if own == size => {
@@ -824,9 +829,9 @@ pub(crate) fn gpu_draw() -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
-        let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+        let draw: DrawFn = Box::new(move |shot, live, size, capture, out| {
             cache.begin_frame();
-            snapshot::compose(&mut compositor, &mut cache, shot, capture, size, true)
+            snapshot::compose(&mut compositor, &mut cache, shot, live, capture, size, true)
                 .and_then(|output| copy_pixels(&output, out))
                 .map_err(|err| err.to_string())?;
             // A failed frame skips this: what it retired waits for the next frame's
@@ -1533,6 +1538,7 @@ impl Frames {
         &mut self,
         draw: &mut DrawFn,
         shot: &Shot,
+        live: &LiveParams,
         size: FrameSize,
     ) -> Result<Option<Reclaimed>, String> {
         if shot.shows_capture() {
@@ -1549,7 +1555,7 @@ impl Frames {
             version: self.source_version,
             image,
         });
-        let freed = draw(shot, size, capture.as_ref(), &mut self.scratch)?;
+        let freed = draw(shot, live, size, capture.as_ref(), &mut self.scratch)?;
         std::mem::swap(&mut self.scratch, &mut self.shown);
         Ok(freed)
     }
@@ -1576,9 +1582,9 @@ impl Frames {
 
 /// Composites on every base-rate tick of the media clock.
 ///
-/// Each tick first adopts the render snapshot the control side published last, which
-/// costs a pointer compare unless a new one arrived ([`RenderReader::adopt`]); the
-/// thread never takes the collection lock. Its generation is stamped as the thread
+/// Each tick first adopts the render snapshot the control side published last, then the
+/// live values on the parameter channel, which costs two pointer compares unless a new
+/// one arrived ([`RenderReader::adopt`]); the thread never takes the collection lock. Its generation is stamped as the thread
 /// starts and whenever it changes. The stopped marker is published when the loop ends,
 /// and when a fatal error stops the drawing.
 ///
@@ -1678,8 +1684,9 @@ fn render_loop(job: RenderJob) {
         if !broken {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 frames.read_capture(capture.as_mut());
-                let snapshot = reader.adopt();
-                frames.draw(&mut draw, snapshot.shot(), size)
+                reader.adopt();
+                let (snapshot, live) = reader.held();
+                frames.draw(&mut draw, snapshot.shot(), live, size)
             }));
             match tick {
                 Ok(Ok(freed)) => {
@@ -2501,7 +2508,7 @@ mod tests {
         let size = FrameSize::new(4, 4).expect("size");
         // Fills the output, checking the capture it is given.
         let drawing = |expected: Option<(u64, FrameSize)>| -> DrawFn {
-            Box::new(move |_, size: FrameSize, capture, out: &mut Vec<u8>| {
+            Box::new(move |_, _, size: FrameSize, capture, out: &mut Vec<u8>| {
                 let got = capture.map(|c| match c.image {
                     CaptureImage::Rgba { size, .. } => (c.version, size),
                     CaptureImage::Gpu(_) => panic!("a CPU capture"),
@@ -2514,13 +2521,25 @@ mod tests {
         let program = crate::snapshot::tests::one_scene_shot();
         assert!(!program.shows_capture());
         frames
-            .draw(&mut drawing(None), &program, size)
+            .draw(
+                &mut drawing(None),
+                &program,
+                &crate::snapshot::LiveParams::default(),
+                size,
+            )
             .expect("draw");
         assert!(frames.pending.is_some(), "not converted");
         let empty = Shot::default();
         assert!(empty.shows_capture());
         let mut check = drawing(Some((1, FrameSize::new(8, 2).expect("size"))));
-        frames.draw(&mut check, &empty, size).expect("draw");
+        frames
+            .draw(
+                &mut check,
+                &empty,
+                &crate::snapshot::LiveParams::default(),
+                size,
+            )
+            .expect("draw");
         assert!(frames.pending.is_none());
         assert_eq!(frames.source_version, 1);
         assert_eq!(frames.shown.len(), 4 * 4 * 4);

@@ -766,6 +766,34 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
                 drops.output_packets,
             )?;
         }
+        Event::LiveChanged {
+            gesture_id,
+            client_id,
+            values,
+        } => {
+            let names: Vec<&str> = values.iter().map(Edit::name).collect();
+            writeln!(
+                out,
+                "live.changed {gesture_id} by {client_id}: {}",
+                names.join(", ")
+            )?;
+        }
+        Event::LiveEnded {
+            gesture_id,
+            client_id,
+            outcome,
+            rev,
+        } => {
+            write!(
+                out,
+                "live.ended {gesture_id} by {client_id} {}",
+                outcome.name()
+            )?;
+            if let Some(rev) = rev {
+                write!(out, " rev {rev}")?;
+            }
+            writeln!(out)?;
+        }
         other => line(out, other)?,
     }
     Ok(true)

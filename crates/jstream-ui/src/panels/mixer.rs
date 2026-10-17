@@ -199,6 +199,7 @@ pub async fn apply_plan(control: &dyn Control, plan: Pending) -> Result<(), Stri
         edits: plan.edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     }
     .expecting(plan.rev);
     control
@@ -1475,6 +1476,7 @@ mod tests {
                     edits: control.plan.clone(),
                     expected_rev: None,
                     idempotency_key: None,
+                    ends_gesture: None,
                 }
                 .expecting(rev)
             ))

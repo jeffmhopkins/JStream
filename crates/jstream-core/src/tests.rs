@@ -8,6 +8,7 @@ mod audio_routing;
 mod collection;
 mod gpu_capture;
 mod history;
+mod live_values;
 mod preview;
 mod sources;
 #[cfg(all(windows, feature = "hw-tests"))]
@@ -17,10 +18,10 @@ mod youtube;
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, Hello,
-    IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
-    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole, SourceId, SourceKind,
-    parity,
+    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, GestureId,
+    Hello, IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION,
+    ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole,
+    SourceId, SourceKind, parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -318,6 +319,7 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
+        ends_gesture: None,
     };
     assert_eq!(batch(&control, edits), Ok(Rev(1)));
     assert_eq!(engine.rev(), Rev(1));
@@ -336,6 +338,7 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         ],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     let error = batch(&control, failing).expect_err("fails");
     assert_eq!(
@@ -353,6 +356,7 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         edits: vec![],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     assert_eq!(
         code(&batch(&control, empty).expect_err("empty")),
@@ -368,6 +372,7 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         edits: vec![],
         expected_rev: Some(Rev(5)),
         idempotency_key: None,
+        ends_gesture: None,
     };
     assert_eq!(
         code(&batch(&control, empty_and_stale).expect_err("stale")),
@@ -722,6 +727,7 @@ fn scene_switch_changes_program_without_an_edit() {
         edits: vec![create("a"), create("b")],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     })))
     .expect("scenes");
     assert_eq!(
@@ -991,6 +997,26 @@ fn concurrent_sessions_see_every_event_in_rev_order() {
 /// The same script of calls against the engine and against `jstream-control`'s mock
 /// gets the same answers (results, error codes and fields) and the same events, up to
 /// client IDs. The mock is the reference implementation clients were developed against.
+fn moved(item: &str, x: f32) -> Edit {
+    Edit::ItemSetTransform {
+        item_id: ItemId::new(item),
+        scene_id: None,
+        transform: jstream_protocol::ItemTransform {
+            position: jstream_protocol::Vec2::new(x, 0.0).expect("finite"),
+            ..jstream_protocol::ItemTransform::IDENTITY
+        },
+    }
+}
+
+fn live(gesture_id: &str, values: Vec<Edit>) -> Call {
+    Call::Action {
+        action: Action::LiveSet {
+            gesture_id: GestureId::new(gesture_id),
+            values,
+        },
+    }
+}
+
 #[test]
 fn the_engine_answers_like_the_mock() {
     fn normalize(event: Event) -> Event {
@@ -1002,6 +1028,24 @@ fn the_engine_answers_like_the_mock() {
                 client_id: ClientId::new("client"),
                 request_id,
                 cause: None,
+            },
+            Event::LiveChanged {
+                gesture_id, values, ..
+            } => Event::LiveChanged {
+                gesture_id,
+                client_id: ClientId::new("client"),
+                values,
+            },
+            Event::LiveEnded {
+                gesture_id,
+                outcome,
+                rev,
+                ..
+            } => Event::LiveEnded {
+                gesture_id,
+                client_id: ClientId::new("client"),
+                outcome,
+                rev,
             },
             Event::StudioChanged {
                 program_scene,
@@ -1016,7 +1060,21 @@ fn the_engine_answers_like_the_mock() {
         }
     }
     /// Error messages may differ between implementations; codes and fields may not.
+    /// Client IDs are named differently too.
     fn comparable(result: Result<CallResult, ControlError>) -> Result<CallResult, ProtocolError> {
+        let result = result.map(|result| match result {
+            CallResult::Query {
+                result: QueryResult::LiveList { mut gestures },
+            } => {
+                for gesture in &mut gestures {
+                    gesture.client_id = ClientId::new("client");
+                }
+                CallResult::Query {
+                    result: QueryResult::LiveList { gestures },
+                }
+            }
+            other => other,
+        });
         result.map_err(|error| match error.protocol() {
             Some(ProtocolError::InvalidArgument { field, .. }) => {
                 ProtocolError::invalid_argument(field.clone(), String::new())
@@ -1109,6 +1167,41 @@ fn the_engine_answers_like_the_mock() {
         Call::Query {
             query: Query::OutputStatus {
                 output_id: OutputId::new("yt"),
+            },
+        },
+        // Live values (ADR-0032): one `live.set` per gesture, so the engine's coalescing
+        // sends each at once, as the mock does.
+        Call::Batch(edits(vec![create("z"), add("z", "iz", "cam")])),
+        live("g1", vec![moved("iz", 5.0)]),
+        live("g1", vec![create("x")]),
+        live("g2", vec![moved("ghost", 1.0)]),
+        live("g2", vec![]),
+        Call::Query {
+            query: Query::LiveList,
+        },
+        // `ends_gesture` is checked before `expected_rev`.
+        Call::Batch(
+            Batch::single(moved("iz", 6.0))
+                .expecting(Rev(0))
+                .ending_gesture(GestureId::new("nope")),
+        ),
+        Call::Batch(Batch::single(moved("iz", 6.0)).ending_gesture(GestureId::new("g1"))),
+        Call::Batch(Batch::single(moved("iz", 7.0)).ending_gesture(GestureId::new("g1"))),
+        live("g3", vec![moved("iz", 1.0)]),
+        Call::Batch(Batch::single(Edit::ItemRemove {
+            item_id: ItemId::new("iz"),
+        })),
+        Call::Query {
+            query: Query::LiveList,
+        },
+        Call::Action {
+            action: Action::LiveCancel {
+                gesture_id: GestureId::new("g3"),
+            },
+        },
+        Call::Action {
+            action: Action::LiveCancel {
+                gesture_id: GestureId::new("g9"),
             },
         },
     ];
@@ -1804,6 +1897,7 @@ fn the_render_snapshot_follows_the_program_mix() {
         edits: vec![create("main"), display, add("main", "shown", "screen")],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     batch(&control, edits).expect("batch");
     assert_eq!(generation(), 2);
@@ -1967,6 +2061,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
             edits: vec![create("main"), webcam(), add("main", "layer", "webcam")],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect("scene");
@@ -2032,6 +2127,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect("second scene");
@@ -2081,6 +2177,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect("nested scenes");
@@ -2139,6 +2236,7 @@ fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         },
     )
     .expect("scene");
@@ -2389,11 +2487,11 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+                let draw: DrawFn = Box::new(move |shot, live, size, capture, out| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push(shot.program().cloned());
-                    inner(shot, size, capture, out)
+                    inner(shot, live, size, capture, out)
                 });
                 Ok(draw)
             })
@@ -2423,6 +2521,7 @@ mod cpu_pipeline {
             edits: vec![edit],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         batch(&control, one(create("main"))).expect("scene.create");
         assert_eq!(hub.load().generation(), 2);
@@ -3007,9 +3106,9 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, live, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, size, rgba, out)
+                    inner(shot, live, size, rgba, out)
                 });
                 Ok(draw)
             })
@@ -4282,9 +4381,9 @@ mod cpu_pipeline {
             Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, live, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, size, rgba, out)
+                    inner(shot, live, size, rgba, out)
                 });
                 Ok(draw)
             })
@@ -4448,7 +4547,7 @@ mod cpu_pipeline {
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move |_| {
-            let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>| {
+            let draw: DrawFn = Box::new(move |_, _, size: FrameSize, _, out: &mut Vec<u8>| {
                 out.clear();
                 for _ in 0..size.width() as usize * size.height() as usize {
                     out.extend_from_slice(&rgba);
@@ -4750,6 +4849,7 @@ fn edits(edits: Vec<Edit>) -> Batch {
         edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     }
 }
 
@@ -5266,7 +5366,7 @@ fn batches_and_actions_are_audited() {
         .map(|e| {
             (
                 e.client_id.as_str(),
-                e.request_id.as_str(),
+                e.request_id.as_ref().map_or("", RequestId::as_str),
                 e.call,
                 e.edits.clone(),
                 e.output_id.as_ref().map(OutputId::as_str),

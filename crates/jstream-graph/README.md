@@ -206,7 +206,7 @@ the batch **touched**.
   (`invalid_argument` on `chord`), whether it is already bound (`already_exists`) or
   bound at all (`not_found`, entity `hotkey`), an action that can't be bound
   (`Action::bind_problem`: `output.set_key`, whose key is never stored, and the
-  session-only, server-answered and YouTube actions), and the objects the action names
+  session-only (preview and live), server-answered and YouTube actions), and the objects the action names
   (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
   `hotkey.set` in one batch. Deleting a scene, source, output or encoder profile removes
   the bindings that name it, so none dangles: the result's `removed_hotkeys` lists them,
