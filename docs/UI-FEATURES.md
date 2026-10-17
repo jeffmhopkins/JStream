@@ -64,13 +64,13 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Scene objects panel](#objects) | 9 | 0 | 3 | 5 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 0 | 0 | 6 | 4 | 0 |
 | [Transform panel](#transform) | 4 | 0 | 0 | 4 | 0 | 0 |
-| [Filters](#filters) | 8 | 0 | 0 | 5 | 2 | 1 |
+| [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
 | [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **7** | **23** | **56** | **42** | **2** |
+| **Total** | **130** | **7** | **23** | **56** | **43** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -87,7 +87,7 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. |
-| WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then the stack names Plex first and falls back to system fonts. |
+| WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
 | WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | Today: text glyphs (▲ ▼ ✕ ● ○ ↺). |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ⬜ | Used by the Inspector, filters, mixer and dialogs. |
@@ -98,7 +98,7 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 <a id="header"></a>
 ## Header bar
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/panels/outputs.rs"]
 -->
 
 Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header-bar).
@@ -109,11 +109,11 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ⬜ | Needs [docking](#docking). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ⬜ | Needs [docking](#docking). |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
-| HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (draft #317). |
-| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | 🔒 | T1 (#260) and T1u (draft #304). |
-| HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped recording output; "Stop recording" while any runs; disabled with none. |
+| HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
+| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | 🔒 | T1 (#260) and T1u (#304). |
+| HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
-| HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped stream output whose key is set. |
+| HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
 
 <a id="docking"></a>
 ## Docking and layouts
@@ -142,7 +142,7 @@ bottom. Nothing moves, resizes or collapses.
 <a id="canvas"></a>
 ## Canvas
 <!-- @section
-covers = ["crates/jstream-ui/src/canvas/**"]
+covers = ["crates/jstream-ui/src/canvas/**", "crates/jstream-ui/src/store.rs"]
 -->
 
 Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#canvas-structure-and-rendering),
@@ -152,7 +152,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 |---|---|---|---|---|
 | CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | 🟡 | The frame and area colours are built; today the stage is up to 960px wide, with the scene name in a toolbar above. |
 | CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ⬜ | Today it always shows the program scene, with a selection of its own. |
-| CV-03 | Live picture | The scene's real picture under the item boxes. | 🔒 | U4p (draft #302) adds the program preview; other scenes need previews for any target (D36). |
+| CV-03 | Live picture | The scene's real picture under the item boxes. | 🔒 | U4p (#302) adds the program preview; other scenes need previews for any target (D36). |
 | CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Handles, knob and selection exist in a different style; no pill, no hover outline. |
 | CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | 🟡 | Built, with Alt instead of Ctrl. |
 | CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | 🟡 | Built with other modifiers: corners keep aspect, Shift frees it; edges always stretch. |
@@ -166,7 +166,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ⬜ | |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend and no 3D yet (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | 🔒 | Keyframe scenes in the protocol are K1. |
-| CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | 🔒 | E2b (draft #317). |
+| CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | 🔒 | E2b (#317). |
 | CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ⬜ | |
 
 <a id="menus"></a>
@@ -186,7 +186,7 @@ The real UI has no menus yet.
 | CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | ⬜ | |
 | CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
 | CM-07 | Transition in/out submenus | Default (preset), then each preset, then "Manage presets…". | 🔒 | T1 (#260). |
-| CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🔒 | K1 (drafts #319, #323). |
+| CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🔒 | K1 (#319). |
 
 <a id="dialogs"></a>
 ## Dialogs and windows
@@ -222,16 +222,16 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-03 | Search | "Search scenes" filters by name, keeping parents of matches. | ⬜ | |
 | SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Reordering exists as ▲/▼ buttons. Into a folder is 🔒 with SC-06. |
 | SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | 🟡 | Built today with inline controls (double-click rename, ✕, "New scene name" field); they move to menus and keys. |
-| SC-06 | Folders | Folders organise scenes; collapsible. | 🔒 | B11 (draft #323). |
+| SC-06 | Folders | Folders organise scenes; collapsible. | 🔒 | B11 (#323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | 🔒 | K1. |
-| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🔒 | B11 (draft #323). |
-| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | 🔒 | B11. |
+| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🔒 | B11 (#323). |
+| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | 🔒 | B11 (#323). |
 | SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | 🔒 | Today a hover "Program" button cuts; the click-to-switch rule follows T1's studio mode. |
 
 <a id="objects"></a>
 ## Scene objects panel
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/sources.rs"]
+covers = ["crates/jstream-ui/src/panels/sources.rs", "crates/jstream-ui/src/store.rs"]
 -->
 
 Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-objects-panel).
@@ -242,7 +242,7 @@ Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-obj
 | OB-02 | Visibility eye | Hover-revealed eye; stays shown while hidden; hidden rows dimmed. | 🟡 | Built as ●/○; restyle. |
 | OB-03 | References in italics | A placement of a source shared with other scenes reads in italics. | ⬜ | |
 | OB-04 | Nested scenes as groups | A nested scene (group) expands to show its items. | ⬜ | `scene.set_role` and `item.move` exist ([ADR-0024](adr/0024-scene-structure.md)). |
-| OB-05 | Scene-input filter rows | An object with a mask, matte, clip or displacement filter shows the scene it uses as a child row with a role badge. | 🔒 | Scene-input video filters (V3, draft #313). |
+| OB-05 | Scene-input filter rows | An object with a mask, matte, clip or displacement filter shows the scene it uses as a child row with a role badge. | 🔒 | Scene-input video filters (V3, #313). |
 | OB-06 | Drag to reorder and group | Drag before, after or into a group. | ⬜ | Reorder exists as ▲/▼. |
 | OB-07 | Search | "Search objects". | ⬜ | |
 | OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ⬜ | |
@@ -304,8 +304,8 @@ has source filter chains (`filter.add`, `remove`, `set_enabled`, `set_settings`,
 | FL-04 | Add filter | "+ Add filter…" opens DL-05. | ⬜ | |
 | FL-05 | Settings from descriptors | Each filter's settings come from its kind descriptor ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). | ⬜ | The prototype's catalogue is a wish list; the engine lists audio gain, noise gate, compressor, limiter and delay, and video filters from effect packs. |
 | FL-06 | Scene filters | A scene's video chain. | 🔒 | Filter owners are sources only today. |
-| FL-07 | Program and output chains | Master chain on the program output, one chain per output. | 🔒 | D8p (draft #303), [ADR-0027](adr/0027-program-master-and-output-chains.md). |
-| FL-08 | CLAP plugin filter | Host a CLAP audio effect. | ⏸ | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): hidden until CL1 lands in M3. |
+| FL-07 | Program and output chains | Master chain on the program output, one chain per output. | 🔒 | D8p (#303), [ADR-0027](adr/0027-program-master-and-output-chains.md). |
+| FL-08 | CLAP plugin filter | Host a CLAP audio effect. | 🔒 | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): hidden until CL1 lands in M3. |
 
 <a id="mixer"></a>
 ## Mixer
@@ -323,7 +323,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 | MX-03 | Channel strips | Name, level bar, dB number field. | 🟡 | Built with meters, a tapered fader, mute and routing; restyle around them. |
 | MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | Needs [docking](#docking) for the title bar. |
 | MX-05 | Monitoring | "Hear: after FX" / "before FX". | 🔒 | Decision register D22; no monitor device in the protocol. |
-| MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | 🔒 | E2b. |
+| MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | 🔒 | E2b (#317). |
 | MX-07 | Real levels | Meters show the engine's levels. | 🟡 | Built (`meters.tick`); the prototype's numbers are simulated. Counted 🟡 until MX-03's restyle. |
 
 <a id="outputs"></a>
@@ -350,7 +350,7 @@ doesn't show; that stays ([Beyond](#beyond)).
 
 Spec: [panels › transitions](../design/ui-prototype/spec-panels.md#transitions-panel),
 [workspace › transitions](../design/ui-prototype/spec-workspace.md#scenes-keyframes-transitions).
-All of it waits on T1 (#260), whose UI is T1u (draft #304).
+All of it waits on T1 (#260), whose UI is T1u (#304).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -359,7 +359,7 @@ All of it waits on T1 (#260), whose UI is T1u (draft #304).
 | TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🔒 | T1. |
 | TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | 🔒 | T1 ([ADR-0029](adr/0029-transitions.md)). |
 | TR-05 | Move transition | Pairs items by source, interpolates placement, retargets mid-transition; unmatched items fade, scale or slide. | 🔒 | Engine side of T1. |
-| TR-06 | Studio mode | Preview and program, Transition and Cut. | 🔒 | T1u (draft #304). |
+| TR-06 | Studio mode | Preview and program, Transition and Cut. | 🔒 | T1u (#304). |
 
 <a id="live-panels"></a>
 ## Stream stats, live chat and agent activity
@@ -373,14 +373,14 @@ Spec: [panels › stream stats](../design/ui-prototype/spec-panels.md#stream-sta
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | ST-01 | Stream stats | LIVE/READY pill and uptime, watching, likes, chat rate, dropped frames, stream health, 2-minute bitrate chart, details. | 🔒 | Y4 (YouTube health and audience stats); bitrate needs engine stats (D39). |
-| CH-01 | Live chat | YouTube chat with badges and Super Chats, pinned message, composer. | 🔒 | Y4 (draft #363) and the OAuth client. |
-| CH-02 | Show on stream | Feature one message on stream. | 🔒 | Y4 (draft #363 draws the featured message). |
+| CH-01 | Live chat | YouTube chat with badges and Super Chats, pinned message, composer. | 🔒 | Y4 (#363) and the OAuth client. |
+| CH-02 | Show on stream | Feature one message on stream. | 🔒 | Y4 (#363 draws the featured message). |
 | AG-01 | Agent activity | What MCP clients changed, newest first. | 🔒 | An audit log over the protocol (decision register D38). |
 
 <a id="keyboard"></a>
 ## Keyboard
 <!-- @section
-covers = ["crates/jstream-ui/src/canvas/mod.rs"]
+covers = ["crates/jstream-ui/src/canvas/mod.rs", "crates/jstream-ui/src/canvas/transform.rs"]
 -->
 
 Spec: [workspace › keyboard shortcuts](../design/ui-prototype/spec-workspace.md#keyboard-shortcuts).
@@ -394,8 +394,8 @@ handlers; the real UI makes them work.
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ⬜ | |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
-| KB-06 | Privacy key | Pause toggles privacy. | 🔒 | E2b. |
-| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | 🔒 | K1 (draft #319). |
+| KB-06 | Privacy key | Pause toggles privacy. | 🔒 | E2b (#317). |
+| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | 🔒 | K1 (#319). |
 
 <a id="beyond"></a>
 ## Beyond the prototype
@@ -440,8 +440,8 @@ starts when the one before it has passed review.
 4. **Inspector and Transform:** placement number fields, W/H link, crop, opacity, scene
    section, align and distribute (IN-01, IN-02, IN-04, IN-06 to IN-08, TF-01 to TF-04).
 5. **Menus and dialogs:** context menus, Properties dialog, Add source dialog,
-   reference ↔ clone, groups, edit keys (CM-01 to CM-06, DL-01, DL-02, DL-06, OB-03, OB-04,
-   KB-04).
+   reference ↔ clone, groups, edit keys, copy and paste (CM-01 to CM-06, DL-01, DL-02,
+   DL-06, OB-03, OB-04, KB-04, KB-05).
 6. **Filters:** panel, rows, add and settings dialogs (FL-01 to FL-05, DL-04, DL-05).
 7. **Trees and mixer:** search, drag to reorder, mixer master card and vertical meters
    (SC-03, SC-04, SC-05, OB-01, OB-02, OB-06 to OB-09, MX-01 to MX-04).
