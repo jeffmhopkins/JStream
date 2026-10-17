@@ -51,7 +51,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   `max_tcp_connections` are open, and drops one that hasn't sent an accepted upgrade
   request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
-  ([R-SEC-002](../../docs/RULES.md#R-SEC-002)), the device cookie among them.
+  ([R-SEC-002](../../docs/RULES.md#R-SEC-002)), the device cookie among them, and the
+  limit on how many failed credentials are logged.
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
   its events, and the cap on calls in flight.
@@ -469,6 +470,16 @@ alone.
   same way. The test
   `gate::tests::refusals_are_logged_without_the_token` checks this with a capturing
   subscriber, and `jstream-daemon`'s end-to-end test checks its stderr.
+- **Failed credentials** (a missing or wrong token, or a refused device cookie) are
+  logged that way only up to 10 in a minute, counted from the first, for every peer
+  together, since on loopback a peer address tells no one apart. The 11th logs `too
+  many failed credential checks: not logging the rest of this window`, later ones in the
+  minute are only counted, and the first one after the minute logs their number
+  (`failed credential checks were not logged`, `unlogged`) before its own line. The
+  requests are still refused one by one and the right token still gets in: 256 bits
+  can't be guessed, so delaying or locking out attempts would only let any local
+  process shut out the real clients (#354). The state is a start time and a count.
+  `gate::tests::a_flood_of_wrong_tokens_logs_a_bounded_summary` checks this.
 - **Accepted connections** get an `info` span `connection` with a number (counting from
   1 per server) and the peer address, and log `connection accepted`. The session the
   `Connector` opens is created inside that span, so the engine's own `session` and
@@ -542,9 +553,10 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    token file at a path it is given and listens on a free port by default; a default
    port and file location are its open questions
    ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
-6. **Logging volume.** Every refused upgrade is logged at `warn` (see *Logging*). A
-   foreign page that keeps retrying can fill the log; whether refusals need rate
-   limiting or a summary line is open.
+6. **Logging volume.** Failed credentials are settled and built (see *Logging*): at
+   most 10 lines a minute, then a count (#354). Every other refused request is still
+   logged at `warn`, so a foreign page that keeps retrying a refused `Origin` can fill
+   the log; whether those need the same limit is open.
 7. **Backpressure.** Settled and built (see *Sessions*): each connection has a bounded
    event buffer, and on overflow the server drops the queued events and sends one
    `events.dropped` notice, so the engine is never slowed down by one client. What is
