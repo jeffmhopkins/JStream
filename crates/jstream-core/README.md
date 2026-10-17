@@ -1137,8 +1137,9 @@ resolution or rate, or `output.set_video_mix` on a running output changes nothin
 it restarts, and an
 output started after the update opens a session of its own rather than joining one
 with stale settings. `output.status` reports, per running output, the profile, the
-other outputs on the same session and whether its video encoder is a hardware one,
-plus the video sessions and hardware sessions open
+other outputs on the same session and whether its video encoder is a hardware one
+(read from `VideoSession::codec`, so a hardware encoder that fell back to software at
+its first frame reports software), plus the video sessions and hardware sessions open
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
 guess a hardware cap. A hardware session limit fails the start with the encoder's own
 error for now, not a session-limit code.

@@ -740,9 +740,10 @@ impl Encoders {
         self.key.1.as_ref()
     }
 
-    /// Whether the video encoder is a hardware one.
+    /// Whether the video encoder is a hardware one now: false once a hardware encoder
+    /// that refused its first frame fell back to software (#443).
     pub(crate) fn hardware(&self) -> bool {
-        self.video.info().codec.hardware
+        self.video.codec().hardware
     }
 }
 
