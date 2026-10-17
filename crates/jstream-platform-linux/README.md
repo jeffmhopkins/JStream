@@ -1,0 +1,111 @@
+<!-- @doc
+id = "CRATE-jstream-platform-linux"
+title = "jstream-platform-linux"
+kind = "normative"
+status = "active"
+review_every = "90d"
+-->
+
+# jstream-platform-linux
+
+<a id="purpose"></a>
+## Purpose
+<!-- @section
+covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose"]
+-->
+
+The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
+traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
+ADR is **accepted**; this crate has its first two parts (the platform basics, then screen
+capture), and the rest follows in later PRs. Layer 2, and one of
+the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
+system call is wrapped here behind safe APIs, with RAII types for what the system hands
+back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
+
+**System libraries are loaded at run time** (ADR-0060 §8). libpipewire and libva are
+opened with `dlopen` through `libloading` when a backend first needs them, and only the
+functions the crate calls are declared, each with its C signature in a `SAFETY` comment.
+Nothing is linked, so the crate builds and tests on any machine, CI included, without
+their headers. This departs from [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)'s
+preference for the `pipewire` crate for the reason ADR-0060 gives: that crate needs
+libpipewire's headers and libclang wherever the workspace builds. A missing or too-old
+library is `PlatformError::MissingComponent`, with the package to install. Everything that
+calls Linux is under `cfg(target_os = "linux")`. On other targets the crate builds just its
+platform-independent helpers, which are tested on every platform.
+
+It has:
+- **`MonotonicClock`** (`MediaClock`): `CLOCK_MONOTONIC` in **100 ns ticks**
+  (`timebase()`), the unit the Windows backend uses. PipeWire and V4L2 stamp their data
+  on the same clock in nanoseconds, so their timestamps map with a division
+  (`hns_from_timespec`). `now` never decreases, and doesn't allocate, lock or block.
+- **`Session`**: the session type (Wayland, X11, headless) and the desktops, read from
+  `XDG_SESSION_TYPE`, `WAYLAND_DISPLAY`, `DISPLAY` and `XDG_CURRENT_DESKTOP`, and its
+  ADR-0060 tier: GNOME or KDE on Wayland is supported, any other graphical session is
+  best effort.
+- **`PortalCapture`** (`Capture`): lists one target per kind, "a display" and "a
+  window", which the desktop's ScreenCast portal picker resolves when the capture starts.
+  A headless session lists none. `start` runs the portal's session flow on the session
+  bus: `CreateSession`, `SelectSources` (one source of the picked kind, the cursor drawn
+  into the frames, `persist_mode` 2 with the last restore token), `Start` (the picker;
+  `start` blocks while it is open, up to five minutes) and `OpenPipeWireRemote`. Each
+  request's `Response` is matched on the request path computed before the call, or on
+  the handle the call returns. A cancelled picker is an `Os` error with code 1. The
+  flow is a state machine without I/O (`portal/handshake.rs`), tested message by
+  message. The new restore token `Start` returns replaces the spent one, in memory and,
+  with `PortalCapture::with_token_dir`, in a file only the user can read, so the next
+  start skips the picker. A thread keeps the portal's connection open for the session's
+  life and reports the portal closing it (sharing stopped, grant revoked) as
+  `DeviceLost`.
+- **The D-Bus client** (`dbus.rs`) is the crate's own: the wire format in both byte
+  orders, `EXTERNAL` authentication with file descriptor passing, and blocking calls
+  with timeouts over the session bus socket. Received messages are untrusted: lengths
+  are checked, nesting is bounded, and malformed input is an error. The portal needs a
+  few calls and two signals, which didn't justify a D-Bus crate and its async runtime,
+  and libdbus would be one more C library to load.
+- **The PipeWire video stream** (`pipewire/stream.rs`) connects to the granted node on
+  the portal's remote, on a `pw_thread_loop`. It offers BGRx, BGRA, RGBx and RGBA at
+  any size and rate (`spa.rs` builds and parses the SPA pods by hand, since libspa's
+  builder is inline C), asks for mappable shared-memory buffers with header and crop
+  metadata, and copies each frame into a CPU `VideoSurface` (`Bgra8` or `Rgba8`,
+  padding bytes made opaque, the crop applied) in a single-slot mailbox. Its `pts` is
+  the buffer header's `CLOCK_MONOTONIC` time when that is plausible, else the clock's
+  `now`. The callbacks catch panics (R-UNSAFE-005); a stream error is `DeviceLost`.
+  The portal protocol's option values are here too: source types, cursor modes,
+  `persist_mode`, request handle tokens and request object paths.
+- **`PipeWire`** loads `libpipewire-0.3.so.0` and checks it is at least ADR-0060's floor
+  (1.0). **`PipeWireAudio`** (`AudioIo`) is built on it; listing devices and opening
+  streams report `Unsupported` for now.
+- **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
+  libva-drm, and records the best H.264 profile (High, then Main, then Constrained
+  Baseline) and encode entry point (full, then low-power) its driver offers. The display
+  is terminated before its node is closed. **`VaapiCodecs`** (`Codecs`) lists those as
+  hardware H.264 encoders and picks one for a configuration with `choose_encoder`. That
+  refuses other codecs and a software-only request (no software encoder until Cisco's
+  OpenH264 download lands, [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), and reports a machine with no H.264
+  encode driver as a missing component with the distributions' packages (ADR-0060 §6).
+  Opening the session reports `Unsupported` for now. Audio encoding reports
+  `Unsupported` until the Rust AAC-LC encoder exists (ADR-0061), and decoding
+  is out of the ADR's scope.
+
+Not here yet, in roughly the order they follow:
+- DMA-BUF frames imported into the engine's Vulkan device (`Capture::on_context`), in
+  place of the CPU copy;
+- the cursor as stream metadata, composited by the source, once the source has a
+  "show cursor" setting (it is drawn into the frames for now);
+- restore tokens kept per source rather than per kind of pick, once the engine names
+  the source when it starts a capture;
+- PipeWire audio streams, and the ALSA fallback through libasound (ADR-0060 §4, §8);
+- the VA-API H.264 encode session (parameter buffers, NV12 upload, packed headers);
+- V4L2 webcams;
+- the stream-key store.
+
+The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
+
+Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
+pods and the frame copy are platform-independent. The Linux ones (the clock, loading
+libc through the loader, passing a file descriptor over a socket pair, restore token
+files, the PipeWire and libva probes) pass with or without those libraries installed
+and need no GPU, session or daemon. The `hw-tests` feature holds the tests against a
+real desktop, `#[ignore]`d and run by hand: the session bus (`dbus-run-session` is
+enough), and a portal capture in a GNOME or KDE session with PipeWire.

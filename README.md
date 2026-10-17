@@ -50,7 +50,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `██████░░░░` 61% | 14 | 5 | 4 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 25% | 3 | 3 | 6 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 25% | 3 | 4 | 5 |
 
 94 of 115 items are merged; 5 of those still wait on a run on Windows hardware.
 
@@ -219,9 +219,9 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | 🔍 in review | #486 |
 | MAC1 | macOS platform crate | ⏳ planned: ADR-0063 proposed (#511); crate part 1 in draft (#513) | #511, #513 |
-| LNX1 | Linux codec path and platform crate | ⏳ planned |  |
+| LNX1 | Linux codec path and platform crate | 🔍 in review: ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509) | #481, #490, #509 |
 | LNX2 | Linux OpenH264 download (ADR-0061) | ⏳ planned |  |
-| LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | ⏳ planned |  |
+| LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | ⏳ planned: patent check ADR-0062 accepted (#508); encoder not started |  |
 
 </details>
 <!-- @generated end progress -->

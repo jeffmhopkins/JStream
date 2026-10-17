@@ -71,6 +71,7 @@ jstream-media = { path = "crates/jstream-media" }
 jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }
+jstream-platform-linux = { path = "crates/jstream-platform-linux" }
 jstream-platform-macos = { path = "crates/jstream-platform-macos" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
 jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
@@ -80,6 +81,13 @@ jstream-server = { path = "crates/jstream-server" }
 jstream-sources = { path = "crates/jstream-sources" }
 jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
 jstream-youtube = { path = "crates/jstream-youtube" }
+# `clock_gettime(CLOCK_MONOTONIC)` and `close` for the Linux backends (ADR-0060). Already
+# in the tree under tokio, getrandom and others; no build script compiling C.
+libc = { version = "0.2", default-features = false }
+# `dlopen` for the Linux backends' system libraries (libpipewire, libva), loaded at run
+# time so the workspace builds without their headers (ADR-0060). Already in the tree at
+# 0.9 under cef; no build script.
+libloading = { version = "0.9", default-features = false, features = ["std"] }
 # WGSL parsing and validation for effect packs (`jstream-effects`). Pinned to wgpu's
 # exact version (ADR-0004), so it is the copy wgpu already brings in. `wgsl-in` is the
 # only feature: no back ends, no `std`-only extras.
