@@ -3,9 +3,8 @@
 //! Video encode goes through VA-API. There is no software H.264 encoder until Cisco's
 //! OpenH264 binary lands (ADR-0060 question 1, answered; it follows the ADR superseding
 //! ADR-0031), and no AAC encoder until the Rust AAC-LC encoder exists (question 2).
-//! For now, [`VaapiCodecs`] lists the encoders the probe finds and picks one for a
-//! configuration; opening the session itself reports `Unsupported` until the VA-API
-//! encode path lands.
+//! [`VaapiCodecs`] lists the encoders the probe finds, picks one for a configuration
+//! and opens a VA-API H.264 session on it.
 
 use jstream_platform::media::Codec;
 use jstream_platform::{HardwarePreference, PlatformError, VideoEncoderConfig};
@@ -61,10 +60,21 @@ mod backend {
     };
 
     use super::choose_encoder;
+    use crate::vaapi::VaapiH264Encoder;
     use crate::{VaEncoder, probe_encoders};
 
-    /// Codecs through VA-API (ADR-0060 §6). For now it lists and chooses encoders;
-    /// sessions report `Unsupported`.
+    /// How an encoder is listed and reported.
+    fn info(e: &VaEncoder) -> CodecInfo {
+        CodecInfo {
+            name: format!("VA-API H.264 ({}, {})", e.vendor, e.node),
+            codec: Codec::H264,
+            role: CodecRole::VideoEncoder,
+            hardware: true,
+        }
+    }
+
+    /// Codecs through VA-API (ADR-0060 §6): H.264 encode sessions on the probe's
+    /// encoders. CPU frames only for now.
     #[derive(Debug)]
     pub struct VaapiCodecs {
         /// What the probe found, or why it couldn't run (libva missing).
@@ -90,15 +100,7 @@ mod backend {
     impl Codecs for VaapiCodecs {
         fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
             let encoders = self.encoders.as_deref().unwrap_or_default();
-            Ok(encoders
-                .iter()
-                .map(|e| CodecInfo {
-                    name: format!("VA-API H.264 ({}, {})", e.vendor, e.node),
-                    codec: Codec::H264,
-                    role: CodecRole::VideoEncoder,
-                    hardware: true,
-                })
-                .collect())
+            Ok(encoders.iter().map(info).collect())
         }
 
         fn video_encoder(
@@ -107,13 +109,11 @@ mod backend {
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
             let encoders = self.encoders.as_ref().map_err(Clone::clone)?;
             let encoder = choose_encoder(encoders, config)?;
-            Err(PlatformError::Unsupported {
-                what: format!(
-                    "a VA-API H.264 session on {} (encode sessions are not built yet, \
-                     ADR-0060)",
-                    encoder.node
-                ),
-            })
+            Ok(Box::new(VaapiH264Encoder::open(
+                encoder,
+                config,
+                info(encoder),
+            )?))
         }
 
         fn audio_encoder(

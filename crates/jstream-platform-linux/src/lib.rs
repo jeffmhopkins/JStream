@@ -2,8 +2,8 @@
 //! as ADR-0060 lays them out. The first part: it has the `CLOCK_MONOTONIC` media
 //! clock (`MonotonicClock`), session and support-tier detection (`Session`), the
 //! ScreenCast portal's capture targets (`PortalCapture`), run-time loading of libpipewire
-//! (`PipeWire`, behind `PipeWireAudio`) and libva, and VA-API H.264 encoder probing
-//! behind `VaapiCodecs`. Capture, audio and encode sessions report `Unsupported` until
+//! (`PipeWire`, behind `PipeWireAudio`) and libva, and VA-API H.264 encoding from CPU
+//! frames behind `VaapiCodecs`. Capture and audio sessions report `Unsupported` until
 //! their follow-ups land. Layer 2, and one of the crates allowed `unsafe`
 //! (R-UNSAFE-001): every system call is wrapped here behind safe APIs.
 //!

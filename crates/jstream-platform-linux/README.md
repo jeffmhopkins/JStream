@@ -60,16 +60,30 @@ This first part has:
   refuses other codecs and a software-only request (no software encoder until Cisco's
   OpenH264 download lands, ADR-0060 question 1), and reports a machine with no H.264
   encode driver as a missing component with the distributions' packages (ADR-0060 §6).
-  Opening the session reports `Unsupported` for now. Audio encoding reports
-  `Unsupported` until the Rust AAC-LC encoder exists (ADR-0060 question 2), and decoding
-  is out of the ADR's scope.
+  Audio encoding reports `Unsupported` until the Rust AAC-LC encoder exists (ADR-0060
+  question 2), and decoding is out of the ADR's scope.
+- **The VA-API H.264 session** (`VideoEncoder`) opens its own display on the chosen
+  node: a config with the rate-control mode (CBR or VBR, refused if the driver lacks it),
+  a context, four input surfaces with a coded buffer each, and three reconstructed
+  surfaces. It takes CPU frames: NV12, or the compositor's RGBA and BGRA converted to
+  BT.709 limited NV12 with the Windows encoder's arithmetic, written through
+  `vaDeriveImage`, or a staging image and `vaPutImage` where the driver can't map its
+  surfaces. The stream is I and P frames with one reference and one slice per picture,
+  so packets are Annex B in presentation order with `dts == pts`. IDR frames come every
+  `keyframe_interval` frames and on `request_keyframe`, which restarts the cadence, and
+  carry the SPS and PPS: JStream's own (packed headers: BT.709 limited range, frame
+  timing, no reordering) when the driver takes them, the driver's otherwise. The level
+  is the lowest that fits the size, frame rate and peak rate. `poll` never blocks; up
+  to four frames are in flight, and a fifth is refused as busy. The libva structs are
+  hand-written and checked against libva 2.20.0's headers, with their sizes and offsets
+  asserted at compile time.
 
 Not here yet, in roughly the order they follow:
 - the portal's D-Bus transport and the PipeWire video stream (SHM first, then DMA-BUF
   into Vulkan);
 - PipeWire audio streams, and the ALSA fallback through libasound (ADR-0060 §4, §8);
 - keeping the portal's restore token in the data folder (ADR-0060 §3);
-- the VA-API H.264 encode session (parameter buffers, NV12 upload, packed headers);
+- DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
 - V4L2 webcams;
 - the stream-key store.
 
@@ -77,5 +91,7 @@ The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can. The Linux ones (the clock, loading libc
 through the loader, the PipeWire and libva probes) pass with or without those libraries
-installed and need no GPU, session or daemon. The `hw-tests` feature is reserved for
-tests against a real desktop (portal, PipeWire daemon, VA-API GPU), which run by hand.
+installed and need no GPU, session or daemon, and the H.264 parameters, parameter sets,
+GOP and upload are tested everywhere. The `hw-tests` feature holds tests against a real
+desktop (portal, PipeWire daemon, VA-API GPU), which run by hand; today those are the
+VA-API encode tests.
