@@ -16,6 +16,7 @@ mod backends;
 mod capture;
 mod clock;
 mod codec;
+mod cursor;
 mod error;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
@@ -46,6 +47,7 @@ pub use codec::{
     AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, HardwarePreference,
     RateControl, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
 };
+pub use cursor::{CaptureCursor, CursorCapture, CursorImage, draw_cursor};
 pub use error::PlatformError;
 pub use gpu::{AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop};
 pub use id::DeviceId;
