@@ -8,8 +8,9 @@
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
-//! Media Foundation is installed, and `--register-vcam` registers the virtual camera's
-//! media source (`register`). With `--collection` it loads the collection from a file
+//! Media Foundation is installed. The optional `--register-vcam` registers an
+//! administrators-only copy of the virtual camera's media source, and `--unregister-vcam`
+//! removes it (`register`). With `--collection` it loads the collection from a file
 //! and saves every change there, and it records every batch, undo, redo and action in an
 //! audit log next to its log files. Not yet: the web UI.
 //!
@@ -96,6 +97,9 @@ fn main() -> ExitCode {
             env!("CARGO_PKG_VERSION")
         )),
         Ok(Invocation::RegisterVcam) => register::register()
+            .map_err(Failure::Failed)
+            .and_then(|message| print(&message)),
+        Ok(Invocation::UnregisterVcam) => register::unregister()
             .map_err(Failure::Failed)
             .and_then(|message| print(&message)),
         Ok(Invocation::Serve(options)) => run(options),

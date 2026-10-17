@@ -120,7 +120,7 @@ impl VcamSink for WindowsVcam {
             return Err(PlatformError::Unsupported {
                 what: format!(
                     "the virtual camera: its media source {CLSID_STR} is not registered \
-                     (register it with `--register-vcam`)"
+                     (registering it is optional: run `jstream-daemon --register-vcam`)"
                 ),
             });
         }

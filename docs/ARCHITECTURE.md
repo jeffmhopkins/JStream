@@ -47,7 +47,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
                    │ cross-process frames (shared texture + fence)
      ┌─────────────┴────────────────────────────────────┐
      │ jstream-vcam-windows (COM media source DLL,      │  loaded by the Windows
-     │ registered by the app on first use)              │  Frame Server service
+     │ an admin-only copy, registered only on opt-in)   │  Frame Server service
      └──────────────────────────────────────────────────┘
 ```
 
@@ -1112,17 +1112,23 @@ Direct3D 12).
   `after-review.yml` builds it with the release UI its `dist-ui` job builds, names it
   after the commit tested (`--revision`), and uploads it as an artifact, as is, on `main`
   and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The sandboxed browser helper and the CEF runtime are not in it yet; they join it when the hosts turn their `cef` features on.
-- **Virtual camera:** the app registers the COM media source from its own folder the first
-  time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
-  because Frame Server ignores per-user registration. The registered DLL is the one in the app's
-  folder, which the user can usually write to (#242).
-  [ADR-0066](adr/0066-portable-windows-distribution-v2.md) (accepted) makes registering
-  optional and registers an administrators-only copy under `%ProgramFiles%` instead, in
-  the same prompt (#561; [THREAT-MODEL › Virtual camera](security/threat-model.md#vcam)). The app can unregister
-  the source and detects a moved folder. Until the desktop app has that mode, `jstream-daemon --register-vcam` is
-  that mode, and the daemon warns at startup when the registration names another folder
-  ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)); unregistering waits
-  for the app. Spike S2 (Windows 11 25H2, build 26200) found:
+- **Virtual camera:** registering the COM media source is **optional**, an explicit
+  step the user chooses; nothing registers it or asks for elevation on its own
+  ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The step costs **one UAC
+  prompt** (`jstream.exe --register-vcam`), because Frame Server ignores per-user
+  registration. Inside it, the elevated process creates `%ProgramFiles%\JStream\vcam\`
+  with a protected DACL (SYSTEM and Administrators full control, LOCAL SERVICE and Users
+  read and execute, nothing inherited), copies the shipped DLL there with the same DACL,
+  and points `InprocServer32` at the copy. The DLL in the app's folder, which the user
+  can usually write to, is never registered
+  ([THREAT-MODEL › Virtual camera](security/threat-model.md#vcam)). The app compares the
+  copy with the DLL it ships by content, without elevation, and offers to register again
+  when they differ, which is a new opt-in. Unregistering removes the keys and the copy,
+  with one prompt. Until the desktop app has those modes, `jstream-daemon
+  --register-vcam` and `--unregister-vcam` are them, and the daemon only logs the
+  registration's state at startup
+  ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)). Spike S2 (Windows
+  11 25H2, build 26200) found:
   - **Per user (`HKCU`) doesn't work.** `MFCreateVirtualCamera` succeeds, but
     `IMFVirtualCamera::Start` fails with `0x80070003`, and Frame Server never loads the
     DLL.
