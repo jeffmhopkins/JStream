@@ -835,7 +835,7 @@ id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "review"
-prs = [486]
+prs = [486, 623]
 
 [[item]]
 id = "MAC1"
