@@ -68,7 +68,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
   base frame rate, with its range checks (`VideoMix::problem`, shared by every
   implementation), and `VideoMixInfo`.
-- **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   `SourceAudio` and `AudioFollow`, a source's audio settings; `BusInfo` and `SendInfo`,
   the buses and the send matrix as reads report them; the fader range and its shared

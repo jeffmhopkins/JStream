@@ -908,7 +908,7 @@ entries.
 **Encoder profiles.** An output's `encoder_profile` (collection state, set with
 `output.set_encoder`) picks the encoding its next start opens, or the protocol's
 `EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
-when they have the same key: the video mix (or none, for the program at the capture
+when they have the same key: the video mix (or none, for the program at the canvas
 size and base rate), its resolution and rate, and the profile ID and its settings, all
 as they were at start. So `encoder.update`, `output.set_encoder`, a mix's new
 resolution or rate, or `output.set_video_mix` on a running output changes nothing until
