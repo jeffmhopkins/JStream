@@ -218,7 +218,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | 🔍 in review | #486 |
-| MAC1 | macOS platform crate | ⏳ planned |  |
+| MAC1 | macOS platform crate | ⏳ planned: ADR-0063 proposed (#511); crate part 1 in draft (#513) | #511, #513 |
 | LNX1 | Linux codec path and platform crate | ⏳ planned |  |
 | LNX2 | Linux OpenH264 download (ADR-0061) | ⏳ planned |  |
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | ⏳ planned |  |
