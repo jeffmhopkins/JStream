@@ -856,7 +856,9 @@ note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire scree
 id = "LNX2"
 milestone = "M3"
 title = "Linux OpenH264 download (ADR-0061)"
-status = "planned"
+status = "review"
+prs = [536]
+note = "store, check, loader and encoder (#536); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come"
 
 [[item]]
 id = "LNX3"
