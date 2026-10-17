@@ -84,7 +84,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🌊 its wave lands, then 🔨 build | hotkeys #319 merged into wave/m1-2; organisation metadata draft #323 | #319 |
 | E3d | Composite to NV12 on the GPU | M3 | 🌊 its wave lands | #280 merged into wave/m3-2; lands with that wave | #280 |
 | F6 | HEVC and AV1 encode | M3 | ❔ not set |  | #364 |
-| X1 | Full 3D transforms and WGSL effect packs | M3 | 🌊 its wave lands, then 🔨 build | effect packs #368 land with wave/m1-2; full 3D transforms to build | #359, #368 |
+| X1 | Full 3D transforms and WGSL effect packs | M3 | 🌊 its wave lands, then 🔨 build | effect packs #368 land with wave/m1-2; 3D transforms part 1, the drawn polygon and unplace (#611), in review into wave/m3-2; the compositor draw and lifting the rejection to build | #359, #368, #611 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🌊 its wave lands, then 👤 maintainer | #363 merged into wave/m1-2, #375 into wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | M3 | 🌊 its wave lands | #486 merged into wave/m3-2; lands with that wave | #486 |
@@ -255,7 +255,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | E3c | Encode from GPU frames | ✅ merged | #325 |
 | E3d | Composite to NV12 on the GPU | 🔍 in review: #280 merged into wave/m3-2; lands with that wave | #280 |
 | F6 | HEVC and AV1 encode | 🔍 in review | #364 |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 land with wave/m1-2; full 3D transforms to build | #359, #368 |
+| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 land with wave/m1-2; 3D transforms part 1, the drawn polygon and unplace (#611), in review into wave/m3-2; the compositor draw and lifting the rejection to build | #359, #368, #611 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: #363 merged into wave/m1-2, #375 into wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
