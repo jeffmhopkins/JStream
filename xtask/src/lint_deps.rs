@@ -137,6 +137,14 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
          tauri-utils); never built",
     ),
     (
+        "alloca",
+        None,
+        "build-depends on `cc` for one 16-line C function that hands a callback a stack buffer \
+         of a given size (a VLA, or `_alloca` on MSVC); no media code. Under criterion 0.8, which \
+         varies the stack offset between benchmark samples; a dev-dependency of the benchmarks only, \
+         never in a shipped binary (#431)",
+    ),
+    (
         "defmt",
         None,
         "`links = \"defmt\"` only enforces one version per graph; an optional logging backend of \
