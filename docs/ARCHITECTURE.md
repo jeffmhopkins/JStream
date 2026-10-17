@@ -864,15 +864,17 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
+browser source's page paints on the same context and is imported the same way, read
+as premultiplied sRGB (`import_premultiplied`), CEF's layout. The
 composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
 on D3D11 into a texture of their own, fence-synchronized both ways, and
 `jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
 ([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
 Nothing writes the encode targets yet. Built-in video filters are kinds with
-descriptors whose passes `apply_filter` draws from one premultiplied `Rgba16Float` image
-into another, of the size the filter reports
+descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
+import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
 runtime that runs a source's video chain before placement is not built yet. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, loading effect packs (`jstream-effects`; this
@@ -926,7 +928,9 @@ A browser source is a CEF off-screen browser
 ([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
 ([ADR-0046](adr/0046-browser-crate-and-helper.md),
 [its README](../crates/jstream-browser/README.md)). The desktop app and the daemon wire it
-in behind their off-by-default `cef` features; the program mix doesn't use it yet.
+in behind their off-by-default `cef` features. While a program stage runs on a GPU
+context, the mix draws each page's newest texture there (a premultiplied import, see
+[GPU pipeline](#gpu-pipeline)); otherwise a page shows its transparent stand-in.
 CEF runs in the sandboxed browser helper process, never in the engine's
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), which the engine drives over two named
 pipes. Each `OnAcceleratedPaint`

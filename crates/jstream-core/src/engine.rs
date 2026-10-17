@@ -30,7 +30,9 @@ use crate::studio::Studio;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
-use jstream_platform::{Backends, CaptureTarget, CaptureTargetInfo, Secret, StreamKeyStore};
+use jstream_platform::{
+    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, Secret, StreamKeyStore,
+};
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
     EncoderProfile, EncoderSessionInfo, EntityKind, Event, GestureId, HistoryCall,
@@ -371,8 +373,9 @@ impl Engine {
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
     /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
     /// that no backend is set; giving one builds the ones already there again.
-    /// The host also hands the backend a GPU device (`use_device`): for now one it opens
-    /// on the media adapter itself, since the engine doesn't hand out its own yet.
+    /// The host also hands the backend a GPU device (`use_device`), one it opens on the
+    /// media adapter itself, for paints before a program stage; while a stage runs the
+    /// engine lends the backend the stage's own context instead (`use_gpu`).
     #[must_use]
     pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
         {
@@ -532,6 +535,15 @@ impl Engine {
         let mut state = lock(&self.shared.state);
         state.audio.insert_input(source_id, input);
         state.route_audio();
+    }
+
+    /// Lets live sources that paint on the GPU (`browser`) paint on `context`, the
+    /// program stage's platform GPU context, and re-plans the program mix. The returned
+    /// call takes the context away again; the stage makes it before it stops.
+    pub(crate) fn use_gpu(&self, context: &GpuContext) -> Box<dyn FnOnce() + Send + Sync> {
+        set_gpu(&self.shared, Some(context));
+        let shared = Arc::clone(&self.shared);
+        Box::new(move || set_gpu(&shared, None))
     }
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
@@ -2016,6 +2028,13 @@ fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake:
         },
         wake,
     );
+}
+
+/// [`Engine::use_gpu`] and its undo.
+fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
+    let mut state = lock(&shared.state);
+    state.live.use_gpu(context);
+    state.publish_render();
 }
 
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {

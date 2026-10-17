@@ -27,6 +27,15 @@
 //! says when what there is to mix changed. A source with audio of its own that it makes
 //! itself (`browser`, [`Source::audio`]) hands it to the program stage's audio inputs
 //! once it is built ([`LiveSources::audio`]), whether or not a plan reaches it.
+//!
+//! A `browser` source paints on the GPU (ADR-0021). While a program stage runs on a
+//! platform GPU context, the browser engine paints on that context's device
+//! ([`LiveSources::use_gpu`]), and the plan takes each source's newest texture
+//! (`Source::gpu_frame`) in place of its transparent stand-in, which the render thread
+//! samples where it is. Pages repaint on their own, so such a source asks for a re-plan
+//! every program frame, as an animation asks at its next frame; a page that has not
+//! painted yet asks too. Without a context the browser engine has no device and the
+//! source shows its stand-in.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -35,7 +44,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
-use jstream_platform::{MediaClock, MediaDecoders};
+use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock, MediaDecoders};
 use jstream_protocol::{Settings, SourceId, SourceKind};
 use jstream_sources::{
     AudioScopes, BrowserBackend, CaptureSpec, Context, MediaAudio, Painter, Registry, Source,
@@ -43,6 +52,7 @@ use jstream_sources::{
 };
 
 use crate::lock;
+use crate::runtime::{FRAME_DEN, FRAME_NUM};
 use crate::snapshot::{Frame, Look};
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
@@ -74,6 +84,9 @@ pub(crate) struct LiveSources {
     /// Whether a source's sound came, went or moved on the clock since
     /// [`take_audio`](Self::take_audio) last said.
     audio_changed: bool,
+    /// The program stage's GPU context, which the browser engine paints on, while one
+    /// runs.
+    context: Option<ContextKey>,
 }
 
 /// A live source's sound, for the program stage to mix.
@@ -117,6 +130,8 @@ struct Running {
     /// first plan to reach it after that counts as showing it again when one between
     /// didn't.
     planned: u64,
+    /// The texture it showed last, for a source that paints on the GPU.
+    shown_gpu: Option<(GpuFrame, Frame)>,
 }
 
 /// One source to build.
@@ -165,6 +180,7 @@ impl LiveSources {
             started: false,
             plan: 0,
             audio_changed: false,
+            context: None,
         }
     }
 
@@ -226,6 +242,19 @@ impl LiveSources {
             .filter(|e| jstream_sources::opens_browser(&e.kind))
         {
             entry.settings = Settings::new();
+        }
+    }
+
+    /// Gives the browser engine the program stage's GPU context to paint on, or takes
+    /// it away (`None`) when the stage stops. A browser engine set after this gets the
+    /// device from the next stage.
+    pub(crate) fn use_gpu(&mut self, context: Option<&GpuContext>) {
+        self.context = context.map(GpuContext::key);
+        if let Some(browser) = &self.ctx.browser {
+            browser.use_device(context);
+        }
+        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            running.shown_gpu = None;
         }
     }
 
@@ -316,6 +345,7 @@ impl LiveSources {
                 start: self.worker.now(),
                 shown: None,
                 planned: plan,
+                shown_gpu: None,
             }),
             // A kind that is described but not built yet draws what it drew before C1b:
             // a `display` source shows the pipeline's capture.
@@ -380,7 +410,8 @@ impl LiveSources {
         versions: &mut u64,
     ) -> Option<Look> {
         let plan = self.plan;
-        let running = self.entries.get_mut(source_id)?.running.as_mut()?;
+        let entry = self.entries.get_mut(source_id)?;
+        let running = entry.running.as_mut()?;
         if let Some(spec) = running.source.capture() {
             // A window source with no window chosen shows nothing.
             return (*spec != CaptureSpec::Window(None)).then(|| Look::Capture(spec.clone()));
@@ -390,6 +421,38 @@ impl LiveSources {
             running.source.show(at);
         }
         running.planned = plan;
+        if let Some(context) = &self.context {
+            let next = next_program_frame(now);
+            if let Some(texture) = running.source.gpu_frame() {
+                let frame = match &running.shown_gpu {
+                    Some((shown, frame)) if *shown == texture => frame.clone(),
+                    _ => {
+                        *versions = versions.saturating_add(1);
+                        let frame = Frame::from_gpu(texture.clone(), context.clone(), *versions);
+                        running.shown_gpu = Some((texture, frame.clone()));
+                        frame
+                    }
+                };
+                return Some(Look::Frame(frame, next));
+            }
+            if jstream_sources::opens_browser(&entry.kind) {
+                // Not painted yet: the stand-in, until a re-plan finds the first paint.
+                let (frame, _) = Self::cpu_frame(source_id, running, at, now, versions)?;
+                return Some(Look::Frame(frame, next));
+            }
+        }
+        let (frame, next) = Self::cpu_frame(source_id, running, at, now, versions)?;
+        Some(Look::Frame(frame, next))
+    }
+
+    /// [`Self::look`]'s frame from the source's CPU frame at `at`, its own time.
+    fn cpu_frame(
+        source_id: &SourceId,
+        running: &mut Running,
+        at: MediaTime,
+        now: MediaTime,
+        versions: &mut u64,
+    ) -> Option<(Frame, Option<MediaTime>)> {
         let video = match running.source.frame(at) {
             Ok(video) => video,
             Err(err) => {
@@ -410,7 +473,7 @@ impl LiveSources {
             .source
             .next_change(at)
             .and_then(|change| after(running.start, change, now.timebase()));
-        Some(Look::Frame(frame, next))
+        Some((frame, next))
     }
 
     /// Ends a plan of the program mix: a source's sound is heard while the plan reached
@@ -512,6 +575,14 @@ fn since(now: MediaTime, start: MediaTime) -> MediaTime {
     now.checked_sub(start)
         .and_then(|t| t.rescale(Timebase::MILLIS, Rounding::Down))
         .unwrap_or_else(|_| MediaTime::zero(Timebase::MILLIS))
+}
+
+/// One program frame after `now`, when a source that paints on the GPU is planned again.
+fn next_program_frame(now: MediaTime) -> Option<MediaTime> {
+    let period = MediaTime::new(1, Timebase::new(FRAME_NUM, FRAME_DEN).ok()?)
+        .rescale(now.timebase(), Rounding::Up)
+        .ok()?;
+    now.checked_add(period).ok()
 }
 
 /// The clock time `change` after `start`, rounded up so the frame is due by then.
