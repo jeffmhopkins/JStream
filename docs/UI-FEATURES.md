@@ -57,7 +57,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
 | [Header bar](#header) | 9 | 4 | 2 | 0 | 3 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 1 | 6 | 7 | 4 | 0 |
+| [Canvas](#canvas) | 18 | 7 | 2 | 5 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **17** | **25** | **48** | **39** | **1** |
+| **Total** | **130** | **23** | **21** | **46** | **39** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -151,24 +151,24 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | 🟡 | The frame and area colours are built; today the stage is up to 960px wide, with the scene name in a toolbar above. |
-| CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ⬜ | Today it always shows the program scene, with a selection of its own. |
+| CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | ✅ | The frame is the largest 16:9 box inside 28/28/20px margins; the caption is mono 11px. |
+| CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ✅ | Laid out from the shared collection and `Selection`, so a box click selects its row and opens its properties. |
 | CV-03 | Live picture | The scene's real picture under the item boxes. | 🔒 | U4p (#302) adds the program preview; other scenes need previews for any target (D36). |
-| CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Handles, knob and selection exist in a different style; no pill, no hover outline. |
-| CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | 🟡 | Built, with Alt instead of Ctrl. |
-| CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | 🟡 | Built with other modifiers: corners keep aspect, Shift frees it; edges always stretch. |
-| CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | 🟡 | Built with Shift for 15° steps. |
+| CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Outline, handles, knob and stem, pill and hover outline are built; " · cropped" waits on crop (CV-08). Until the picture is drawn (CV-03), every box gets a faint outline and its name. |
+| CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | ✅ | A rotated item doesn't snap, as in the prototype. |
+| CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | ✅ | A corner follows the axis that snapped, else the larger change; an edge scales the other axis about the centre. |
+| CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | ✅ | Off the 90° snap, the angle rounds to 0.1°. |
 | CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | ⬜ | `item.set_crop` exists. |
 | CV-09 | Multi-select | Shift-click adds or removes; Ctrl+A selects all; the group gets a dashed box with its own handles to scale and rotate. | ⬜ | |
 | CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ⬜ | |
-| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Snap is a checkbox in a toolbar above; no Move or Crop tools. |
+| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Move/resize and Snapping are built; Crop lands with CV-08. |
 | CV-12 | Nudge | Arrows move 1px, Shift 10px. | ✅ | |
 | CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ⬜ | |
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ⬜ | |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend and no 3D yet (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | 🔒 | Keyframe scenes in the protocol are K1. |
 | CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | 🔒 | E2b (#317). |
-| CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ⬜ | |
+| CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ✅ | The slow pointer follows the real one's movement, so pressing Shift mid-drag doesn't jump. |
 
 <a id="menus"></a>
 ## Context menus
@@ -390,8 +390,8 @@ handlers; the real UI makes them work.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc and arrows built. |
-| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Built with other meanings (Shift frees aspect and steps 15°, Alt skips snapping); they change with CV-05 to CV-07. |
+| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc and arrows built; C and V land with crop (CV-08), Ctrl+A with multi-select (CV-09). |
+| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Shift half speed and all of Ctrl built; Shift adding to the selection lands with CV-09, Alt crop with CV-08. |
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ⬜ | |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
