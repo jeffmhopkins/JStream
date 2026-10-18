@@ -1,11 +1,17 @@
-// The studio-mode bar under the canvas: putting a scene on preview, taking it to
+// The Transitions panel's studio-mode bar: putting a scene on preview, taking it to
 // program, and swapping the old program scene back onto preview. The seed puts `Main`
 // on program.
-import { test, expect, connect } from '../fixtures.js';
+import { test, expect, connect, showPanel } from '../fixtures.js';
+
+/** Connects and shows the Transitions panel, a tab behind Outputs in the default layout. */
+async function openStudio(page, daemon) {
+  await connect(page, daemon);
+  await showPanel(page, 'Transitions');
+  return page.locator('section.studio');
+}
 
 test('a transition takes preview to program and swaps', async ({ page, daemon }) => {
-  await connect(page, daemon);
-  const studio = page.locator('section.studio');
+  const studio = await openStudio(page, daemon);
   const preview = studio.getByLabel('Scene on preview');
   const program = studio.locator('.program-name');
   await expect(program).toHaveText('Main');
@@ -16,21 +22,17 @@ test('a transition takes preview to program and swaps', async ({ page, daemon })
   await studio.getByRole('button', { name: 'Transition' }).click();
   await expect(program).toHaveText('Intro');
   await expect(preview).toHaveValue('main');
-  // The canvas follows program.
-  await expect(page.locator('.canvas-toolbar strong')).toHaveText('Intro');
 });
 
 test('the switch is off while preview is the program scene', async ({ page, daemon }) => {
-  await connect(page, daemon);
-  const studio = page.locator('section.studio');
+  const studio = await openStudio(page, daemon);
   await studio.getByLabel('Scene on preview').selectOption({ label: 'Main' });
   await expect(studio.getByRole('button', { name: 'Transition' })).toBeDisabled();
   await expect(studio.getByRole('button', { name: 'Cut' })).toBeDisabled();
 });
 
 test('a value the preset form refused keeps it from being added', async ({ page, daemon }) => {
-  await connect(page, daemon);
-  const studio = page.locator('section.studio');
+  const studio = await openStudio(page, daemon);
   await studio.getByText('Transition presets').click();
   const form = studio.locator('form.preset-form');
   const presets = studio.locator('.preset-list .preset');

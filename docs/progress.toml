@@ -761,6 +761,13 @@ note = "#259 merged into wave/m1-2"
 needs = ["wave"]
 
 [[item]]
+id = "E2b"
+milestone = "M2"
+title = "Privacy screen and encoder sharing key"
+status = "review"
+prs = [317]
+
+[[item]]
 id = "D8"
 milestone = "M2"
 title = "Master and output audio chains"

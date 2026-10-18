@@ -22,8 +22,11 @@ futures-util.workspace = true
 jstream-control = { workspace = true, features = ["ws"] }
 jstream-protocol.workspace = true
 leptos.workspace = true
-# Settings values in the properties form and the transition preset form.
+# Settings values in the properties form and the transition preset form, and the dock
+# kept in the browser's storage.
 serde_json.workspace = true
+# The browser's storage for the dock, and finding where a dragged panel would land.
+web-sys = { workspace = true, features = ["Document", "DomRect", "Element", "Event", "Storage", "Window"] }
 
 [dev-dependencies]
 jstream-control = { workspace = true, features = ["mock"] }

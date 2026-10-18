@@ -27,7 +27,8 @@
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 0.0
+            "depth_px": 0.0,
+            "flip_h": true
           },
           "crop": {
             "left": 0,

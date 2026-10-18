@@ -76,4 +76,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0064](0064-nested-scene-folders.md) | Nested scene folders | accepted | agent |  |
 | [ADR-0065](0065-scene-chains-and-item-effects.md) | Scene filter chains and item effects | accepted | agent |  |
 | [ADR-0066](0066-portable-windows-distribution-v2.md) | Portable Windows distribution v2: an optional virtual camera, registered from an administrators-only copy | accepted | maintainer |  |
+| [ADR-0069](0069-wasm-plugin-limits-and-capabilities.md) | WASM plugin resource limits and the Control calls a plugin may make | accepted | maintainer |  |
 <!-- @generated end adr-index -->
