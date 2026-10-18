@@ -32,7 +32,9 @@ runs, and how many of its requests were refused (`denied_requests`). `use_device
 the backend a GPU device to copy the pages' paints onto. The host gives it one it opens
 on the media adapter, for paints before any program stage; while the program stage
 runs, the engine lends it the stage's own context in its place, so the compositor
-samples the pages there, and takes it back (leaving none) when the stage stops
+samples the pages there, and takes it back (leaving none) when the stage stops, or
+when the stage leaves the GPU path mid-run, after which the pages deliver no frames for
+the rest of that stage
 ([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). Without
 a device a page renders and plays but delivers no frames. Dropping the
 page closes it.
@@ -174,8 +176,9 @@ shipping the `cef` feature.
 - **Hosts.** The desktop app and the daemon each create a backend with their `cef`
   feature, on a device of the media adapter they open
   ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)); the engine
-  replaces it with the program stage's context while the stage runs, and the host's
-  device is not given back when it stops.
+  replaces it with the program stage's context while the stage runs on the GPU path,
+  and the host's device is not given back when the stage stops or leaves the GPU path
+  mid-run.
 - **Compositing.** The program mix draws a page's `GpuFrame`, imported premultiplied
   on the stage's context, but only the fake backend's textures have been through it:
   a real CEF texture on Windows hardware is #336.

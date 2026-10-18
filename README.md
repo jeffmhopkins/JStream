@@ -41,6 +41,11 @@ engine and MCP come before the GUI ([ADR-0010](docs/adr/0010-headless-first-mile
 Generated from [`docs/progress.toml`](docs/progress.toml) by `cargo xtask docs generate`
 and drift-checked by `docs check`, so it changes in the same PR as the work.
 
+JStream is done when every item below is merged and has passed its Windows run, where it
+needs one.
+[ROADMAP › Endgame](ROADMAP.md#endgame) defines that and gives the order the rest lands
+in, and **What's left** lists each unfinished item with the steps it still needs.
+
 <!-- @generated begin progress -->
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
