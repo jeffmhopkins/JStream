@@ -10,8 +10,9 @@
 //! permission, the Keychain store for stream keys and OAuth tokens (`MacosKeychain`), and
 //! Core Audio devices, input recording (behind the Microphone permission) and output
 //! playback through the HAL, the processes Core Audio knows as audio clients, and
-//! desktop and application audio through process taps (`CoreAudioIo`), and the
-//! VideoToolbox H.264 and HEVC decoder on CPU frames, its packets split by
+//! desktop and application audio through process taps (`CoreAudioIo`), webcams
+//! through AVFoundation, behind the Camera permission (`AvFoundationVideoDevices`), and
+//! the VideoToolbox H.264 and HEVC decoder on CPU frames, its packets split by
 //! `split_access_unit` and its frames put in presentation order by `Reorder`. Layer 2,
 //! and one of the crates allowed `unsafe` (R-UNSAFE-001): every
 //! system call is wrapped here behind safe APIs.
@@ -35,6 +36,7 @@ mod decode;
 mod fourcc;
 mod keychain;
 mod version;
+mod video_device;
 #[cfg(target_os = "macos")]
 mod videotoolbox;
 #[cfg(target_os = "macos")]
@@ -65,3 +67,5 @@ pub use keychain::KeychainItem;
 #[cfg(target_os = "macos")]
 pub use keychain::MacosKeychain;
 pub use version::{Arch, Feature, MacosVersion, SupportTier, check_floor, support_tier};
+#[cfg(target_os = "macos")]
+pub use video_device::AvFoundationVideoDevices;
