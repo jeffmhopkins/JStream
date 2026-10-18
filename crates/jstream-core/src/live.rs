@@ -315,7 +315,15 @@ impl LiveSources {
 
     /// Brings the live sources in line with the collection's: queues a build for every
     /// source that is new or whose settings changed, and drops the ones deleted.
+    ///
+    /// First it keeps the audio scopes of what the collection's sources draw and drops
+    /// the others (`crate::audio::retain_scopes`), before any build is queued: a build
+    /// for a source drawing a new bus or source then finds its scope, and one still
+    /// running from before the edit can't make a scope the edit dropped again (#701).
     pub(crate) fn sync(&mut self, state: &jstream_graph::State) {
+        if let Some(scopes) = &self.ctx.audio {
+            crate::audio::retain_scopes(scopes, state);
+        }
         let registry = Arc::clone(&self.registry);
         let before = self.entries.len();
         self.entries.retain(|id, _| {

@@ -107,12 +107,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   path).
 - `AudioScopes`: where those sources find their scope, by their `audio_source` and
   `audio` settings: the program mix's (`program()`, which always exists), a bus's
-  (`bus(id)`, made the first time it is asked for), or another source's (`source(id)`,
-  the same). `retain(drawn)` keeps a scope for each bus in `drawn` and drops the
-  others, and `retain_sources(drawn)` does the same for sources; `buses()` and
-  `sources()` list them. The engine keeps one and feeds every scope in it from its
-  mixer thread. Its locks are taken only to find, make or drop a scope, never by the
-  thread that pushes. `drawn_source(kind, settings)` names the source a `waveform` or
+  (`bus(id)`), or another source's (`source(id)`). `retain(drawn)` keeps a scope for
+  each bus in `drawn`, making the missing ones, and drops the others, and
+  `retain_sources(drawn)` does the same for sources; `buses()` and `sources()` list
+  them. Before the first `retain`, `bus(id)` makes a bus's scope the first time it is
+  asked for; after one, only the buses the last `retain` kept have scopes, and for any
+  other it returns a scope of its own that nothing feeds and `buses()` doesn't list, so
+  a source built from settings an edit has since changed can't bring back a scope the
+  edit dropped (#701). `source(id)` does the same with `retain_sources`. The engine
+  keeps one, calls both before it builds the sources an edit changed, and feeds every
+  scope in it from its mixer thread. Its locks are taken only to find, make or drop a
+  scope, never by the thread that pushes. `drawn_source(kind, settings)` names the source a `waveform` or
   `spectrum` draws, for the engine to feed.
 
 **Kinds.**
@@ -403,7 +408,8 @@ settings are live, and the `audio` setting (#362): both kinds describe it as a b
 reference defaulting to the program mix
 (`the_audio_setting_names_a_bus_and_defaults_to_the_program_mix`), a source draws the
 mix it names and not the other (`a_scope_source_draws_the_mix_its_audio_setting_names`),
-and the lookup keeps one scope per drawn bus (`the_lookup_keeps_one_scope_per_drawn_bus`);
+and the lookup keeps one scope per drawn bus, and once a bus isn't drawn, asking for
+its scope lists nothing until it is drawn again (`the_lookup_keeps_one_scope_per_drawn_bus`);
 and the `audio_source` setting (#459): both kinds describe it as an audio source
 reference defaulting to `null` with their version unchanged
 (`the_audio_source_setting_names_an_audio_source_and_defaults_to_none`), a source
