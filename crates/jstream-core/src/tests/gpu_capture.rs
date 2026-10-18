@@ -44,8 +44,11 @@ use crate::snapshot::CaptureImage;
 use crate::{Engine, InProcessControl, RecordingPublish};
 use jstream_sources::CaptureSpec;
 
-/// The colour every GPU capture frame is.
+/// The colour every GPU capture frame composites to.
 const RED: [u8; 4] = [255, 0, 0, 255];
+/// What every GPU capture frame holds: [`RED`] with alpha below 1, as some drivers and
+/// HDR modes deliver. A capture is opaque, so it still composites to [`RED`] (#451).
+const CAPTURED: [u8; 4] = [255, 0, 0, 128];
 
 /// GPU interop on a software device, standing in for the platform's.
 struct SoftwareGpu;
@@ -162,14 +165,14 @@ impl Capture for GpuCapture {
     }
 }
 
-/// A [`RED`] `Rgba8UnormSrgb` texture of `size`, as a capture ring's slot would be.
+/// A [`CAPTURED`] `Rgba8UnormSrgb` texture of `size`, as a capture ring's slot would be.
 fn red_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: FrameSize) -> wgpu::Texture {
     filled_texture(
         device,
         queue,
         size,
         wgpu::TextureFormat::Rgba8UnormSrgb,
-        RED,
+        CAPTURED,
     )
 }
 
@@ -399,7 +402,8 @@ fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
 
 /// An output on the GPU path composites the capture's textures on the platform's
 /// device with no CPU copy: the frames are counted as GPU captures, and what is read
-/// back for the encoder is the captured colour.
+/// back for the encoder is the captured colour, opaque whatever alpha the texture holds
+/// (#451).
 #[test]
 fn an_output_composites_gpu_capture_frames() {
     let _gpu = one_gpu_test_at_a_time();
