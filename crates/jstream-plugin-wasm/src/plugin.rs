@@ -109,7 +109,7 @@ struct HostState {
     result: Vec<u8>,
     /// What the host passed to the current invocation, for `input_read`.
     input: Vec<u8>,
-    /// The calls sent to `Control` in the last second, against the plugin's cap.
+    /// One instant per command sent to `Control` in the last second, against the cap.
     rate: CommandRate,
     /// The deadline of one invocation, in epoch ticks.
     call_ticks: u64,
