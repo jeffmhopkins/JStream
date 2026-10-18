@@ -95,13 +95,18 @@ pub fn with_param(
     let (x, y, w, h, rotation) = match param {
         Param::X => (value, y, w0, h0, rotation),
         Param::Y => (x, value, w0, h0, rotation),
-        Param::W if linked => (x, y, value, round2(value * h0 / w0).max(MIN_SIZE), rotation),
-        Param::H if linked => (x, y, round2(value * w0 / h0).max(MIN_SIZE), value, rotation),
+        Param::W if linked => (x, y, value, linked_side(value * h0 / w0), rotation),
+        Param::H if linked => (x, y, linked_side(value * w0 / h0), value, rotation),
         Param::W => (x, y, value, h0, rotation),
         Param::H => (x, y, w0, value, rotation),
         Param::Rotation => (x, y, w0, h0, value),
     };
     crate::canvas::transform::with_box(geometry, x + w / 2.0, y + h / 2.0, w, h, rotation)
+}
+
+/// The other side of a linked resize, kept within the sizes a field may send.
+fn linked_side(value: f32) -> f32 {
+    round2(value).clamp(MIN_SIZE, MAX_SIZE)
 }
 
 /// One side of a crop.
@@ -561,6 +566,9 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
         let Some(opacity) = Finite32::new(to_f32(v.clamp(0.0, 100.0) / 100.0)) else {
             return;
         };
+        if current.with_untracked(|i| i.as_ref().is_some_and(|i| i.opacity == opacity)) {
+            return;
+        }
         let (item_id, scene) = ids.get_value();
         send(Edit::ItemSetOpacity {
             item_id,
@@ -838,6 +846,10 @@ mod tests {
         let thin = geometry(0.0, 0.0, 1000.0, 2.0);
         let narrow = with_param(&thin, Param::W, 10.0, true).expect("a box");
         assert_eq!(narrow.size.height.get(), MIN_SIZE);
+        // Nor above the maximum.
+        let tall = geometry(0.0, 0.0, 10.0, 1000.0);
+        let wide = with_param(&tall, Param::W, 5000.0, true).expect("a box");
+        assert_eq!(wide.size.height.get(), MAX_SIZE);
     }
 
     #[test]

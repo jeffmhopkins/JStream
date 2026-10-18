@@ -204,6 +204,7 @@ pub fn NumberField(
         let Some(v) = value.get_untracked() else {
             return;
         };
+        dragged.set(None);
         scrub.set_value(Some(Scrub {
             pointer: event.pointer_id(),
             last_x: f64::from(event.client_x()),
@@ -215,6 +216,13 @@ pub fn NumberField(
         let Some(mut s) = scrub.get_value() else {
             return;
         };
+        // A release the field never saw (outside the window, before capture) leaves
+        // no button held: drop the scrub rather than drag with nothing pressed.
+        if event.buttons() == 0 {
+            scrub.set_value(None);
+            dragged.set(None);
+            return;
+        }
         let x = f64::from(event.client_x());
         if !s.started {
             if (x - s.last_x).abs() < SCRUB_PX {
