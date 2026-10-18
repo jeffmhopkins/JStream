@@ -147,9 +147,11 @@ folder keeps the daemon's logs (and any crash report), the snapshot and the sink
 recording. It holds the run's token file too, so don't attach the whole folder to an
 issue.
 
-Off Windows the daemon only steps a placeholder output, so the run skips the key, the
-sink and `stats.tick`, and checks the rest: start-up, MCP, the output's states, the
-snapshot and the graceful stop. That is what CI or a Linux machine can run.
+Off Windows the run skips the key, the sink and `stats.tick`, and checks the rest:
+start-up, MCP, the output's states, the snapshot and the graceful stop. On Linux the
+daemon only steps a placeholder output, so that is what CI or a Linux machine can run.
+On macOS the daemon can go live, but the script doesn't drive that yet: going live on a
+Mac is checked by hand (#644).
 
 <a id="youtube"></a>
 ## YouTube

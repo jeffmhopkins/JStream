@@ -6,9 +6,10 @@ its key, going live, sampling stats.tick, taking a snapshot and stopping.
 .DESCRIPTION
 The steps and what each one checks are in docs/runbooks/go-live.md (Smoke script). By
 default it streams to a local RTMP sink (an ffmpeg listen process) with a throwaway key,
-so it needs no real stream key. On Windows the daemon really encodes and publishes; on
-Linux and macOS it only steps the placeholder output, so the key, stats and sink checks
-are skipped there.
+so it needs no real stream key. On Windows the daemon really encodes and publishes, and
+the script checks it. Elsewhere the key, stats and sink checks are skipped: on Linux the
+daemon only steps the placeholder output, and on macOS, where it can go live, the script
+doesn't drive that yet.
 
 The script never reads, prints or logs a stream key: -KeyFile is passed to jstream-cli as
 a path, and the local sink's key is a fixed, non-secret placeholder.
