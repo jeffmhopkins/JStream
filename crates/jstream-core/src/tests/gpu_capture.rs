@@ -2,7 +2,8 @@
 //! on a software device: which path `open_capture` takes for each kind of platform, an
 //! output whose capture frames are textures composited with no CPU copy, a browser
 //! source whose page paints on the stage's device, and an output that leaves the GPU
-//! path mid-run when compositing keeps failing on it (#451).
+//! path mid-run when compositing keeps failing on it (#451), and one whose fallback
+//! hangs (#577).
 //!
 //! A software adapter stands in for the platform's media adapter, and a fake capture
 //! backend delivers `GpuFrame`s on it. A machine with no adapter skips; CI, which
@@ -10,7 +11,7 @@
 
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -37,7 +38,7 @@ use super::{
 };
 use crate::audio_sources::Wanted;
 use crate::runtime::{
-    DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from, start_capture,
+    DrawFn, OpenDraw, RenderHub, cpu_draw, gpu_draw, open_capture, parts_from, start_capture,
 };
 use crate::snapshot::CaptureImage;
 use crate::{Engine, InProcessControl, RecordingPublish};
@@ -825,10 +826,18 @@ fn the_gpu_fallback_takes_the_context_from_browser_pages() {
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     };
-    let released = tick_until(&clock, || given() == [true, false]);
-    assert!(released, "the browser still has the device: {:?}", given());
-    let stats = engine.output_stats().expect("still running");
-    assert_eq!(stats.gpu_fallbacks, 1, "{stats:?}");
+    let fell_back = || {
+        engine
+            .output_stats()
+            .is_some_and(|stats| stats.gpu_fallbacks == 1)
+    };
+    let released = tick_until(&clock, || given() == [true, false] && fell_back());
+    assert!(
+        released,
+        "the browser still has the device: {:?}, {:?}",
+        given(),
+        engine.output_stats()
+    );
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert_eq!(given(), [true, false], "taken away once");
@@ -862,5 +871,101 @@ fn an_output_fails_when_the_gpu_fallback_fails() {
             .on_context,
         vec![true, false],
         "one fallback was tried"
+    );
+}
+
+/// Lets a [`hanging_fallback`]'s open return when dropped, so a failing test unwinds
+/// instead of waiting on the hung thread.
+struct Release(Arc<(Mutex<bool>, Condvar)>);
+
+impl Drop for Release {
+    fn drop(&mut self) {
+        let (released, wake) = &*self.0;
+        *released.lock().unwrap_or_else(PoisonError::into_inner) = true;
+        wake.notify_all();
+    }
+}
+
+/// An [`OpenDraw`] whose compositor on the platform's context draws one frame (the CPU
+/// stand-in's) and then fails every frame, and whose open on a device of its own hangs
+/// until `release` is set.
+fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
+    Arc::new(move |context: Option<&GpuContext>| {
+        if context.is_none() {
+            let (released, wake) = &*release;
+            let mut released = released.lock().unwrap_or_else(PoisonError::into_inner);
+            while !*released {
+                released = wake.wait(released).unwrap_or_else(PoisonError::into_inner);
+            }
+            return Err("released after the test".to_owned());
+        }
+        let mut inner = (cpu_draw())(context)?;
+        let mut drawn = false;
+        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
+            if drawn {
+                return Err("device removed".to_owned());
+            }
+            drawn = true;
+            inner(shot, live, captures, frames, at)
+        });
+        Ok(draw)
+    })
+}
+
+/// A fallback whose compositor hangs while opening on a device of its own neither
+/// freezes the output nor leaves it hanging: the render thread keeps repeating the last
+/// frame while it waits, and fails the output at the open deadline (#577).
+#[test]
+fn a_hung_gpu_fallback_fails_the_output_at_its_deadline() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let timeout = Duration::from_secs(2);
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends(&clock, Arc::new(SoftwareGpu), GpuMode::Deliver))
+        .with_open_timeout(timeout)
+        .with_draw(hanging_fallback(Arc::clone(&gate)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    // Dropped before the engine, which joins the render thread.
+    let _release = Release(gate);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    // The first frame draws; the next ten fail and set the fallback off.
+    let mut received = 0;
+    tick_until(&clock, || {
+        received = engine
+            .output_stats()
+            .map_or(0, |stats| stats.video.received);
+        received >= 15
+    });
+    let started = Instant::now();
+    // While the fallback hangs the last frame repeats, and the output is still active.
+    for _ in 0..20 {
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(10));
+    }
+    let repeating = engine.output_stats().expect("still running");
+    assert!(
+        repeating.video.received > received,
+        "the output froze: {repeating:?}"
+    );
+    assert_eq!(repeating.readbacks, 1, "{repeating:?}");
+    assert_eq!(repeating.gpu_fallbacks, 0, "{repeating:?}");
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    let failed = tick_until(&clock, || {
+        output_state(&control, "yt") == OutputState::Failed
+    });
+    assert!(
+        failed,
+        "the output did not fail: {:?}",
+        engine.output_stats()
+    );
+    assert!(
+        started.elapsed() >= timeout.saturating_sub(Duration::from_millis(500)),
+        "failed before the deadline"
     );
 }
