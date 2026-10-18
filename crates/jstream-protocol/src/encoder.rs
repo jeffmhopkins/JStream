@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 /// How an output's video and audio are encoded.
 ///
 /// An output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:
-/// H.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,
-/// and AAC at 160 kbit/s.
+/// H.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when
+/// there is one (else the software one), and AAC at 160 kbit/s.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct EncoderProfile {
     /// The video encoding.
@@ -31,7 +31,7 @@ impl EncoderProfile {
             codec: VideoCodec::H264,
             rate_control: RateControl::Cbr { kbps: 2500 },
             keyframe_interval_s: 2,
-            hardware: HardwarePreference::Avoid,
+            hardware: HardwarePreference::Prefer,
         },
         audio: AudioEncoding {
             codec: AudioCodec::Aac,
@@ -171,11 +171,12 @@ pub enum RateControl {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum HardwarePreference {
-    /// Hardware if there is one, else software.
+    /// Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses
+    /// (ADR-0031: hardware first).
     Prefer,
     /// Hardware only: `output.start` fails when there is none.
     Require,
-    /// Software only.
+    /// Software only. What an omitted `hardware` field means.
     #[default]
     Avoid,
     /// A preference this version of the protocol doesn't know, from a newer server.
@@ -233,6 +234,12 @@ pub struct EncoderSessionInfo {
     pub shared_with: Vec<OutputId>,
     /// Whether the session's video encoder is a hardware one.
     pub hardware: bool,
+    /// Whether the output has the session to itself by rule: an output with its own
+    /// video chain never shares (ADR-0027 §2), so its picture costs one more GPU pass
+    /// and one more encoder session. Omitted when false, which is every output until
+    /// video chains exist.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dedicated: bool,
 }
 
 #[cfg(test)]
@@ -254,7 +261,7 @@ mod tests {
                     "codec": "h264",
                     "rate_control": {"type": "cbr", "kbps": 2500},
                     "keyframe_interval_s": 2,
-                    "hardware": "avoid"
+                    "hardware": "prefer"
                 },
                 "audio": {"codec": "aac", "kbps": 160}
             }))

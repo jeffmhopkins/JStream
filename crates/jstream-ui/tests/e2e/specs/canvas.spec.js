@@ -1,5 +1,5 @@
-// The canvas editor over the program scene: selecting, dragging, nudging, and undo and
-// redo through the engine. The seed's box is 640×360 at the centre of a 1920×1080 canvas.
+// The canvas editor over the selected scene: selecting, dragging, nudging, the readout,
+// and undo and redo through the engine. The seed's box is 640×360 at the centre of a 1920×1080 canvas.
 import { test, expect, connect, rev } from '../fixtures.js';
 
 /** The seed item's outline: its polygon's corners, in canvas pixels. */
@@ -35,11 +35,38 @@ async function expectCorners(page, expected, tolerance = 0.01) {
 }
 
 
-test('the program scene shows with its box', async ({ page, daemon }) => {
+/** The pill under the selected box. */
+function readout(page) {
+  return page.locator('.stage-overlay .readout text');
+}
+
+test('the selected scene shows with its box', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await expect(page.locator('.canvas-toolbar strong')).toHaveText('Main');
+  await expect(page.locator('.canvas-caption')).toHaveText('Main · 1920 × 1080');
+  await expect(page.getByLabel('Scene canvas, Main')).toBeVisible();
   await expect(outline(page)).toBeVisible();
   await expectCorners(page, [[640, 360], [1280, 360], [1280, 720], [640, 720]]);
+});
+
+test('the canvas, the scene list and the sources list share one selection', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  const row = page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' });
+
+  // Clicking the box selects its row; clicking empty canvas clears both.
+  const centre = await onScreen(page, 960, 540);
+  await page.mouse.click(centre.x, centre.y);
+  await expect(row).toHaveClass(/selected/);
+  await expect(readout(page)).toHaveText('640 × 360');
+  const corner = await onScreen(page, 40, 40);
+  await page.mouse.click(corner.x, corner.y);
+  await expect(row).not.toHaveClass(/selected/);
+  await expect(readout(page)).toHaveCount(0);
+
+  // Selecting another scene in the list edits that one.
+  await page.locator('.scenes-panel li.row').filter({ hasText: 'Intro' }).locator('.row-main').click();
+  await expect(page.locator('.canvas-caption')).toHaveText('Intro · 1920 × 1080');
+  await expect(outline(page)).toHaveCount(0);
 });
 
 test('a drag is one undoable edit', async ({ page, daemon }) => {
@@ -48,19 +75,21 @@ test('a drag is one undoable edit', async ({ page, daemon }) => {
   const before = await corners(page);
   const startRev = await rev(page);
 
-  // Drag from the box's centre by 120 by 80 screen pixels. Alt skips snapping, so the
+  // Drag from the box's centre by 120 by 80 screen pixels. Ctrl skips snapping, so the
   // box lands exactly where it was dropped.
   const from = await onScreen(page, 960, 540);
   const by = { x: 120, y: 80 };
-  await page.keyboard.down('Alt');
+  await page.keyboard.down('Control');
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move(from.x + by.x / 2, from.y + by.y / 2, { steps: 4 });
   await page.mouse.move(from.x + by.x, from.y + by.y, { steps: 4 });
-  // Nothing reaches the engine until the drop.
+  // The readout shows where the box's top-left is, and nothing reaches the engine
+  // until the drop.
+  await expect(readout(page)).toHaveText(/^X \d+ {2}Y \d+$/);
   expect(await rev(page)).toBe(startRev);
   await page.mouse.up();
-  await page.keyboard.up('Alt');
+  await page.keyboard.up('Control');
 
   // The page measures its stage in whole pixels, so allow half a screen pixel.
   const halfPixel = 0.5 / from.scale;
@@ -68,13 +97,44 @@ test('a drag is one undoable edit', async ({ page, daemon }) => {
   expect(await rev(page)).toBe(startRev + 1);
   const moved = await corners(page);
 
-  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(readout(page)).toHaveText('640 × 360');
+
+  await page.keyboard.press('Control+z');
   await expectCorners(page, before);
-  await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Redo' }).click();
+  await page.keyboard.press('Control+Shift+z');
   await expectCorners(page, moved);
-  await expect(page.getByRole('button', { name: 'Redo' })).toBeDisabled();
   expect(await rev(page)).toBe(startRev + 3);
+});
+
+test('Shift drags at half speed', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  const before = await corners(page);
+
+  const from = await onScreen(page, 960, 540);
+  const by = { x: 120, y: 80 };
+  await page.keyboard.down('Control');
+  await page.keyboard.down('Shift');
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + by.x, from.y + by.y, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  await page.keyboard.up('Control');
+
+  const halfPixel = 0.5 / from.scale;
+  await expectCorners(page, shifted(before, by.x / 2 / from.scale, by.y / 2 / from.scale), halfPixel);
+});
+
+test('the snapping tool turns snapping off and on', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const snapping = page.getByRole('toolbar', { name: 'Canvas tools' }).getByRole('button', { name: 'Snapping' });
+  await expect(snapping).toHaveAttribute('aria-pressed', 'true');
+  await snapping.click();
+  await expect(snapping).toHaveAttribute('aria-pressed', 'false');
+  await expect(snapping).toHaveAttribute('title', 'Snapping off · click to turn on');
+  await snapping.click();
+  await expect(snapping).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('arrow keys nudge the selected box, and Ctrl+Z undoes a nudge', async ({ page, daemon }) => {

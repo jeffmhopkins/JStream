@@ -7,12 +7,13 @@
 //! read at; kinds are not collection state, so their results carry none.
 
 use crate::model::{
-    Bus, Encoder, Filter, Graph, Item, Output, Placement, Scene, Source, State, VideoMix,
+    Bus, Chains, Encoder, Filter, Folder, Graph, Item, Label, Output, Placement, Scene, Source,
+    State, VideoMix,
 };
 use jstream_protocol::{
-    BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, HotkeyBinding, ItemInfo,
-    KindDescriptor, OutputInfo, ProtocolError, Query, QueryResult, SceneId, SceneInfo,
-    SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
+    BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo, HotkeyBinding,
+    ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError, Query, QueryResult,
+    SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
 };
 
 impl Graph {
@@ -75,6 +76,8 @@ impl Graph {
                     name: scene.name.clone(),
                     role: scene.role,
                     item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
+                    folder: scene.folder.clone(),
+                    meta: scene.meta.clone(),
                 })
                 .collect(),
         }
@@ -156,7 +159,8 @@ impl Graph {
 
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
     /// in display order, every output, encoder profile, video mix and bus by ID, every
-    /// send, and every hotkey binding by chord.
+    /// send, every hotkey binding by chord, the master stage, and the folders and labels
+    /// in their own orders.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
@@ -169,14 +173,20 @@ impl Graph {
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
+            transitions: Box::new(self.state.transitions_info()),
             video_mixes: self.state.video_mixes().map(VideoMix::to_info).collect(),
             buses: self.state.buses().map(Bus::to_info).collect(),
             sends: self.send_infos(),
+            master: Box::new(MasterInfo {
+                filters: self.state.master().to_info(),
+            }),
             hotkeys: self
                 .state
                 .hotkeys()
                 .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
                 .collect(),
+            folders: self.state.folders().iter().map(Folder::to_info).collect(),
+            labels: self.state.labels().iter().map(Label::to_info).collect(),
         }
     }
 }
@@ -195,10 +205,8 @@ impl Source {
                 .clone()
                 .filter(|original| state.source(original).is_some()),
             audio: self.audio,
-            filters: FilterChains {
-                video: self.filters.video.iter().map(Filter::to_info).collect(),
-                audio: self.filters.audio.iter().map(Filter::to_info).collect(),
-            },
+            meta: crate::organise::source_meta(self),
+            filters: self.filters.to_info(),
         }
     }
 }
@@ -215,6 +223,16 @@ impl Filter {
     }
 }
 
+impl Chains {
+    /// These chains as query results report them.
+    pub fn to_info(&self) -> FilterChains {
+        FilterChains {
+            video: self.video.iter().map(Filter::to_info).collect(),
+            audio: self.audio.iter().map(Filter::to_info).collect(),
+        }
+    }
+}
+
 impl Output {
     /// This output as `output.list` and `state.get` report it.
     pub fn to_info(&self) -> OutputInfo {
@@ -222,6 +240,7 @@ impl Output {
             output_id: self.id.clone(),
             kind: self.kind.clone(),
             encoder_profile: self.encoder_profile.clone(),
+            filters: self.filters.to_info(),
             video_mix: self.video_mix.clone(),
         }
     }
@@ -249,6 +268,29 @@ impl Encoder {
     }
 }
 
+impl Folder {
+    /// This folder as `state.get` reports it.
+    pub fn to_info(&self) -> FolderInfo {
+        FolderInfo {
+            folder_id: self.id.clone(),
+            name: self.name.clone(),
+            parent: self.parent.clone(),
+        }
+    }
+}
+
+impl Label {
+    /// This label as `state.get` reports it.
+    pub fn to_info(&self) -> LabelInfo {
+        LabelInfo {
+            label_id: self.id.clone(),
+            name: self.name.clone(),
+            color: self.color.clone(),
+            icon: self.icon.clone(),
+        }
+    }
+}
+
 impl Bus {
     /// This bus as `bus.list` and `state.get` report it.
     pub fn to_info(&self) -> BusInfo {
@@ -268,6 +310,10 @@ impl Scene {
             scene_id: self.id.clone(),
             name: self.name.clone(),
             role: self.role,
+            transition_in: self.transition_in.clone(),
+            transition_out: self.transition_out.clone(),
+            folder: self.folder.clone(),
+            meta: self.meta.clone(),
             items: self.items.iter().map(Item::to_info).collect(),
         }
     }
@@ -300,6 +346,7 @@ impl Item {
             visible: self.visible,
             opacity: self.opacity,
             blend: self.blend,
+            transition: self.transition,
         }
     }
 }
@@ -376,6 +423,7 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                transitions: Box::new(jstream_protocol::TransitionsInfo::default()),
                 video_mixes: vec![],
                 buses: vec![jstream_protocol::BusInfo {
                     bus_id: jstream_protocol::BusId::master(),
@@ -384,7 +432,10 @@ mod tests {
                     muted: false,
                 }],
                 sends: vec![],
+                master: Default::default(),
                 hotkeys: vec![],
+                folders: Vec::new(),
+                labels: Vec::new(),
             }
         );
         assert_eq!(
@@ -409,7 +460,13 @@ mod tests {
         let Some(Ok(QueryResult::KindList { kinds })) = graph.query(&Query::KindList) else {
             panic!("kind.list");
         };
-        let mut expected: Vec<_> = parity::kinds().iter().map(|k| k.summary()).collect();
+        // The built-in transition kinds, which every graph describes, and the source
+        // kind the fixture adds, by ID.
+        let mut expected: Vec<_> = jstream_protocol::builtin_transition_kinds()
+            .iter()
+            .chain(&parity::kinds())
+            .map(jstream_protocol::KindDescriptor::summary)
+            .collect();
         expected.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
         assert_eq!(kinds, expected);
         let describe = |id: &str| graph.query(&Query::KindDescribe { kind_id: id.into() });

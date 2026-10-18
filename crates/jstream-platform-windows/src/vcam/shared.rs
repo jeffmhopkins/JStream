@@ -30,7 +30,7 @@ use crate::com::OsResult;
 
 /// Closes a handle on drop. A named object keeps its name only while a handle to it is
 /// open, so the producer holds one for each.
-pub(super) struct Handle(pub(super) HANDLE);
+pub(crate) struct Handle(pub(crate) HANDLE);
 
 // SAFETY: a handle names a kernel object; closing it from any thread is sound, and
 // `Handle` owns it exclusively.

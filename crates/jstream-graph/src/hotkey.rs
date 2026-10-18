@@ -69,6 +69,7 @@ fn exists(state: &State, entity: EntityKind, id: &str) -> bool {
         EntityKind::Source => state.sources.keys().any(|s| s.as_str() == id),
         EntityKind::Output => state.outputs.keys().any(|o| o.as_str() == id),
         EntityKind::Encoder => state.encoders.keys().any(|e| e.as_str() == id),
+        EntityKind::Transition => state.transitions.presets.keys().any(|p| p.as_str() == id),
         _ => false,
     }
 }

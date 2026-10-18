@@ -7,12 +7,15 @@
 //! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
-//! stream-key actions, `scene.switch` and the program scene it sets (`studio.get`),
+//! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
+//! scenes they set (`studio.get`),
 //! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`]),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
-//! session. It does no persistence or real output work.
+//! session. It does no persistence or real output work, and knows no transition preset
+//! but the initial `cut` (ADR-0029): every switch cuts, and the `transition.*` edits are
+//! not mocked.
 //!
 //! The mock has no render thread, so a gesture's values are released the moment it ends,
 //! and it sends one `live.changed` per `live.set` instead of coalescing them: the engine
@@ -32,12 +35,13 @@ use jstream_protocol::{
     Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
     CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
     EncoderProfileInfo, EntityKind, Event, Finite32, GeometryError, GestureId, GestureInfo, Hello,
-    HistoryCall, HistoryDirection, HotkeyBinding, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
-    ItemTransform, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo,
-    OutputKind, OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo,
-    SourceKind, VideoMix, VideoMixId, VideoMixInfo, Welcome, is_live_adjustable,
+    HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET, IdempotencyKey, ItemGeometry,
+    ItemId, ItemInfo, ItemTransform, ItemTransition, LiveOutcome, MAX_GESTURES_PER_CLIENT,
+    MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PixelSize,
+    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
+    SourceAudio, SourceId, SourceInfo, SourceKind, TransitionPresetId, TransitionStarted,
+    TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo, Welcome, is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -213,7 +217,19 @@ impl Control for MockControl {
 
     fn events(&self) -> EventStream {
         let queue = Arc::new(Mutex::new(Queue::default()));
-        lock(&self.shared).subscribers.push(Arc::downgrade(&queue));
+        {
+            let mut shared = lock(&self.shared);
+            // A subscriber that arrives while the privacy screen is on learns it first,
+            // as from the engine.
+            if let Some(by) = &shared.privacy {
+                lock(&queue).events.push_back(Event::PrivacyChanged {
+                    on: true,
+                    client_id: by.clone(),
+                    request_id: None,
+                });
+            }
+            shared.subscribers.push(Arc::downgrade(&queue));
+        }
         let mut mine = lock(&self.subscriptions);
         mine.retain(|weak| weak.strong_count() > 0);
         mine.push(Arc::downgrade(&queue));
@@ -269,10 +285,15 @@ struct State {
     /// rules (ADR-0030): the first scene created goes on program, and a deleted program
     /// scene gives way to the first scene left.
     program: Option<SceneId>,
+    /// The scene on preview, which follows the same rules.
+    preview: Option<SceneId>,
     /// Every client's open gestures, with the value of each parameter each holds.
     gestures: BTreeMap<(ClientId, GestureId), BTreeMap<Param, Edit>>,
     /// Which gesture holds each parameter: at most one.
     holders: BTreeMap<Param, (ClientId, GestureId)>,
+    /// Whether the privacy screen is on, as the client that turned it on: runtime
+    /// state, never undone (ADR-0027 §4).
+    privacy: Option<ClientId>,
 }
 
 /// A parameter a live value overrides: an item's placement (`false`) or its crop
@@ -462,6 +483,10 @@ struct Collection {
     output_encoders: BTreeMap<OutputId, EncoderProfileId>,
     /// The encoder profiles, ordered by ID: name and encoding.
     encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
+    /// Each output's own filter chains, for those that have had a filter (ADR-0027).
+    output_filters: BTreeMap<OutputId, jstream_protocol::FilterChains>,
+    /// The master stage's filter chains.
+    master: jstream_protocol::FilterChains,
     /// The video mix each output shows, for those that chose one.
     output_mixes: BTreeMap<OutputId, VideoMixId>,
     /// The video mixes, ordered by ID: name and mix.
@@ -493,6 +518,8 @@ impl Default for Collection {
             buses: BTreeMap::from([audio::Bus::master()]),
             sends: BTreeMap::new(),
             audio_kinds: BTreeMap::new(),
+            output_filters: BTreeMap::new(),
+            master: jstream_protocol::FilterChains::default(),
             hotkeys: BTreeMap::new(),
         }
     }
@@ -747,24 +774,34 @@ impl State {
             request_id: Some(request_id.clone()),
             cause,
         });
-        // Edits that deleted the program scene, or created the first scene, move
-        // program; that event follows their `state.changed` (ADR-0030).
-        let kept = self
-            .program
-            .as_ref()
-            .is_some_and(|id| self.collection.scene_index(id).is_some());
-        if !kept {
-            let first = self.collection.scenes.first().map(|scene| scene.id.clone());
-            if first != self.program {
-                self.program = first;
-                self.emit_program(client_id, request_id);
+        // Edits that deleted the program or preview scene, or created the first scene,
+        // move them; that event follows their `state.changed` (ADR-0030).
+        let first = self.collection.scenes.first().map(|scene| scene.id.clone());
+        let mut moved = false;
+        for slot in [&mut self.program, &mut self.preview] {
+            let kept = slot
+                .as_ref()
+                .is_some_and(|id| self.collection.scene_index(id).is_some());
+            if !kept && *slot != first {
+                *slot = first.clone();
+                moved = true;
             }
+        }
+        if moved {
+            self.emit_studio(client_id, request_id, None);
         }
     }
 
-    fn emit_program(&mut self, client_id: &ClientId, request_id: &RequestId) {
+    fn emit_studio(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        transition: Option<TransitionStarted>,
+    ) {
         self.emit(Event::StudioChanged {
             program_scene: self.program.clone(),
+            preview_scene: self.preview.clone(),
+            transition,
             client_id: client_id.clone(),
             request_id: Some(request_id.clone()),
         });
@@ -802,13 +839,44 @@ impl State {
         action: Action,
     ) -> Result<CallResult, ProtocolError> {
         let (output_id, start) = match action {
-            Action::SceneSwitch { scene_id } => {
+            Action::SceneSwitch {
+                scene_id,
+                preset_id,
+            } => {
                 self.collection.existing_scene(&scene_id)?;
+                // The only preset the mock knows is the initial `cut`.
+                let initial = TransitionPresetId::new(INITIAL_PRESET);
+                if let Some(id) = preset_id.filter(|id| *id != initial) {
+                    return Err(not_found(EntityKind::Transition, id.as_str()));
+                }
                 if self.program.as_ref() != Some(&scene_id) {
                     self.program = Some(scene_id);
-                    self.emit_program(client_id, request_id);
+                    let started = TransitionStarted {
+                        preset_id: initial,
+                        duration_ms: 0,
+                    };
+                    self.emit_studio(client_id, request_id, Some(started));
                 }
                 return Ok(CallResult::action());
+            }
+            Action::StudioSetPreview { scene_id } => {
+                self.collection.existing_scene(&scene_id)?;
+                if self.preview.as_ref() != Some(&scene_id) {
+                    self.preview = Some(scene_id);
+                    self.emit_studio(client_id, request_id, None);
+                }
+                return Ok(CallResult::action());
+            }
+            Action::PrivacySet { on } => {
+                if on != self.privacy.is_some() {
+                    self.privacy = on.then(|| client_id.clone());
+                    self.emit(Event::PrivacyChanged {
+                        on,
+                        client_id: client_id.clone(),
+                        request_id: Some(request_id.clone()),
+                    });
+                }
+                return Ok(CallResult::Action { result: None });
             }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -884,6 +952,8 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
+                        folder: None,
+                        meta: Default::default(),
                     })
                     .collect(),
             },
@@ -926,6 +996,10 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         items: self.collection.item_infos(scene),
+                        transition_in: None,
+                        transition_out: None,
+                        folder: None,
+                        meta: Default::default(),
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
@@ -933,19 +1007,29 @@ impl State {
                 video_mixes: self.collection.video_mix_infos(),
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
+                master: Box::new(jstream_protocol::MasterInfo {
+                    filters: self.collection.master.clone(),
+                }),
                 hotkeys: self
                     .collection
                     .hotkeys
                     .iter()
                     .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
                     .collect(),
+                transitions: Box::new(TransitionsInfo::default()),
+                folders: Vec::new(),
+                labels: Vec::new(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
             },
+            Query::PrivacyGet => QueryResult::PrivacyGet {
+                on: self.privacy.is_some(),
+            },
             Query::StudioGet => QueryResult::StudioGet {
                 program_scene: self.program.clone(),
+                preview_scene: self.preview.clone(),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
@@ -1556,7 +1640,8 @@ impl Collection {
                     duplicated_from: source.duplicated_from,
                 }];
                 inverse.extend(restore_audio);
-                inverse.extend(filter::restore_all(&source_id, source.filters));
+                let owner = jstream_protocol::FilterOwner::Source { source_id };
+                inverse.extend(filter::restore_all(&owner, source.filters));
                 inverse
             }
             Edit::OutputCreate { output_id, kind } => {
@@ -1617,9 +1702,13 @@ impl Collection {
                 }
                 if let Some(mix_id) = self.output_mixes.remove(&output_id) {
                     inverse.push(Edit::OutputSetVideoMix {
-                        output_id,
+                        output_id: output_id.clone(),
                         mix_id: Some(mix_id),
                     });
+                }
+                if let Some(filters) = self.output_filters.remove(&output_id) {
+                    let owner = jstream_protocol::FilterOwner::Output { output_id };
+                    inverse.extend(filter::restore_all(&owner, filters));
                 }
                 inverse
             }
@@ -1791,6 +1880,8 @@ impl Collection {
                         EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
                         EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
                         EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
+                        // The mock has only the `cut` preset every collection starts with.
+                        EntityKind::Transition => id == INITIAL_PRESET,
                         _ => false,
                     };
                     if !exists {
@@ -1955,6 +2046,7 @@ impl Collection {
                     .filter(|original| self.sources.contains_key(original)),
                 filters: source.filters.clone(),
                 audio: source.audio,
+                meta: Default::default(),
             })
             .collect()
     }
@@ -1967,6 +2059,7 @@ impl Collection {
                 output_id: id.clone(),
                 kind: kind.clone(),
                 encoder_profile: self.output_encoders.get(id).cloned(),
+                filters: self.output_filters.get(id).cloned().unwrap_or_default(),
                 video_mix: self.output_mixes.get(id).cloned(),
             })
             .collect()
@@ -2016,6 +2109,7 @@ impl Collection {
                     visible: item.visible,
                     opacity: item.opacity,
                     blend: item.blend,
+                    transition: ItemTransition::default(),
                 })
             })
             .collect()
@@ -2562,7 +2656,8 @@ mod tests {
         HistoryDirection, HistoryOp, IdempotencyKey, ItemId, ItemTransform, MixInput,
         MixResolution, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION,
         ProtocolError, ProtocolVersion, Query, QueryResult, Rev, RtmpTarget, SceneId, SceneRole,
-        SecretString, Settings, SourceId, SourceKind, VideoMix, VideoMixId, parity,
+        SecretString, Settings, SourceId, SourceKind, TransitionsInfo, VideoMix, VideoMixId,
+        parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -2668,6 +2763,64 @@ mod tests {
 
     fn code(error: &ControlError) -> Option<&'static str> {
         error.protocol().map(ProtocolError::code)
+    }
+
+    /// `privacy.set` is an action: no `rev`, an event only when the state changes, read
+    /// back by `privacy.get`, and replayed to a subscriber that arrives while it is on.
+    #[test]
+    fn privacy_is_runtime_state_replayed_to_new_subscribers() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let mut events = control.events();
+        let set = |on| {
+            let call = Call::Action {
+                action: Action::PrivacySet { on },
+            };
+            block_on(control.call(call)).expect("privacy.set");
+        };
+        let privacy = || match block_on(control.call(Call::Query {
+            query: Query::PrivacyGet,
+        }))
+        .expect("privacy.get")
+        .result
+        {
+            CallResult::Query {
+                result: QueryResult::PrivacyGet { on },
+            } => on,
+            other => panic!("not privacy.get: {other:?}"),
+        };
+        assert!(!privacy());
+        set(true);
+        set(true);
+        assert!(privacy());
+        let changed = drain(&mut events);
+        assert_eq!(changed.len(), 1, "{changed:?}");
+        assert!(matches!(
+            &changed[0],
+            Event::PrivacyChanged {
+                on: true,
+                request_id: Some(_),
+                ..
+            }
+        ));
+        assert_eq!(scene_list(&*control).0, Rev(0), "no rev");
+
+        let mut late = control.events();
+        assert!(matches!(
+            drain(&mut late).as_slice(),
+            [Event::PrivacyChanged {
+                on: true,
+                request_id: None,
+                ..
+            }]
+        ));
+        set(false);
+        assert!(!privacy());
+        assert!(matches!(
+            drain(&mut late).as_slice(),
+            [Event::PrivacyChanged { on: false, .. }]
+        ));
+        assert!(drain(&mut control.events()).is_empty(), "nothing to replay");
     }
 
     #[test]
@@ -2959,10 +3112,12 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                master,
                 video_mixes,
                 buses,
                 sends,
                 hotkeys,
+                transitions,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -2971,10 +3126,14 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                master,
                 video_mixes,
                 buses,
                 sends,
                 hotkeys,
+                transitions,
+                folders: Vec::new(),
+                labels: Vec::new(),
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -3135,11 +3294,16 @@ mod tests {
                 Edit::OutputDelete {
                     output_id: OutputId::new("yt"),
                 },
+                // Its inverse re-adds its own filter (ADR-0027).
                 Edit::OutputDelete {
                     output_id: OutputId::new("rec"),
                 },
                 Edit::OutputDelete {
                     output_id: OutputId::new("vcam"),
+                },
+                Edit::FilterRemove {
+                    owner: jstream_protocol::FilterOwner::Master,
+                    filter_id: jstream_protocol::FilterId::new("m1"),
                 },
                 Edit::EncoderDelete {
                     profile_id: EncoderProfileId::new("low"),
@@ -3177,7 +3341,11 @@ mod tests {
                     muted: false,
                 }],
                 sends: vec![],
+                master: Default::default(),
                 hotkeys: vec![],
+                transitions: Box::new(TransitionsInfo::default()),
+                folders: Vec::new(),
+                labels: Vec::new(),
             }
         );
         drain(&mut events);
@@ -4214,6 +4382,8 @@ mod tests {
             },
             Event::StudioChanged {
                 program_scene: Some(SceneId::new("a")),
+                preview_scene: Some(SceneId::new("a")),
+                transition: None,
                 client_id: ClientId::new("mock_2"),
                 request_id: Some(response.id),
             },
@@ -4297,6 +4467,7 @@ mod tests {
                     output_id: OutputId::new("yt"),
                     kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
                     encoder_profile: None,
+                    filters: Default::default(),
                     video_mix: None,
                 }],
             })

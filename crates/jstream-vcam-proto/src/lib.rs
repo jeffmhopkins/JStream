@@ -22,7 +22,7 @@
 //! checks [`MAGIC`] and [`VERSION`]. Any change to the layout, the names or the meaning of
 //! a field bumps [`VERSION`].
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-vcam-proto/README.md#purpose
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-vcam-proto/README.md#purpose, docs/security/threat-model.md#vcam
 
 #![forbid(unsafe_code)]
 

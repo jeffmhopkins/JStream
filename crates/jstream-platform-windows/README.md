@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -354,7 +354,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     they are released.
 
 - **`WindowsVcam`** (`VcamSink`), the virtual camera's engine side
-  ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). It is the producer of
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). It is the producer of
   the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract that the
   [`jstream-vcam-windows`](../jstream-vcam-windows/README.md#purpose) media source reads
   inside Frame Server:
@@ -465,6 +465,37 @@ The code is ported from spikes S1 to S3. This first cut has:
   executable), ignoring case, `\\?\` and `/`. The answer is `Missing`, `Current` or
   `Moved`, the last when a portable install was moved after registering. That comparison
   is tested on every platform.
+
+- **`PluginBlock`** and **`ProAudioThread`**, for CLAP filters hosted out of process
+  ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)).
+  - `PluginBlock` is one filter instance's
+    [`jstream-plugin-proto`](../jstream-plugin-proto/README.md#purpose) `Shared` block
+    as a named file mapping. `create` (the engine) makes a new, zeroed one exactly the
+    block's size that only this user can open (a DACL naming the user's SID alone),
+    and refuses a name that already exists. `open` (the plugin host) maps it by name and
+    refuses a section smaller than this version's block. Both give `&Shared` through
+    `AsRef`, unmap on drop, and are `Send` and `Sync`, since the block is all atomics.
+  - `ProAudioThread::register` registers the calling thread with MMCSS "Pro Audio"
+    until the guard drops, as the WASAPI threads do. It is best effort, and the guard
+    isn't `Send`.
+  - `WindowsPluginHosts` is the `PluginHosts` backend. It runs `PLUGIN_HOST_EXE`
+    (`jstream-plugin-host.exe`, beside the engine's executable, or another path through
+    `with_exe`). Every host goes in one job object that kills its processes when the
+    engine's handle closes (and suppresses the crash dialog), so no host outlives the
+    engine. A host starts with a cleared environment that keeps only the system and
+    user-folder variables (`KEPT_ENV`), so it never sees the engine's keys, tokens or
+    configuration, and its stderr is discarded. `start` creates a block named
+    `Local\JStreamPlugin-<pid>-<n>`, initialised with the request's configuration,
+    passes its name on the command line, and keeps the stdin and stdout pipes as the
+    control channel; a thread decodes stdout into messages and stops on a frame that
+    doesn't decode. Dropping a host kills it. `scan` runs `scan <file>` and kills the
+    host after its answer, or after 20 s. `search_paths` is CLAP's order on Windows:
+    `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and
+    `%LOCALAPPDATA%\Programs\Common\CLAP`, keeping the ones that exist, without
+    repeats.
+  - **Not yet:** a test that starts a real host process (CI's Windows job builds the
+    launcher and tests `search_paths` only), and keeping the plugin from inheriting handles other threads make
+    inheritable while it starts.
 
 **Not yet:** Media Foundation's packet-level video decoders (`MfCodecs`; media files
 decode through `MfMediaDecoders`), the virtual camera taking

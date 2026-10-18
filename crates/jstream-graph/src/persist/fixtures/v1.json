@@ -27,7 +27,8 @@
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 0.0
+            "depth_px": 0.0,
+            "flip_h": true
           },
           "crop": {
             "left": 0,
@@ -258,6 +259,18 @@
         "container": "mp4"
       },
       "encoder_profile": "hq",
+      "filters": {
+        "audio": [
+          {
+            "id": "o1",
+            "kind": "gain",
+            "kind_version": 1,
+            "settings": {
+              "gain_db": -6.0
+            }
+          }
+        ]
+      },
       "video_mix": "prog"
     },
     {
@@ -390,5 +403,19 @@
       "bus_id": "vod",
       "gain_db": -3.0
     }
-  ]
+  ],
+  "master": {
+    "filters": {
+      "audio": [
+        {
+          "id": "m1",
+          "kind": "gain",
+          "kind_version": 1,
+          "settings": {
+            "gain_db": -1.0
+          }
+        }
+      ]
+    }
+  }
 }

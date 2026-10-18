@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -20,7 +20,7 @@ Windows camera Frame Server loads, which serves the frames the engine publishes 
 the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract. Layer 2,
 and one of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001));
 it depends only on layer-0 crates and Microsoft's `windows` bindings
-([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). On other platforms it
+([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). On other platforms it
 builds only its pixel helpers, the sample pacer and the control-block trust rule,
 which are tested everywhere.
 
@@ -49,9 +49,13 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   namespace is used only if that session is active (at the console, or an active remote
   connection) and the mapping's owner is the session's logged-on user, SYSTEM or
   Administrators (`trust`), so another user's engine, say in a session switched away
-  from, can't feed this camera. The DLL runs as LOCAL SERVICE, which can't call
-  `WTSQueryUserToken`, so it reads the owner with `GetSecurityInfo` and the session's
-  user with `WTSQuerySessionInformationW` and `LookupAccountNameW`; anything unreadable
+  from, can't feed this camera. While several sessions are active at once (Windows
+  Server, several remote sessions), only the console session's block is used; another
+  session's block is used only when it is the only active session, as when one remote
+  session has taken over a workstation (#204). A block in use is checked again every 5 s
+  (`RECHECK`) and dropped once it fails. The DLL runs as LOCAL SERVICE, which can't call
+  `WTSQueryUserToken`, so it reads the owner with `GetSecurityInfo`, the active
+  sessions with `WTSEnumerateSessionsW` and the session's user with `WTSQuerySessionInformationW` and `LookupAccountNameW`; anything unreadable
   refuses the block. `Global\` blocks are not owner-checked: only administrators and
   services can create them. The DLL then requires the contract's format
   (`format_matches`), requires the scope and session the block names to be the
