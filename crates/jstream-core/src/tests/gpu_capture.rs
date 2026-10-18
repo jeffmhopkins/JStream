@@ -1,7 +1,8 @@
 //! The render thread's GPU capture path and its fallbacks (ARCH › GPU pipeline, step 6),
 //! on a software device: which path `open_capture` takes for each kind of platform, an
-//! output whose capture frames are textures composited with no CPU copy, and a browser
-//! source whose page paints on the stage's device.
+//! output whose capture frames are textures composited with no CPU copy, a browser
+//! source whose page paints on the stage's device, and an encoder that takes GPU frames
+//! getting the program converted into NV12 encode targets.
 //!
 //! A software adapter stands in for the platform's media adapter, and a fake capture
 //! backend delivers `GpuFrame`s on it. A machine with no adapter skips; CI, which
@@ -23,8 +24,10 @@ use jstream_platform::fake::{
 };
 use jstream_platform::wgpu;
 use jstream_platform::{
-    AdapterId, Backends, Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
-    FrameSync, GpuContext, GpuFrame, GpuInterop, MediaClock, PlatformError, VideoSurface,
+    AdapterId, AudioEncoder, AudioEncoderConfig, Backends, Capture, CaptureStats, CaptureStream,
+    CaptureTarget, CaptureTargetInfo, CodecInfo, Codecs, FrameSync, GpuContext, GpuFrame,
+    GpuInterop, MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+    VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{Batch, Edit, OutputId, Settings, SourceId, SourceKind};
 use jstream_render::{Compositor, OpenOptions};
@@ -633,4 +636,176 @@ fn a_browser_page_is_composited_from_its_gpu_frames() {
         [true, false],
         "the stage took the device away when it stopped"
     );
+}
+
+/// GPU interop on a software device with NV12 textures, whose encode targets are plain
+/// `NV12` textures counting their stages: the platform's encode path, minus the
+/// platform. `None` where the adapter has no `TEXTURE_FORMAT_NV12`.
+struct Nv12Gpu {
+    stages: Arc<AtomicU64>,
+}
+
+impl Nv12Gpu {
+    fn open_context() -> Result<GpuContext, PlatformError> {
+        let compositor = Compositor::open(OpenOptions::headless()).map_err(|err| {
+            PlatformError::Unsupported {
+                what: format!("a software adapter: {err}"),
+            }
+        })?;
+        let adapter = compositor.adapter().clone();
+        if !adapter
+            .features()
+            .contains(wgpu::Features::TEXTURE_FORMAT_NV12)
+        {
+            return Err(PlatformError::Unsupported {
+                what: "NV12 textures on the software adapter".into(),
+            });
+        }
+        let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("jstream-core-test-nv12"),
+            required_features: wgpu::Features::TEXTURE_FORMAT_NV12,
+            ..Default::default()
+        }))
+        .map_err(|err| PlatformError::Unsupported {
+            what: format!("an NV12 device: {err}"),
+        })?;
+        Ok(GpuContext::new(
+            adapter,
+            device,
+            queue,
+            AdapterId {
+                luid: None,
+                vendor: 0,
+            },
+            None,
+        ))
+    }
+}
+
+impl GpuInterop for Nv12Gpu {
+    fn open_device(&self) -> Result<GpuContext, PlatformError> {
+        Self::open_context()
+    }
+
+    fn encode_target(
+        &self,
+        context: &GpuContext,
+        size: FrameSize,
+    ) -> Result<GpuFrame, PlatformError> {
+        let texture = context.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-core-test-encode-target"),
+            size: wgpu::Extent3d {
+                width: size.width(),
+                height: size.height(),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::NV12,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let info = VideoFrameInfo {
+            size,
+            format: PixelFormat::Nv12,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::MICROS),
+        };
+        Ok(GpuFrame::new(
+            texture,
+            info,
+            Arc::new(CountSync(Arc::clone(&self.stages))),
+        ))
+    }
+}
+
+/// The fake codecs, whose encoders take GPU frames on any context. The fake encoder
+/// takes frames of its configured format only, so one opened in NV12 fails its session
+/// on a CPU RGBA frame.
+struct GpuCodecs;
+
+impl Codecs for GpuCodecs {
+    fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+        FakeCodecs.list()
+    }
+
+    fn video_encoder(
+        &self,
+        config: &VideoEncoderConfig,
+    ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+        FakeCodecs.video_encoder(config)
+    }
+
+    fn audio_encoder(
+        &self,
+        config: &AudioEncoderConfig,
+    ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+        FakeCodecs.audio_encoder(config)
+    }
+
+    fn video_decoder(
+        &self,
+        config: &VideoDecoderConfig,
+    ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+        FakeCodecs.video_decoder(config)
+    }
+
+    fn on_context(&self, _context: &GpuContext) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
+        Ok(Some(Arc::new(FakeCodecs)))
+    }
+}
+
+/// An output whose encoder takes GPU frames gets the program converted into the
+/// platform's encode targets: each conversion stages a target, the encoder encodes
+/// them, and nothing is read back to the CPU. (The conversion's values are checked in
+/// `jstream-render`; lavapipe draws NV12 plane views wrongly, so they aren't here.)
+#[test]
+fn a_gpu_encoder_gets_nv12_encode_targets_and_no_readback() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    if let Err(err) = Nv12Gpu::open_context() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the encode-target test: {err}"
+        );
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let stages = Arc::new(AtomicU64::new(0));
+    let gpu = Arc::new(Nv12Gpu {
+        stages: Arc::clone(&stages),
+    });
+    let mut backends = backends(&clock, gpu, GpuMode::Deliver);
+    backends.codecs = Arc::new(GpuCodecs);
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(gpu_draw())
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut encoded = false;
+    while Instant::now() < deadline {
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(20));
+        let stats = engine.output_stats().expect("running");
+        if stats.video.encoded >= 3 && stages.load(Ordering::Relaxed) >= 3 {
+            encoded = true;
+            break;
+        }
+    }
+    let stats = engine.output_stats().expect("running");
+    assert!(
+        encoded,
+        "no encode target was converted and encoded: {stats:?}"
+    );
+    assert_eq!(stats.readbacks, 0, "a GPU-only program reads nothing back");
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
 }

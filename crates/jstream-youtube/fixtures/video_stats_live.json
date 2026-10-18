@@ -1,0 +1,27 @@
+{
+  "kind": "youtube#videoListResponse",
+  "etag": "fixture-etag-stats-live",
+  "items": [
+    {
+      "kind": "youtube#video",
+      "etag": "fixture-etag-video",
+      "id": "fixturebroadcast01",
+      "statistics": {
+        "viewCount": "5321",
+        "likeCount": "412",
+        "favoriteCount": "0",
+        "commentCount": "0"
+      },
+      "liveStreamingDetails": {
+        "actualStartTime": "2026-10-17T18:00:04Z",
+        "scheduledStartTime": "2026-10-17T18:00:00Z",
+        "concurrentViewers": "1287",
+        "activeLiveChatId": "fixture-live-chat-id"
+      }
+    }
+  ],
+  "pageInfo": {
+    "totalResults": 1,
+    "resultsPerPage": 1
+  }
+}

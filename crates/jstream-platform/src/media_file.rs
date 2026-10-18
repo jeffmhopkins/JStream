@@ -1,5 +1,5 @@
-//! Media files: the seam a media-file source plays a local file through (ADR-0031,
-//! docs/adr/0031-source-types-and-decoding-scope.md). The platform demuxes and decodes
+//! Media files: the seam a media-file source plays a local file through (ADR-0061,
+//! docs/adr/0061-source-types-and-decoding-scope-v2.md). The platform demuxes and decodes
 //! with its own APIs (the Media Foundation Source Reader on Windows), so the files it
 //! plays are the containers and codecs the OS supports.
 //!

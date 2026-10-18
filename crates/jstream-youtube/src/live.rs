@@ -437,7 +437,7 @@ fn parse<T: DeserializeOwned>(
     })
 }
 
-fn first<T>(page: Page<T>, kind: &'static str, id: &str) -> Result<T, YoutubeError> {
+pub(crate) fn first<T>(page: Page<T>, kind: &'static str, id: &str) -> Result<T, YoutubeError> {
     page.items
         .into_iter()
         .next()

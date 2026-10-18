@@ -2077,6 +2077,20 @@ fn output_start_returns_after_a_panicking_teardown() {
         thread::sleep(Duration::from_millis(20));
     }
     assert!(failed, "publish failure left the output running");
+    // `failed` settles before the watcher drops the pipeline, and a start that comes
+    // while the program stage is still alive shares it instead of waiting, so the
+    // restart would never see the panicking teardown (the first macOS run, #520).
+    // Wait for the stream's drop to fire; the start below then races the unwinding
+    // teardown's `draining`, which is what this test is about.
+    let mut dropped = false;
+    for _ in 0..500 {
+        if !armed.load(Ordering::Acquire) {
+            dropped = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(dropped, "the first pipeline never dropped its audio stream");
 
     let engine = engine.with_publish(Box::new(RecordingPublish::new()));
     let restart = connected(&engine);
@@ -2091,10 +2105,6 @@ fn output_start_returns_after_a_panicking_teardown() {
     let restarted = restart_thread.join().expect("restart thread");
     restarted.expect("second output.start");
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
-    assert!(
-        !armed.load(Ordering::Acquire),
-        "the first pipeline never dropped its audio stream"
-    );
 }
 
 /// Dropping the last engine handle stops a running pipeline. The publish watcher

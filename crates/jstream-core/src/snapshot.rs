@@ -1374,7 +1374,7 @@ fn draw(
         View::default(),
         live,
         &NoCaptures,
-        shot.canvas().map_err(from_render)?,
+        DrawAt::read(shot.canvas().map_err(from_render)?),
     );
     drop(cache.end_frame(compositor));
     let full = output
@@ -1441,9 +1441,28 @@ impl Captures for NoCaptures {
     }
 }
 
+/// What [`compose`] draws into: the output's size, and whether the output carries a CPU
+/// readback ([`Output::pixels`]). Without, only its texture is drawn, for a GPU consumer
+/// such as an encode target's conversion.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DrawAt {
+    pub(crate) size: FrameSize,
+    pub(crate) readback: bool,
+}
+
+impl DrawAt {
+    /// `size`, read back.
+    pub(crate) fn read(size: FrameSize) -> Self {
+        Self {
+            size,
+            readback: true,
+        }
+    }
+}
+
 /// Draws `view.mix` of `shot` (the program mix for `None`) as it is at `at` (a running
-/// transition samples it) at `output`, over opaque black, blurred when `view.privacy`
-/// is `Some(true)` (ADR-0027 §4), and reads it back,
+/// transition samples it) at `to`'s size, over opaque black, blurred when `view.privacy`
+/// is `Some(true)` (ADR-0027 §4), and reads it back when `to` asks for that,
 /// between the caller's [`ResourceCache::begin_frame`] and
 /// [`ResourceCache::end_frame`]. Several mixes may be drawn between the two, so their
 /// shared uploads and layers are kept for all of them.
@@ -1470,8 +1489,12 @@ pub(crate) fn compose(
     view: View<'_>,
     live: &LiveParams,
     captures: &dyn Captures,
-    output: FrameSize,
+    to: DrawAt,
 ) -> Result<Output, RenderError> {
+    let DrawAt {
+        size: output,
+        readback,
+    } = to;
     let canvas = shot.canvas()?;
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
@@ -1553,7 +1576,7 @@ pub(crate) fn compose(
                 })
                 .collect();
             let shown = scene(output, Color::BLACK, &items);
-            return present(compositor, cache, &shown, view.privacy);
+            return present(compositor, cache, &shown, view.privacy, readback);
         }
     };
     let direct = output == canvas;
@@ -1589,27 +1612,29 @@ pub(crate) fn compose(
     }
     if direct {
         let shown = scene(output, Color::BLACK, &items);
-        return present(compositor, cache, &shown, view.privacy);
+        return present(compositor, cache, &shown, view.privacy, readback);
     }
     let layer = image(&GpuKey::Program)?;
     compositor.render_into(&scene(canvas, Color::BLACK, &items), layer)?;
     let placed = [fitted(layer, canvas, output)];
     let shown = scene(output, Color::BLACK, &placed);
-    present(compositor, cache, &shown, view.privacy)
+    present(compositor, cache, &shown, view.privacy, readback)
 }
 
 /// Draws `shown`, the finished picture at the output size: as it is, or with the
 /// privacy screen on, blurred by halving it step by step into the [`GpuKey::Privacy`]
-/// layers and scaling the smallest back up, and reads it back. An error here fails the frame, and the
+/// layers and scaling the smallest back up, and reads it back when `readback` is set. An
+/// error here fails the frame, and the
 /// render thread then sends black, never the picture (ADR-0027 §4: it fails closed).
 fn present(
     compositor: &mut Compositor,
     cache: &ResourceCache<GpuKey>,
     shown: &Scene<'_>,
     privacy: Option<bool>,
+    readback: bool,
 ) -> Result<Output, RenderError> {
     if privacy != Some(true) {
-        return compositor.render(shown, true);
+        return compositor.render(shown, readback);
     }
     let layer = |size: FrameSize| {
         cache
@@ -1628,7 +1653,7 @@ fn present(
         from = to;
     }
     let placed = [stretched(layer(from)?, from, output)];
-    compositor.render(&scene(output, Color::BLACK, &placed), true)
+    compositor.render(&scene(output, Color::BLACK, &placed), readback)
 }
 
 /// Keeps the privacy blur's layers for an output of `output`'s size in the cache, so
@@ -2511,7 +2536,7 @@ pub(crate) mod tests {
             View::default(),
             live,
             &captures,
-            size,
+            super::DrawAt::read(size),
         )
         .expect("compose");
         drop(cache.end_frame(compositor));
@@ -2650,7 +2675,7 @@ pub(crate) mod tests {
                 View { mix, privacy: None },
                 &LiveParams::default(),
                 &super::NoCaptures,
-                square,
+                super::DrawAt::read(square),
             )
             .expect("compose");
             drop(cache.end_frame(&compositor));
@@ -2986,7 +3011,7 @@ pub(crate) mod tests {
                 View::default(),
                 &LiveParams::default(),
                 &super::NoCaptures,
-                canvas,
+                super::DrawAt::read(canvas),
             )
             .expect("program");
             if index.is_multiple_of(2) {
@@ -3000,7 +3025,7 @@ pub(crate) mod tests {
                     },
                     &LiveParams::default(),
                     &super::NoCaptures,
-                    small,
+                    super::DrawAt::read(small),
                 )
                 .expect("half");
             } else {
