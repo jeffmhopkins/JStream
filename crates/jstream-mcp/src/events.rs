@@ -21,6 +21,15 @@
 //! gap and evict nothing. `meters.tick` comes about ten times a second while the mixer
 //! runs and each one is a full reading, so it is kept the same way, as `meters`.
 //!
+//! `live.changed` comes up to 30 times a second per gesture while someone drags
+//! (ADR-0032), so it would do the same. Each carries the newest values of what changed,
+//! so a newer one can stand in for an older one of the same gesture: the feed merges the
+//! newer values over the older event's, in place, when no read has returned that event
+//! yet, only `live.changed` events follow it, and none of those sets a parameter the
+//! newer one sets. The merged event keeps its `seq`, so the numbers stay contiguous,
+//! nothing a reader has seen changes, and every value keeps its order relative to the
+//! others. An unread drag therefore holds one buffered event.
+//!
 //! `youtube.*` events are dropped on arrival: YouTube is for people, through the UI, so
 //! agents see neither its sign-in state nor its stream health (ADR-0058 §3).
 //!
@@ -28,7 +37,7 @@
 
 use crate::tools::PEOPLE_ONLY;
 use jstream_control::EventStream;
-use jstream_protocol::Event;
+use jstream_protocol::{Edit, Event};
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -85,6 +94,8 @@ pub(crate) struct Buffer {
     events: VecDeque<Numbered>,
     /// The sequence number of the next event pushed.
     next_seq: u64,
+    /// The newest `seq` any read has returned. Events up to it are never changed.
+    read_up_to: u64,
     ended: bool,
     /// The newest `stats.tick`.
     stats: Option<Event>,
@@ -98,6 +109,7 @@ impl Buffer {
             capacity: capacity.max(1),
             events: VecDeque::new(),
             next_seq: 1,
+            read_up_to: 0,
             ended: false,
             stats: None,
             meters: None,
@@ -106,8 +118,9 @@ impl Buffer {
 
     /// Appends `event`, dropping the oldest one if the buffer is full. A `stats.tick` or
     /// a `meters.tick` replaces the kept one of its type instead and takes no sequence
-    /// number. A people-only event (a `youtube.*` one) is not kept: agents don't see it
-    /// (ADR-0058 §3).
+    /// number, and a `live.changed` may be merged into an unread one instead
+    /// ([`Buffer::supersede`]). A people-only event (a `youtube.*` one) is not kept:
+    /// agents don't see it (ADR-0058 §3).
     pub(crate) fn push(&mut self, event: Event) {
         if is_people_only(&event) {
             return;
@@ -123,6 +136,9 @@ impl Buffer {
             }
             _ => {}
         }
+        let Some(event) = self.supersede(event) else {
+            return;
+        };
         if self.events.len() == self.capacity {
             self.events.pop_front();
         }
@@ -133,8 +149,64 @@ impl Buffer {
         self.next_seq += 1;
     }
 
+    /// For a `live.changed`, finds the newest buffered `live.changed` of the same gesture
+    /// that no read has returned yet and that only `live.changed` events follow. If none
+    /// of those later events sets a parameter `event` sets, merges `event`'s values over
+    /// that one's in place, keeping its `seq`, and returns `None`. Otherwise it returns
+    /// `event` to be buffered as usual. Merging moves nothing a reader has seen and
+    /// leaves no gap in the numbers, so `dropped` stays exact.
+    fn supersede(&mut self, event: Event) -> Option<Event> {
+        let Event::LiveChanged {
+            gesture_id,
+            client_id,
+            values,
+        } = event
+        else {
+            return Some(event);
+        };
+        let read_up_to = self.read_up_to;
+        let mut clashes = false;
+        let older = self
+            .events
+            .iter_mut()
+            .rev()
+            .take_while(|e| e.seq > read_up_to && matches!(e.event, Event::LiveChanged { .. }))
+            .find(|e| {
+                let Event::LiveChanged {
+                    gesture_id: g,
+                    client_id: c,
+                    values: theirs,
+                } = &e.event
+                else {
+                    return false;
+                };
+                if *g == gesture_id && *c == client_id {
+                    return true;
+                }
+                clashes |= theirs
+                    .iter()
+                    .any(|t| param(t).is_some_and(|p| values.iter().any(|v| param(v) == Some(p))));
+                false
+            });
+        match older {
+            Some(Numbered {
+                event: Event::LiveChanged { values: old, .. },
+                ..
+            }) if !clashes => {
+                old.retain(|o| param(o).is_none_or(|p| values.iter().all(|v| param(v) != Some(p))));
+                old.extend(values);
+                None
+            }
+            _ => Some(Event::LiveChanged {
+                gesture_id,
+                client_id,
+                values,
+            }),
+        }
+    }
+
     /// The events after `after` (0 for all), at most `page` of them.
-    pub(crate) fn read(&self, after: u64, page: usize) -> Result<Page, CursorAhead> {
+    pub(crate) fn read(&mut self, after: u64, page: usize) -> Result<Page, CursorAhead> {
         let newest = self.next_seq - 1;
         if after > newest {
             return Err(CursorAhead { after, newest });
@@ -151,6 +223,7 @@ impl Buffer {
             .cloned()
             .collect();
         let next = events.last().map_or(after, |e| e.seq);
+        self.read_up_to = self.read_up_to.max(next);
         Ok(Page {
             more: next < newest,
             events,
@@ -160,6 +233,18 @@ impl Buffer {
             stats: self.stats.clone(),
             meters: self.meters.clone(),
         })
+    }
+}
+
+/// The parameter a live value sets: its item, and whether it is the crop (else the
+/// placement, which `item.set_transform` and `item.set_geometry` both set).
+fn param(value: &Edit) -> Option<(&jstream_protocol::ItemId, bool)> {
+    match value {
+        Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
+            Some((item_id, false))
+        }
+        Edit::ItemSetCrop { item_id, .. } => Some((item_id, true)),
+        _ => None,
     }
 }
 
@@ -269,7 +354,7 @@ fn pump(shared: &Mutex<Shared>) {
 #[cfg(test)]
 mod tests {
     use super::{Buffer, CursorAhead, Numbered};
-    use jstream_protocol::{ClientId, Event, Rev, YoutubeAuth};
+    use jstream_protocol::{ClientId, Crop, Edit, Event, GestureId, ItemId, Rev, YoutubeAuth};
 
     fn changed(rev: u64) -> Event {
         Event::StateChanged {
@@ -318,6 +403,74 @@ mod tests {
         // A reader that kept up missed nothing.
         assert_eq!(buffer.read(4, 10).map(|p| p.dropped), Ok(0));
         assert_eq!(buffer.read(6, 10).map(|p| p.dropped), Ok(0));
+    }
+
+    fn live(gesture: &str, values: Vec<Edit>) -> Event {
+        Event::LiveChanged {
+            gesture_id: GestureId::new(gesture),
+            client_id: ClientId::new("c"),
+            values,
+        }
+    }
+
+    fn crop(item: &str, left: u32) -> Edit {
+        Edit::ItemSetCrop {
+            item_id: ItemId::new(item),
+            scene_id: None,
+            crop: Crop { left, ..Crop::NONE },
+        }
+    }
+
+    /// A drag holds one buffered `live.changed`, with the newest value of each parameter,
+    /// and every other event keeps its place.
+    #[test]
+    fn a_newer_live_changed_merges_into_an_unread_one_of_its_gesture() {
+        let mut buffer = Buffer::new(10);
+        buffer.push(changed(1));
+        buffer.push(live("g", vec![crop("a", 1), crop("b", 1)]));
+        buffer.push(live("h", vec![crop("c", 1)]));
+        buffer.push(live("g", vec![crop("a", 2)]));
+        let page = buffer.read(0, 10).expect("a valid cursor");
+        assert_eq!(seqs(&page.events), [1, 2, 3]);
+        assert_eq!(
+            page.events[1].event,
+            live("g", vec![crop("b", 1), crop("a", 2)])
+        );
+
+        // Not into an event a read has returned: the reader would never see the change.
+        buffer.push(live("g", vec![crop("a", 3)]));
+        let page = buffer.read(3, 10).expect("a valid cursor");
+        assert_eq!(seqs(&page.events), [4]);
+        assert_eq!(page.events[0].event, live("g", vec![crop("a", 3)]));
+
+        // Not across another kind of event: its order relative to them matters.
+        buffer.push(changed(2));
+        buffer.push(live("g", vec![crop("a", 4)]));
+        let page = buffer.read(4, 10).expect("a valid cursor");
+        assert_eq!(seqs(&page.events), [5, 6]);
+
+        // Nor across a `live.changed` that sets the same parameter: another gesture took
+        // it over, and moving this value before that one would undo the takeover.
+        let mut buffer = Buffer::new(10);
+        buffer.push(live("g", vec![crop("a", 1)]));
+        buffer.push(live("h", vec![crop("a", 2)]));
+        buffer.push(live("g", vec![crop("a", 3)]));
+        assert_eq!(seqs(&buffer.read(0, 10).expect("valid").events), [1, 2, 3]);
+    }
+
+    /// Merging leaves no gap in the numbers, so eviction still counts only real drops.
+    #[test]
+    fn merging_then_evicting_reports_only_the_evicted_events() {
+        let mut buffer = Buffer::new(3);
+        buffer.push(changed(1));
+        buffer.push(live("g", vec![crop("a", 1)]));
+        buffer.push(live("g", vec![crop("a", 2)]));
+        buffer.push(changed(2));
+        buffer.push(changed(3));
+        let page = buffer.read(0, 10).expect("a valid cursor");
+        assert_eq!(seqs(&page.events), [2, 3, 4]);
+        assert_eq!(page.dropped, 1, "only seq 1 was dropped");
+        assert_eq!(page.events[0].event, live("g", vec![crop("a", 2)]));
     }
 
     #[test]
