@@ -131,12 +131,15 @@ pub fn NumberField(
     let scrub = StoredValue::new(None::<Scrub>);
     let input = NodeRef::<leptos::html::Input>::new();
 
-    let text = move || {
-        again.track();
+    let shown = move || {
         dragged
             .get()
             .or_else(|| value.get())
             .map_or_else(String::new, |v| format_number(v, decimals, fixed))
+    };
+    let text = move || {
+        again.track();
+        shown()
     };
     let disabled = move || value.get().is_none();
     let put = move |v: f64| {
@@ -169,6 +172,11 @@ pub fn NumberField(
             "Enter" => blur(),
             "Escape" => {
                 event.prevent_default();
+                // Put the committed text back before the blur, which would otherwise
+                // send the typed text as a change before the re-render reaches the input.
+                if let Some(el) = input.get_untracked() {
+                    el.set_value(&untrack(shown));
+                }
                 again.update(|n| *n += 1);
                 blur();
             }
