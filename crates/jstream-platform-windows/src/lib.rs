@@ -33,6 +33,9 @@ mod n_edition;
 mod plugin_block;
 #[cfg(windows)]
 mod plugin_hosts;
+// Its owner and DACL rule is tested on every platform.
+#[cfg(any(windows, test))]
+mod security;
 mod vcam;
 // Its path comparison is tested on every platform.
 #[cfg(any(windows, test))]

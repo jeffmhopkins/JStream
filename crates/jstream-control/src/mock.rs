@@ -3,7 +3,8 @@
 //! feature.
 //!
 //! [`MockEngine`] holds a tiny collection (scenes, items, sources, configured outputs,
-//! encoder profiles, and the audio buses and sends),
+//! encoder profiles, the audio buses and sends, and the folders, labels and
+//! organisation metadata),
 //! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
@@ -52,6 +53,7 @@ use std::task::{Context, Poll, Waker};
 
 mod audio;
 mod filter;
+mod organise;
 
 /// Locks `mutex`, ignoring poisoning: the mock's state stays consistent because every
 /// change is computed first and committed without panicking.
@@ -217,7 +219,19 @@ impl Control for MockControl {
 
     fn events(&self) -> EventStream {
         let queue = Arc::new(Mutex::new(Queue::default()));
-        lock(&self.shared).subscribers.push(Arc::downgrade(&queue));
+        {
+            let mut shared = lock(&self.shared);
+            // A subscriber that arrives while the privacy screen is on learns it first,
+            // as from the engine.
+            if let Some(by) = &shared.privacy {
+                lock(&queue).events.push_back(Event::PrivacyChanged {
+                    on: true,
+                    client_id: by.clone(),
+                    request_id: None,
+                });
+            }
+            shared.subscribers.push(Arc::downgrade(&queue));
+        }
         let mut mine = lock(&self.subscriptions);
         mine.retain(|weak| weak.strong_count() > 0);
         mine.push(Arc::downgrade(&queue));
@@ -279,6 +293,9 @@ struct State {
     gestures: BTreeMap<(ClientId, GestureId), BTreeMap<Param, Edit>>,
     /// Which gesture holds each parameter: at most one.
     holders: BTreeMap<Param, (ClientId, GestureId)>,
+    /// Whether the privacy screen is on, as the client that turned it on: runtime
+    /// state, never undone (ADR-0027 §4).
+    privacy: Option<ClientId>,
 }
 
 /// A parameter a live value overrides: an item's placement (`false`) or its crop
@@ -478,6 +495,10 @@ struct Collection {
     video_mixes: BTreeMap<VideoMixId, (String, VideoMix)>,
     /// The hotkey bindings, ordered by chord.
     hotkeys: BTreeMap<Chord, Action>,
+    /// The scene list's folders, in folder order (ADR-0024 §3).
+    folders: Vec<jstream_protocol::FolderInfo>,
+    /// The labels, in label order (ADR-0024 §4).
+    labels: Vec<jstream_protocol::LabelInfo>,
     /// The buses, ordered by ID, the master among them.
     buses: BTreeMap<BusId, audio::Bus>,
     /// Each send's gain in dB, keyed by bus, then by source.
@@ -506,6 +527,8 @@ impl Default for Collection {
             output_filters: BTreeMap::new(),
             master: jstream_protocol::FilterChains::default(),
             hotkeys: BTreeMap::new(),
+            folders: Vec::new(),
+            labels: Vec::new(),
         }
     }
 }
@@ -523,6 +546,8 @@ struct Source {
     filters: jstream_protocol::FilterChains,
     /// Set exactly for an audio source.
     audio: Option<SourceAudio>,
+    /// Its labels, ordered by ID, and favourite flag (ADR-0024 §4).
+    meta: jstream_protocol::SourceMeta,
 }
 
 #[derive(Clone)]
@@ -532,6 +557,9 @@ struct Scene {
     role: SceneRole,
     /// Bottom to top.
     items: Vec<ItemId>,
+    /// The folder it is filed in, if any.
+    folder: Option<jstream_protocol::FolderId>,
+    meta: jstream_protocol::SceneMeta,
 }
 
 /// An item: the scene that holds it, the source it places, and every property an edit
@@ -852,6 +880,17 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            Action::PrivacySet { on } => {
+                if on != self.privacy.is_some() {
+                    self.privacy = on.then(|| client_id.clone());
+                    self.emit(Event::PrivacyChanged {
+                        on,
+                        client_id: client_id.clone(),
+                        request_id: Some(request_id.clone()),
+                    });
+                }
+                return Ok(CallResult::Action { result: None });
+            }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
             Action::LiveSet { gesture_id, values } => {
@@ -926,8 +965,8 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
-                        folder: None,
-                        meta: Default::default(),
+                        folder: scene.folder.clone(),
+                        meta: scene.meta.clone(),
                     })
                     .collect(),
             },
@@ -972,8 +1011,8 @@ impl State {
                         items: self.collection.item_infos(scene),
                         transition_in: None,
                         transition_out: None,
-                        folder: None,
-                        meta: Default::default(),
+                        folder: scene.folder.clone(),
+                        meta: scene.meta.clone(),
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
@@ -991,12 +1030,15 @@ impl State {
                     .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
                     .collect(),
                 transitions: Box::new(TransitionsInfo::default()),
-                folders: Vec::new(),
-                labels: Vec::new(),
+                folders: self.collection.folders.clone(),
+                labels: self.collection.labels.clone(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
+            },
+            Query::PrivacyGet => QueryResult::PrivacyGet {
+                on: self.privacy.is_some(),
             },
             Query::StudioGet => QueryResult::StudioGet {
                 program_scene: self.program.clone(),
@@ -1221,6 +1263,9 @@ impl Collection {
         if let Some(applied) = self.apply_audio(&edit, at) {
             return applied;
         }
+        if let Some(applied) = self.apply_organise(&edit, at) {
+            return applied;
+        }
         let inverse = match edit {
             Edit::SceneCreate {
                 scene_id,
@@ -1237,6 +1282,8 @@ impl Collection {
                     name,
                     role: role.unwrap_or_default(),
                     items: Vec::new(),
+                    folder: None,
+                    meta: Default::default(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
             }
@@ -1302,6 +1349,18 @@ impl Collection {
                     inverse.push(Edit::SceneReorder {
                         scene_id: scene.id.clone(),
                         index: wire_index(index)?,
+                    });
+                }
+                if scene.folder.is_some() {
+                    inverse.push(Edit::SceneSetFolder {
+                        scene_id: scene.id.clone(),
+                        folder_id: scene.folder.clone(),
+                    });
+                }
+                if !scene.meta.is_default() {
+                    inverse.push(Edit::SceneSetMeta {
+                        scene_id: scene.id.clone(),
+                        meta: scene.meta.clone(),
                     });
                 }
                 // Re-adding bottom to top puts each item back at its own index.
@@ -1554,11 +1613,14 @@ impl Collection {
                 new_source_id,
                 name,
             } => {
-                let Some((kind, settings, filters)) = self
-                    .sources
-                    .get(&source_id)
-                    .map(|s| (s.kind.clone(), s.settings.clone(), s.filters.clone()))
-                else {
+                let Some((kind, settings, filters, meta)) = self.sources.get(&source_id).map(|s| {
+                    (
+                        s.kind.clone(),
+                        s.settings.clone(),
+                        s.filters.clone(),
+                        s.meta.clone(),
+                    )
+                }) else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
                 check_id(new_source_id.as_str(), at, "new_source_id")?;
@@ -1570,9 +1632,11 @@ impl Collection {
                     settings,
                     Some(source_id.clone()),
                 )?;
-                // A duplicate keeps its original's filter IDs (ADR-0026 §2).
+                // A duplicate keeps its original's filter IDs (ADR-0026 §2), labels and
+                // favourite flag (ADR-0024 §4).
                 if let Some(copy) = self.sources.get_mut(&new_source_id) {
                     copy.filters = filters;
+                    copy.meta = meta;
                 }
                 self.audio_copied(&source_id, &new_source_id);
                 inverse
@@ -1611,8 +1675,16 @@ impl Collection {
                     duplicated_from: source.duplicated_from,
                 }];
                 inverse.extend(restore_audio);
-                let owner = jstream_protocol::FilterOwner::Source { source_id };
+                let owner = jstream_protocol::FilterOwner::Source {
+                    source_id: source_id.clone(),
+                };
                 inverse.extend(filter::restore_all(&owner, source.filters));
+                if !source.meta.is_default() {
+                    inverse.push(Edit::SourceSetMeta {
+                        source_id,
+                        meta: source.meta,
+                    });
+                }
                 inverse
             }
             Edit::OutputCreate { output_id, kind } => {
@@ -1979,6 +2051,7 @@ impl Collection {
                 duplicated_from,
                 filters: jstream_protocol::FilterChains::default(),
                 audio,
+                meta: Default::default(),
             },
         );
         self.audio_created(&id);
@@ -2017,7 +2090,7 @@ impl Collection {
                     .filter(|original| self.sources.contains_key(original)),
                 filters: source.filters.clone(),
                 audio: source.audio,
-                meta: Default::default(),
+                meta: source.meta.clone(),
             })
             .collect()
     }
@@ -2736,6 +2809,64 @@ mod tests {
         error.protocol().map(ProtocolError::code)
     }
 
+    /// `privacy.set` is an action: no `rev`, an event only when the state changes, read
+    /// back by `privacy.get`, and replayed to a subscriber that arrives while it is on.
+    #[test]
+    fn privacy_is_runtime_state_replayed_to_new_subscribers() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let mut events = control.events();
+        let set = |on| {
+            let call = Call::Action {
+                action: Action::PrivacySet { on },
+            };
+            block_on(control.call(call)).expect("privacy.set");
+        };
+        let privacy = || match block_on(control.call(Call::Query {
+            query: Query::PrivacyGet,
+        }))
+        .expect("privacy.get")
+        .result
+        {
+            CallResult::Query {
+                result: QueryResult::PrivacyGet { on },
+            } => on,
+            other => panic!("not privacy.get: {other:?}"),
+        };
+        assert!(!privacy());
+        set(true);
+        set(true);
+        assert!(privacy());
+        let changed = drain(&mut events);
+        assert_eq!(changed.len(), 1, "{changed:?}");
+        assert!(matches!(
+            &changed[0],
+            Event::PrivacyChanged {
+                on: true,
+                request_id: Some(_),
+                ..
+            }
+        ));
+        assert_eq!(scene_list(&*control).0, Rev(0), "no rev");
+
+        let mut late = control.events();
+        assert!(matches!(
+            drain(&mut late).as_slice(),
+            [Event::PrivacyChanged {
+                on: true,
+                request_id: None,
+                ..
+            }]
+        ));
+        set(false);
+        assert!(!privacy());
+        assert!(matches!(
+            drain(&mut late).as_slice(),
+            [Event::PrivacyChanged { on: false, .. }]
+        ));
+        assert!(drain(&mut control.events()).is_empty(), "nothing to replay");
+    }
+
     #[test]
     fn control_is_dyn_compatible_and_thread_safe() {
         fn send_sync<T: Send + Sync + ?Sized>() {}
@@ -3031,6 +3162,8 @@ mod tests {
                 sends,
                 hotkeys,
                 transitions,
+                folders,
+                labels,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -3045,8 +3178,8 @@ mod tests {
                 sends,
                 hotkeys,
                 transitions,
-                folders: Vec::new(),
-                labels: Vec::new(),
+                folders,
+                labels,
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -4575,5 +4708,219 @@ mod tests {
         drop(control);
         drop(engine);
         assert_eq!(poll_event(&mut events, &waker), Poll::Ready(None));
+    }
+
+    /// The folder, label and metadata edits (ADR-0024 §3 and §4) with `jstream-graph`'s
+    /// checks: missing parents and labels, a folder inside itself, colours and icons,
+    /// a label listed twice, and the in-use refusals with their blockers. Reads report
+    /// what they set, `source.duplicate` copies the metadata, and undo restores it
+    /// through a scene's and a source's delete.
+    #[test]
+    fn folders_labels_and_metadata_follow_the_graph() {
+        use jstream_protocol::{Blocker, FolderId, LabelId, SceneMeta, SourceMeta};
+        fn field(error: ControlError) -> String {
+            match error.protocol() {
+                Some(ProtocolError::InvalidArgument { field, .. }) => field.clone(),
+                other => panic!("not invalid_argument: {other:?}"),
+            }
+        }
+        fn folder(id: &str, parent: Option<&str>) -> Edit {
+            Edit::FolderCreate {
+                folder_id: FolderId::new(id),
+                name: id.to_uppercase(),
+                parent: parent.map(FolderId::new),
+            }
+        }
+        fn label(id: &str, color: &str) -> Edit {
+            Edit::LabelCreate {
+                label_id: LabelId::new(id),
+                name: id.to_uppercase(),
+                color: color.into(),
+                icon: None,
+            }
+        }
+        fn many(edits: Vec<Edit>) -> Batch {
+            Batch {
+                edits,
+                ..Batch::single(create("unused"))
+            }
+        }
+        fn labelled(labels: &[&str]) -> Edit {
+            Edit::SourceSetMeta {
+                source_id: SourceId::new("webcam"),
+                meta: SourceMeta {
+                    labels: labels.iter().map(|l| LabelId::new(*l)).collect(),
+                    favourite: true,
+                },
+            }
+        }
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = many(vec![
+            create("a"),
+            webcam(),
+            add("a", "i1", "webcam"),
+            folder("outer", None),
+            folder("inner", Some("outer")),
+            label("sponsor", "#ff8800"),
+            label("camera", "#00FF00"),
+        ]);
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let before = state(&*control);
+
+        let refused = |edit: Edit| batch(&*control, Batch::single(edit)).expect_err("refused");
+        assert_eq!(
+            code(&refused(folder("x", Some("ghost")))),
+            Some("not_found")
+        );
+        assert_eq!(
+            code(&refused(folder("outer", None))),
+            Some("already_exists")
+        );
+        let cycle = Edit::FolderSetParent {
+            folder_id: FolderId::new("outer"),
+            parent: Some(FolderId::new("inner")),
+        };
+        assert_eq!(field(refused(cycle)), "edits.0.parent");
+        assert_eq!(field(refused(label("x", "orange"))), "edits.0.color");
+        let icon = Edit::LabelUpdate {
+            label_id: LabelId::new("sponsor"),
+            name: "Sponsor".into(),
+            color: "#ff8800".into(),
+            icon: Some(String::new()),
+        };
+        assert_eq!(field(refused(icon)), "edits.0.icon");
+        assert_eq!(code(&refused(labelled(&["ghost"]))), Some("not_found"));
+        assert_eq!(
+            field(refused(labelled(&["sponsor", "sponsor"]))),
+            "edits.0.labels"
+        );
+        let bad_meta = Edit::SceneSetMeta {
+            scene_id: SceneId::new("a"),
+            meta: SceneMeta {
+                color: Some("#123".into()),
+                ..SceneMeta::default()
+            },
+        };
+        assert_eq!(field(refused(bad_meta)), "edits.0.color");
+
+        let organise = many(vec![
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("a"),
+                folder_id: Some(FolderId::new("inner")),
+            },
+            Edit::SceneSetMeta {
+                scene_id: SceneId::new("a"),
+                meta: SceneMeta {
+                    favourite: true,
+                    ..SceneMeta::default()
+                },
+            },
+            labelled(&["sponsor", "camera"]),
+            Edit::FolderReorder {
+                folder_id: FolderId::new("inner"),
+                index: 0,
+            },
+        ]);
+        assert_eq!(batch(&*control, organise), Ok(Rev(2)));
+        let Ok(QueryResult::SourceList { sources, .. }) = query(&*control, Query::SourceList)
+        else {
+            panic!("a source list");
+        };
+        assert_eq!(
+            sources[0].meta.labels,
+            [LabelId::new("camera"), LabelId::new("sponsor")]
+        );
+        let Ok(QueryResult::SceneList { scenes, .. }) = query(&*control, Query::SceneList) else {
+            panic!("a scene list");
+        };
+        assert_eq!(scenes[0].folder, Some(FolderId::new("inner")));
+        assert!(scenes[0].meta.favourite);
+        let Ok(QueryResult::StateGet { folders, .. }) = query(&*control, Query::StateGet) else {
+            panic!("a state");
+        };
+        assert_eq!(folders[0].folder_id, FolderId::new("inner"));
+
+        let in_use = refused(Edit::FolderDelete {
+            folder_id: FolderId::new("inner"),
+        });
+        let Some(ProtocolError::InvalidArgument {
+            field: in_use_field,
+            blockers,
+            ..
+        }) = in_use.protocol()
+        else {
+            panic!("not invalid_argument: {in_use:?}");
+        };
+        assert_eq!(in_use_field, "edits.0.folder_id");
+        assert_eq!(
+            blockers,
+            &[Blocker {
+                entity: EntityKind::Scene,
+                id: "a".into(),
+                field: "folder".into(),
+            }]
+        );
+        let blocked = |error: ControlError| match error.protocol() {
+            Some(ProtocolError::InvalidArgument {
+                field, blockers, ..
+            }) => (field.clone(), blockers.clone()),
+            other => panic!("not invalid_argument: {other:?}"),
+        };
+        let blocker = |entity, id: &str, field: &str| Blocker {
+            entity,
+            id: id.into(),
+            field: field.into(),
+        };
+        let label_in_use = refused(Edit::LabelDelete {
+            label_id: LabelId::new("sponsor"),
+        });
+        assert_eq!(
+            blocked(label_in_use),
+            (
+                "edits.0.label_id".into(),
+                vec![blocker(EntityKind::Source, "webcam", "labels")]
+            )
+        );
+        let outer = refused(Edit::FolderDelete {
+            folder_id: FolderId::new("outer"),
+        });
+        assert_eq!(
+            blocked(outer),
+            (
+                "edits.0.folder_id".into(),
+                vec![blocker(EntityKind::Folder, "inner", "parent")]
+            )
+        );
+
+        // The copy carries the labels and favourite flag.
+        let copy = Edit::SourceDuplicate {
+            source_id: SourceId::new("webcam"),
+            new_source_id: SourceId::new("webcam_2"),
+            name: "Copy".into(),
+        };
+        assert_eq!(batch(&*control, Batch::single(copy)), Ok(Rev(3)));
+        let Ok(QueryResult::SourceList { sources, .. }) = query(&*control, Query::SourceList)
+        else {
+            panic!("a source list");
+        };
+        assert_eq!(sources[0].meta, sources[1].meta);
+        assert!(undo(&*control).is_ok());
+
+        // Deleting the scene and the source, then undoing, restores their metadata.
+        let organised = state(&*control);
+        let delete = many(vec![
+            Edit::SceneDelete {
+                scene_id: SceneId::new("a"),
+            },
+            Edit::SourceDelete {
+                source_id: SourceId::new("webcam"),
+            },
+        ]);
+        assert!(batch(&*control, delete).is_ok());
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), organised);
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), before);
     }
 }
