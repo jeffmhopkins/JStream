@@ -6,11 +6,12 @@
 //!
 //! It produces the MPEG-4 AAC-LC object type (audio object type 2) with only tools of
 //! the MPEG-2 AAC LC profile (ISO/IEC 13818-7, 1997): the MDCT filterbank with sine and
-//! KBD windows, block switching, M/S stereo, scalefactors, quantization and Huffman
-//! coding. It never emits PNS, SBR, parametric stereo or any later tool, and there is no
+//! KBD windows, block switching, temporal noise shaping (TNS), M/S stereo, scalefactors,
+//! quantization and Huffman coding. It never emits PNS, SBR, parametric stereo or any later tool, and there is no
 //! decoder. Each encoder technique names its pre-2003 source where it is implemented: the
 //! psychoacoustic model and attack detector in `psy`, the quantization loops in `quant`,
-//! rate control and M/S in `encoder`, sectioning in `huffman`, the filterbank in `mdct`.
+//! rate control and M/S in `encoder`, sectioning in `huffman`, the filterbank in `mdct`,
+//! TNS in `tns`.
 //!
 //! JStream holds no AAC patent licence. Via Licensing Alliance (Via LA) administers the
 //! AAC patent pool; ADR-0062 records what is and isn't known about the patents.
@@ -51,6 +52,7 @@ mod mdct;
 mod psy;
 mod quant;
 mod tables;
+mod tns;
 
 pub use encoder::Encoder;
 pub use mdct::WindowShape;
@@ -81,16 +83,21 @@ pub struct Config {
     pub bit_rate: u32,
     /// The window shape of every frame.
     pub window_shape: WindowShape,
+    /// Whether to use temporal noise shaping (TNS) where it pays, so that the noise in a
+    /// window follows the signal's temporal envelope (clicks, consonants, struck notes)
+    /// instead of spreading over the whole window. On by default; off is for comparing.
+    pub tns: bool,
 }
 
 impl Config {
-    /// A configuration with the sine window.
+    /// A configuration with the sine window and TNS on.
     pub fn new(sample_rate: u32, channels: u8, bit_rate: u32) -> Self {
         Self {
             sample_rate,
             channels,
             bit_rate,
             window_shape: WindowShape::Sine,
+            tns: true,
         }
     }
 

@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 0
-summary = "AAC-LC encoder in safe Rust (ADR-0061, within ADR-0062's limits): MDCT with sine and KBD windows, block switching, a psychoacoustic model, M/S stereo, two-loop quantization, Huffman coding and a bit reservoir; raw access units plus the AudioSpecificConfig; encode only"
+summary = "AAC-LC encoder in safe Rust (ADR-0061, within ADR-0062's limits): MDCT with sine and KBD windows, block switching, TNS, a psychoacoustic model, M/S stereo, two-loop quantization, Huffman coding and a bit reservoir; raw access units plus the AudioSpecificConfig; encode only"
 unsafe_allowed = false
 
 [lints]

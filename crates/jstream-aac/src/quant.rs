@@ -72,6 +72,8 @@ pub(crate) struct Channel {
     pub(crate) section_count: [usize; 8],
     /// The `global_gain` to write: the first coded band's scalefactor.
     pub(crate) global_gain: i32,
+    /// The TNS filters applied to `spec`, per window.
+    pub(crate) tns: crate::tns::Tns,
     // Scratch.
     xp: Vec<f32>,
     amp: [i32; MAX_BANDS],
@@ -92,6 +94,7 @@ impl Channel {
             sections: [[Section::default(); 49]; 8],
             section_count: [0; 8],
             global_gain: SF_OFFSET,
+            tns: crate::tns::Tns::default(),
             xp: vec![0.0; 1024],
             amp: [0; MAX_BANDS],
             best_amp: [0; MAX_BANDS],

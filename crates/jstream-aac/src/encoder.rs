@@ -17,6 +17,7 @@ use crate::mdct::{Mdct, WindowShape, Windows};
 use crate::psy::{self, AttackDetector, Layout};
 use crate::quant::{Channel, MAX_BANDS, Quantizer, Shape};
 use crate::tables::{SWB_LONG, SWB_SHORT};
+use crate::tns::Analyzer;
 use crate::{Config, Error, FRAME_LEN};
 
 /// Samples the encoder holds before it encodes a frame: the frame's 2048-sample window
@@ -80,6 +81,8 @@ pub struct Encoder {
     layout_long: Layout,
     layout_short: Layout,
     quantizer: Quantizer,
+    /// Chooses each window's TNS filter, when `config.tns`.
+    tns: Analyzer,
     detector: AttackDetector,
     /// Whether the next frame's short-window region holds an attack.
     attack_next: Option<bool>,
@@ -133,6 +136,7 @@ impl Encoder {
             layout_long: Layout::new(&SWB_LONG, 1024, config.sample_rate, bw),
             layout_short: Layout::new(&SWB_SHORT, 128, config.sample_rate, bw),
             quantizer: Quantizer::new(),
+            tns: Analyzer::new(config.sample_rate, &SWB_LONG, &SWB_SHORT),
             detector: AttackDetector::default(),
             attack_next: None,
             prev_sequence: Sequence::OnlyLong,
@@ -146,6 +150,12 @@ impl Encoder {
             pe_mean: 0.0,
             windowed: vec![0.0; 2 * FRAME_LEN],
         })
+    }
+
+    /// Whether the last access unit sent TNS data on any channel.
+    #[cfg(test)]
+    pub(crate) fn used_tns(&self) -> bool {
+        self.state.iter().any(|ch| ch.tns.present())
     }
 
     /// The configuration the encoder was opened with.
@@ -317,11 +327,17 @@ impl Encoder {
             lines,
         };
 
-        // Filterbank and model.
+        // Filterbank, model, and TNS on each channel before M/S (the decoder undoes M/S
+        // first, then TNS).
         let mut pe = [0.0f32; 2];
         for (c, pe) in pe.iter_mut().enumerate().take(self.channels) {
             self.analyse(c, sequence, shape);
             *pe = self.model(c, &frame, short);
+            if self.config.tns {
+                self.tns.apply(&mut self.state[c], &frame);
+            } else {
+                self.state[c].tns.clear();
+            }
         }
         if self.channels == 2 {
             pe = self.decide_ms(&frame);
@@ -353,6 +369,7 @@ impl Encoder {
                     0.5
                 }
             };
+            let fixed = fixed + self.state[c].tns.bits(frame.windows);
             let ch_budget = ((left as f32 * share) as u32).saturating_sub(fixed);
             let used = self.quantizer.run(&mut self.state[c], &frame, ch_budget) + fixed;
             left = left.saturating_sub(used);
@@ -611,7 +628,10 @@ pub(crate) fn write_ics(
         }
     }
     w.bit(false); // pulse_data_present
-    w.bit(false); // tns_data_present
+    w.bit(ch.tns.present());
+    if ch.tns.present() {
+        ch.tns.write(w, frame.windows);
+    }
     w.bit(false); // gain_control_data_present
     for g in 0..frame.windows {
         for s in &ch.sections[g][..ch.section_count[g]] {
