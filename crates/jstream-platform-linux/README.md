@@ -17,12 +17,11 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
-ADR is **accepted**; this crate has its first three parts (the platform basics, screen
-capture, then VA-API H.264 encoding) and ALSA audio input and output, and the rest
-follows in later PRs. Layer 2, and one
-of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
-system call is wrapped here behind safe APIs, with RAII types for what the system hands
-back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
+ADR is **accepted**; this crate has the platform basics, screen capture, VA-API H.264
+encoding, the software H.264 and AAC encoders, PipeWire and ALSA audio, and V4L2
+webcams, and the rest follows in later PRs. Layer 2, and one of the crates allowed `unsafe`
+([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every system call is wrapped here
+behind safe APIs, with RAII types for what the system hands back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
 
 **System libraries are loaded at run time** (ADR-0060 §8). libpipewire, libva and
 libasound are opened with `dlopen` through `libloading` when a backend first needs them, and only the
@@ -88,8 +87,62 @@ It has:
   The portal protocol's option values are here too: source types, cursor modes,
   `persist_mode`, request handle tokens and request object paths.
 - **`PipeWire`** loads `libpipewire-0.3.so.0` and checks it is at least ADR-0060's floor
-  (1.0). **`PipeWireAudio`** (`AudioIo`) is built on it; listing devices and opening
-  streams report `Unsupported` for now.
+  (1.0). **`PipeWireAudio`** (`AudioIo`, ADR-0060 §4) is built on it. Each call
+  connects to the user's daemon on its own `pw_thread_loop` (`pipewire/audio.rs`) and
+  reads the registry with two core round trips: nodes, clients, the core's
+  `default.clock.rate`, the `default` metadata's `default.audio.source` and
+  `default.audio.sink`, and each device node's info, bound for its channel count
+  (`audio.channels`, else the length of `audio.position`), which a registry global
+  never carries (a node's proxy is destroyed when its global goes). No daemon is a missing component whose remedy starts it.
+  `pipewire/graph.rs` turns that into devices (`Audio/Source`, `Audio/Source/Virtual`,
+  `Audio/Sink` and `Audio/Duplex` nodes, with `node.name` as the stable id), the
+  processes playing audio (`Stream/Output/Audio` nodes, with the pid from their
+  client's `pipewire.sec.pid` and the executable's name from `/proc`, else the
+  application's name), and which node each target connects to: `target.object`, with
+  `stream.capture.sink` for an output's loopback, and a process's loopback recording
+  its first playback stream. A stream is fixed to interleaved `f32` at the graph's rate
+  in the device's layout (mono, stereo or 5.1; any other count, or a default with no
+  device, as stereo; `spa/audio.rs` builds and parses the format pods), so PipeWire
+  converts and the handler never sees a format change. `process` runs on the stream's
+  own loop thread: input packets carry their device position and a media-clock time
+  from `pw_stream_get_time_n` (the capture time, before the device's delay), a
+  corrupted buffer marks a discontinuity and its frames still count in the position, an
+  empty one (nothing playing into the source) is a silent packet, and output
+  asks the handler to fill each buffer. A named device or process whose node is
+  removed is `DeviceLost`; a default follows the session manager. The callbacks catch
+  panics (R-UNSAFE-005): a panicking handler is told once, with `InvalidState`, and
+  isn't called again. Dropping the stream stops its callbacks before it returns,
+  without telling the handler it failed. Each input node's ALSA card (from its info's
+  `api.alsa.pcm.card`) is kept for pairing webcams.
+- **`V4l2Devices`** (`VideoDevices`): webcams and capture cards through V4L2, the
+  "plain V4L2 backend" ADR-0060 §9 keeps in scope. There is no library: the nodes are
+  driven with `ioctl`s declared by hand from `<linux/videodev2.h>` (`v4l2/abi.rs`, the
+  64-bit layouts, checked against the kernel headers; the backend isn't built for 32-bit
+  targets). `devices` lists each `/dev/videoN` that captures single-planar video with
+  streaming I/O (a UVC webcam's metadata node doesn't), named by its card name, with
+  udev's `/dev/v4l/by-id/` link as the ID where there is one (it survives replugging and
+  renumbering), else the node's path. Only such paths are ever opened, since an ID can
+  come from a saved collection. Nodes the user can't open are left out. Built with an
+  audio backend (`with_audio`), it pairs each device with its microphone
+  (`pairing.rs`): the node's device in sysfs (the USB device, for a USB interface)
+  holds its sound cards, and the backend names its input on the first of them that has
+  one, PipeWire by card index and ALSA by the card's id (`sysdefault:CARD=<id>`, else
+  `plughw:`, `dsnoop:` or `hw:`). A capture card whose audio is another PCI function
+  isn't paired, and a backend that can't list its inputs pairs nothing. `formats` lists every enumerated size and frame interval of
+  the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12), NV12 and I420 as
+  they are, and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. A stepwise size range
+  offers its largest size and the common sizes its steps reach, a stepwise interval its
+  shortest, and a driver that enumerates no sizes or no intervals its current ones. `open` sets the
+  format (refused as `Unsupported` if the driver settles on another) and frame interval,
+  maps four driver buffers, and starts a capture thread that waits on the node and an
+  `eventfd`, converts each filled buffer with `jstream_platform::yuv` or hands it to the
+  decoder, queues it back, and fills the single-slot mailbox. A frame's time is its
+  `CLOCK_MONOTONIC` buffer timestamp when it is recent, else the clock's `now`. Buffers
+  the driver marks as corrupt and short raw frames are dropped, rejected JPEGs counted.
+  Raw colour is what the driver reports, else the colour space's default, else BT.601
+  below 720 lines and BT.709 from there, in limited range. An unplug is `DeviceLost`, a
+  device another application streams from `Busy`. Dropping the stream wakes and joins
+  the thread, which turns the stream off, unmaps the buffers and closes the node.
 - **`AlsaAudio`** (`AudioIo`): audio input and output through ALSA, the fallback
   ADR-0060 §4 names for a machine without a PipeWire daemon, on `libasound.so.2` loaded
   at run time. `devices` lists the PCMs in ALSA's name hints (`default`, `sysdefault:`,
@@ -109,11 +162,20 @@ It has:
   playback restarts with its next write, dropping the rest of that period) and flags the
   next packet as a discontinuity (ALSA doesn't say how many frames were lost, so the
   device position doesn't jump); a device that can't be recovered ends the stream with
-  `DeviceLost`. A short write is finished before the next period is rendered. An unknown
-  PCM is `NotFound`. Desktop and application audio (`*Loopback`, `processes`) are `Unsupported`: ALSA has no loopback,
+  `DeviceLost`. A short write is finished before the next period is rendered. An unknown PCM is `NotFound`. Desktop and
+  application audio (`*Loopback`, `processes`) are `Unsupported`: ALSA has no loopback,
   and ADR-0060 §4 leaves them to PipeWire. alsa-lib prints its own error lines to stderr
   (such as for an unknown PCM); silencing them needs a variadic C callback, which stable
   Rust can't define.
+- **`LinuxBackends`**: the backend set, ADR-0060 §4's choice made once when it is
+  built (`backends.rs`). Audio is `PipeWireAudio` when libpipewire loads and the daemon
+  answers a device listing, else `AlsaAudio`; `audio_backend` says which and
+  `pipewire_unavailable` why PipeWire wasn't used, and with neither it is a missing
+  component naming both reasons. The same audio backend is handed to `V4l2Devices` for
+  pairing, so a paired microphone is one the engine can open. It holds the clock,
+  portal capture (with a restore-token folder when given), the paired video devices,
+  the audio backend and `VaapiCodecs`; `into_backends` adds the host's GPU interop and
+  media decoders, which this crate doesn't have yet, for the engine's `Backends`.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
@@ -186,28 +248,38 @@ Not here yet, in roughly the order they follow:
 - the engine starting each portal source's capture with `start_with` and
   `CaptureOptions::for_source`, and calling `forget_source` when the source is deleted,
   once captures follow sources on this wave (it captures the primary display for now);
-- PipeWire audio streams (ADR-0060 §4), including desktop and application audio, and
-  choosing between PipeWire and ALSA where both are present;
 - DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
-- V4L2 webcams;
+- multi-planar V4L2 capture (some capture cards and SoC cameras);
+- GPU interop and media-file decoders, which `LinuxBackends` leaves to the host;
 - the stream-key store.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
-pods, the frame copy, and the H.264 parameters, parameter sets, GOP and upload are
+pods, the frame copy, the H.264 parameters, parameter sets, GOP and upload, and V4L2's
+ABI layouts, formats list, colour, buffer times and device IDs are
 platform-independent. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
-libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
-stopping on drop, a capture stream running again after an overrun, loopback refused, an
-unknown PCM and the listing) pass with or without those libraries installed and need no
-GPU, session or daemon. ALSA's sample conversion, channel layouts, listed names and frame
-times are platform-independent. The OpenH264 tests use a fake download and a fake
-encoder behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
+libva probes, V4L2's refusal of IDs that aren't video nodes and of a node that isn't
+V4L2, and its handling of filled buffers, and ALSA through its sound-card-free `null`
+PCM: recording, playing, stopping on drop, a capture stream running again after an
+overrun, loopback refused, an unknown PCM and the listing) pass with or without those
+libraries installed and need no GPU, session or daemon; a missing PipeWire daemon is
+tried on a socket name nothing listens on. ALSA's sample conversion, channel layouts,
+listed names and frame times, PipeWire's registry reading and stream planning
+(`pipewire/graph.rs`) and its audio format pods, the audio backend choice, and
+pairing (finding a node's sound cards in a sysfs tree laid out in a temporary folder,
+and each backend's preferred input on a card) are platform-independent too. The
+OpenH264 tests use a fake download and a fake encoder behind the library's vtable, and
+the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
 GNOME or KDE session with PipeWire, VA-API H.264 encodes on a GPU with an encode
-driver, and a second of ALSA's default input on a sound card (`null` isn't paced, so
-only a real device shows real-time recording).
+driver, V4L2 capture from a webcam or capture card (the `vivid` test driver will
+do), a second of ALSA's default input on a sound card (`null` isn't paced, so
+only a real device shows real-time recording), and `PipeWireAudio` recording, playing
+and looping back on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes are
+enough, no sound card, and one says it is on ALSA card 7 for the pairing test), and
+`LinuxBackends` picking PipeWire with a daemon and ALSA without.

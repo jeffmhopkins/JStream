@@ -261,7 +261,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     `open` waits up to 5 s for the first read, so a device another application holds is
     `Busy` there. A denied camera privacy setting is an `Os` error that says so. Raw
     frames are copied (NV12, I420) or converted to NV12 (YUY2, with each chroma sample
-    averaging the two rows of its block) on that thread, into the same single-slot
+    averaging the two rows of its block) on that thread by `jstream_platform::yuv`, the
+    converter Linux's V4L2 backend uses too, into the same single-slot
     mailbox as display capture. Their colour is what the type declares, else BT.601
     below 720 lines and BT.709 from there, in limited range.
   - **Threads:** `devices`, `formats` and `open` join the calling thread to the
@@ -497,7 +498,8 @@ choice (reuse, drop when full, release on resize), the credential helpers (targe
 of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
 the Media Foundation check's decision (edition kinds and the advice for each) and the
 video-device helpers (subtypes and frame rates to formats, repeats left out, colour
-fallbacks, NV12 and I420 copies, YUY2 to NV12, short buffers, audio pairing by container)
+fallbacks, strides, short buffers reported against the buffer lock, audio pairing by
+container; the NV12 and I420 copies and YUY2 to NV12 are `jstream-platform`'s, tested there)
 and the media-file helpers (RGB32 rows to RGBA and BGRA, top-down and bottom-up,
 cropping to an aperture, short buffers, packed sizes and rates, 100 ns times, the
 verbatim path prefix, and the gapless cut of audio priming and padding) run on every platform. The QPC clock test, the start-race test (a destroyed message-only

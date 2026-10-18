@@ -33,6 +33,7 @@ mod surface;
 mod tests;
 mod vcam;
 mod video_device;
+pub mod yuv;
 
 pub use audio::{
     AudioDeviceInfo, AudioDirection, AudioInputHandler, AudioInputTarget, AudioIo,
