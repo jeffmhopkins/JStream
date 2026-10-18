@@ -68,7 +68,7 @@ Contents ([Design](#design) explains the choices):
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
-- **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
+- **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over a placeholder background, edits their geometry with the pointer and the
   keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
   hooked up yet.
@@ -123,8 +123,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   before the state, so it starts on the scene on program. It is fixed up after every
   change: a
   deleted scene falls back to the program scene, then the first listed scene, and an
-  item that left the scene is dropped. The canvas still draws the program scene with a
-  selection of its own; moving it onto `Selection` is a canvas follow-up.
+  item that left the scene is dropped. The canvas edits the same scene and selects the
+  same item, so a click on a box selects its row and opens its properties.
 - **Scenes and sources.** The scene list shows scenes in display order and leaves out
   groups (ADR-0024), marks the program scene, and puts a scene on program with
   `scene.switch`. The sources list shows the selected scene's items with the top of the
@@ -292,27 +292,35 @@ handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads
 scene and sends the edits. These three are pure and tested natively against
 `MockEngine`; `mod.rs` is the component.
 
-- **What it shows.** The scene on program (`studio.get`, or the first non-group scene
-  if none is), re-read on every `state.changed`, `studio.changed` and
-  `events.dropped`. Boxes are outlined with `jstream-protocol`'s placement formula, so
-  the overlay matches what the compositor draws. An item still stored as a 0.3 legacy
-  placement is not drawn: its box depends on the source's runtime size, which the
-  protocol doesn't report yet (ADR-0022's `source.sizes`), and the toolbar counts
-  such items. Hidden items are drawn dashed.
+- **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
+  `Layout::of` from the shared collection, so it follows every state change the app
+  reads. The frame is the largest 16:9 box in the canvas area, with the scene's name
+  and the canvas size captioned bottom left. Boxes are outlined with
+  `jstream-protocol`'s placement formula, so the overlay matches what the compositor
+  draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
+  on the source's runtime size, which the protocol doesn't report yet (ADR-0022's
+  `source.sizes`), and a note top left counts such items. Hidden items are drawn
+  dashed, and the box under the pointer gets a light outline.
 - **Selecting and dragging.** A press selects the topmost box under the pointer, or
-  clears the selection on empty canvas. Dragging the box moves it. The selected box
-  has eight resize handles and a rotate handle above its top edge. A corner keeps the
-  box's aspect ratio (Shift frees it) and an edge handle changes one side; the
-  opposite corner or edge stays put, in the box's own rotated frame, and a box never
-  gets smaller than 1 pixel or flips. Rotation turns about the centre and snaps to
-  the nearest multiple of 90° within 4°; Shift moves it in 15° steps. Arrow keys
-  nudge the selected box by 1 pixel (Shift: 10). Escape cancels a drag, or clears the
-  selection.
-- **Snapping.** A moved box's edges and centre snap, within 6 screen pixels, to the
-  canvas's edges and centre lines and to the other boxes' edges and centres, using
-  each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
-  upright box's resized edges snap the same way. Alt skips snapping for one drag, and
-  a toolbar toggle turns it off.
+  clears the selection on empty canvas; either way the shared selection changes. The
+  cursor shows what a press would do. Dragging the box moves it. The selected box has
+  a 2 px outline, eight resize handles, a rotate knob on a stem above its top edge, and
+  a readout under it: its size (and rotation, if turned), or during a drag its
+  top-left, size or angle. A resize keeps the box's aspect ratio (Ctrl stretches): a
+  corner follows the axis that snapped, else the one that changed more, and an edge
+  handle scales the other axis about the centre. The opposite corner or edge stays
+  put, in the box's own rotated frame, and a box never gets smaller than 10 pixels or
+  flips. Rotation turns about the centre and snaps to the nearest multiple of 90°
+  within 3°, else to 0.1°; Ctrl moves it in 45° steps. Shift drags at half speed for
+  every gesture, following the pointer's movement so pressing it mid-drag doesn't
+  jump. Arrow keys nudge the selected box by 1 pixel (Shift: 10). Escape cancels a
+  drag, or clears the selection.
+- **Snapping.** A moved upright box's edges and centre snap, within 6 screen pixels,
+  to the canvas's edges and centre lines and to the other boxes' edges and centres,
+  using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
+  upright box's resized edges snap the same way. Ctrl moves without snapping, a
+  rotated box never snaps, and the Snapping button in the floating tools (top right)
+  turns it off.
 - **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
   draws the gesture locally, and on release one batch with one `item.set_geometry`
   commits it, so each gesture (and each nudge) is one undo step. It carries no
@@ -320,9 +328,9 @@ scene and sends the edits. These three are pure and tested natively against
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
   (`live.set` with `ends_gesture` on the committing batch), which would show the drag
   on the output while it happens, are in the protocol but the canvas doesn't send them
-  yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
-  while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
-  out when the engine reports nothing left, and an `undo_conflict` is explained.
+  yet. Undo and redo (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y while the canvas has focus, and
+  the Edit menu) are `history.undo` and `history.redo`; nothing left to undo is
+  silent, and an `undo_conflict` is explained in the problem bar.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos

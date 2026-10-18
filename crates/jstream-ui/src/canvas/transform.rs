@@ -12,16 +12,25 @@ use crate::canvas::snap::{Guide, SnapTargets};
 use jstream_control::protocol::{Canvas, Finite32, ItemGeometry, Size, Vec2};
 
 /// The smallest box side a resize leaves, in canvas pixels.
-pub const MIN_SIZE: f32 = 1.0;
-/// Half the side of a resize handle, in screen pixels: what is drawn and what a press
-/// hits.
+pub const MIN_SIZE: f32 = 10.0;
+/// The side of a drawn resize handle, in screen pixels.
+pub const HANDLE_SIZE: f32 = 10.0;
+/// The diameter of the drawn rotate knob, in screen pixels.
+pub const KNOB_SIZE: f32 = 14.0;
+/// Half the side of the square a press on a handle hits, in screen pixels, before
+/// [`handle_at`]'s 2 px of slack.
 pub const HANDLE_RADIUS: f32 = 6.0;
-/// How far above the box's top edge the rotate handle sits, in screen pixels.
-pub const ROTATE_OFFSET: f32 = 28.0;
-/// The rotation step with Shift held, in degrees.
-pub const ROTATE_STEP: f32 = 15.0;
+/// How far above the box's top edge the rotate knob's centre sits, in screen pixels:
+/// the knob's top is 38 px above the edge.
+pub const ROTATE_OFFSET: f32 = 38.0 - KNOB_SIZE / 2.0;
+/// How long the stem from the top edge towards the knob is, in screen pixels.
+pub const STEM_LENGTH: f32 = 30.0;
+/// The rotation step with Ctrl held, in degrees.
+pub const ROTATE_STEP: f32 = 45.0;
 /// How close to a multiple of 90° a rotation snaps to it, in degrees.
-pub const ROTATE_SNAP: f32 = 4.0;
+pub const ROTATE_SNAP: f32 = 3.0;
+/// How fast the pointer moves the item with Shift held.
+pub const SLOW_SPEED: f32 = 0.5;
 
 /// A point in canvas pixels, x right and y down.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -215,14 +224,46 @@ impl From<Handle> for GestureKind {
     }
 }
 
-/// The modifier keys a gesture reads.
+/// The modifier keys a gesture reads. Shift's half speed is [`Pointer`]'s, not the
+/// gesture's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Modifiers {
-    /// Shift: a corner resize stops keeping the aspect ratio, and rotation moves in
-    /// 15° steps.
-    pub shift: bool,
-    /// Alt: no snapping for this movement.
-    pub alt: bool,
+    /// Ctrl (or Cmd): a move doesn't snap, a resize stops keeping the aspect ratio, and
+    /// rotation moves in 45° steps.
+    pub ctrl: bool,
+}
+
+/// The pointer a gesture follows: the real one, except that while Shift is held it
+/// moves at [`SLOW_SPEED`]. It follows the real pointer's movement, so pressing or
+/// releasing Shift mid-drag doesn't make the item jump.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pointer {
+    /// Where the real pointer was last.
+    last: Point,
+    /// Where the gesture's pointer is.
+    at: Point,
+}
+
+impl Pointer {
+    /// A pointer pressed at `point`.
+    pub fn new(point: Point) -> Pointer {
+        Pointer {
+            last: point,
+            at: point,
+        }
+    }
+
+    /// Follows the real pointer to `point`, at half speed when `slow`, and returns where
+    /// the gesture's pointer is now.
+    pub fn follow(&mut self, point: Point, slow: bool) -> Point {
+        let speed = if slow { SLOW_SPEED } else { 1.0 };
+        self.at = Point {
+            x: self.at.x + (point.x - self.last.x) * speed,
+            y: self.at.y + (point.y - self.last.y) * speed,
+        };
+        self.last = point;
+        self.at
+    }
 }
 
 /// One pointer drag on one item: the geometry it started from and where it started.
@@ -257,9 +298,14 @@ impl Gesture {
         snap: Option<&SnapTargets>,
         tolerance: f32,
     ) -> Option<Update> {
-        let snap = if modifiers.alt { None } else { snap };
         match self.kind {
-            GestureKind::Move => self.drag(pointer, snap, tolerance),
+            // Ctrl moves without snapping. A rotated box doesn't snap either: its edges
+            // aren't the canvas's axes.
+            GestureKind::Move => {
+                let upright = self.start.rotation_deg.get().rem_euclid(360.0) == 0.0;
+                let snap = snap.filter(|_| upright && !modifiers.ctrl);
+                self.drag(pointer, snap, tolerance)
+            }
             GestureKind::Resize { x, y } => self.resize(x, y, pointer, modifiers, snap, tolerance),
             GestureKind::Rotate => self.turn(pointer, modifiers, snap.is_some()),
         }
@@ -318,16 +364,19 @@ impl Gesture {
             x: pointer.x - (self.origin.x - grabbed.x),
             y: pointer.y - (self.origin.y - grabbed.y),
         };
+        let (mut snapped_x, mut snapped_y) = (false, false);
         if let Some(snap) = snap {
             if sx != 0
                 && let Some(x) = snap.snap_x(pointer.x, tolerance)
             {
                 pointer.x = x;
+                snapped_x = true;
             }
             if sy != 0
                 && let Some(y) = snap.snap_y(pointer.y, tolerance)
             {
                 pointer.y = y;
+                snapped_y = true;
             }
         }
         let (lx, ly) = to_local(start, pointer);
@@ -344,17 +393,27 @@ impl Gesture {
         } else {
             (fy * (ly - anchor_y)).max(MIN_SIZE)
         };
-        if sx != 0 && sy != 0 && !modifiers.shift {
-            // A corner keeps the aspect ratio: the axis whose size changed more sets it,
-            // so a drag straight inward along one axis shrinks the box.
+        if !modifiers.ctrl {
+            // The aspect ratio is kept. An edge sets it, and the other axis grows about
+            // the centre; at a corner the axis that snapped sets it, else the one whose
+            // size changed more, so a drag straight inward along one axis shrinks the box.
             let (kx, ky) = (width / start_w, height / start_h);
-            let k = if (kx - 1.0).abs() >= (ky - 1.0).abs() {
-                kx
-            } else {
-                ky
+            let k = match (sx, sy) {
+                (_, 0) => kx,
+                (0, _) => ky,
+                _ if snapped_x != snapped_y => {
+                    if snapped_x {
+                        kx
+                    } else {
+                        ky
+                    }
+                }
+                _ if (kx - 1.0).abs() >= (ky - 1.0).abs() => kx,
+                _ => ky,
             };
-            width = (start_w * k).max(MIN_SIZE);
-            height = (start_h * k).max(MIN_SIZE);
+            let k = k.max(MIN_SIZE / start_w).max(MIN_SIZE / start_h);
+            width = start_w * k;
+            height = start_h * k;
         }
         let local_x = if sx == 0 {
             0.0
@@ -379,7 +438,7 @@ impl Gesture {
         let c = center(&self.start);
         let angle = |p: Point| (p.y - c.y).atan2(p.x - c.x).to_degrees();
         let raw = self.start.rotation_deg.get() + angle(pointer) - angle(self.origin);
-        let rotation = snap_angle(normalize_deg(raw), modifiers.shift, snapping);
+        let rotation = snap_angle(normalize_deg(raw), modifiers.ctrl, snapping);
         let geometry = with_box(
             &self.start,
             c.x,
@@ -401,8 +460,8 @@ pub fn normalize_deg(deg: f32) -> f32 {
     if wrapped == -180.0 { 180.0 } else { wrapped }
 }
 
-/// A rotation after snapping: to 15° steps with `step` (Shift), else to the nearest
-/// multiple of 90° within [`ROTATE_SNAP`] when `snapping`.
+/// A rotation after snapping: to 45° steps with `step` (Ctrl), else to the nearest
+/// multiple of 90° within [`ROTATE_SNAP`] when `snapping`, else rounded to 0.1°.
 pub fn snap_angle(deg: f32, step: bool, snapping: bool) -> f32 {
     if step {
         return normalize_deg((deg / ROTATE_STEP).round() * ROTATE_STEP);
@@ -411,7 +470,7 @@ pub fn snap_angle(deg: f32, step: bool, snapping: bool) -> f32 {
     if snapping && (deg - right).abs() <= ROTATE_SNAP {
         normalize_deg(right)
     } else {
-        deg
+        normalize_deg((deg * 10.0).round() / 10.0)
     }
 }
 
@@ -477,10 +536,8 @@ mod tests {
         );
     }
 
-    const NONE: Modifiers = Modifiers {
-        shift: false,
-        alt: false,
-    };
+    const NONE: Modifiers = Modifiers { ctrl: false };
+    const CTRL: Modifiers = Modifiers { ctrl: true };
 
     #[test]
     fn the_viewport_fits_and_centres_the_canvas() {
@@ -541,9 +598,10 @@ mod tests {
             handle_at(&g, Point { x: 605.0, y: 555.0 }, viewport),
             Some(Handle::Resize { x: 1, y: 1 })
         );
-        // The rotate handle is 28 screen pixels (56 canvas pixels) above the top edge.
+        // The rotate knob's centre is 31 screen pixels (62 canvas pixels) above the top
+        // edge.
         assert_eq!(
-            handle_at(&g, Point { x: 500.0, y: 394.0 }, viewport),
+            handle_at(&g, Point { x: 500.0, y: 388.0 }, viewport),
             Some(Handle::Rotate)
         );
         assert_eq!(handle_at(&g, Point { x: 500.0, y: 500.0 }, viewport), None);
@@ -577,17 +635,9 @@ mod tests {
             .update(Point { x: 400.0, y: 150.0 }, NONE, None, 0.0)
             .expect("finite");
         assert_box(&update.geometry, 200.0, 150.0, 400.0, 200.0);
-        // With Shift the aspect is free.
+        // With Ctrl the aspect is free.
         let free = gesture
-            .update(
-                Point { x: 400.0, y: 150.0 },
-                Modifiers {
-                    shift: true,
-                    alt: false,
-                },
-                None,
-                0.0,
-            )
+            .update(Point { x: 400.0, y: 150.0 }, CTRL, None, 0.0)
             .expect("finite");
         assert_box(&free.geometry, 200.0, 100.0, 400.0, 100.0);
         // Straight inward along x shrinks it: half as wide, so half as tall.
@@ -610,10 +660,15 @@ mod tests {
             .update(Point { x: 195.0, y: 100.0 }, NONE, None, 0.0)
             .expect("finite");
         assert_box(&still.geometry, 100.0, 100.0, 200.0, 100.0);
+        // An edge keeps the aspect too: the other axis grows about the centre.
         let moved = gesture
             .update(Point { x: 215.0, y: 100.0 }, NONE, None, 0.0)
             .expect("finite");
-        assert_box(&moved.geometry, 110.0, 100.0, 220.0, 100.0);
+        assert_box(&moved.geometry, 110.0, 100.0, 220.0, 110.0);
+        let stretched = gesture
+            .update(Point { x: 215.0, y: 100.0 }, CTRL, None, 0.0)
+            .expect("finite");
+        assert_box(&stretched.geometry, 110.0, 100.0, 220.0, 100.0);
     }
 
     #[test]
@@ -636,8 +691,9 @@ mod tests {
         let update = gesture
             .update(Point { x: 100.0, y: 300.0 }, NONE, None, 0.0)
             .expect("finite");
-        // The left edge (now the top, at y = 0) stays; the box is 300 long.
-        assert_box(&update.geometry, 100.0, 150.0, 300.0, 100.0);
+        // The left edge (now the top, at y = 0) stays; the box is 300 long, and half as
+        // wide again about its centre line.
+        assert_box(&update.geometry, 100.0, 150.0, 300.0, 150.0);
     }
 
     #[test]
@@ -659,9 +715,21 @@ mod tests {
                 0.0,
             )
             .expect("finite");
-        assert!(close(update.geometry.size.width.get(), MIN_SIZE));
+        // The shorter side stops at the minimum, and the aspect holds.
+        assert_box(&update.geometry, MIN_SIZE, 100.0, 2.0 * MIN_SIZE, MIN_SIZE);
         // The left edge stayed at x = 0.
-        assert!(close(update.geometry.center.x.get(), MIN_SIZE / 2.0));
+        let stretched = gesture
+            .update(
+                Point {
+                    x: -500.0,
+                    y: 100.0,
+                },
+                CTRL,
+                None,
+                0.0,
+            )
+            .expect("finite");
+        assert_box(&stretched.geometry, MIN_SIZE / 2.0, 100.0, MIN_SIZE, 100.0);
     }
 
     #[test]
@@ -677,32 +745,27 @@ mod tests {
             .update(Point { x: 100.0, y: 0.0 }, NONE, None, 0.0)
             .expect("finite");
         assert!(close(update.geometry.rotation_deg.get(), 90.0));
-        // 33° snaps to 30° in 15° steps.
+        // 33° snaps to 45° in Ctrl's steps.
         let (s, c) = 33.0_f32.to_radians().sin_cos();
         let pointer = Point {
             x: 100.0 * s,
             y: -100.0 * c,
         };
-        let stepped = gesture
-            .update(
-                pointer,
-                Modifiers {
-                    shift: true,
-                    alt: false,
-                },
-                None,
-                0.0,
-            )
-            .expect("finite");
-        assert!(close(stepped.geometry.rotation_deg.get(), 30.0));
+        let stepped = gesture.update(pointer, CTRL, None, 0.0).expect("finite");
+        assert!(close(stepped.geometry.rotation_deg.get(), 45.0));
+        let free = gesture.update(pointer, NONE, None, 0.0).expect("finite");
+        assert!(close(free.geometry.rotation_deg.get(), 33.0));
         assert!(close(snap_angle(-178.0, false, true), 180.0));
+        assert!(close(snap_angle(93.0, false, true), 90.0));
+        assert!(close(snap_angle(93.5, false, true), 93.5));
         assert!(close(snap_angle(-170.0, false, true), -170.0));
         assert!(close(snap_angle(2.0, false, false), 2.0));
+        assert!(close(snap_angle(12.34, false, false), 12.3));
         assert!(close(normalize_deg(270.0), -90.0));
     }
 
     #[test]
-    fn alt_turns_snapping_off() {
+    fn ctrl_or_a_rotation_moves_without_snapping() {
         let targets = SnapTargets::new(Canvas::DEFAULT, std::iter::empty());
         let gesture = Gesture {
             kind: GestureKind::Move,
@@ -716,17 +779,35 @@ mod tests {
             .expect("finite");
         assert!(close(snapped.geometry.center.x.get(), 25.0));
         let free = gesture
-            .update(
-                pointer,
-                Modifiers {
-                    shift: false,
-                    alt: true,
-                },
-                Some(&targets),
-                5.0,
-            )
+            .update(pointer, CTRL, Some(&targets), 5.0)
             .expect("finite");
         assert!(close(free.geometry.center.x.get(), 27.0));
+        let tilted = Gesture {
+            start: geometry(100.0, 100.0, 50.0, 50.0, 10.0),
+            ..gesture
+        };
+        let unsnapped = tilted
+            .update(pointer, NONE, Some(&targets), 5.0)
+            .expect("finite");
+        assert!(close(unsnapped.geometry.center.x.get(), 27.0));
+    }
+
+    #[test]
+    fn shift_follows_the_pointer_at_half_speed() {
+        let mut pointer = Pointer::new(Point { x: 100.0, y: 100.0 });
+        assert_eq!(
+            pointer.follow(Point { x: 120.0, y: 100.0 }, false),
+            Point { x: 120.0, y: 100.0 }
+        );
+        // Shift pressed mid-drag: the next 20 px move only 10, with no jump.
+        assert_eq!(
+            pointer.follow(Point { x: 140.0, y: 120.0 }, true),
+            Point { x: 130.0, y: 110.0 }
+        );
+        assert_eq!(
+            pointer.follow(Point { x: 150.0, y: 120.0 }, false),
+            Point { x: 140.0, y: 110.0 }
+        );
     }
 
     #[test]

@@ -78,9 +78,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   docks it there; a lone panel collapses by its title, and closes on a second click of
   its ×; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live and resets to Editing.
-- **Canvas** (`canvas.spec.js`): the program scene's box is drawn where the seed put it;
-  a drag sends nothing until the drop, then one edit that undo and redo reverse; arrow
-  keys nudge (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
+- **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
+  it, under the scene's caption; a click on the box selects its row in the sources list
+  and shows the size readout, a click on empty canvas clears both, and selecting another
+  scene in the list switches the canvas to it; a Ctrl drag sends nothing until the drop
+  and shows the top-left readout meanwhile, then one edit that Ctrl+Z and Ctrl+Shift+Z
+  reverse; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
+  (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
 
 <a id="running"></a>
 ## Running them
