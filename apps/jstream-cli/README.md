@@ -86,6 +86,8 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `studio get` | query `studio.get` (the scenes on program and preview) |
 | `studio set-preview <scene-id>` | action `studio.set_preview` |
 | `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
+| `privacy on`, `privacy off` | action `privacy.set` (covers every output, or uncovers them) |
+| `privacy get` | query `privacy.get` |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -122,7 +124,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   item is a legacy one at 1:1. Place either with `item.set_geometry <item-id>
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
-  are always sent neutral, since the engine refuses anything else until it draws 3D.
+  are always sent neutral, since the engine refuses anything else until it draws 3D,
+  and it sends no flip (`flip_h` and `flip_v` false): the command has no flip argument
+  yet.
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
@@ -182,7 +186,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` (or `studio.changed`) event it causes; an event an undo or redo caused ends with
+  the `state.changed` (or `studio.changed`, or `privacy.changed`) event it causes; an event an undo or redo caused ends with
   `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this

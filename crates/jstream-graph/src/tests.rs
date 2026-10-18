@@ -3142,6 +3142,39 @@ fn set_geometry_converts_a_legacy_item_and_undo_restores_the_transform() {
     assert_eq!(applied.inverse.edits, vec![set_geometry("i1", boxed())]);
 }
 
+/// A flip is part of the geometry: `item.set_geometry` stores it, its inverse puts the
+/// unflipped box back, reads report it, and the 0.3 view does not change.
+#[test]
+fn a_flip_travels_with_set_geometry_and_its_inverse() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![add("a", "i1", "cam"), set_geometry("i1", boxed())],
+    );
+    let mirrored = ItemGeometry {
+        flip_h: true,
+        flip_v: true,
+        ..boxed()
+    };
+    let applied = apply_ok(&mut graph, vec![set_geometry("i1", mirrored)]);
+    assert_eq!(placement(&graph, "i1"), Placement::Geometry(mirrored));
+    assert_eq!(applied.inverse.edits, vec![set_geometry("i1", boxed())]);
+    let Some(Ok(QueryResult::ItemList { items, .. })) = graph.query(&Query::ItemList {
+        scene_id: SceneId::new("a"),
+    }) else {
+        panic!("item.list");
+    };
+    assert_eq!(items[0].geometry, Some(mirrored));
+    assert_eq!(
+        Some(items[0].transform),
+        boxed().transform_view().ok(),
+        "the deprecated view has no flip"
+    );
+    let undone = apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(placement(&graph, "i1"), Placement::Geometry(boxed()));
+    assert_eq!(undone.inverse.edits, vec![set_geometry("i1", mirrored)]);
+}
+
 #[test]
 fn removing_a_geometry_item_re_adds_it_with_its_geometry() {
     let mut graph = fixture();

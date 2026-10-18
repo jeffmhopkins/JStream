@@ -38,6 +38,7 @@ mod live;
 mod outputs;
 mod plugins;
 mod preview;
+mod privacy;
 mod runtime;
 mod session;
 mod snapshot;
