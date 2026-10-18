@@ -67,7 +67,9 @@ Contents:
   `CaptureStream::cursor` then gives it as of the newest `latest`, as a
   `CaptureCursor` (`Shown` with a `CursorImage`, straight-alpha RGBA, and its top-left
   in the frame's pixels; `Hidden`; or `NotSent`, the default, from a stream that draws
-  it in or doesn't capture it). A backend that can't send it draws it in. `draw_cursor`
+  it in or doesn't capture it). A backend that can't send it draws it in.
+  `CursorCapture::Hidden` leaves the pointer out altogether (the stream's `cursor` stays
+  `NotSent`); a backend that can't leave it out draws it in. `draw_cursor`
   (`cursor.rs`) blends a shown pointer into a `Bgra8` or `Rgba8` CPU frame, clipped to
   it.
 - **Video capture devices** (webcams and capture cards,

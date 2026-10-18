@@ -460,6 +460,8 @@ mod backend {
             )?;
             if options.cursor == CursorCapture::Metadata {
                 h = h.with_cursor_metadata();
+            } else if options.cursor == CursorCapture::Hidden {
+                h = h.with_cursor_hidden();
             }
             let cursor_metadata = h.sends_cursor_metadata();
             let (granted, fd) = match run(&mut bus, &mut h) {

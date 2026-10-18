@@ -48,7 +48,9 @@ It has:
   A headless session lists none. `start` runs the portal's session flow on the session
   bus: `CreateSession`, `SelectSources` (one source of the picked kind, the cursor drawn
   into the frames, or sent as metadata for `CursorCapture::Metadata` where the portal
-  offers that mode, `persist_mode` 2 with the last restore token), `Start` (the picker;
+  offers that mode; for `CursorCapture::Hidden`, cursor mode hidden where it's offered,
+  else metadata that the stream doesn't ask PipeWire for, else drawn in;
+  `persist_mode` 2 with the last restore token), `Start` (the picker;
   `start` blocks while it is open, up to five minutes) and `OpenPipeWireRemote`. Each
   request's `Response` is matched on the request path computed before the call, or on
   the handle the call returns. Only the portal is listened to: its unique bus name
@@ -164,10 +166,9 @@ It has:
 Not here yet, in roughly the order they follow:
 - DMA-BUF frames imported into the engine's Vulkan device (`Capture::on_context`), in
   place of the CPU copy;
-- the engine drawing the cursor metadata for display and window sources whose
-  `show_cursor` setting is on, after the main sync (#521): the setting is a protocol
-  change, so it takes the version the waves session assigns (the cursor is drawn into
-  the frames until then);
+- display and window sources' `show_cursor` setting (protocol 0.36), after the main
+  sync (#521): the engine asks for `Drawn` when it's on and `Hidden` when it's off, and
+  never draws the pointer itself (the cursor is drawn into the frames until then);
 - the engine starting each portal source's capture with `start_with` and
   `CaptureOptions::for_source`, and calling `forget_source` when the source is deleted,
   once captures follow sources on this wave (it captures the primary display for now);
