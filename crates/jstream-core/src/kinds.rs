@@ -40,6 +40,23 @@ mod tests {
         }
     }
 
+    /// Every kind `kind.list` serves, snapshot-tested (ADR-0025, "Kinds get their own
+    /// snapshot"; #635). The source kinds also have one in `jstream-sources`, but the
+    /// audio filter kinds of `crate::filters` are only here, so a change to one of their
+    /// settings is reviewed like an API diff. Regenerate it with
+    /// `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`.
+    #[test]
+    fn served_kinds_snapshot() {
+        let kinds = serde_json::to_string_pretty(&builtin()).expect("descriptors serialize");
+        insta::with_settings!({
+            snapshot_path => "../schema",
+            prepend_module_to_snapshot => false,
+            omit_expression => true,
+        }, {
+            insta::assert_snapshot!("kinds", kinds);
+        });
+    }
+
     /// The shared parity collection needs its kinds described exactly as the fixture
     /// does, so every implementation reports the same settings. Its audio kind, `mic`, is
     /// not a built-in kind; the engine's parity tests add it themselves.

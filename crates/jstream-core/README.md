@@ -71,6 +71,9 @@ state machine. Contents:
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   the source kinds of `jstream-sources`' built-in registry and the audio filter kinds.
+  What `kind.list` serves is snapshot-tested (`schema/kinds.snap`, an `insta` snapshot),
+  so a change to a kind's settings, including an audio filter's, is reviewed like an
+  API diff. `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds` rewrites it.
 - **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's

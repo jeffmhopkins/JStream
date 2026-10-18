@@ -1,0 +1,1014 @@
+---
+source: crates/jstream-core/src/kinds.rs
+---
+[
+  {
+    "kind_id": "app_audio",
+    "category": "source",
+    "name": "Application audio",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "exe",
+        "type": "string",
+        "multiline": false,
+        "max_len": 260,
+        "default": "",
+        "label": "Application",
+        "description": "The application's executable file name, such as game.exe. It is found again when the application restarts.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "audio_input",
+    "category": "source",
+    "name": "Audio input",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "device",
+        "type": "string",
+        "multiline": false,
+        "max_len": 512,
+        "default": "",
+        "label": "Device",
+        "description": "The input device's ID. Empty follows the system's default input.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "browser",
+    "category": "source",
+    "name": "Browser",
+    "version": 1,
+    "video": true,
+    "audio": true,
+    "params": [
+      {
+        "id": "url",
+        "type": "string",
+        "multiline": false,
+        "max_len": 8192,
+        "default": "",
+        "label": "URL",
+        "description": "The page's address, http:// or https://. Ignored when a local file is set.",
+        "live": false
+      },
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "html",
+          "htm"
+        ],
+        "default": null,
+        "label": "Local file",
+        "description": "A local HTML file to show instead of a URL. The page can load files beside it.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1920,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1080,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "fps",
+        "type": "int",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "unit": "fps",
+        "default": 30,
+        "label": "Frame rate",
+        "description": "The most frames a second the page paints. It paints less when nothing changes.",
+        "live": false
+      },
+      {
+        "id": "css",
+        "type": "string",
+        "multiline": true,
+        "max_len": 65536,
+        "default": "body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }",
+        "label": "Custom CSS",
+        "description": "CSS added to the page after it loads. The default makes the page's background transparent.",
+        "live": true
+      },
+      {
+        "id": "local_network",
+        "type": "bool",
+        "default": false,
+        "label": "Allow local network",
+        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. A local file or a page on the local network may always.",
+        "advanced": true,
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "chat_message",
+    "category": "source",
+    "name": "Chat message",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "font",
+        "type": "asset",
+        "accept": [
+          "ttf",
+          "otf",
+          "ttc"
+        ],
+        "default": null,
+        "label": "Font",
+        "description": "A TrueType or OpenType font. None uses the bundled Roboto, which covers Latin text only.",
+        "live": false
+      },
+      {
+        "id": "size",
+        "type": "float",
+        "min": 1.0,
+        "max": 256.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 32.0,
+        "label": "Size",
+        "live": true
+      },
+      {
+        "id": "author_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffd54fff",
+        "label": "Author colour",
+        "live": true
+      },
+      {
+        "id": "text_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Text colour",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000b3",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "padding",
+        "type": "int",
+        "min": 0,
+        "max": 1024,
+        "step": 1,
+        "unit": "px",
+        "default": 16,
+        "label": "Padding",
+        "live": true
+      },
+      {
+        "id": "max_width",
+        "type": "int",
+        "min": 0,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 600,
+        "label": "Maximum width",
+        "description": "Lines wrap at this width. 0 doesn't wrap.",
+        "live": true
+      },
+      {
+        "id": "outline_width",
+        "type": "int",
+        "min": 0,
+        "max": 64,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Outline width",
+        "live": true
+      },
+      {
+        "id": "outline_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Outline colour",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "color",
+    "category": "source",
+    "name": "Colour",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Colour",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1920,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1080,
+        "label": "Height",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "compressor",
+    "category": "audio_filter",
+    "name": "Compressor",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "threshold_db",
+        "type": "float",
+        "min": -60.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -18.0,
+        "label": "Threshold",
+        "live": true
+      },
+      {
+        "id": "ratio",
+        "type": "float",
+        "min": 1.0,
+        "max": 100.0,
+        "unit": ":1",
+        "default": 10.0,
+        "label": "Ratio",
+        "description": "Input dB over the threshold per output dB. 100 is a limiter's curve.",
+        "live": true
+      },
+      {
+        "id": "knee_db",
+        "type": "float",
+        "min": 0.0,
+        "max": 24.0,
+        "unit": "dB",
+        "default": 6.0,
+        "label": "Knee",
+        "live": true
+      },
+      {
+        "id": "attack_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 500.0,
+        "unit": "ms",
+        "default": 6.0,
+        "label": "Attack",
+        "live": true
+      },
+      {
+        "id": "release_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 60.0,
+        "label": "Release",
+        "live": true
+      },
+      {
+        "id": "makeup_db",
+        "type": "float",
+        "min": 0.0,
+        "max": 24.0,
+        "unit": "dB",
+        "default": 0.0,
+        "label": "Makeup gain",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "delay",
+    "category": "audio_filter",
+    "name": "Delay",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "delay_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 0.0,
+        "label": "Delay",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "desktop_audio",
+    "category": "source",
+    "name": "Desktop audio",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": []
+  },
+  {
+    "kind_id": "display",
+    "category": "source",
+    "name": "Display capture",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "target",
+        "type": "string",
+        "multiline": false,
+        "max_len": 1024,
+        "default": "",
+        "label": "Display",
+        "description": "The ID of the display to capture, as `capture.targets` lists it. Empty captures the primary display.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "gain",
+    "category": "audio_filter",
+    "name": "Gain",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "gain_db",
+        "type": "float",
+        "min": -96.0,
+        "max": 24.0,
+        "unit": "dB",
+        "default": 0.0,
+        "label": "Gain",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "image",
+    "category": "source",
+    "name": "Image",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif"
+        ],
+        "default": null,
+        "label": "Image file",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "limiter",
+    "category": "audio_filter",
+    "name": "Limiter",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "ceiling_db",
+        "type": "float",
+        "min": -30.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -1.0,
+        "label": "Ceiling",
+        "live": true
+      },
+      {
+        "id": "release_ms",
+        "type": "float",
+        "min": 1.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 60.0,
+        "label": "Release",
+        "live": true
+      },
+      {
+        "id": "lookahead_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 20.0,
+        "unit": "ms",
+        "default": 5.0,
+        "label": "Look-ahead",
+        "description": "How far ahead it looks, which is also the delay it adds. Changing it rebuilds the filter.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "media",
+    "category": "source",
+    "name": "Media file",
+    "version": 1,
+    "video": true,
+    "audio": true,
+    "params": [
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "mp4",
+          "mkv",
+          "mov",
+          "webm",
+          "mp3",
+          "m4a",
+          "wav",
+          "flac",
+          "ogg"
+        ],
+        "default": null,
+        "label": "Media file",
+        "description": "A video or audio file the platform can play. Its sound plays while the program shows it, at speed 1.",
+        "live": false
+      },
+      {
+        "id": "loop",
+        "type": "bool",
+        "default": true,
+        "label": "Loop",
+        "live": true
+      },
+      {
+        "id": "speed",
+        "type": "float",
+        "min": 0.25,
+        "max": 4.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Speed",
+        "description": "1 is normal speed.",
+        "live": true
+      },
+      {
+        "id": "restart_on_show",
+        "type": "bool",
+        "default": true,
+        "label": "Restart when shown",
+        "description": "Plays from the start each time the program shows it again.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "noise_gate",
+    "category": "audio_filter",
+    "name": "Noise gate",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "open_threshold_db",
+        "type": "float",
+        "min": -96.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -26.0,
+        "label": "Open threshold",
+        "live": true
+      },
+      {
+        "id": "close_threshold_db",
+        "type": "float",
+        "min": -96.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -32.0,
+        "label": "Close threshold",
+        "description": "Where an open gate starts to close. Above the open threshold, it is the open threshold.",
+        "live": true
+      },
+      {
+        "id": "attack_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 1000.0,
+        "unit": "ms",
+        "default": 25.0,
+        "label": "Attack",
+        "live": true
+      },
+      {
+        "id": "hold_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 200.0,
+        "label": "Hold",
+        "live": true
+      },
+      {
+        "id": "release_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 150.0,
+        "label": "Release",
+        "live": true
+      },
+      {
+        "id": "range_db",
+        "type": "float",
+        "min": -96.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -96.0,
+        "label": "Range",
+        "description": "The level while closed. −96 dB is silence.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "spectrum",
+    "category": "source",
+    "name": "Audio spectrum",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "audio",
+        "type": "bus",
+        "default": null,
+        "label": "Audio",
+        "description": "What it draws. None draws the program mix: the master after its filters, as the outputs hear it. A bus draws that bus after its fader, before the master's filters. Either is silent while no output runs.",
+        "live": false
+      },
+      {
+        "id": "audio_source",
+        "type": "source",
+        "media": "audio",
+        "default": null,
+        "label": "Audio source",
+        "description": "A source to draw instead of the audio above: that source after its own filters, fader, mute and follow, before any bus, as the audience hears it. Silent while that source isn't playing into the mixer, and while no output runs.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 640,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 240,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Colour",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "bars",
+        "type": "int",
+        "min": 1,
+        "max": 1024,
+        "step": 1,
+        "default": 64,
+        "label": "Bars",
+        "live": true
+      },
+      {
+        "id": "smoothing",
+        "type": "float",
+        "min": 0.0,
+        "max": 0.99,
+        "step": 0.01,
+        "default": 0.7,
+        "label": "Smoothing",
+        "description": "How slowly a bar falls back: 0 follows the audio exactly.",
+        "live": true
+      },
+      {
+        "id": "scale",
+        "type": "enum",
+        "options": [
+          {
+            "value": "log",
+            "label": "Logarithmic"
+          },
+          {
+            "value": "linear",
+            "label": "Linear"
+          }
+        ],
+        "default": "log",
+        "label": "Scale",
+        "description": "How frequencies spread across the bars: log gives each octave the same width from 20 Hz, as the ear hears them; linear gives each hertz the same width from 0 Hz.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "text",
+    "category": "source",
+    "name": "Text",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "text",
+        "type": "string",
+        "multiline": true,
+        "max_len": 4096,
+        "default": "",
+        "label": "Text",
+        "live": true
+      },
+      {
+        "id": "font",
+        "type": "asset",
+        "accept": [
+          "ttf",
+          "otf",
+          "ttc"
+        ],
+        "default": null,
+        "label": "Font",
+        "description": "A TrueType or OpenType font, or the first font of a collection. None uses the bundled Roboto.",
+        "live": false
+      },
+      {
+        "id": "size",
+        "type": "float",
+        "min": 1.0,
+        "max": 1024.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 64.0,
+        "label": "Size",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Colour",
+        "live": true
+      },
+      {
+        "id": "align",
+        "type": "enum",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Centre"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "default": "left",
+        "label": "Alignment",
+        "live": true
+      },
+      {
+        "id": "wrap_width",
+        "type": "int",
+        "min": 0,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Wrap width",
+        "description": "Lines wrap at this width. 0 doesn't wrap.",
+        "live": true
+      },
+      {
+        "id": "outline_width",
+        "type": "int",
+        "min": 0,
+        "max": 64,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Outline width",
+        "live": true
+      },
+      {
+        "id": "outline_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Outline colour",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "padding",
+        "type": "int",
+        "min": 0,
+        "max": 1024,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Padding",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "waveform",
+    "category": "source",
+    "name": "Audio waveform",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "audio",
+        "type": "bus",
+        "default": null,
+        "label": "Audio",
+        "description": "What it draws. None draws the program mix: the master after its filters, as the outputs hear it. A bus draws that bus after its fader, before the master's filters. Either is silent while no output runs.",
+        "live": false
+      },
+      {
+        "id": "audio_source",
+        "type": "source",
+        "media": "audio",
+        "default": null,
+        "label": "Audio source",
+        "description": "A source to draw instead of the audio above: that source after its own filters, fader, mute and follow, before any bus, as the audience hears it. Silent while that source isn't playing into the mixer, and while no output runs.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 640,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 160,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Colour",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "smoothing",
+        "type": "float",
+        "min": 0.0,
+        "max": 0.99,
+        "step": 0.01,
+        "default": 0.0,
+        "label": "Smoothing",
+        "description": "How slowly a peak falls back: 0 follows the audio exactly.",
+        "live": true
+      },
+      {
+        "id": "scale",
+        "type": "enum",
+        "options": [
+          {
+            "value": "linear",
+            "label": "Linear"
+          },
+          {
+            "value": "db",
+            "label": "dB"
+          }
+        ],
+        "default": "linear",
+        "label": "Scale",
+        "description": "Linear draws the samples as they are; dB draws their level from -60 dBFS, so quiet audio shows.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "webcam",
+    "category": "source",
+    "name": "Webcam",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": []
+  },
+  {
+    "kind_id": "window",
+    "category": "source",
+    "name": "Window capture",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "target",
+        "type": "string",
+        "multiline": false,
+        "max_len": 1024,
+        "default": "",
+        "label": "Window",
+        "description": "The ID of the window to capture, as `capture.targets` lists it. Empty captures nothing.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "youtube_chat",
+    "category": "source",
+    "name": "YouTube chat",
+    "version": 1,
+    "video": true,
+    "audio": true,
+    "params": [
+      {
+        "id": "video",
+        "type": "string",
+        "multiline": false,
+        "max_len": 2048,
+        "default": "",
+        "label": "Live video",
+        "description": "The live video: its ID, or a youtube.com/watch, youtube.com/live, youtube.com/live_chat or youtu.be link. Empty shows nothing.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 400,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 600,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "fps",
+        "type": "int",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "unit": "fps",
+        "default": 30,
+        "label": "Frame rate",
+        "live": false
+      },
+      {
+        "id": "css",
+        "type": "string",
+        "multiline": true,
+        "max_len": 65536,
+        "default": "html, body, yt-live-chat-app, yt-live-chat-renderer, #item-list, #item-scroller, #items { background: transparent !important; } body { margin: 0; overflow: hidden; } yt-live-chat-header-renderer, #ticker, #input-panel, yt-live-chat-message-input-renderer, #panel-pages { display: none !important; }",
+        "label": "Custom CSS",
+        "description": "CSS added to the chat page. The default makes it transparent and hides everything but the messages.",
+        "live": true
+      }
+    ]
+  }
+]
