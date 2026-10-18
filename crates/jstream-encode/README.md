@@ -71,7 +71,9 @@ next regular one when the encoder can't force it; keyframe requests coalesce; `f
 drains; an encoder error and a panic reach every subscriber; dropping a session closes
 the streams and joins the thread; dropped audio blocks become silence, also when that
 silence is first refused as busy; the fan-out's
-keyframe resync; and the registry. `src/gpu_tests.rs` covers `open_on` on every
+keyframe resync; the registry; and one invariant, checked by snapshotting while
+another thread pushes, that must hold on every interleaving: a snapshot never shows
+more encoded, busy-dropped or published inputs than received ones (#709). `src/gpu_tests.rs` covers `open_on` on every
 platform, with GPU frames that are textures on a software adapter: CPU frames without a
 context, the CPU fallback (opened as configured, with its reason) for a backend with no
 GPU path, one that refuses the context and one whose GPU encoder fails to open, and a
@@ -205,8 +207,11 @@ lives while an output holds its `Arc`; the output that lets go last should `fini
 
 `SessionStats`: inputs `received`, `dropped_queue_full`, `dropped_encoder_busy`,
 `encoded`, `packets`, `keyframes`, `keyframes_requested` (requests the encoder
-accepted), current `subscribers`, `subscriber_drops` and `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are relaxed atomic
-counters read without stopping the thread. The engine maps a video session's input
+accepted), current `subscribers`, `subscriber_drops` and `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are atomic counters
+read without stopping the thread, so a snapshot can be mid-update, but never ahead of
+itself: an input is counted `received` before it is queued, the later stages count it
+with release ordering, and the snapshot reads them in reverse with acquire, so it never
+shows more `encoded`, `dropped_encoder_busy` or `packets` than `received`. The engine maps a video session's input
 drops to `encode_frames` and an audio session's to `encode_blocks`, and both sessions'
 `subscriber_drops` to `output_packets`, in `stats.tick`
 ([R-RT-004](../../docs/RULES.md#R-RT-004)). `silence_frames` is gap-fill, not a drop.

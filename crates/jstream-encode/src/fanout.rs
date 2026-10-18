@@ -140,9 +140,11 @@ impl FanOut {
             return;
         }
         for packet in packets.drain(..) {
-            counters.packets.fetch_add(1, Ordering::Relaxed);
+            // Release, so a snapshot that sees the packet also sees its input received
+            // (`Counters::snapshot`).
+            counters.packets.fetch_add(1, Ordering::Release);
             if packet.is_keyframe() {
-                counters.keyframes.fetch_add(1, Ordering::Relaxed);
+                counters.keyframes.fetch_add(1, Ordering::Release);
             }
             self.subs.retain_mut(|sub| sub.offer(&packet, counters));
         }
