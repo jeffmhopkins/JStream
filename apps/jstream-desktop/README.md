@@ -200,7 +200,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   clock the mixer runs on. Its pages paint onto a device of the media adapter the app
   opens for them (`WindowsGpu::open_device`) until a program stage runs; the engine then
   lends the backend the stage's own context in its place, so the mix draws the pages,
-  and takes it back when the stage stops. The backend is added after the OS backends, so sources open on the media
+  and takes it back when the stage stops or leaves the GPU path mid-run, after which
+  the pages deliver no frames for the rest of that stage. The backend is added after the OS backends, so sources open on the media
   clock. CEF runs only in the sandboxed browser helper, which the backend starts on the
   first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
   doesn't link CEF, so a missing helper or missing CEF files fail that source, not the

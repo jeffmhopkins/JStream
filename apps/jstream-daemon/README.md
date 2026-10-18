@@ -380,8 +380,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   first two are logged at `warn`. While the program stage runs, the engine lends the
   backend the stage's own GPU context in place of that device (`Engine::use_gpu`), so
   pages paint where the compositor samples them and are drawn into the mix; it takes
-  the context back when the stage stops, leaving the backend with no device, so the
-  device the daemon opens covers only paints before the first stage
+  the context back when the stage stops, or when the stage leaves the GPU path mid-run
+  (its pages then deliver no frames for the rest of that stage), leaving the backend
+  with no device, so the device the daemon opens covers only paints before the first
+  stage
   ([jstream-core › Design](../../crates/jstream-core/README.md#design), *Live sources*).
   The daemon doesn't build or link CEF (only the helper does); the
   feature is off by default until the helper and CEF's runtime are packaged
