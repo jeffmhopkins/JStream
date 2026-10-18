@@ -57,7 +57,7 @@ fn timed_out(what: &'static str) -> PlatformError {
     PlatformError::Os {
         call: what,
         code: None,
-        message: "timed out waiting for the desktop portal".into(),
+        message: "timed out waiting for the reply".into(),
     }
 }
 
@@ -194,10 +194,15 @@ impl Bus {
     /// [`PlatformError::Os`] when the socket refuses it.
     pub(crate) fn send(&mut self, msg: &Message) -> Result<u32, PlatformError> {
         self.serial = self.serial.wrapping_add(1).max(1);
-        let bytes = msg.encode(self.serial)?;
-        self.sock
+        let mut bytes = msg.encode(self.serial)?;
+        let written = self
+            .sock
             .write_all(&bytes)
-            .map_err(|e| io_err("writing to the D-Bus session bus", &e))?;
+            .map_err(|e| io_err("writing to the D-Bus session bus", &e));
+        // A message can carry a secret (the Secret Service's `CreateItem`), so the
+        // encoded copy is zeroed before it is freed.
+        wipe(&mut bytes);
+        written?;
         Ok(self.serial)
     }
 
@@ -215,7 +220,23 @@ impl Bus {
         what: &'static str,
         timeout: Duration,
     ) -> Result<Received, PlatformError> {
-        let serial = self.send(&msg)?;
+        let reply = self.call_reply(&msg, from, what, timeout)?;
+        check_reply(reply, what)
+    }
+
+    /// As [`call`](Self::call), but an error reply is returned as it came, for a caller
+    /// that tells its error names apart itself (the Secret Service store).
+    ///
+    /// # Errors
+    /// [`PlatformError::Os`] on a timeout or a broken connection.
+    pub(crate) fn call_reply(
+        &mut self,
+        msg: &Message,
+        from: Option<&str>,
+        what: &'static str,
+        timeout: Duration,
+    ) -> Result<Received, PlatformError> {
+        let serial = self.send(msg)?;
         let deadline = Instant::now() + timeout;
         loop {
             if let Some(i) = self
@@ -223,8 +244,7 @@ impl Bus {
                 .iter()
                 .position(|r| is_reply(&r.msg, serial, from))
             {
-                let reply = self.queue.remove(i).ok_or_else(|| timed_out(what))?;
-                return check_reply(reply, what);
+                return self.queue.remove(i).ok_or_else(|| timed_out(what));
             }
             let got = self.receive(deadline)?.ok_or_else(|| timed_out(what))?;
             if got.msg.reply_serial == Some(serial) && !is_reply(&got.msg, serial, from) {
@@ -275,8 +295,11 @@ impl Bus {
                 && self.buf.len() >= len
             {
                 let rest = self.buf.split_off(len);
-                let bytes = std::mem::replace(&mut self.buf, rest);
-                let msg = Message::decode(&bytes)?;
+                let mut bytes = std::mem::replace(&mut self.buf, rest);
+                let msg = Message::decode(&bytes);
+                // A reply can carry a secret (the Secret Service's `GetSecret`).
+                wipe(&mut bytes);
+                let msg = msg?;
                 let n = usize::try_from(msg.unix_fds).unwrap_or(usize::MAX);
                 if n > self.fds.len() {
                     return Err(PlatformError::Os {
@@ -305,8 +328,9 @@ impl Bus {
                         message: "the bus closed the connection".into(),
                     });
                 }
-                Ok((bytes, fds)) => {
+                Ok((mut bytes, fds)) => {
                     self.buf.extend_from_slice(&bytes);
+                    wipe(&mut bytes);
                     self.fds.extend(fds);
                     if self.fds.len() > 4 * MAX_FDS {
                         // Descriptors no message claims: drop the oldest.
@@ -331,6 +355,14 @@ impl Bus {
             }
         }
     }
+}
+
+/// Zeroes a buffer before it is freed. Best effort, as for `Secret`: `black_box` keeps
+/// the writes from being dropped as dead stores, and copies made when a buffer grew are
+/// not reached.
+fn wipe(bytes: &mut [u8]) {
+    bytes.fill(0);
+    std::hint::black_box(&*bytes);
 }
 
 /// A method's reply, or its error as a [`PlatformError`].
