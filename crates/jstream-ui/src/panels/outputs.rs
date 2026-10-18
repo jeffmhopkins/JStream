@@ -232,16 +232,22 @@ pub enum Vcam {
     Registered,
     /// Not registered: Windows doesn't list the camera until it is.
     NotRegistered,
-    /// Registered for another folder, such as one the install was moved from.
-    Moved,
+    /// Registered, but not for a current copy of this install's DLL: an update changed
+    /// it, or an older JStream registered its own folder. The old registration keeps
+    /// working until the user opts in to register again.
+    Outdated,
     /// The app was started with `--no-vcam`, so its engine has no virtual camera.
     Off,
     /// The page doesn't know: it isn't running in the desktop app.
     Unknown,
 }
 
-/// The command that registers the camera. It asks for administrator rights once.
-pub const REGISTER_HINT: &str = "Run `jstream-daemon --register-vcam` from the JStream folder (it asks for administrator rights once), then restart JStream.";
+/// The optional step that registers the camera. It asks for administrator rights once.
+pub const REGISTER_HINT: &str = "Registering the virtual camera is optional: to use it, run `jstream-daemon --register-vcam` from the JStream folder (it asks for administrator rights once), then restart JStream.";
+
+/// The optional step that updates an outdated registration. Until then the camera keeps
+/// using the copy registered before.
+pub const UPDATE_HINT: &str = "Optional: run `jstream-daemon --register-vcam` from the JStream folder to register this version's camera (it asks for administrator rights), then restart JStream. Until then the camera registered before is used.";
 
 impl Vcam {
     /// The desktop app's `vcam` value; anything else, or none, is [`Vcam::Unknown`].
@@ -249,7 +255,7 @@ impl Vcam {
         match value {
             Some("registered") => Vcam::Registered,
             Some("not_registered") => Vcam::NotRegistered,
-            Some("moved") => Vcam::Moved,
+            Some("outdated") => Vcam::Outdated,
             Some("off") => Vcam::Off,
             _ => Vcam::Unknown,
         }
@@ -260,7 +266,7 @@ impl Vcam {
         match self {
             Vcam::Registered => "Virtual camera: registered",
             Vcam::NotRegistered => "Virtual camera: not registered",
-            Vcam::Moved => "Virtual camera: registered for another folder",
+            Vcam::Outdated => "Virtual camera: registered, but not for this version",
             Vcam::Off => "Virtual camera: off in this app",
             Vcam::Unknown => "Virtual camera: registration not known here",
         }
@@ -270,7 +276,8 @@ impl Vcam {
     pub fn hint(self) -> Option<&'static str> {
         match self {
             Vcam::Registered => None,
-            Vcam::NotRegistered | Vcam::Moved => Some(REGISTER_HINT),
+            Vcam::NotRegistered => Some(REGISTER_HINT),
+            Vcam::Outdated => Some(UPDATE_HINT),
             Vcam::Off => Some("Start JStream without `--no-vcam` to use it."),
             Vcam::Unknown => Some(
                 "The engine checks the camera when it starts: an unregistered one is refused with how to register it.",
@@ -291,7 +298,7 @@ pub fn start_blocker(row: &OutputRow, vcam: Vcam) -> Option<&'static str> {
         OutputKind::VirtualCam => match vcam {
             Vcam::NotRegistered => Some("Register the virtual camera first."),
             Vcam::Off => Some("The virtual camera is off in this app."),
-            Vcam::Registered | Vcam::Moved | Vcam::Unknown => None,
+            Vcam::Registered | Vcam::Outdated | Vcam::Unknown => None,
         },
         _ => Some("This engine's output kind is newer than this page."),
     }
@@ -991,7 +998,7 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, Vcam, create_edit,
+        Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, UPDATE_HINT, Vcam, create_edit,
         describe_kind, explain_start_failure, go_live_targets, live_outputs, load, next_output_id,
         start_blocker, start_or_stop_all, status, take_key,
     };
@@ -1278,7 +1285,7 @@ mod tests {
         let parse = |value| Vcam::from_host(value);
         assert_eq!(parse(Some("registered")), Vcam::Registered);
         assert_eq!(parse(Some("not_registered")), Vcam::NotRegistered);
-        assert_eq!(parse(Some("moved")), Vcam::Moved);
+        assert_eq!(parse(Some("outdated")), Vcam::Outdated);
         assert_eq!(parse(Some("off")), Vcam::Off);
         assert_eq!(parse(Some("later")), Vcam::Unknown);
         assert_eq!(parse(None), Vcam::Unknown);
@@ -1291,11 +1298,21 @@ mod tests {
             start_blocker(&row, Vcam::Off),
             Some("The virtual camera is off in this app.")
         );
-        assert_eq!(start_blocker(&row, Vcam::Moved), None, "the engine decides");
+        assert_eq!(
+            start_blocker(&row, Vcam::Outdated),
+            None,
+            "the engine decides"
+        );
         assert_eq!(Vcam::Registered.hint(), None);
         assert_eq!(Vcam::NotRegistered.hint(), Some(REGISTER_HINT));
-        assert_eq!(Vcam::Moved.hint(), Some(REGISTER_HINT));
-        assert!(REGISTER_HINT.contains("jstream-daemon --register-vcam"));
+        assert_eq!(Vcam::Outdated.hint(), Some(UPDATE_HINT));
+        for hint in [REGISTER_HINT, UPDATE_HINT] {
+            assert!(hint.contains("jstream-daemon --register-vcam"), "{hint}");
+            assert!(
+                hint.contains("ptional"),
+                "the step is named optional: {hint}"
+            );
+        }
         assert!(
             Vcam::Unknown
                 .hint()
@@ -1318,7 +1335,8 @@ mod tests {
     #[test]
     fn a_refused_camera_start_gets_the_hint_that_fits() {
         let unregistered = "action_failed: starting the virtual camera: the virtual camera: its \
-             media source {0B5A3E7C} is not registered (register it with `--register-vcam`)"
+             media source {0B5A3E7C} is not registered (registering it is optional: run \
+             `jstream-daemon --register-vcam`)"
             .to_owned();
         let explained = explain_start_failure(&OutputKind::VirtualCam, unregistered.clone());
         assert!(explained.starts_with(&unregistered), "{explained}");

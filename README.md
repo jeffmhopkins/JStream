@@ -52,10 +52,10 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M2: UI](ROADMAP.md#m2) | `███████░░░` 68% | 17 | 6 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 2 | 5 |
 
-97 of 115 items are merged; 7 of those still wait on a run on Windows hardware.
+97 of 115 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 25 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 3</summary>
+<summary><b>What's left</b>: 26 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 8, 👤 maintainer 2, ❔ not set 3</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -69,6 +69,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
 | I2 | Live values | M1b | 🌊 its wave lands | #244 merged into wave/m1-2 | #244 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
+| G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
 | U4p | Live preview on canvas | M2 | 🔨 build | draft #302 |  |
 | T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
@@ -186,7 +187,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | G2 | vcam media source DLL | 🧪 merged, Windows run pending: pacing rerun | #174, #195, #200, #229 |
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
 | G3b | VirtualCam output kind | ✅ merged | #213, #297 |
-| G3c | --register-vcam | ✅ merged | #235 |
+| G3c | --register-vcam | 🧪 merged, Windows run pending: Windows run (#563) | #235, #565 |
 | G3d | Virtual camera in the UI and the desktop app | 🧪 merged, Windows run pending: Windows run (#390) | #316 |
 | P1 | Portable Windows zip | ✅ merged | #271 |
 
