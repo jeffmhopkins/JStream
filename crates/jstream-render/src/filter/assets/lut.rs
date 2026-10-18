@@ -108,7 +108,7 @@ impl Pass for ApplyLut {
 ///
 /// # Errors
 /// [`RenderError::TooLarge`] if the layout (512x512 at most) exceeds the adapter limit.
-pub(crate) fn lut_image(compositor: &mut Compositor, lut: &Lut) -> Result<Image, RenderError> {
+pub fn lut_image(compositor: &mut Compositor, lut: &Lut) -> Result<Image, RenderError> {
     let (width, height, texels) = lut.layout();
     // A data upload only lives inside a filter pass, where the compositor's image maker
     // is at hand; copying it into the pass's output layer keeps the f16 values exactly.
