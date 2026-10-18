@@ -871,7 +871,7 @@ id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "review"
-prs = [486]
+prs = [486, 623]
 note = "#486 merged into wave/m3-2; lands with that wave"
 needs = ["wave"]
 
@@ -889,8 +889,8 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; the rest of the codec path to build"
+prs = [481, 490, 509, 510, 572]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; ALSA audio input and output (#572); the rest of the codec path to build"
 needs = ["wave", "build"]
 
 [[item]]
