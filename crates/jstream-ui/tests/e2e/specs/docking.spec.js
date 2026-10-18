@@ -38,7 +38,7 @@ test('the Editing layout docks every panel, and the View menu hides and adds the
   await connect(page, daemon);
   await expect(zone(page, 'Left sidebar').getByRole('tab')).toHaveText(['Scenes', 'Scene objects']);
   await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector']);
-  await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs']);
+  await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs', 'Transitions']);
   // Empty zones are hidden until a panel is dragged.
   await expect(zone(page, 'Top dock')).toBeHidden();
   await expect(page.locator('header.app-header')).toContainText('Layout: Editing');
@@ -61,8 +61,9 @@ test('a tab dragged onto a strip joins its group, and onto a zone starts one', a
   await connect(page, daemon);
   await drag(page, tab(page, 'Outputs'), await centre(tab(page, 'Audio mixer')));
   const bottom = zone(page, 'Bottom dock');
-  await expect(bottom.getByRole('tablist')).toHaveCount(1);
-  await expect(bottom.getByRole('tab')).toHaveText(['Audio mixer', 'Outputs']);
+  // Transitions stays behind as the lone panel of the group Outputs left.
+  await expect(bottom.getByRole('tablist')).toHaveCount(2);
+  await expect(bottom.getByRole('tab')).toHaveText(['Audio mixer', 'Outputs', 'Transitions']);
   await expect(tab(page, 'Outputs')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tabpanel', { name: 'Audio mixer' })).toBeHidden();
   await tab(page, 'Audio mixer').click();
@@ -130,12 +131,12 @@ test('the Layout menu switches to Live and resets to Editing', async ({ page, da
   const menu = page.getByRole('menu', { name: 'Layout' });
   await expect(menu.getByRole('menuitem', { name: /Editing/ })).toContainText('current');
   await menu.getByRole('menuitem', { name: 'Live' }).click();
-  await expect(zone(page, 'Dock below the canvas').getByRole('tab')).toHaveText(['Audio mixer']);
+  await expect(zone(page, 'Dock below the canvas').getByRole('tab')).toHaveText(['Audio mixer', 'Transitions']);
   await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Outputs']);
   await expect(zone(page, 'Bottom dock')).toBeHidden();
 
   await openMenu(page, 'Layout');
   await page.getByRole('menuitem', { name: 'Reset to default' }).click();
-  await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs']);
+  await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs', 'Transitions']);
   await expect(page.locator('header.app-header')).toContainText('Layout: Editing');
 });
