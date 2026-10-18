@@ -25,9 +25,24 @@ webview. It is a client like the CLI and the MCP server: it holds a `dyn Control
 
 Contents ([Design](#design) explains the choices):
 - **App** (`app.rs`): `App`, the root component. It shows the connect form until a
-  session is open, then the shell with its regions, and keeps the shared state current
-  from the session's events. It owns the routing: which panel sits in which region, and
-  the inspector's pages. `SessionContext` gives components the open session.
+  session is open, then the shell (the header over the workspace), and keeps the shared
+  state current from the session's events. `SessionContext` gives components the open
+  session.
+- **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
+  (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (show or hide each panel) and the Layout menu (saved layouts), the frames dropped
+  since the page connected, Record, and Go Live / End stream. `RecordButton` and
+  `Dropped` are its logic, tested natively.
+- **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
+  around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
+  the saved layouts (`Layout`, with Editing and Live built in). Every change goes
+  through it (`place`, `close`, `toggle`, `click_tab`, `resize_zone`, `resize_between`,
+  `save_as_new`, `apply`, `reset`), and it reads and writes itself as JSON. Tested
+  natively.
+- **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas,
+  with the splitters, dividers, tabs and close buttons, and drags a tab to dock it;
+  `DockState`, the dock as context, which the header's menus change; and `restore`,
+  the dock the browser kept.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
   and `desktop_vcam()`, what that global says about the virtual camera.
@@ -38,21 +53,24 @@ Contents ([Design](#design) explains the choices):
   share: the collection as `state.get` last reported it (`Collection`, with its buses
   for the bus picker), the program
   scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
-  last failed call. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
+  last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
+  is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
   (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
-  they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel, an inspector
-  page (creating, editing and deleting streams, recordings and the virtual camera, their
-  stream keys, start and stop, go-live and the pipeline's health), and the calls and
-  logic behind it, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
-  audio mixer along the bottom (faders, mutes, routing and buses, with meters and the
-  master's loudness), also tested natively against `MockEngine`.
-- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the inspector's pages,
-  shown only when the server pairs devices (start pairing and show the code, list and
+  they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  (creating, editing and deleting streams, recordings and the virtual camera, their
+  stream keys, start and stop, and the pipeline's health), and the calls and
+  logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
+  audio mixer (faders, mutes, routing and buses, with meters and the
+  master's loudness), also tested natively against `MockEngine`; and `studio.rs`:
+  `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
+  transition presets and each scene's overrides; [Design](#design)).
+- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
+  Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
-- **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
+- **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over a placeholder background, edits their geometry with the pointer and the
   keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
   hooked up yet.
@@ -92,7 +110,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   session is `Rc`-shared: everything in the page runs on one thread, and on `wasm32`
   `Control` needs no `Send`.
 - **Events and the shared state.** One task reads the session's event stream. It keeps
-  the status bar's revision current and hands each event to `Studio`, which re-reads
+  the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
   `events.dropped`), and follows `studio.changed` for the program scene. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.
@@ -103,12 +121,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   holds no handle of its own, so Disconnecting drops the last one, which closes the
   socket.
 - **Selection.** `Selection` is the scene being edited (shown by the sources list) and
-  an item in it (edited by the properties form). A new session reads the program scene
+  the items selected in it: a primary item (edited by the properties form) and any
+  others the canvas selected with it. A new session reads the program scene
   before the state, so it starts on the scene on program. It is fixed up after every
   change: a
   deleted scene falls back to the program scene, then the first listed scene, and an
-  item that left the scene is dropped. The canvas still draws the program scene with a
-  selection of its own; moving it onto `Selection` is a canvas follow-up.
+  item that left the scene is dropped, the next selected one becoming primary. The
+  canvas edits the same scene and selects the same items, so a click on a box selects
+  its row and opens its properties, and every selected item's row is highlighted.
 - **Scenes and sources.** The scene list shows scenes in display order and leaves out
   groups (ADR-0024), marks the program scene, and puts a scene on program with
   `scene.switch`. The sources list shows the selected scene's items with the top of the
@@ -135,32 +155,66 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
   `scene` source has no settings.
-- **Routing.** `app.rs` decides the regions: the scene and sources lists on the left,
-  the canvas in the middle, the inspector on the right, and the mixer along the
-  bottom. The inspector's pages are `inspector_pages()`, one line each, shown as tabs
-  once there is more than one; the pairing panel sits under them, outside the tabs,
-  because it hides itself where the server pairs nothing. A failed call shows in a
-  dismissable bar.
-- **The shell** is a CSS grid: a status bar on top, the scene and sources lists on the left, the
-  preview canvas in the middle, the inspector on the right and the mixer along the
-  bottom; narrow windows stack them. Each region is its own component, so the panels
-  and the canvas are built separately without touching the shell. Colours follow the
-  system's light or dark scheme.
+- **The shell** is the header bar over the workspace. A failed call shows in a
+  dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
+  prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
+  first and falls back to the system's, since the page's policy loads fonts only from
+  its own origin and Plex isn't bundled.
+- **The workspace** follows the prototype's dock
+  ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
+  the canvas, outer columns, full-width top and bottom, sidebars, and above and below
+  the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
+  shows one panel with its title, or tabs. Panels are the six the UI has: Scenes,
+  Scene objects (`Sources`), the Inspector (`Properties`, with `Pairing` under it), the
+  Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
+  adds a `PanelId` and a line there. The panels' own `h2` headings are hidden, since
+  the tab is the title. Narrow windows stack the zones, without splitters.
+  - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
+    switch keeps a panel's state; moving a panel to another group mounts it afresh.
+  - A tab drags with pointer events, not HTML drag and drop, which desktop webviews
+    can intercept for file drops. Once a press moves 4 pixels it is a drag: empty zones
+    show their "Drop here" placeholders, and the element under the pointer, through its
+    `data-drop` attributes, names the target: a tab strip (join that group), half of a
+    group's body (a new group before or after it) or a zone (a new group at its end).
+    Escape cancels.
+  - Splitters and dividers capture the pointer while they drag. Zone sizes and group
+    weights are set through the CSS object model, which the page's policy allows,
+    unlike `style` attributes. After every dock change the workspace fires a window
+    `resize`, which the canvas measures itself on.
+  - The dock is kept in the browser's storage (`jstream.dock`) after every change and
+    read back when the workspace opens; a stored dock that doesn't parse is ignored. So
+    a layout lasts per browser, not per engine, until the engine stores UI settings
+    (decision register D35).
+- **The header** keeps its own copy of the outputs, as the outputs panel does (both
+  re-read on `state.changed` and `events.dropped` and follow `output.state_changed`),
+  plus `Studio::keys_changed`, which the panel bumps after a stream key is set or
+  cleared, since no event reports that. Go Live and End stream are described under
+  Outputs. Record starts every stopped or failed recording output and, while any runs,
+  becomes "Stop recording", which stops them; with no recording output it is disabled.
+  The dropped readout counts captured, rendered and encoded frames dropped since the
+  first `stats.tick` this page saw, starting over when the engine restarts. Undo and
+  Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
+  buttons. A failed call shows in the shell's problem bar. The menus close on Escape
+  or on a press anywhere outside them.
 - **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
-  output, and starts and stops each. "Go live" starts every stopped or failed RTMP
-  output whose stream key is set, and "End stream" stops the running ones; recordings
-  have only their own buttons. Both try every output, even after one fails, and report
+  output, and starts and stops each. The header's "Go Live" starts every stopped or
+  failed RTMP output whose stream key is set, and "End stream", which replaces it while
+  any runs, stops the running ones; recordings start from their own buttons or the
+  header's Record. Both try every output, even after one fails, and report
   each failure. An RTMP output without a key can't be started from the
   panel.
   A virtual camera output (`virtual_cam`) has no target, key or encoder profile, so its
   card shows none of them; neither "Go live" nor "End stream" touches it. The card says
   what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
   read in `host.rs`): there an unregistered camera, or one turned off with `--no-vcam`,
-  can't be started, and the card gives the `jstream-daemon --register-vcam` hint. In a
+  can't be started, and the card gives the `jstream-daemon --register-vcam` hint, which
+  names the step as optional; an `outdated` one (registered, but not for a current copy
+  of this version's DLL) can still be started, and its hint offers registering again,
+  also optional. In a
   browser the page can't tell, so it lets the engine decide and explains its refusal:
   an unregistered camera ("is not registered") gets the full registration command, and
   an engine with no camera at all ("no virtual camera": not running on Windows, or the
@@ -179,6 +233,35 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   name and its paired and last-used dates (UTC), with a button that calls
   `device.revoke` and re-reads the list. The code is never logged or stored by the page,
   and `OpenCode`'s `Debug` form hides it.
+- **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
+  The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
+  in Live) reads the scenes (groups left out) and presets with
+  `state.get` and the studio state with `studio.get` into a copy of its own, since
+  `Studio` keeps neither the presets nor preview, re-reads them on `state.changed` and
+  `events.dropped`, and takes `studio.changed` in place. The engine has no
+  studio-mode switch, so the panel always shows preview and program. Picking a scene sends
+  `studio.set_preview`. "Transition" sends `scene.switch` for the preview scene, naming
+  the preset picked beside it, or none so the engine resolves it; a line under the
+  button names the preset the engine will use and why, in the engine's order (the
+  switch's, the new scene's `transition_in`, the old scene's `transition_out`, the
+  default). "Cut" names a `cut` preset (the default if it is one), and is off when the
+  collection has none. With "Swap" on (the default), the scene that was on program
+  then goes on preview with a second `studio.set_preview`, as in other studio tools;
+  the engine itself never moves preview on a switch. While a transition runs, the bar
+  shows an indeterminate progress bar for the `duration_ms` `studio.changed` reported;
+  a cut, or program moving without a transition, clears it at once. A preview scene
+  the list doesn't show (a group) reads "Choose a scene".
+  The presets section lists each preset, adds one (ID from its name, `-2`, `-3`… when
+  taken; a 300 ms ease-in-out fade by default), edits one with a `transition.update`
+  naming only what changed (after a kind change, the patch is against the new kind's
+  defaults, as the engine applies it), makes one the default and deletes any other.
+  The kind's parameters come from `kind.list` and `kind.describe` (category
+  `transition`), or the built-in `cut`, `fade` and `move` when the engine can't list
+  them; enum, boolean, number and text parameters are editable, others read-only. A
+  value the form refuses keeps the preset from being saved until it is fixed.
+  Each scene's `transition_in` and `transition_out` are set with
+  `scene.set_transitions`. Items' own transition settings (`item.set_transition`) are
+  not edited here; they belong to the properties panel, which doesn't edit them yet.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
   password field is not bound to a signal: the panel reads it only on save, wraps it in
   a `SecretString` at once (trimming a pasted newline), empties the field and sends
@@ -246,41 +329,72 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
-handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
-scene and sends the edits. These three are pure and tested natively against
-`MockEngine`; `mod.rs` is the component.
+handles, and turns a drag into a new geometry; `group.rs` does the same for several
+selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scene and
+sends the edits. These are pure and tested natively, `model.rs` against `MockEngine`;
+`mod.rs` is the component.
 
-- **What it shows.** The scene on program (`studio.get`, or the first non-group scene
-  if none is), re-read on every `state.changed`, `studio.changed` and
-  `events.dropped`. Boxes are outlined with `jstream-protocol`'s placement formula, so
-  the overlay matches what the compositor draws. An item still stored as a 0.3 legacy
-  placement is not drawn: its box depends on the source's runtime size, which the
-  protocol doesn't report yet (ADR-0022's `source.sizes`), and the toolbar counts
-  such items. Hidden items are drawn dashed.
-- **Selecting and dragging.** A press selects the topmost box under the pointer, or
-  clears the selection on empty canvas. Dragging the box moves it. The selected box
-  has eight resize handles and a rotate handle above its top edge. A corner keeps the
-  box's aspect ratio (Shift frees it) and an edge handle changes one side; the
-  opposite corner or edge stays put, in the box's own rotated frame, and a box never
-  gets smaller than 1 pixel or flips. Rotation turns about the centre and snaps to
-  the nearest multiple of 90° within 4°; Shift moves it in 15° steps. Arrow keys
-  nudge the selected box by 1 pixel (Shift: 10). Escape cancels a drag, or clears the
-  selection.
-- **Snapping.** A moved box's edges and centre snap, within 6 screen pixels, to the
-  canvas's edges and centre lines and to the other boxes' edges and centres, using
-  each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
-  upright box's resized edges snap the same way. Alt skips snapping for one drag, and
-  a toolbar toggle turns it off.
+- **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
+  `Layout::of` from the shared collection, so it follows every state change the app
+  reads. The frame is the largest 16:9 box in the canvas area, with the scene's name
+  and the canvas size captioned bottom left. Boxes are outlined with
+  `jstream-protocol`'s placement formula, so the overlay matches what the compositor
+  draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
+  on the source's runtime size, which the protocol doesn't report yet (ADR-0022's
+  `source.sizes`), and a note top left counts such items. Hidden items are drawn
+  dashed, and the box under the pointer gets a light outline.
+- **Selecting and dragging.** A press selects the topmost box under the pointer and
+  drags it, or, on a box already selected, drags every selected box. Shift-click adds
+  a box to the selection (and drags them all) or takes a selected one out. A press on
+  empty canvas, or on the dark margin around the frame, draws a marquee that selects
+  every box whose bounds it touches (Shift keeps what was selected); a click there
+  clears the selection. Ctrl+A selects every box. The shared selection follows each of
+  these. A double click selects a box alone and shows the Inspector, in place of the
+  prototype's Properties dialog, which the UI doesn't have yet. The pointer is
+  followed over the whole canvas area, so handles reaching past the frame can be
+  grabbed. The cursor shows what a press would do. The selected box has
+  a 2 px outline, eight resize handles, a rotate knob on a stem above its top edge, and
+  a readout under it: its size (and rotation, if turned), or during a drag its
+  top-left, size or angle. A resize keeps the box's aspect ratio (Ctrl stretches): a
+  corner follows the axis that snapped, else the one that changed more, and an edge
+  handle scales the other axis about the centre. The opposite corner or edge stays
+  put, in the box's own rotated frame, and a box never gets smaller than 10 pixels or
+  flips. Rotation turns about the centre and snaps to the nearest multiple of 90°
+  within 3°, else to 0.1°; Ctrl moves it in 45° steps. Shift drags at half speed for
+  every gesture, following the pointer's movement so pressing it mid-drag doesn't
+  jump. Arrow keys nudge the selected boxes by 1 pixel (Shift: 10). Escape cancels a
+  drag, or clears the selection.
+- **Several selected.** Each selected box keeps its 2 px outline without handles, and
+  a dashed box 4 screen pixels outside their bounds gets the handles, a knob 42 pixels
+  above it, and a readout 12 pixels below (`N items · W × H`, the size while scaling,
+  the angle turned while rotating). Its handles scale every box from the far side of
+  the bounds (an edge handle scales the other axis about the centre), keeping the
+  aspect unless Ctrl is held, down to 20 pixels; the knob turns every box about the
+  bounds' centre, in 45° steps with Ctrl. A move of several boxes snaps their bounds
+  the way one box snaps, unless one of them is rotated.
+- **Crop** on the canvas (Alt on a handle, the crop tool) needs each source's size to
+  turn a dragged edge into source pixels, which the protocol doesn't report yet
+  (ADR-0022's `source.sizes`), so the canvas doesn't crop.
+- **Snapping.** A moved upright box's edges and centre snap, within 6 screen pixels,
+  to the canvas's edges and centre lines and to the other boxes' edges and centres,
+  using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
+  upright box's resized edges snap the same way. Ctrl moves without snapping, a
+  rotated box never snaps, and the Snapping button in the floating tools (top right)
+  turns it off.
 - **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
-  draws the gesture locally, and on release one batch with one `item.set_geometry`
-  commits it, so each gesture (and each nudge) is one undo step. It carries no
+  draws the gesture locally, and on release one batch with an `item.set_geometry` per
+  item it changed commits it, so each gesture (and each nudge) is one undo step. The
+  local geometries stay drawn until no commit is in flight and the collection has
+  caught up with the last one's revision; a later drag replaces only its own items',
+  so a nudge still in flight isn't lost. A commit that fails shows its error and stops
+  drawing its geometries, unless a later gesture has replaced them. It carries no
   `expected_rev`: a drag is last writer wins per field
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
   (`live.set` with `ends_gesture` on the committing batch), which would show the drag
   on the output while it happens, are in the protocol but the canvas doesn't send them
-  yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
-  while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
-  out when the engine reports nothing left, and an `undo_conflict` is explained.
+  yet. Undo and redo (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y while the canvas has focus, and
+  the Edit menu) are `history.undo` and `history.redo`; nothing left to undo is
+  silent, and an `undo_conflict` is explained in the problem bar.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos

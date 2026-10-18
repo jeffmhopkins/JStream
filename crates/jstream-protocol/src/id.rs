@@ -81,6 +81,14 @@ opaque_id!(
     VideoMixId
 );
 opaque_id!(
+    /// A folder of the scene list (ADR-0024 §3). Folders organise only.
+    FolderId
+);
+opaque_id!(
+    /// A label that sources carry (ADR-0024 §4).
+    LabelId
+);
+opaque_id!(
     /// A paired device: one browser or other client admitted with its own device token
     /// (ADR-0044). Assigned by the server when the device pairs.
     DeviceId

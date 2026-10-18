@@ -551,8 +551,9 @@ prs = [213, 297]
 id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
-status = "done"
-prs = [235]
+status = "hardware"
+prs = [235, 565]
+note = "Windows run (#563)"
 
 [[item]]
 id = "G3d"
@@ -747,8 +748,8 @@ needs = ["build"]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "planned"
-note = "draft #304, on T1"
+status = "review"
+prs = [304]
 needs = ["build"]
 
 [[item]]
@@ -759,6 +760,13 @@ status = "review"
 prs = [259]
 note = "#259 merged into wave/m1-2"
 needs = ["wave"]
+
+[[item]]
+id = "E2b"
+milestone = "M2"
+title = "Privacy screen and encoder sharing key"
+status = "review"
+prs = [317]
 
 [[item]]
 id = "D8"
@@ -790,6 +798,13 @@ milestone = "M2"
 title = "Audio waveform and spectrum sources"
 status = "done"
 prs = [315, 460, 463, 466]
+
+[[item]]
+id = "B11"
+milestone = "M2"
+title = "Folders and labels"
+status = "review"
+prs = [323]
 
 [[item]]
 id = "K1"

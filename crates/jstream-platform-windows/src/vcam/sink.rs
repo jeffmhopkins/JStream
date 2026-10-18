@@ -40,6 +40,7 @@ use windows::core::{HSTRING, Interface, s, w};
 use super::format::{Pixels, check_format, contract_format, frame_pixels};
 use super::shared::{Handle, Mapping, SecurityAttributes, qpc, session_id, user_sid};
 use crate::com::{MtaUsage, OsResult};
+use crate::security::{self, LOCAL_SERVICE_SID};
 
 /// How often the heartbeat thread marks the producer alive. Well inside the contract's
 /// `LIVENESS_MS`, so a stall in the engine's frames shows the last frame, not the DLL's
@@ -120,7 +121,7 @@ impl VcamSink for WindowsVcam {
             return Err(PlatformError::Unsupported {
                 what: format!(
                     "the virtual camera: its media source {CLSID_STR} is not registered \
-                     (register it with `--register-vcam`)"
+                     (registering it is optional: run `jstream-daemon --register-vcam`)"
                 ),
             });
         }
@@ -382,6 +383,18 @@ impl Producer {
                 what: "vcam start",
                 state: "another producer in this session is publishing to the camera",
             });
+        }
+        // An existing mapping keeps its own owner and DACL: `CreateFileMappingW` ignores
+        // the attributes passed when it opens one. One someone else made, or made looser
+        // than the contract's DACL, could be read or rewritten by them (#356).
+        if mapping.existed {
+            security::check(&mapping.security()?, &sid, &[LOCAL_SERVICE_SID]).map_err(|_| {
+                PlatformError::InvalidState {
+                    what: "vcam start",
+                    state: "this session's control block was created by another account, or \
+                            with an access list looser than the contract's",
+                }
+            })?;
         }
 
         let mut handles = Vec::new();

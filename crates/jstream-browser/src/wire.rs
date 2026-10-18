@@ -219,6 +219,7 @@ impl ToHelper {
                 out.u32(spec.size.height());
                 out.u32(spec.fps);
                 out.str(&spec.css)?;
+                out.u8(u8::from(spec.local_network));
             }
             Self::SetCss { page, css } => {
                 out.u8(2);
@@ -261,6 +262,11 @@ impl ToHelper {
                     .map_err(|_| WireError::Malformed("a page size is invalid"))?;
                 let fps = body.u32()?;
                 let css = body.string()?;
+                let local_network = match body.u8()? {
+                    0 => false,
+                    1 => true,
+                    _ => return Err(WireError::Malformed("a local-network flag isn't 0 or 1")),
+                };
                 Self::Open {
                     page,
                     spec: PageSpec {
@@ -268,6 +274,7 @@ impl ToHelper {
                         size,
                         fps,
                         css,
+                        local_network,
                     },
                 }
             }
@@ -508,6 +515,7 @@ mod tests {
             size: FrameSize::new(1920, 1080).expect("size"),
             fps: 60,
             css: "body { color: red; } /* é */".into(),
+            local_network: true,
         }
     }
 

@@ -54,23 +54,23 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
-| [Theme and shared controls](#theme) | 8 | 0 | 1 | 6 | 0 | 1 |
-| [Header bar](#header) | 9 | 0 | 3 | 3 | 3 | 0 |
-| [Docking and layouts](#docking) | 10 | 0 | 0 | 9 | 1 | 0 |
-| [Canvas](#canvas) | 18 | 1 | 6 | 7 | 4 | 0 |
+| [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
+| [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
+| [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
+| [Canvas](#canvas) | 18 | 9 | 3 | 1 | 5 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
-| [Scenes panel](#scenes) | 10 | 1 | 3 | 1 | 5 | 0 |
-| [Scene objects panel](#objects) | 9 | 0 | 3 | 5 | 1 | 0 |
+| [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
+| [Scene objects panel](#objects) | 9 | 1 | 3 | 4 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 0 | 0 | 6 | 4 | 0 |
 | [Transform panel](#transform) | 4 | 0 | 0 | 4 | 0 | 0 |
 | [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
-| [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
+| [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **3** | **24** | **59** | **43** | **1** |
+| **Total** | **130** | **29** | **24** | **42** | **34** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -86,58 +86,59 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ⬜ | Today: system light or dark, with 7 variables of its own (`style.css`). |
-| WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the theme batch's font stack names Plex first and falls back to system fonts. |
-| WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ⬜ | |
-| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | Today: text glyphs (▲ ▼ ✕ ● ○ ↺). |
+| WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. |
+| WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
+| WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
+| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | Today: text glyphs (▲ ▼ ✕ ● ○ ↺), except the canvas tools' two stroke icons. |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ⬜ | Used by the Inspector, filters, mixer and dialogs. |
 | WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ⬜ | |
 | WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ⬜ | Rows already show tools on hover; the prototype's look and "stays on" rule are missing. |
-| WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
+| WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss, in the prototype's toast colours. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
 
 <a id="header"></a>
 ## Header bar
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/panels/outputs.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/panels/outputs.rs"]
 -->
 
 Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header-bar).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | 🟡 | Today: a status bar with the brand, engine URL, protocol, client ID, revision and Disconnect. The prototype's File and Edit are empty; the real ones hold Disconnect and the connection details, and Undo/Redo. |
-| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ⬜ | Needs [docking](#docking). |
-| HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ⬜ | Needs [docking](#docking). |
-| HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | `stats.tick` has drop totals only; fps and CPU need engine stats (decision register D39). |
+| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. |
+| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | 🟡 | Built for the six panels the UI has; the rest join as they are built. |
+| HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
+| HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
-| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | 🔒 | T1 (#260) and T1u (#304). |
-| HD-07 | Record button | Starts and stops recording. | ⬜ | Start/stop the recording outputs; the Outputs panel already does it per output. |
+| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ⬜ | UI only: the engine has no studio-mode switch, so the Transitions panel (#304) always shows preview and program; the button would hide them. |
+| HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
-| HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | 🟡 | Built in the Outputs panel (starts every stopped or failed stream output whose key is set); it moves to the header. |
+| HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
 
 <a id="docking"></a>
 ## Docking and layouts
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crates/jstream-ui/src/workspace.rs"]
 -->
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
-Today the shell is one fixed grid: Scenes over Sources on the left, the canvas in the
-middle, an inspector with Properties and Outputs tabs (and the pairing panel under them) on the right, the mixer along the
-bottom. Nothing moves, resizes or collapses.
+The dock is built (`dock.rs`, `workspace.rs`) with the six panels the UI has: Scenes,
+Scene objects, Inspector (with the pairing panel under the properties), Audio mixer,
+Outputs and Transitions (studio mode and the presets). The other prototype panels join
+the dock, its View menu and its layouts as their rows are built.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| DK-01 | Eight dock zones | Outer left and right columns, full-width top and bottom, left and right sidebars, above and below the canvas, nested as the spec says; empty zones hidden. | ⬜ | |
-| DK-02 | Panel groups and tabs | A zone stacks groups; a group holds tabs (uppercase, accent underline on the active tab of a multi-tab group). | ⬜ | |
-| DK-03 | Resize | 5px splitters resize zones within their limits; 6px dividers trade space between groups. | ⬜ | |
-| DK-04 | Collapse | Clicking a lone panel's title collapses it (not in a tab group, not the only group in its zone); in a side-by-side zone it becomes a narrow strip with its title turned. | ⬜ | |
-| DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ⬜ | |
-| DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ⬜ | |
-| DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ⬜ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | ⬜ | |
-| DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ⬜ | |
-| DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🔒 | Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. Until it does, layouts are kept in the browser's storage. |
+| DK-01 | Eight dock zones | Outer left and right columns, full-width top and bottom, left and right sidebars, above and below the canvas, nested as the spec says; empty zones hidden. | ✅ | |
+| DK-02 | Panel groups and tabs | A zone stacks groups; a group holds tabs (uppercase, accent underline on the active tab of a multi-tab group). | ✅ | |
+| DK-03 | Resize | 5px splitters resize zones within their limits; 6px dividers trade space between groups. | ✅ | |
+| DK-04 | Collapse | Clicking a lone panel's title collapses it (not in a tab group, not the only group in its zone); in a side-by-side zone it becomes a narrow strip with its title turned. | ✅ | |
+| DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
+| DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. |
+| DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has; Filters, Transform, chat, stats and agent join them as they are built. |
+| DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
+| DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
 
 <a id="canvas"></a>
 ## Canvas
@@ -150,24 +151,24 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | 🟡 | Today: a black stage up to 960px wide, scene name in a toolbar above. |
-| CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ⬜ | Today it always shows the program scene, with a selection of its own. |
+| CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | ✅ | The frame is the largest 16:9 box inside 28/28/20px margins; the caption is mono 11px. |
+| CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ✅ | Laid out from the shared collection and `Selection`, so a box click selects its row and opens its properties. |
 | CV-03 | Live picture | The scene's real picture under the item boxes. | 🔒 | U4p (#302) adds the program preview; other scenes need previews for any target (D36). |
-| CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Handles, knob and selection exist in a different style; no pill, no hover outline. |
-| CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | 🟡 | Built, with Alt instead of Ctrl. |
-| CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | 🟡 | Built with other modifiers: corners keep aspect, Shift frees it; edges always stretch. |
-| CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | 🟡 | Built with Shift for 15° steps. |
-| CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | ⬜ | `item.set_crop` exists. |
-| CV-09 | Multi-select | Shift-click adds or removes; Ctrl+A selects all; the group gets a dashed box with its own handles to scale and rotate. | ⬜ | |
-| CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ⬜ | |
-| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Snap is a checkbox in a toolbar above; no Move or Crop tools. |
+| CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Outline, handles, knob and stem, pill and hover outline are built; " · cropped" waits on crop (CV-08). Until the picture is drawn (CV-03), every box gets a faint outline and its name. |
+| CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | ✅ | A rotated item doesn't snap, as in the prototype. |
+| CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | ✅ | A corner follows the axis that snapped, else the larger change; an edge scales the other axis about the centre. |
+| CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | ✅ | Off the 90° snap, the angle rounds to 0.1°. |
+| CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | 🔒 | `item.set_crop` is in source pixels, and turning a dragged edge into source pixels needs the source's size: runtime source sizes (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md)) aren't in the protocol. |
+| CV-09 | Multi-select | Shift-click adds or removes; Ctrl+A selects all; the group gets a dashed box with its own handles to scale and rotate. | ✅ | The group box can reach past the frame; the pointer is followed over the whole canvas area so its handles stay reachable. A corner scales by the larger change (as a single item's resize does), where the prototype takes the larger factor; they differ only when shrinking. |
+| CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ✅ | A marquee can start on the dark margin too. Hits use each item's axis-aligned bounds. |
+| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Move/resize and Snapping are built; Crop waits on CV-08. |
 | CV-12 | Nudge | Arrows move 1px, Shift 10px. | ✅ | |
-| CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ⬜ | |
+| CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | 🟡 | Selects the item and shows the Inspector, since the Properties dialog (DL-02) isn't built yet; a reference doesn't open its source separately. |
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ⬜ | |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend and no 3D yet (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | 🔒 | Keyframe scenes in the protocol are K1. |
 | CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | 🔒 | E2b (#317). |
-| CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ⬜ | |
+| CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ✅ | The slow pointer follows the real one's movement, so pressing Shift mid-drag doesn't jump. |
 
 <a id="menus"></a>
 ## Context menus
@@ -220,12 +221,12 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-01 | Scene list | Scenes in display order, with type icons; click selects; groups hidden. | ✅ | Icons come with WS-04. |
 | SC-02 | "program" badge | The scene on program shows "program" in red after its name. | 🟡 | Built as a "Program" pill; restyle. |
 | SC-03 | Search | "Search scenes" filters by name, keeping parents of matches. | ⬜ | |
-| SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Reordering exists as ▲/▼ buttons. Into a folder is 🔒 with SC-06. |
+| SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Reordering exists as ▲/▼ buttons. Into a folder is `scene.set_folder` (SC-06). |
 | SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | 🟡 | Built today with inline controls (double-click rename, ✕, "New scene name" field); they move to menus and keys. |
-| SC-06 | Folders | Folders organise scenes; collapsible. | 🔒 | B11 (#323). |
+| SC-06 | Folders | Folders organise scenes; collapsible. | ⬜ | `folder.*` and `scene.set_folder`; folders nest ([ADR-0024](adr/0024-scene-structure.md) §3, [ADR-0064](adr/0064-nested-scene-folders.md), #323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | 🔒 | K1. |
-| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🔒 | B11 (#323). |
-| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | 🔒 | B11 (#323). |
+| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | ⬜ | `label.*`, `source.set_meta` and `scene.set_meta` (ADR-0024 §4, #323). |
+| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | ⬜ | Filtering is client-side over `state.get`'s labels and favourites (#323). |
 | SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | 🔒 | Today a hover "Program" button cuts; the click-to-switch rule follows T1's studio mode. |
 
 <a id="objects"></a>
@@ -245,7 +246,7 @@ Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-obj
 | OB-05 | Scene-input filter rows | An object with a mask, matte, clip or displacement filter shows the scene it uses as a child row with a role badge. | 🔒 | Scene-input video filters (V3, #313). |
 | OB-06 | Drag to reorder and group | Drag before, after or into a group. | ⬜ | Reorder exists as ▲/▼. |
 | OB-07 | Search | "Search objects". | ⬜ | |
-| OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ⬜ | |
+| OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ✅ | Shift-click adds a row or takes it out; every selected item's row is highlighted. |
 | OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | 🟡 | Built with inline controls; the dialog is DL-06. |
 
 <a id="inspector"></a>
@@ -260,7 +261,7 @@ the source's settings move to the Properties dialog (DL-02).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | ⬜ | Labels and favourite are 🔒 with SC-08. |
+| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | ⬜ | Labels and favourite: `source.set_meta` (SC-08). |
 | IN-02 | Parameters | X, Y, W, H in px, and Rotation, as number fields bound to the canvas. | ⬜ | `item.set_geometry`. |
 | IN-03 | Size in % | W % and H % of the source's own size. | 🔒 | Source sizes as runtime state (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md)) aren't in the protocol. |
 | IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ⬜ | |
@@ -321,7 +322,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 | MX-01 | Master card | "Master · program output", N channels, Loudness bar against a target marker with "−14.2 LUFS", True peak with "safe" or a warning, "FX N". | 🟡 | Master loudness (M, S, I, dBTP) is shown as a text line on the master bus. |
 | MX-02 | Channels fold under the master | Channels hidden under the master card by default. | ⬜ | |
 | MX-03 | Channel strips | Name, level bar, dB number field. | 🟡 | Built with meters, a tapered fader, mute and routing; restyle around them. |
-| MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | Needs [docking](#docking) for the title bar. |
+| MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | The dock's title bar is built; the toggle comes with the mixer's restyle. |
 | MX-05 | Monitoring | "Hear: after FX" / "before FX". | 🔒 | Decision register D22; no monitor device in the protocol. |
 | MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | 🔒 | E2b (#317). |
 | MX-07 | Real levels | Meters show the engine's levels. | 🟡 | Built (`meters.tick`); the prototype's numbers are simulated. Counted 🟡 until MX-03's restyle. |
@@ -350,16 +351,17 @@ doesn't show; that stays ([Beyond](#beyond)).
 
 Spec: [panels › transitions](../design/ui-prototype/spec-panels.md#transitions-panel),
 [workspace › transitions](../design/ui-prototype/spec-workspace.md#scenes-keyframes-transitions).
-All of it waits on T1 (#260), whose UI is T1u (#304).
+The engine side is T1 (#260); T1u (#304) builds the Transitions panel: the studio bar,
+with the presets and each scene's overrides in a section under it.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🔒 | T1. |
-| TR-02 | Preset fields | Duration; Move: stagger, items in one scene only (Fade, Scale, Slide); easing (Ease in-out, Ease out, Linear, Spring). | 🔒 | T1. |
-| TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🔒 | T1. |
-| TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | 🔒 | T1 ([ADR-0029](adr/0029-transitions.md)). |
+| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🟡 | A list of presets under the studio bar, each with its name, a line such as "Fade, 300 ms, ease in and out" (a cut shows only its kind) and a "Default" badge on the default, then an "Add a preset" form. It is not the spec's picker. |
+| TR-02 | Preset fields | Duration; Move: stagger, items in one scene only (Fade, Scale, Slide); easing (Ease in-out, Ease out, Linear, Spring). | ✅ | The kind's own fields come from `kind.describe`. |
+| TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🟡 | Make default and Delete are built (Delete is off for the default); no override counts yet. |
+| TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | ✅ | The engine resolves it ([ADR-0029](adr/0029-transitions.md)); the studio bar names the preset it will use and why. |
 | TR-05 | Move transition | Pairs items by source, interpolates placement, retargets mid-transition; unmatched items fade, scale or slide. | 🔒 | Engine side of T1. |
-| TR-06 | Studio mode | Preview and program, Transition and Cut. | 🔒 | T1u (#304). |
+| TR-06 | Studio mode | Preview and program, Transition and Cut. | ✅ | With "Swap" putting the old program scene on preview. |
 
 <a id="live-panels"></a>
 ## Stream stats, live chat and agent activity
@@ -389,8 +391,8 @@ handlers; the real UI makes them work.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc and arrows built. |
-| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Built with other meanings (Shift frees aspect and steps 15°, Alt skips snapping); they change with CV-05 to CV-07. |
+| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc, Ctrl+A and arrows built (arrows move every selected item, as one edit); C and V wait on crop (CV-08). |
+| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Shift half speed and add, and all of Ctrl, built; Alt crop waits on CV-08. |
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ⬜ | |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
@@ -410,7 +412,8 @@ not remove them; they move into the prototype's look.
   connection details (engine URL, protocol, client, revision) with Disconnect.
 - Pairing ([ADR-0044](adr/0044-pairing-remote-browsers.md)): the pairing panel shows a
   one-time code for a remote browser and lists and revokes paired devices. In the
-  workspace it becomes a panel of its own, with the right column as its home zone.
+  workspace it sits under the properties in the Inspector panel, since it hides itself
+  where the server pairs nothing.
 - Undo and redo, with the engine's history.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs: creating stream, recording and virtual camera outputs, the write-only stream
@@ -433,18 +436,22 @@ starts when the one before it has passed review.
    Record (WS-01, WS-03 to WS-08, HD-01, HD-07, HD-09).
 2. **Workspace:** dock zones, tabs, resize, collapse, close twice, drag to dock, View and
    Layout menus, Editing and Live layouts (DK-01 to DK-09, HD-02, HD-03). The panels split
-   into Scenes, Scene objects, Inspector, Filters, Transform, Mixer and Outputs.
+   into Scenes, Scene objects, Inspector, Mixer and Outputs; Filters and Transform join
+   with their batches.
 3. **Canvas:** edits the selected scene with one shared selection, frame and chrome,
-   floating toolbar, crop, multi-select, box select, the prototype's modifier keys
-   (CV-01, CV-02, CV-04 to CV-14, CV-18, KB-01, KB-02).
+   floating toolbar, multi-select, box select, the prototype's modifier keys
+   (CV-01, CV-02, CV-04 to CV-07, CV-09 to CV-13, CV-18, KB-01, KB-02). The context
+   menu (CV-14) comes with the other menus in batch 5, and crop (CV-08) once the
+   protocol reports source sizes.
 4. **Inspector and Transform:** placement number fields, W/H link, crop, opacity, scene
    section, align and distribute (IN-01, IN-02, IN-04, IN-06 to IN-08, TF-01 to TF-04).
 5. **Menus and dialogs:** context menus, Properties dialog, Add source dialog,
    reference ↔ clone, groups, edit keys, copy and paste (CM-01 to CM-06, DL-01, DL-02,
    DL-06, OB-03, OB-04, KB-04, KB-05).
 6. **Filters:** panel, rows, add and settings dialogs (FL-01 to FL-05, DL-04, DL-05).
-7. **Trees and mixer:** search, drag to reorder, mixer master card and vertical meters
-   (SC-03, SC-04, SC-05, OB-01, OB-02, OB-06 to OB-09, MX-01 to MX-04).
+7. **Trees and mixer:** search, drag to reorder, folders, labels and favourites, mixer
+   master card and vertical meters (SC-03 to SC-06, SC-08, SC-09, OB-01, OB-02, OB-06 to
+   OB-09, MX-01 to MX-04).
 
 🔒 rows follow their engine items: each of those PRs, or a UI PR right after it, flips its
 rows here.

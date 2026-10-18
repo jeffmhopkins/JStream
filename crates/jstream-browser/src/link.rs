@@ -516,6 +516,7 @@ mod tests {
             size: FrameSize::new(640, 360).expect("size"),
             fps: 30,
             css: String::new(),
+            local_network: false,
         }
     }
 
