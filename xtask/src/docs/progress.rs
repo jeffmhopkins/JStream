@@ -493,6 +493,11 @@ fn merged_from(subject: &str) -> Option<Merged> {
     Some(Merged { number, names })
 }
 
+/// The PR a squash-merge subject names in its trailing `(#N)`, if it names one.
+pub(crate) fn pr_number(subject: &str) -> Option<u64> {
+    merged_from(subject).map(|m| m.number)
+}
+
 /// The merged PRs in `git log --format=%B%x00` output: each commit's subject, and for a
 /// wave's landing squash (`chore(wave): land …`), the `* <subject> (#N)` lines of its
 /// body, which are the PRs the wave carried (docs/runbooks/waves.md#landing).

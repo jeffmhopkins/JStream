@@ -14,7 +14,7 @@
 //! block from the merged sources, as `docs generate` would (ADR-0038). Every other conflict
 //! is left untouched for a person.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::{Command, Output};
 
@@ -57,6 +57,74 @@ pub(crate) struct StaleInput {
     pub(crate) note: Option<String>,
     /// The merged commits that changed the file the input lives in, as `<hash> <subject>`.
     pub(crate) commits: Vec<String>,
+}
+
+impl Merge {
+    /// The PRs the merge brought in that changed any stale input of `section` (#677).
+    pub(crate) fn credits(&self, section: &str) -> Credits {
+        Credits::from_commits(
+            self.inputs
+                .get(section)
+                .into_iter()
+                .flatten()
+                .flat_map(|i| &i.commits),
+        )
+    }
+}
+
+/// The PRs a merge brought in that changed some of a section's inputs, so its re-verify
+/// note can credit each of them (#677).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Credits {
+    /// Each PR, by the trailing `(#N)` of a merged commit's subject, with that subject (the
+    /// first one seen, when several commits name the same PR).
+    pub(crate) prs: BTreeMap<u64, String>,
+    /// The merged commits whose subject names no PR, as `<hash> <subject>`.
+    pub(crate) unnumbered: Vec<String>,
+}
+
+impl Credits {
+    /// The credits of merged commits given as `<hash> <subject>`.
+    pub(crate) fn from_commits<'a>(commits: impl IntoIterator<Item = &'a String>) -> Credits {
+        let mut out = Credits::default();
+        let mut seen = BTreeSet::new();
+        for commit in commits {
+            let subject = commit.split_once(' ').map_or("", |(_, s)| s);
+            match super::progress::pr_number(subject) {
+                Some(n) => {
+                    out.prs.entry(n).or_insert_with(|| subject.to_owned());
+                }
+                None if seen.insert(commit.clone()) => out.unnumbered.push(commit.clone()),
+                None => {}
+            }
+        }
+        out
+    }
+
+    /// Whether the merge brought in nothing that changed these inputs.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.prs.is_empty() && self.unnumbered.is_empty()
+    }
+
+    /// The PRs that `note` doesn't name as `#N`.
+    pub(crate) fn missing_from(&self, note: &str) -> Vec<u64> {
+        self.prs
+            .keys()
+            .copied()
+            .filter(|&n| !names_pr(note, n))
+            .collect()
+    }
+}
+
+/// Whether `text` names PR `n` as `#n`, and not as the start of a longer number.
+fn names_pr(text: &str, n: u64) -> bool {
+    let needle = format!("#{n}");
+    text.match_indices(&needle).any(|(at, _)| {
+        !text[at + needle.len()..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit())
+    })
 }
 
 /// The merge `docs merge-main` made last on this branch: the latest merge on its
@@ -367,6 +435,32 @@ pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::L
     ledger_at(root, &point.theirs, "on the merged side")
 }
 
+/// The commits `point`'s merge brought in that changed `path`, as `<hash> <subject>`.
+fn merged_commits(root: &Path, point: &MergePoint, path: &str) -> Result<Vec<String>> {
+    let range = format!("{}..{}", point.base, point.theirs);
+    let log = git_ok(root, &["log", "--format=%h %s", &range, "--", path])?;
+    Ok(String::from_utf8_lossy(&log)
+        .lines()
+        .map(str::to_owned)
+        .collect())
+}
+
+/// The PRs `point`'s merge brought in that changed the file of any of `inputs` (ledger
+/// input keys of a section in `doc`) (#677).
+pub(crate) fn credits_for<'a>(
+    root: &Path,
+    point: &MergePoint,
+    doc: &str,
+    inputs: impl IntoIterator<Item = &'a String>,
+) -> Result<Credits> {
+    let paths: BTreeSet<String> = inputs.into_iter().map(|i| input_path(doc, i)).collect();
+    let mut commits = Vec::new();
+    for path in &paths {
+        commits.extend(merged_commits(root, point, path)?);
+    }
+    Ok(Credits::from_commits(&commits))
+}
+
 /// Added to an error from the steps after the merge commit (moving inline stamps, listing
 /// stale sections), so the error doesn't read as if the merge failed.
 const AFTER_COMMIT: &str = "the merge is committed, but the steps after it failed; fix what \
@@ -388,17 +482,12 @@ fn stale_report(root: &Path) -> Result<BTreeMap<String, Vec<StaleInput>>> {
         let mut list = Vec::new();
         for (input, path) in inputs {
             let Some(p) = &point else { break };
-            let range = format!("{}..{}", p.base, p.theirs);
-            let log = git_ok(root, &["log", "--format=%h %s", &range, "--", &path])?;
             list.push(StaleInput {
                 note: own
                     .get(&key)
                     .and_then(|s| s.get(&input))
                     .and_then(|e| e.note.clone()),
-                commits: String::from_utf8_lossy(&log)
-                    .lines()
-                    .map(str::to_owned)
-                    .collect(),
+                commits: merged_commits(root, p, &path)?,
                 input,
             });
         }
@@ -706,6 +795,36 @@ mod tests {
         ] {
             assert!(resolve_generated(path, text).is_err(), "{text}");
         }
+    }
+
+    /// #677: each merged commit is credited to the PR its squash subject names, once per
+    /// PR; commits that name none are listed once each; a note names `#N` only as a whole
+    /// number.
+    #[test]
+    fn credits_collect_the_merged_prs() {
+        let commits: Vec<String> = [
+            "a1 feat(core): x (#12)",
+            "b2 fix(core): x again (#12 item 2) (#13)",
+            "c3 Merge branch 'main' into wave/m1",
+            "c3 Merge branch 'main' into wave/m1",
+            "d4 chore(wave): land wave/m1 (#9)",
+            "e5 feat: x (#12)",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        let c = Credits::from_commits(&commits);
+        assert_eq!(
+            c.prs,
+            BTreeMap::from([
+                (9, "chore(wave): land wave/m1 (#9)".to_owned()),
+                (12, "feat(core): x (#12)".to_owned()),
+                (13, "fix(core): x again (#12 item 2) (#13)".to_owned()),
+            ])
+        );
+        assert_eq!(c.unnumbered, vec!["c3 Merge branch 'main' into wave/m1"]);
+        assert!(!c.is_empty() && Credits::default().is_empty());
+        assert_eq!(c.missing_from("#9, #12 and #130"), vec![13]);
+        assert_eq!(c.missing_from("#9; #12; #13."), Vec::<u64>::new());
     }
 
     #[test]

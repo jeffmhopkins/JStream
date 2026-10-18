@@ -281,7 +281,10 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
 /// had written on it before the merge and adds `text`, what the merge changed in the
 /// section's inputs (docs/DOCS.md#notes). It refuses when the file of a rewritten input changed after
 /// the merge: the branch's earlier note doesn't cover that edit, so it needs `--note`.
-fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
+///
+/// It returns the section's key and the PRs the merge brought in that changed the inputs
+/// it rewrote, for [`report_credits`] to list against `text` (#677).
+fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Credited> {
     let text = check_stamp(by, text)?;
     let point = merge::last_merge(root)?.context(
         "no merge on this branch to carry notes across (run `cargo xtask docs merge-main` \
@@ -289,6 +292,7 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
     )?;
     let branch = merge::branch_entries(root, &point)?;
     let merged = merge::merged_ledger(root, &point)?;
+    let credited = std::cell::RefCell::new(None);
     stamp_section(root, target, &|doc, key, old, inputs| {
         let theirs = merged.sections.get(key);
         let stamp = ledger::restamp_merge(old, inputs, branch.get(key), theirs, by, text);
@@ -317,8 +321,45 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
                 refused.join(", ")
             );
         }
+        let credits = merge::credits_for(root, &point, doc, rewritten.iter().map(|(k, _)| *k))?;
+        *credited.borrow_mut() = Some((key.to_owned(), credits));
         Ok(stamp)
-    })
+    })?;
+    Ok(credited.into_inner())
+}
+
+/// A verified section's key and the merged PRs its new entries should credit; `None` when
+/// there is no merge of this branch's own to credit.
+type Credited = Option<(String, merge::Credits)>;
+
+/// Prints the merged PRs `credited` names and warns, without refusing anything, about each
+/// one `note` leaves out (#677).
+fn report_credits(credited: &Credited, note: &str) {
+    let Some((key, credits)) = credited else {
+        return;
+    };
+    if credits.is_empty() {
+        return;
+    }
+    eprintln!("{key}: the merge brought in these changes to the inputs this note covers:");
+    print_credits(credits, "  ");
+    for n in credits.missing_from(note) {
+        eprintln!(
+            "warning: {key}: the note doesn't name #{n} ({}); credit it if it changed what \
+             the section says (docs/DOCS.md#notes)",
+            credits.prs[&n]
+        );
+    }
+}
+
+/// One line per merged PR in `credits`, then one per merged commit that names none.
+fn print_credits(credits: &merge::Credits, indent: &str) {
+    for (n, subject) in &credits.prs {
+        eprintln!("{indent}PR #{n}: {subject}");
+    }
+    for c in &credits.unnumbered {
+        eprintln!("{indent}commit without a PR number: {c}");
+    }
 }
 
 /// `docs verify <DOC#anchor> --by <who> --renote <text> [--from wave/<name>]`: replaces the
@@ -326,10 +367,21 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
 /// keeping their hashes, as when a reviewer asks for a better note. The branch's entries are
 /// those that differ from the ledger where it left `origin/main` (or the wave it targets).
 /// A stale section is refused: re-read it and verify with `--note` or `--merge`.
-fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) -> Result<()> {
+///
+/// After a merge of this branch's own, it returns the PRs that merge brought in that
+/// changed the inputs it renoted, as [`verify_merge`] does (#677).
+fn verify_renote(
+    root: &Path,
+    target: &str,
+    by: &str,
+    note: &str,
+    branch: &str,
+) -> Result<Credited> {
     let note = check_stamp(by, note)?;
     let base = merge::base_ledger(root, branch)?;
-    stamp_section(root, target, &|_, key, old, inputs| {
+    let point = merge::last_merge(root)?;
+    let credited = std::cell::RefCell::new(None);
+    stamp_section(root, target, &|doc, key, old, inputs| {
         if !ledger::diff(old, inputs).is_empty() {
             bail!(
                 "{key} is stale: re-read it and verify with --note (or --merge after \
@@ -337,10 +389,17 @@ fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) 
             );
         }
         let old = old.context("invariant: a fresh section has a stamp")?;
-        ledger::renote(old, base.sections.get(key), by, note).with_context(|| {
+        let stamp = ledger::renote(old, base.sections.get(key), by, note).with_context(|| {
             format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
-        })
-    })
+        })?;
+        if let Some(point) = &point {
+            let renoted = stamp.iter().filter(|(k, e)| old.get(*k) != Some(*e));
+            let credits = merge::credits_for(root, point, doc, renoted.map(|(k, _)| k))?;
+            *credited.borrow_mut() = Some((key.to_owned(), credits));
+        }
+        Ok(stamp)
+    })?;
+    Ok(credited.into_inner())
 }
 
 /// The section's new stamp from its doc's path, its key, its current stamp and its current
@@ -614,11 +673,11 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                     verify(root, target, by, note)?;
                 }
                 (Some(target), Some(by), None, Some(merge), None, None) => {
-                    verify_merge(root, target, by, merge)?;
+                    report_credits(&verify_merge(root, target, by, merge)?, merge);
                 }
                 (Some(target), Some(by), None, None, Some(renote), from) => {
                     let branch = from.map_or(merge::BRANCH, String::as_str);
-                    verify_renote(root, target, by, renote, branch)?;
+                    report_credits(&verify_renote(root, target, by, renote, branch)?, renote);
                 }
                 _ => bail!(
                     "usage: cargo xtask docs verify <DOC#anchor> --by <human:..|agent:..> \
@@ -751,13 +810,19 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                         eprintln!("    merged: … and {} more", i.commits.len() - SHOWN);
                     }
                 }
+                // Every PR behind the section, past SHOWN too, for its note to credit.
+                let credits = m.credits(s);
+                if !credits.is_empty() {
+                    eprintln!("  merged PRs that changed these inputs, for the note to credit:");
+                    print_credits(&credits, "    ");
+                }
             }
             eprintln!(
                 "docs merge-main: merged {} stamp conflict(s) and resolved {} @generated conflict(s); {} stale \
                  section(s) to re-read. Re-read each against what the merge brought in, then \
                  `cargo xtask docs verify <DOC#anchor> --by <who> --merge \"<what the merge \
-                 changed in this section's inputs>\"`: it keeps this branch's note on each entry \
-                 and adds yours (docs/DOCS.md#notes)",
+                 changed in this section's inputs, naming the PRs listed under it>\"`: it keeps \
+                 this branch's note on each entry and adds yours (docs/DOCS.md#notes)",
                 m.stamps.len(),
                 m.generated.len(),
                 m.stale.len()
@@ -1376,8 +1441,18 @@ mod tests {
 
         // `--merge` puts the branch's note back on a.rs, with what the merge changed, and
         // leaves b.rs (which the merge didn't change) and the body as they were.
+        // #677: merge-main collects the PRs behind the section, and `--merge` returns the
+        // same for the inputs it rewrites, here a.rs only (b.rs is the branch's alone).
+        let pr1 = BTreeMap::from([(1, "main: a5 1 (#1)".to_owned())]);
+        assert_eq!(m.credits("S#a").prs, pr1);
         let first = "main's a5 edit (#1) is outside what the text says about a.rs";
-        verify_merge(&work.0, "S#a", "agent:work", first).expect("S verifies after the merge");
+        let credited =
+            verify_merge(&work.0, "S#a", "agent:work", first).expect("S verifies after the merge");
+        let (key, credits) = credited.expect("a merge to credit");
+        assert_eq!((key.as_str(), &credits.prs), ("S#a", &pr1));
+        assert!(credits.unnumbered.is_empty(), "{credits:?}");
+        assert!(credits.missing_from(first).is_empty());
+        assert_eq!(credits.missing_from("main's a5 edit (#10)"), vec![1]);
         assert_eq!(note("file:src/a.rs"), joined(first));
         assert_eq!(entries()["file:src/b.rs"], b);
         assert!(work.diags("is stale").is_empty());
@@ -1391,9 +1466,18 @@ mod tests {
         assert_eq!(i[0].note.as_deref(), Some(joined(first).as_str()), "{i:?}");
         assert_eq!(subjects(&i[0].commits), vec!["main: a5 2 (#2)"]);
         let second = "main's second a5 edit (#2) is outside it too";
-        verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
+        let credited = verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
+        let (_, credits) = credited.expect("a merge to credit");
+        assert_eq!(credits.prs.keys().copied().collect::<Vec<_>>(), vec![2]);
         assert_eq!(note("file:src/a.rs"), joined(second));
         assert!(work.diags("is stale").is_empty());
+        // `--renote` after the merge lists the same, and reports a note that leaves it out.
+        let renote = "the branch's a1 and b edits hold; main's a5 edit is outside the text";
+        let credited =
+            verify_renote(&work.0, "S#a", "agent:review", renote, "main").expect("renotes");
+        let (_, credits) = credited.expect("a merge to credit");
+        assert_eq!(credits.missing_from(renote), vec![2]);
+        assert_eq!(note("file:src/a.rs"), renote);
     }
 
     /// #596: on an input whose hash after the merge equals the merged side's entry,
@@ -1599,7 +1683,12 @@ mod tests {
         )
         .expect("verifies");
         let before = entries();
-        verify_renote(&work.0, "S#a", "agent:review", better, "main").expect("renotes");
+        let credited =
+            verify_renote(&work.0, "S#a", "agent:review", better, "main").expect("renotes");
+        assert!(
+            credited.is_none(),
+            "no merge of the branch's own: {credited:?}"
+        );
         let after = entries();
         let a = &after["file:src/a.rs"];
         assert_eq!(a.hash, before["file:src/a.rs"].hash);

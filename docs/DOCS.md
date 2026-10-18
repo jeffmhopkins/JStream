@@ -62,9 +62,11 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
   that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
   has, and lists the sections left stale: each stale input with the note the branch had
-  written on it and the merged commits that changed it. `docs verify --merge` then keeps
+  written on it and the merged commits that changed it, then the merged PRs behind the
+  section. `docs verify --merge` then keeps
   those notes and adds what the merge changed ([Verification notes](#notes)), and refuses
-  an input whose file the branch changed after the merge.
+  an input whose file the branch changed after the merge. It and `--renote` list the
+  merged PRs again and warn about each one the note leaves out.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -336,7 +338,10 @@ resolved this way it commits the merge, runs
 `docs migrate` and commits what that changed separately, and prints the sections that are
 now stale, for `docs verify` after a re-read. Under each one it prints each stale input,
 the note this branch had written on it before the merge, and the merged commits that
-changed the file the input lives in.
+changed the file the input lives in (the first six, then a count). Then it prints every
+merged PR behind the section's stale inputs, all of them, each named by the trailing
+`(#N)` of a squash commit's subject, and each merged commit whose subject names none. A
+wave's landing squash counts as the landing PR alone.
 
 `docs verify <DOC#anchor> --by <who> --merge "<text>"` re-verifies such a section after the
 re-read. It finds the branch's latest merge (one that no `origin/main` or `origin/wave/*`
@@ -354,7 +359,11 @@ lives in (the doc itself for `body`, the covered file, the target doc for `dep:`
 committed or not, from what `merge-main` left: the merge, or its `docs migrate` commit.
 The branch's earlier note doesn't cover such a later edit, so verify that section with
 `--note` instead, covering both. An entry taken from the merged side is never refused,
-since it carries no note of the branch's. It fails when the ledger on the branch before the
+since it carries no note of the branch's. Once it has stamped the section, it prints the
+merged PRs that changed the files of the entries it rewrote, listed the way `merge-main`
+lists them. It prints a warning for each one the text doesn't name as `#N`. The warning
+refuses nothing, since a PR can change a file without changing what the section says. It
+fails when the ledger on the branch before the
 merge, at the merge base or on the merged side doesn't parse, rather than taking none or
 every one of the entries for the branch's own; `merge-main` fails the same way when it
 lists the branch's notes, after it has committed the merge.
@@ -364,7 +373,9 @@ section that is already fresh, as when a reviewer asks for a better note, withou
 any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
 at the merge base of `HEAD` and `origin/main`, or of the wave named with
 `--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
-`--merge`, and a section this branch never stamped. It fails when the ledger at that merge
+`--merge`, and a section this branch never stamped. When the branch has a merge of its
+own, as `--merge` finds it, it lists and warns about that merge's PRs the same way, for the
+entries it renoted. It fails when the ledger at that merge
 base doesn't parse, rather than taking every entry for this branch's own.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
@@ -466,7 +477,9 @@ holds**. The note says what was checked and why it still holds, e.g.:
   `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
   this PR changes and adds the text. On an input whose hash equals the merged side's
   entry, it keeps that entry as it is. `merge-main` prints the merged commits behind each
-  stale input to write it from ([Hash-bound verification](#verification)). The text is
+  stale input to write it from, and the PRs behind each section, for the text to name as
+  `#N`. `--merge` and `--renote` list those PRs again and warn about each one the text
+  leaves out ([Hash-bound verification](#verification)). The text is
   still per section: one stock text across every stale section, such as "rechecked after merging
   main", fails review. A section this PR also changed after the merge takes `--note`, and
   `--merge` refuses it.

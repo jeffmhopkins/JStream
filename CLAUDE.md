@@ -47,7 +47,8 @@ depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
   to you. Then re-read each section it lists as stale and verify it with
   `cargo xtask docs verify <ID#anchor> --by agent:<name> --merge "<what the merge changed
   in this section's inputs>"`, which keeps your earlier notes and adds that text. Write
-  the text per section from the merged commits it prints
+  the text per section from the merged commits it prints, and name as `#N` each merged
+  PR it lists under that section; `--merge` and `--renote` warn about one you leave out
   ([DOCS › notes](docs/DOCS.md#notes)). A PR into a wave branch merges its wave instead:
   `cargo xtask docs merge-main --from wave/<name>`. Which branch a PR targets, and how waves
   land, is in [docs/runbooks/waves.md](docs/runbooks/waves.md).
