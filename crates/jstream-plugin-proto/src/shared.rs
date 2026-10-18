@@ -95,6 +95,14 @@ impl Config {
     }
 }
 
+/// A block on the heap is its own block: so a test, or a host of the block that isn't
+/// an OS mapping, can hand an `Arc<Shared>` to code that takes any `AsRef<Shared>`.
+impl AsRef<Shared> for Shared {
+    fn as_ref(&self) -> &Shared {
+        self
+    }
+}
+
 impl Shared {
     /// A zeroed block on the heap, as a fresh mapping would be. For tests and for hosts
     /// of the block that aren't an OS mapping.

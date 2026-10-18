@@ -28,7 +28,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **Available now:** `cargo xtask docs check` validates doc identity and metadata
   schema, sections and rules (anchors, blocks, `enforced_by` vocabulary and check names),
   references (links, anchors, registered external URLs, superseded ADRs, `depends_on`), and
-  facts. It runs as the `docs` CI check.
+  facts. It also refuses git conflict markers left in a doc by a merge committed with its
+  conflicts unresolved. It runs as the `docs` CI check.
 - **Hash-bound verification** ([Hash-bound verification](#verification)): `docs check`
   fails on any section whose stamp no longer matches its text, covered files and
   dependencies, and `cargo xtask docs verify` records a re-read. Hashes skip metadata
@@ -48,9 +49,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs for <path>`** ([Code back-references](#back-references)): prints
   what governs a file.
 - **Generated content** ([Generated content](#generated)): `cargo xtask docs generate`
-  writes the ADR status banners, the ADR index and the README's progress block, and
-  `docs check` fails on their drift. `cargo xtask docs progress` lists progress entries
-  the merged history contradicts.
+  writes the ADR status banners, the ADR index, the README's progress block and the UI
+  features summary, and `docs check` fails on their drift. `cargo xtask docs progress`
+  lists progress entries the merged history contradicts.
   The crate map and the other generated references are not generated yet.
 - **Reports (warnings):** crates no section covers, and `applies_to` globs naming an
   unknown crate ([PR gate](#gate)).
@@ -60,7 +61,10 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
   that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
-  has, and lists the sections left stale with the notes the branch had written on each.
+  has, and lists the sections left stale: each stale input with the note the branch had
+  written on it and the merged commits that changed it. `docs verify --merge` then keeps
+  those notes and adds what the merge changed ([Verification notes](#notes)), and refuses
+  an input whose file the branch changed after the merge.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -301,6 +305,10 @@ Commands:
 cargo xtask docs check                         # what is stale, and why
 cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --note "…"                # re-read (or edited) and it holds: restamp it
+cargo xtask docs verify ARCH#gpu-pipeline \
+    --by agent:claude --merge "…"               # the same after merge-main: keeps the branch's notes
+cargo xtask docs verify ARCH#gpu-pipeline \
+    --by agent:claude --renote "…"              # fresh section, better note: hashes unchanged
 cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
@@ -326,9 +334,38 @@ other conflict, including one in a file that also has stamp conflicts, is left e
 git wrote it, and the merge stays open for you to finish by hand. When every conflict was
 resolved this way it commits the merge, runs
 `docs migrate` and commits what that changed separately, and prints the sections that are
-now stale, for `docs verify` after a re-read. Under each one it prints the notes this
-branch wrote on that section since its merge base, because the re-verify replaces them
-([Verification notes](#notes)).
+now stale, for `docs verify` after a re-read. Under each one it prints each stale input,
+the note this branch had written on it before the merge, and the merged commits that
+changed the file the input lives in.
+
+`docs verify <DOC#anchor> --by <who> --merge "<text>"` re-verifies such a section after the
+re-read. It finds the branch's latest merge (one that no `origin/main` or `origin/wave/*`
+branch contains) and the entries the branch had written itself before it. An input whose
+hash equals the merged side's entry gets that entry as it is, `by` and note included: the
+branch changes nothing in it, so its diff against the merged side shows no rewrite there.
+Each other entry a verify would rewrite, and each the branch had written whose input the
+merge has since changed, gets the branch's note on it, then ` | merge: `, then the text.
+An earlier merge's addendum is dropped first, because what it brought in is part of the
+base by then. An entry the branch hadn't written gets `merge: ` and the text alone. Because
+it rewrites the branch's entries whose input the merge changed even when they are fresh, it
+also repairs a plain re-verify after the merge that replaced the branch's notes. It
+refuses, naming each input, when the file an entry it would rewrite with the branch's note
+lives in (the doc itself for `body`, the covered file, the target doc for `dep:`) differs,
+committed or not, from what `merge-main` left: the merge, or its `docs migrate` commit.
+The branch's earlier note doesn't cover such a later edit, so verify that section with
+`--note` instead, covering both. An entry taken from the merged side is never refused,
+since it carries no note of the branch's. It fails when the ledger on the branch before the
+merge, at the merge base or on the merged side doesn't parse, rather than taking none or
+every one of the entries for the branch's own; `merge-main` fails the same way when it
+lists the branch's notes, after it has committed the merge.
+
+`docs verify <DOC#anchor> --by <who> --renote "<note>"` replaces the `by` and `note` of a
+section that is already fresh, as when a reviewer asks for a better note, without touching
+any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
+at the merge base of `HEAD` and `origin/main`, or of the wave named with
+`--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
+`--merge`, and a section this branch never stamped. It fails when the ledger at that merge
+base doesn't parse, rather than taking every entry for this branch's own.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -371,7 +408,10 @@ so it never causes merge conflicts.
 <!-- @section
 -->
 
-`xtask docs check` runs on every PR (required check `docs`) and fails on:
+`xtask docs check` runs on every PR once it leaves draft: a draft skips it, and marking
+the PR ready for review runs it on the head (required check `docs`,
+[R-GIT-003](RULES.md#R-GIT-003)).
+It fails on:
 
 1. **Stale verifications:** any section whose stamp in `docs/verified.toml` doesn't name
    exactly its current inputs and hashes (the message lists the inputs that differ), any
@@ -383,7 +423,9 @@ so it never causes merge conflicts.
 3. **Broken references:** see [References](#references).
 4. **Back-reference mismatches:** see [Code back-references](#back-references).
 5. **Generated drift:** regenerated content differs from what is committed, or can't be
-   generated (a `superseded_by` that names no tracked ADR). See [Generated content](#generated).
+   generated (a `superseded_by` that names no tracked ADR, a `docs/progress.toml` that
+   breaks its rules, a UI feature row with an unknown status). See
+   [Generated content](#generated).
 6. **Fact mismatches** for file-sourced facts.
 7. **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
    `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
@@ -421,10 +463,16 @@ holds**. The note says what was checked and why it still holds, e.g.:
   cover the PR's whole change to that input: it is the one the reviewer reads.
 - After `docs merge-main`, each stale section needs its own note: what its earlier note
   said about this PR's change, plus what the merge changed in that section's inputs.
-  `merge-main` prints the earlier notes under each stale section for this. One stock note
-  across every stale section, such as "rechecked after merging main", fails review.
+  `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
+  this PR changes and adds the text. On an input whose hash equals the merged side's
+  entry, it keeps that entry as it is. `merge-main` prints the merged commits behind each
+  stale input to write it from ([Hash-bound verification](#verification)). The text is
+  still per section: one stock text across every stale section, such as "rechecked after merging
+  main", fails review. A section this PR also changed after the merge takes `--note`, and
+  `--merge` refuses it.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
-  `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. Say in
+  `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. To
+  improve the note on a fresh section, use `docs verify --renote`, never a hand edit. Say in
   the PR what you re-read after removing a covered file.
 - The sweep is to report each section's verify-to-edit ratio from git (not built yet,
   see [Time-based review](#ttl)). A section that gets
@@ -463,8 +511,9 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     `review_every` has passed), and any `cargo xtask docs check` failure on `main`;
   - reports `cargo update --dry-run`: compatible updates, and dependencies held back by a
     version requirement or the toolchain;
-  - lists the entries of `docs/progress.toml` that the merged history contradicts
-    (`cargo xtask docs progress`, [Generated content](#generated));
+  - lists the entries of `docs/progress.toml` that the merged history contradicts, and
+    rows whose `needs` is missing or left over (`cargo xtask docs progress`,
+    [Generated content](#generated));
   - lists every PR merged with `governance-approved` or `review-override` in the past
     eight days (the override audit, [R-GOV-002](RULES.md#R-GOV-002));
   - **rewrites one pinned issue, "Weekly sweep"**, instead of opening new ones, and
@@ -539,7 +588,8 @@ covered by the TTLs of their external resources.
 
 Anything derivable is generated, never hand-written: the crate map (from
 `[package.metadata.jstream]`), the protocol reference, the MCP tool list, the index, and
-the ADR status banners and ADR index, and the README's progress table. Generated blocks
+the ADR status banners and ADR index, the README's progress table, and the UI features
+summary. Generated blocks
 in committed docs are fenced as `<!-- @generated begin <name> -->` …
 `<!-- @generated end <name> -->` and are drift-checked.
 
@@ -566,12 +616,28 @@ It also generates one block from data rather than from docs:
   `docs/progress.toml`. That file lists the milestones and each roadmap item's
   milestone, title, `status` (`done`, `hardware` for merged work still waiting on a run
   on Windows hardware, named by a `note`, `review`, or `planned`) and the PRs that
-  deliver it, and `docs check` fails when it doesn't parse or breaks those rules. A PR
-  that delivers or advances an item updates its entry, so the README changes with the
-  work. `cargo xtask docs progress` compares the file with the merged history (the
-  `(#N)` of each squash commit, and item IDs that PR titles name in parentheses) and
-  prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
+  deliver it. An item not yet `done` lists in `needs` the steps it still needs, in order
+  (`build`, `wave`, `hardware` or `maintainer`; a `hardware` item without it needs its
+  run), and the block's **What's left** table shows each such item with them, linking
+  the order they land in ([ROADMAP › Endgame](../ROADMAP.md#endgame)). `docs check`
+  fails when the file doesn't parse or breaks those rules. A PR that delivers or advances
+  an item updates its entry, so the README changes with the work.
+  `cargo xtask docs progress` compares the file with the merged history (the `(#N)` of
+  each squash commit, the `(#N)` of each `* …` line in a wave's landing squash, which
+  lists the PRs the wave carried, and item IDs that PR titles name in parentheses) and
+  prints, as Markdown, the entries it contradicts, the `planned` and `review` items with
+  no `needs` and the `done` items still listing it; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.
+
+And one from the tables of a hand-written doc:
+
+- **The `ui-summary` block** in `docs/UI-FEATURES.md`: a table with one row per area,
+  linking its section by heading and anchor, then the number of its feature rows and
+  how many are in each status (✅ 🟡 ⬜ 🔒 ⏸), then a **Total** row. An area is any
+  other `##` section of that doc with a Markdown table that has a `Status` column,
+  in document order; each row of such a table is counted by its `Status` cell.
+  `docs check` fails on a status that isn't one of the five, and on a block that finds
+  no area. A doc without the block is left alone, so the block is opt-in.
 
 <a id="governance"></a>
 ## Governance: protecting the checks themselves
@@ -670,8 +736,11 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
 - **Clients** ([R-ARCH-003](RULES.md#R-ARCH-003)): `jstream-ui`, `jstream-mcp`,
   `jstream-server` and `jstream-cli` never reach `jstream-core`, directly or through other
   members. The finding shows the path.
-- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam, browser and
-  browser-helper crates on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
+- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam, CLAP
+  wrapper, browser and browser-helper crates on the `unsafe` allowlist and `*-sys` crates
+  may declare `unsafe_allowed = true`. No member but `jstream-plugin-host` reaches
+  `jstream-plugin-clap`, directly or through other members
+  ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); the finding shows the path. For a
   member that declares `false`, every library and binary crate root must carry
   `#![forbid(unsafe_code)]` (alone or among other lints, possibly wrapped over several
   lines) among its leading inner attributes: only whitespace, comments and other inner
