@@ -106,6 +106,20 @@ Contents:
   across its users, so reading chat through the API is opt-in: a per-collection
   switch, off by default, decides whether the engine polls at all (ADR-0058 §5). The
   "YouTube chat" browser preset shows chat at no quota cost.
+- **`stats`:** audience stats (ADR-0041 §3, kept by ADR-0058). `LiveClient::audience_stats`
+  reads a broadcast's concurrent viewers, likes and views, and its actual start and end
+  times, with one
+  [`videos.list`](https://developers.google.com/youtube/v3/docs/videos/list) call
+  (`part=id,liveStreamingDetails,statistics`, one unit of quota) under
+  `Scope::Readonly`, which the one `youtube` sign-in covers. A count YouTube leaves out
+  is `None`, never 0: the viewer count while nobody watches, once the broadcast ends,
+  or when the owner hides it, and a hidden like count. `STATS_INTERVAL` (60 s) is the
+  low fixed rate the engine polls at (ADR-0041 §5); this crate keeps no timer.
+  `ChatRate` turns the message count of each chat poll into messages per minute over
+  the last minute (`CHAT_RATE_WINDOW`): the messages of the polls after the oldest one
+  in the window, over the time from it to the newest, since a poll returns what arrived
+  since the one before (so a first poll's backlog is not a burst). It is `None` until
+  two polls are in the window, and keeps at most 128 counts, never a message.
 - **`fake`** (feature `fake`, and in this crate's tests): `FakeTransport` replays
   queued responses and records requests. Tests run on JSON fixtures in `fixtures/`,
   shaped after the API reference's documented responses, so no test uses the network
@@ -131,5 +145,6 @@ leaves them out: YouTube is for people, not agents (ADR-0058 §3).
 
 **Not yet:** sending chat as the channel, the engine's chat polling with its
 per-collection opt-in switch and its `youtube.chat.feature` action,
-`liveChatMessages.streamList` where the API offers it (ADR-0058 §5), audience stats
-from ADR-0041 (kept by ADR-0058), and quota accounting.
+`liveChatMessages.streamList` where the API offers it (ADR-0058 §5), the engine's
+stats polling and its `youtube.stats` event and query (protocol work), and quota
+accounting.
