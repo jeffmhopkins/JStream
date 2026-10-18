@@ -2,15 +2,11 @@
 //! filter chains). Each kind is a `video_filter` descriptor plus a GPU pass that reads one
 //! premultiplied linear image and writes another, possibly of a different size.
 //!
-//! This is the shared harness the filter groups build on. The chain runtime (V0) will
-//! keep a [`VideoFilter`] per enabled filter of a source's video chain and run them in
-//! order through [`crate::Compositor::apply_filter`]; until then nothing in the engine
-//! calls it, and the kinds are not in `kind.list`.
-
-#![allow(
-    dead_code,
-    reason = "Lane V: the harness lands before the filter groups that use it"
-)]
+//! This is the shared harness the filter groups build on. `jstream-core`'s chain runtime
+//! (V0) keeps a [`VideoFilter`] per enabled filter of a source's video chain and runs
+//! them in order, each into a layer it keeps, through
+//! [`crate::Compositor::apply_filter_into`]; [`descriptors`] is how its `kind.list`
+//! gets these kinds.
 
 mod aspect;
 mod assets;

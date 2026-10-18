@@ -24,6 +24,7 @@ mod activity;
 mod audio;
 mod audio_sources;
 mod audit;
+mod chain;
 mod collection;
 mod drops;
 mod engine;

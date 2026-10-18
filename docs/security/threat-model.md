@@ -335,10 +335,14 @@ intercepted connection.
   its crash reports.
 
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
-the URL, as the target documentation warns.
+the URL, as the target documentation warns. Plain `rtmp://` to another machine sends
+the key across the network in the clear, since some ingest servers offer nothing else.
+The engine logs a warning naming the host on each start, and the web UI's output card
+shows one (`RtmpUrl::sends_key_in_cleartext`; `localhost` and loopback are exempt).
+`output.status` carries no flag for it yet, so other clients must apply the rule
+themselves.
 
-**Gaps:** `rtmp://` sends the key in cleartext with no warning (#353). The daemon's and
-the desktop app's crash reports redact the control token and the keys and refresh
+**Gaps:** the daemon's and the desktop app's crash reports redact the control token and the keys and refresh
 tokens that pass through their credential stores, but not a YouTube-bound output's key
 or the OAuth access token, which pass through neither (#353).
 
@@ -408,7 +412,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #348 | WASM | CPU, memory and API-scope limits decided ([ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) but not built (WA1) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
-| #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
+| #353 | Secrets | Crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |
