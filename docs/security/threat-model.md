@@ -194,12 +194,19 @@ own folder or below it, compared by name and again after resolving links; popups
 shown. The control server refuses a page's WebSocket upgrade, since its `Origin` is
 foreign or `null`.
 
+**Controls (in flight, #549):** a page from a public origin is also refused loopback,
+private, link-local and local-name targets, redirects to them included, unless its
+source sets `local_network`.
+
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt
 (`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
 a focused page's clipboard writes, never reaches that handler; the helper never focuses a
 page or sends it input (#347).
-No stance on requests to loopback and LAN addresses (#347). ADR-0021's per-source
+The local-network refusal reads only the URL's host: a public name that resolves to a
+local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes until Chromium's
+Private Network Access checks are on, and so does any request the helper's request
+handler doesn't see, such as a service worker's (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
 <a id="files"></a>
@@ -384,7 +391,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 |---|---|---|---|
 | #344 | Server, pairing | Windows token, devices and log files only inherit their folder's ACL | Medium |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
-| #347 | Browser | Permissions granted without a prompt; no stance on loopback and LAN requests | Medium |
+| #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
 | #348 | WASM | CPU, memory and API-scope limits decided ([ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) but not built (WA1) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
