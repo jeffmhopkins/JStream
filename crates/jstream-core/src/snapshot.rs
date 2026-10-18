@@ -1570,7 +1570,8 @@ impl Captures for NoCaptures {
 /// crop in `shot`.
 ///
 /// Every image comes from `cache`, and every source's video chain runs in `chains`
-/// once per frame of the cache, however many mixes draw it ([`Chains::run`]): a source
+/// once per frame of the cache, however many mixes draw it (`run_chains`, through
+/// [`Chains::begin`] and [`Chains::run_one`]), after the passes of the scenes they read: a source
 /// frame is uploaded only when its version changed, and each nested scene is composited into the layer it had last frame
 /// ([`Compositor::render_into`]), so a steady frame allocates no texture. Each nested
 /// scene is premultiplied linear `Rgba16Float` that stays on the GPU, transparent where
@@ -1706,7 +1707,9 @@ pub(crate) fn compose(
 /// into their [`GpuKey::reference`] layers first ([`schedule_chains`]).
 ///
 /// # Errors
-/// What the compositor reports for a scene layer or pass.
+/// What the compositor reports for a scene layer or pass. That fails the frame, as a
+/// failed nested pass does: the chains after it don't run, and since [`Chains::begin`]
+/// has marked the frame, no later mix of the tick runs them either.
 fn run_chains(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),

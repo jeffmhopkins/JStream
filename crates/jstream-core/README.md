@@ -764,9 +764,11 @@ drawn at depth 1, as a nested scene, into its own layer (`GpuKey::reference`, at
 canvas size), and those passes run once per frame with the chains, before any mix
 draws; `claim_layers` keeps their layers too. The filter holds a clone of the layer and
 is made again only when the layer is remade, the old one retired through the cache. A
-scene layer that isn't there (its pass failed) fails the chain, which draws nothing.
-The graph refuses a cycle through a filter's scene reference (ADR-0026), and were one
-there, the chain that closes it would read the frame before.
+scene pass that fails (its layer can't be made, or the draw fails) fails the frame, as
+a failed nested pass does, and the chains after it don't run that tick. The graph
+refuses a cycle through a filter's scene reference (ADR-0026). Were one there, the
+chain that closes it would find no layer on its first frame and draw nothing, logged
+once, and would read the frame before after that.
 A `display` or `window` source with no stored frame shows what the pipeline captures
 for it on the render thread, and nothing in `video.snapshot`, which has no capture; a
 stored frame wins. The `Shot` lists what the passes of the program, or the tracks of a

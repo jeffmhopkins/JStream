@@ -208,8 +208,10 @@ impl Chains {
 
     /// Runs `source`'s `chain` at `at`, after [`Self::begin`] started the frame, once its
     /// input is in `cache` and the layer of every scene it reads has been drawn this
-    /// frame ([`GpuKey::reference`]). A chain whose input or scene layer is not cached
-    /// (a failed or skipped upload or pass) draws nothing.
+    /// frame ([`GpuKey::reference`]). A chain whose input is not cached (a failed or
+    /// skipped upload), or whose scene layer hasn't been drawn yet (only a chain closing
+    /// a cycle, which the graph refuses), draws nothing. A failed scene pass fails the
+    /// frame before this runs.
     pub(crate) fn run_one(
         &mut self,
         compositor: &mut Compositor,
