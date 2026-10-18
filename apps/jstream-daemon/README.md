@@ -423,7 +423,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `jstream-platform` (`Backends`, the key store trait, the data directory),
   `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
-  (the backends, the key store and the Media Foundation check),
+  (the backends, the key store and the Media Foundation check), `jstream-platform-macos`
+  on macOS only (the backends built so far, the stand-ins and the Keychain key store),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
