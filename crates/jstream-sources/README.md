@@ -376,7 +376,10 @@ it; a symbolic link is skipped, with a note, where the test may not create one).
 `tests/kinds.rs` snapshots every built-in kind's descriptor (`schema/kinds.snap`, an
 `insta` snapshot): adding or changing a kind changes no protocol schema, so this diff is
 where a kind's settings are reviewed like an API diff (ADR-0025). `INSTA_UPDATE=always
-cargo test -p jstream-sources --test kinds` rewrites it. `tests/sources.rs` checks
+cargo test -p jstream-sources --test kinds` rewrites it. `jstream-core` snapshots the
+same source kinds again, with the audio filter kinds (its `schema/kinds.snap`), so a
+changed source kind needs `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
+too. `tests/sources.rs` checks
 the registry and runs the colour and image kinds through the public API on files in a
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
