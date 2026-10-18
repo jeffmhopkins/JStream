@@ -105,6 +105,12 @@ const MAX_DRAW_ERRORS: u32 = 30;
 /// leaves it ([`Switch`]), well before [`MAX_DRAW_ERRORS`] would fail the output. A
 /// third of a second at the base rate, so one bad frame does not cost the GPU path.
 const GPU_FALLBACK_ERRORS: u32 = 10;
+/// Device losses within [`LOSS_WINDOW`] that end the drawing: the render thread opens a
+/// new device after each of the first two, and fails the output at the third
+/// (#349's decision: a GPU that keeps resetting is not retried for ever).
+const MAX_DEVICE_LOSSES: usize = 3;
+/// How far back [`MAX_DEVICE_LOSSES`] counts.
+const LOSS_WINDOW: Duration = Duration::from_secs(60);
 /// How long a stop lets the output thread send the packets still queued, counted from
 /// the moment it sees the stop flag. What is left after that is dropped and counted, and
 /// the publish target is told the same deadline ([`LivePublish::stop_by`]), so a stalled
@@ -134,8 +140,33 @@ pub(crate) type DrawFn = Box<
             &dyn Captures,
             &mut [MixFrame],
             MediaTime,
-        ) -> Result<Option<Reclaimed>, String>,
+        ) -> Result<Option<Reclaimed>, DrawError>,
 >;
+
+/// Why a [`DrawFn`] drew nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum DrawError {
+    /// This frame failed; the next may not. Counted toward [`MAX_DRAW_ERRORS`].
+    Failed(String),
+    /// The compositor's device is lost (`Compositor::lost`): nothing it holds comes back,
+    /// so the render thread opens a new one at once ([`Switch`], #349).
+    Lost(String),
+}
+
+impl From<String> for DrawError {
+    fn from(error: String) -> Self {
+        Self::Failed(error)
+    }
+}
+
+impl std::fmt::Display for DrawError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Failed(error) => f.write_str(error),
+            Self::Lost(why) => write!(f, "the GPU device was lost ({why})"),
+        }
+    }
+}
 
 /// One picture the render thread draws for the encoder sessions it feeds: a video mix
 /// (or the program, for `None`) at a size, every `divisor`th base tick.
@@ -294,8 +325,14 @@ pub struct OutputStats {
     /// path.
     pub gpu_captures: u64,
     /// Times the render thread left the platform's GPU context mid-run because
-    /// compositing kept failing on it (#451): at most one per program stage.
+    /// compositing kept failing on it (#451), or because its device was lost (#349): at
+    /// most one per program stage.
     pub gpu_fallbacks: u64,
+    /// Times the render thread's GPU device was lost (#349): a driver reset after a
+    /// hang, Windows' TDR, a removed GPU. After each of the first two within a minute it
+    /// opens the compositor on a new device and the output keeps streaming; the third
+    /// fails the output.
+    pub gpu_device_losses: u64,
 }
 
 struct PipelineStats {
@@ -528,6 +565,7 @@ pub(crate) struct Program {
     readbacks: Arc<AtomicU64>,
     gpu_captures: Arc<AtomicU64>,
     gpu_fallbacks: Arc<AtomicU64>,
+    gpu_losses: Arc<AtomicU64>,
     /// The mixer's inputs, one per audio source, and the thread that follows the
     /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
     /// only so the program can be shared.
@@ -1010,6 +1048,10 @@ impl Running {
                 .program
                 .as_ref()
                 .map_or(0, |p| p.gpu_fallbacks.load(Ordering::Relaxed)),
+            gpu_device_losses: self
+                .program
+                .as_ref()
+                .map_or(0, |p| p.gpu_losses.load(Ordering::Relaxed)),
         }
     }
 
@@ -1166,9 +1208,24 @@ pub(crate) fn parts_from(
 /// is none (`OpenOptions::hardware`; WARP missed the 1/30 s budget at 720p, about 10 fps,
 /// #433). Its [`ResourceCache`] keeps
 /// the uploads, the imported capture textures and the nested-scene layers from tick to
-/// tick.
+/// tick. A draw that fails on a lost device says so ([`DrawError::Lost`]).
 pub(crate) fn gpu_draw() -> OpenDraw {
-    Arc::new(|context: Option<&GpuContext>| {
+    open_gpu_draw(None)
+}
+
+/// Runs before each draw on the compositor it is about to draw with. Tests use it to
+/// lose the device mid-run (`gpu_draw_with`); [`gpu_draw`] has none.
+pub(crate) type DrawHook = Arc<dyn Fn(&Compositor) + Send + Sync>;
+
+/// [`gpu_draw`], calling `hook` before each draw.
+#[cfg(test)]
+pub(crate) fn gpu_draw_with(hook: DrawHook) -> OpenDraw {
+    open_gpu_draw(Some(hook))
+}
+
+fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
+    Arc::new(move |context: Option<&GpuContext>| {
+        let hook = hook.clone();
         let mut compositor = match context {
             Some(context) => Compositor::on_context(context),
             None => {
@@ -1184,28 +1241,31 @@ pub(crate) fn gpu_draw() -> OpenDraw {
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
+            if let Some(hook) = &hook {
+                hook(&compositor);
+            }
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
             // this tick claims its layers, and its privacy blur's, without drawing, so
             // they aren't retired and reallocated when it is due again.
             cache.begin_frame();
             for frame in frames.iter().filter(|frame| !frame.due) {
-                snapshot::claim_layers(
+                let claimed = snapshot::claim_layers(
                     &mut compositor,
                     (&mut cache, &mut chains),
                     shot,
                     frame.mix.as_ref(),
                     frame.size,
                 )
-                .and_then(|()| snapshot::privacy_layers(&compositor, &mut cache, frame.size))
-                .map_err(|err| err.to_string())?;
+                .and_then(|()| snapshot::privacy_layers(&compositor, &mut cache, frame.size));
+                claimed.map_err(|err| draw_error(&compositor, &err))?;
             }
             for frame in frames.iter_mut().filter(|frame| frame.due) {
                 let view = View {
                     mix: frame.mix.as_ref(),
                     privacy: Some(frame.privacy),
                 };
-                snapshot::compose(
+                let drawn = snapshot::compose(
                     &mut compositor,
                     (&mut cache, &mut chains),
                     (shot, at),
@@ -1225,8 +1285,8 @@ pub(crate) fn gpu_draw() -> OpenDraw {
                         Some(target) => nv12.submit(&compositor, output.texture(), target),
                         None => Ok(()),
                     }
-                })
-                .map_err(|err| err.to_string())?;
+                });
+                drawn.map_err(|err| draw_error(&compositor, &err))?;
             }
             // A failed frame skips this: what it retired waits for the next frame's
             // fence, which also covers it, so nothing is freed on this thread.
@@ -1294,6 +1354,16 @@ impl Nv12Passes {
             }
         };
         converter.submit(compositor.queue(), &self.passes[at].2, frame)
+    }
+}
+
+/// `err` from drawing on `compositor`, as a [`DrawError::Lost`] when the device is gone:
+/// a lost device's draws fail on its invalid resources, and wgpu reports the loss itself
+/// on the poll `Compositor::lost` makes.
+fn draw_error(compositor: &Compositor, err: &RenderError) -> DrawError {
+    match compositor.lost() {
+        Some(why) => DrawError::Lost(why),
+        None => DrawError::Failed(err.to_string()),
     }
 }
 
@@ -1398,6 +1468,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let readbacks = Arc::new(AtomicU64::new(0));
     let gpu_captures = Arc::new(AtomicU64::new(0));
     let gpu_fallbacks = Arc::new(AtomicU64::new(0));
+    let gpu_losses = Arc::new(AtomicU64::new(0));
     let failures = Arc::new(Failures::default());
     let (ready_tx, ready_rx) = mpsc::channel();
     let (video_taps, video_inputs) = mpsc::channel();
@@ -1439,6 +1510,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             readbacks: Arc::clone(&readbacks),
             gpu_captures: Arc::clone(&gpu_captures),
             gpu_fallbacks: Arc::clone(&gpu_fallbacks),
+            gpu_losses: Arc::clone(&gpu_losses),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
         };
@@ -1496,6 +1568,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         readbacks,
         gpu_captures,
         gpu_fallbacks,
+        gpu_losses,
         audio: Mutex::new(audio),
         capture_drops,
         bus,
@@ -1969,6 +2042,7 @@ struct RenderJob {
     readbacks: Arc<AtomicU64>,
     gpu_captures: Arc<AtomicU64>,
     gpu_fallbacks: Arc<AtomicU64>,
+    gpu_losses: Arc<AtomicU64>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
 }
@@ -2176,7 +2250,7 @@ impl Frames {
         live: &LiveParams,
         captures: &RenderCaptures,
         at: MediaTime,
-    ) -> Result<Option<Reclaimed>, String> {
+    ) -> Result<Option<Reclaimed>, DrawError> {
         let drawn = draw(shot, live, captures, &mut self.mixes, at);
         for ((frame, shown), encode) in self
             .mixes
@@ -2252,6 +2326,7 @@ fn render_loop(job: RenderJob) {
         readbacks,
         gpu_captures,
         gpu_fallbacks,
+        gpu_losses,
         drops,
         fail,
     } = job;
@@ -2288,6 +2363,9 @@ fn render_loop(job: RenderJob) {
     // because a covered tick's draw failed (the privacy screen fails closed).
     let mut encode_held: u64 = 0;
     let mut draw_errors: u32 = 0;
+    // When the device was lost, within the last `LOSS_WINDOW`: at most
+    // `MAX_DEVICE_LOSSES`, as the third ends the drawing.
+    let mut losses: Vec<Instant> = Vec::with_capacity(MAX_DEVICE_LOSSES);
     // Set by a fatal error: stop drawing and repeat `shown` until the pipeline stops. A
     // session that arrives afterwards with a new feed has nothing drawn to repeat, so
     // it gets no frames until the pipeline (already failing) stops.
@@ -2356,35 +2434,41 @@ fn render_loop(job: RenderJob) {
                 Err(panic) => Some(Err(format!("panicked: {}", panic_message(&*panic)))),
             };
             if let Some(done) = done {
-                let (cause, errors) = (pending.cause.clone(), pending.errors);
+                let (why, leave_gpu) = (pending.why.clone(), pending.leave_gpu);
                 switch = None;
                 let switched = done.and_then(|own| {
                     panic::catch_unwind(AssertUnwindSafe(|| {
-                        captures.leave_gpu();
+                        if leave_gpu {
+                            captures.leave_gpu();
+                        }
                         draw = own;
                     }))
                     .map_err(|panic| format!("panicked: {}", panic_message(&*panic)))
                 });
                 match switched {
                     Ok(()) => {
-                        tracing::warn!(
-                            error = %cause,
-                            errors,
-                            "compositing kept failing on the GPU path; fell back to CPU \
-                             capture on the render thread's own device"
-                        );
-                        gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
+                        match &why {
+                            SwitchWhy::Failing { cause, errors } => tracing::warn!(
+                                error = %cause,
+                                errors,
+                                "compositing kept failing on the GPU path; fell back to CPU \
+                                 capture on the render thread's own device"
+                            ),
+                            SwitchWhy::Lost { cause } => tracing::warn!(
+                                reason = %cause,
+                                platform = leave_gpu,
+                                "the GPU device was lost; the compositor reopened on a new \
+                                 device and the output kept streaming"
+                            ),
+                        }
+                        if leave_gpu {
+                            gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
+                        }
                     }
                     Err(fell) => {
                         broken = true;
                         reader.stop();
-                        report(
-                            &fail,
-                            format!(
-                                "compositing failed {errors} times in a row on the GPU path \
-                                 ({cause}), and falling back failed: {fell}"
-                            ),
-                        );
+                        report(&fail, why.failed(&fell));
                     }
                 }
             }
@@ -2412,7 +2496,44 @@ fn render_loop(job: RenderJob) {
                         reader.free(freed);
                     }
                 }
-                Ok(Err(err)) => {
+                Ok(Err(DrawError::Lost(cause))) => {
+                    // Nothing the compositor holds comes back, so it is replaced at once,
+                    // without waiting for the error count (#349).
+                    let at = Instant::now();
+                    gpu_losses.fetch_add(1, Ordering::Relaxed);
+                    losses.retain(|lost: &Instant| at.duration_since(*lost) < LOSS_WINDOW);
+                    losses.push(at);
+                    let why = SwitchWhy::Lost { cause };
+                    let started = if losses.len() >= MAX_DEVICE_LOSSES {
+                        Err(format!(
+                            "it was lost {} times within {}s, so the engine stopped \
+                             opening new devices",
+                            losses.len(),
+                            LOSS_WINDOW.as_secs()
+                        ))
+                    } else if on_context && frames.feeds_gpu() {
+                        // The encode targets are the lost context's, and a compositor on
+                        // a device of its own couldn't write new ones.
+                        Err("an encoder takes the context's GPU frames, so the program \
+                             can't leave it"
+                            .to_owned())
+                    } else {
+                        let leave_gpu = on_context;
+                        let sources = if leave_gpu { gpu_sources.take() } else { None };
+                        Switch::start(&open, sources, open_timeout, why.clone(), leave_gpu)
+                    };
+                    on_context = false;
+                    draw_errors = 0;
+                    match started {
+                        Ok(started) => switch = Some(started),
+                        Err(fell) => {
+                            broken = true;
+                            reader.stop();
+                            report(&fail, why.failed(&fell));
+                        }
+                    }
+                }
+                Ok(Err(DrawError::Failed(err))) => {
                     draw_errors += 1;
                     if draw_errors == 1 {
                         tracing::warn!(error = %err, "composite failed; repeating the last frame");
@@ -2432,12 +2553,16 @@ fn render_loop(job: RenderJob) {
                         );
                     } else if on_context && draw_errors >= GPU_FALLBACK_ERRORS {
                         on_context = false;
+                        let why = SwitchWhy::Failing {
+                            cause: err,
+                            errors: draw_errors,
+                        };
                         let started = Switch::start(
                             &open,
                             gpu_sources.take(),
                             open_timeout,
-                            err.clone(),
-                            draw_errors,
+                            why.clone(),
+                            true,
                         );
                         match started {
                             Ok(started) => {
@@ -2447,13 +2572,7 @@ fn render_loop(job: RenderJob) {
                             Err(fell) => {
                                 broken = true;
                                 reader.stop();
-                                report(
-                                    &fail,
-                                    format!(
-                                        "compositing failed {draw_errors} times in a row on \
-                                         the GPU path ({err}), and falling back failed: {fell}"
-                                    ),
-                                );
+                                report(&fail, why.failed(&fell));
                             }
                         }
                     } else if draw_errors > MAX_DRAW_ERRORS {
@@ -2567,13 +2686,45 @@ fn render_loop(job: RenderJob) {
 /// there and never shared, so it is not the collector's to free (R-RT-003). The context
 /// itself stays until the render loop ends, after the captures have stopped, as its
 /// platform state requires (README › GPU frames).
+///
+/// A lost device (#349) starts one too, at once: on the context it leaves the GPU path as
+/// above, and on the render thread's own device it opens the compositor on a new one
+/// (`open(None)` again, so the hardware adapter or, if that is gone, the software one).
+/// The captures are already on the CPU path then, and stay there.
 struct Switch {
     done: Receiver<Result<DrawFn, String>>,
     by: Instant,
     timeout: Duration,
-    /// The composite error that set it off, and how many there were in a row.
-    cause: String,
-    errors: u32,
+    why: SwitchWhy,
+    /// Whether the compositor was on the platform's context, so the captures move to the
+    /// CPU path once it is done ([`RenderCaptures::leave_gpu`]).
+    leave_gpu: bool,
+}
+
+/// What set a [`Switch`] off.
+#[derive(Clone, Debug)]
+enum SwitchWhy {
+    /// Compositing on the platform's context kept failing: the last error, and how many
+    /// there were in a row.
+    Failing { cause: String, errors: u32 },
+    /// The compositor's device was lost: why, as wgpu said.
+    Lost { cause: String },
+}
+
+impl SwitchWhy {
+    /// Why the output failed, when the switch did not finish: `fell`.
+    fn failed(&self, fell: &str) -> String {
+        match self {
+            Self::Failing { cause, errors } => format!(
+                "compositing failed {errors} times in a row on the GPU path ({cause}), and \
+                 falling back failed: {fell}"
+            ),
+            Self::Lost { cause } => format!(
+                "the GPU was lost ({cause}), and the compositor could not reopen on a new \
+                 device: {fell}"
+            ),
+        }
+    }
 }
 
 impl Switch {
@@ -2581,8 +2732,8 @@ impl Switch {
         open: &OpenDraw,
         gpu_sources: Option<GpuSources>,
         timeout: Duration,
-        cause: String,
-        errors: u32,
+        why: SwitchWhy,
+        leave_gpu: bool,
     ) -> Result<Self, String> {
         let (sent, done) = mpsc::channel();
         let open = Arc::clone(open);
@@ -2602,8 +2753,8 @@ impl Switch {
             done,
             by,
             timeout,
-            cause,
-            errors,
+            why,
+            leave_gpu,
         })
     }
 
@@ -3154,8 +3305,8 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, EncodeRing, Feed, Frames, GpuSources, MixFrame, OpenDraw, Switch, VideoTap,
-        catch_up, encode_ring_len, lock, open_video, output_size, push_each, stream_info,
+        DrawFn, EncodeRing, Feed, Frames, GpuSources, MixFrame, OpenDraw, Switch, SwitchWhy,
+        VideoTap, catch_up, encode_ring_len, lock, open_video, output_size, push_each, stream_info,
         video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
@@ -3814,6 +3965,13 @@ mod tests {
         }
     }
 
+    fn failing() -> SwitchWhy {
+        SwitchWhy::Failing {
+            cause: "x".into(),
+            errors: 10,
+        }
+    }
+
     /// A fallback takes the context from the live sources and opens the compositor
     /// without it on a thread of its own; a panic there, or an open past the deadline,
     /// comes back as an error instead of unwinding or blocking the render thread (#577).
@@ -3830,7 +3988,7 @@ mod tests {
             let released = Arc::clone(&released);
             move || released.store(true, Ordering::SeqCst)
         }));
-        let switch = Switch::start(&opens, Some(sources), long, "x".into(), 10).expect("start");
+        let switch = Switch::start(&opens, Some(sources), long, failing(), true).expect("start");
         assert!(finish(&switch, long).is_ok(), "opened");
         assert!(
             released.load(Ordering::SeqCst),
@@ -3838,7 +3996,7 @@ mod tests {
         );
 
         let panics: OpenDraw = Arc::new(|_: Option<&GpuContext>| panic!("adapter lost"));
-        let switch = Switch::start(&panics, None, long, "x".into(), 10).expect("start");
+        let switch = Switch::start(&panics, None, long, failing(), true).expect("start");
         let Err(err) = finish(&switch, long) else {
             panic!("a panicking open succeeded");
         };
@@ -3851,7 +4009,7 @@ mod tests {
             Err("released".into())
         });
         let timeout = Duration::from_millis(50);
-        let switch = Switch::start(&hangs, None, timeout, "x".into(), 10).expect("start");
+        let switch = Switch::start(&hangs, None, timeout, failing(), true).expect("start");
         assert!(switch.poll(Instant::now()).is_none(), "still opening");
         let Err(err) = finish(&switch, long) else {
             panic!("a hung open succeeded");
