@@ -102,8 +102,8 @@ It has:
   playback restarts with its next write, dropping the rest of that period) and flags the
   next packet as a discontinuity (ALSA doesn't say how many frames were lost, so the
   device position doesn't jump); a device that can't be recovered ends the stream with
-  `DeviceLost`. A short write is finished before the next period is rendered. An unknown PCM is `NotFound`. Desktop and
-  application audio (`*Loopback`, `processes`) are `Unsupported`: ALSA has no loopback,
+  `DeviceLost`. A short write is finished before the next period is rendered. An unknown
+  PCM is `NotFound`. Desktop and application audio (`*Loopback`, `processes`) are `Unsupported`: ALSA has no loopback,
   and ADR-0060 §4 leaves them to PipeWire. alsa-lib prints its own error lines to stderr
   (such as for an unknown PCM); silencing them needs a variadic C callback, which stable
   Rust can't define.

@@ -32,6 +32,7 @@ use jstream_platform::PlatformError;
 use jstream_platform::media::ChannelLayout;
 
 /// How long a stream's thread waits on the PCM before checking whether it should stop.
+/// This and the stream constants below are used only by the Linux-only stream code.
 #[cfg(target_os = "linux")]
 pub(crate) const WAIT_MS: i32 = 100;
 
