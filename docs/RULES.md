@@ -531,7 +531,7 @@ idempotency key. Undo is per client ([ADR-0013](adr/0013-command-model.md)).
 ### R-SEC-001: Secrets stay in the OS credential store
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_core::secrets_are_redacted", "review"]
+enforced_by = ["test:jstream_core::secrets_are_redacted", "test:jstream_server::stream_keys_are_never_echoed_or_logged", "review"]
 applies_to = ["crates/**"]
 -->
 Stream keys and OAuth tokens live only in the OS credential store. They never appear in

@@ -2792,8 +2792,7 @@ fn exchange_texts(harness: &Harness, socket: &mut RawSocket, text: &str) -> Vec<
 /// or logs. That covers the answer, the errors for a key of the wrong shape, for a key
 /// that isn't a string and for a frame that isn't JSON, `output.status`, the events, and
 /// MCP tool results, valid and refused.
-#[test]
-fn stream_keys_are_never_echoed_or_logged() {
+pub(crate) fn check_stream_keys_are_never_echoed_or_logged() {
     const SECRET: &str = "live_SERVER-REDACT-ME-41c9";
     let capture = crate::gate::tests::Capture::default();
     let engine = MockEngine::new();

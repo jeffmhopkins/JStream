@@ -343,9 +343,9 @@ async fn upgrade(
     response
 }
 
-// The two tests below sit at the crate root because RULES.md names them by path
-// (R-SEC-002): `jstream_server::rejects_missing_token` and
-// `jstream_server::rejects_foreign_origin`.
+// The tests below sit at the crate root because RULES.md names them by path:
+// `jstream_server::rejects_missing_token` and `jstream_server::rejects_foreign_origin`
+// (R-SEC-002), and `jstream_server::stream_keys_are_never_echoed_or_logged` (R-SEC-001).
 
 /// R-SEC-002: an upgrade or an MCP request without the control token, or with a wrong
 /// one, is refused with HTTP 401 and no session is opened.
@@ -363,4 +363,12 @@ fn rejects_missing_token() {
 fn rejects_foreign_origin() {
     tests::check_rejects_foreign_origin();
     tests::check_mcp_rejects_foreign_origin();
+}
+
+/// R-SEC-001: a stream key sent over the WebSocket layer or the MCP endpoint reaches the
+/// engine and nothing the server sends back or logs.
+#[cfg(test)]
+#[test]
+fn stream_keys_are_never_echoed_or_logged() {
+    tests::check_stream_keys_are_never_echoed_or_logged();
 }
