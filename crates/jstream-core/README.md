@@ -253,10 +253,13 @@ state machine. Contents:
   the stage stops, an output leaving the GPU path mid-run when every GPU frame
   fails to import or the context breaks (taking the context from browser pages, and
   failing when that fallback fails, or at its deadline when it hangs, still repeating
-  the last frame meanwhile), and an output whose encoder takes GPU frames getting NV12
-  encode targets with no readback, on a software device that stands in for the
-  platform's (`src/tests/gpu_capture.rs`; the last skips without
-  `TEXTURE_FORMAT_NV12`), a page's GPU frame drawing only on its own context in
+  the last frame meanwhile), an output surviving a lost device (its own, reopened on a
+  new one; the context's, left at once) and failing at the third loss in a minute, and
+  an output whose encoder takes GPU frames getting NV12 encode targets with no
+  readback and riding out 20 composite errors in a row with no fallback, on a software
+  device that stands in for the platform's (`src/tests/gpu_capture.rs`; the last two
+  skip without `TEXTURE_FORMAT_NV12`), a page's
+  GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
   display and a window that each start a WGC capture (`src/tests/windows_gpu.rs`,
@@ -683,7 +686,7 @@ its other layers, so turning privacy on allocates nothing on the render thread. 
 virtual camera is fed the program frame, so it is covered too. It fails closed: a covered tick whose draw failed blackens the
 frames due on it instead of repeating them, including after a fatal draw error. A
 session on the GPU encode path is not pushed the mix's last encode target on such a
-tick, since that target holds an uncovered frame: it misses the tick, counted in
+tick, since that target may hold an uncovered frame: it misses the tick, counted in
 `encode_frames`, until a covered draw succeeds. The
 CPU stand-in draws covered frames black. `video.snapshot` and the preview streams show
 the editing view and are never covered. Only the default blur exists: the look setting, the slate and muting
@@ -1064,7 +1067,7 @@ What each stage contributes:
 | Render loop | ticks skipped to catch up with the media clock, published by the render thread | `render_ticks` |
 | Mixer input | overrun and late frames, each input while it records | `audio_frames` |
 | Mix bus | frames skipped when the mixer falls behind the clock | `audio_frames` |
-| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, one per such session, published by the render thread | `encode_frames` |
+| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, or because a tick under the privacy screen could not be drawn, one per such session, published by the render thread | `encode_frames` |
 | Video encode session | input drops (`dropped_queue_full` + `dropped_encoder_busy`) | `encode_frames` |
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
@@ -1496,10 +1499,14 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   composite error repeats the last composited frame, up to 30 in a row. On the
   platform's GPU context, the 10th in a row leaves the GPU path once instead, for CPU
   capture on a device of the thread's own, and the last frames repeat while that opens
-  (see [Runtime](#runtime)).
+  (see [Runtime](#runtime)); while a session takes the context's GPU encode targets
+  there is no fallback, and the errors run on to the 31st. A lost GPU device switches at once, to a new device or
+  off the context, the same way (#349).
 - **Fatal, reported:** a 31st composite error in a row (counted again after a
   fallback), a fallback from the GPU path whose compositor does not open, panics or
-  isn't done in time, a panic
+  isn't done in time, a lost context device while a session takes its GPU encode
+  targets, an encode ring that cannot be allocated or has no context, the third lost
+  device within 60 s, a panic
   inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
@@ -1834,11 +1841,30 @@ its own and drops what it opened; none of it uses the context. Errors that go on
 and fail the output as they would on the CPU path. The context itself stays until the
 render loop ends.
 
+**A lost device** (#349; a driver reset after a hang, Windows' TDR, a removed GPU) is
+one event, not a run of errors. `gpu_draw` turns a draw that failed on a lost device
+(`Compositor::lost`) into `DrawError::Lost`, and the render thread starts the same
+switch at once, without counting to 10. On the context, it is the fallback above, so
+the captures move to the CPU path. On the render thread's own device, it is a new
+device (`open(None)` again, hardware adapter first), and the captures stay where they
+are. Meanwhile the output repeats its last frames (black under the privacy screen) and stays
+`active`. Encoders on the CPU path take the readback, so they don't reopen; a session
+on the GPU encode path rules out leaving the context, as below. A virtual camera gets the repeated frame, not its
+test pattern. Each loss is logged as a warning and counted
+(`OutputStats::gpu_device_losses`; leaving the context also counts in
+`gpu_fallbacks`). The third loss within 60 s fails the output instead ("the GPU was
+lost ... and the compositor could not reopen"), as does a switch that fails as above.
+There is no engine event for a loss yet (a protocol change), and no pack attribution
+or quarantine (X1).
+
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
-errors reach that count, the outputs fail instead, as they did before the fallback
-existed. A session that opens on the context after a fallback has no encode targets
-either, so its first tick fails the outputs too.
+errors reach that count, there is no fallback and the errors run on: the outputs fail
+at the 31st in a row, as they did before the fallback existed. If one runs when the
+context's device is lost, the outputs fail at once, since nothing can draw into its
+targets. A session that opens on the context after a fallback has no context to draw
+for, so its first due tick fails the outputs too, whether or not its mix still holds
+targets from before (#699).
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as

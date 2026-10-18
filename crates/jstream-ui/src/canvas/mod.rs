@@ -653,9 +653,6 @@ pub fn Canvas() -> impl IntoView {
         let (width, height) = canvas_size();
         format!("0 0 {width} {height}")
     };
-    // Screen pixels in canvas units, for handle sizes and label text.
-    // Where the preview picture goes in the stage, in CSS pixels: the canvas's own fit,
-    // so the picture lies exactly under the boxes.
     // The preview is the program mix, so it lies under the boxes only while the canvas
     // shows the program scene; another selected scene gets the placeholder instead.
     let on_program = move || {
@@ -672,6 +669,8 @@ pub fn Canvas() -> impl IntoView {
             Some("The preview shows the program scene".to_owned())
         }
     };
+    // Where the preview picture goes in the stage, in CSS pixels: the canvas's own fit,
+    // so the picture lies exactly under the boxes.
     let screen_box = move || {
         let fit = viewport.get()?;
         let (width, height) = canvas_size();
@@ -682,6 +681,7 @@ pub fn Canvas() -> impl IntoView {
             height as f32 * fit.scale,
         ))
     };
+    // Screen pixels in canvas units, for handle sizes and label text.
     let px = move |screen: f32| viewport.get().map_or(screen, |v| v.canvas_len(screen));
 
     let boxes = move || {

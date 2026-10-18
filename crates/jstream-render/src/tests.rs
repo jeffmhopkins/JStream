@@ -1387,6 +1387,75 @@ fn a_rotated_geometry_turns_about_its_centre() {
     near(&snapshot, 16, 32, [0, 0, 0, 255], 0);
 }
 
+/// A lost device (#349) is reported by `lost`, and drawing on it fails instead of
+/// panicking, so the caller can open a new compositor. `destroy` stands in for a driver
+/// reset: wgpu reports both through the same device-lost callback.
+#[test]
+fn a_lost_device_is_reported_and_fails_without_a_panic() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = Color::rgb(1.0, 0.0, 0.0);
+    let image = solid(&opened.compositor, 2, 2, [0, 0, 255, 255]);
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    draw(&mut opened.compositor, 4, 3, red, &items);
+    assert_eq!(opened.compositor.lost(), None);
+
+    opened.compositor.device().destroy();
+    assert_eq!(opened.compositor.lost().as_deref(), Some("destroyed"));
+    let scene = Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: red,
+        items: &items,
+    };
+    assert!(
+        opened.compositor.render(&scene, true).is_err(),
+        "a lost device draws nothing"
+    );
+    // Uploads and layers raise the invalid-resource errors a loss leaves; none panics.
+    let _ = opened.compositor.upload_rgba8(1, 1, &[0, 0, 0, 255]);
+    let _ = opened.compositor.render_image(&scene);
+}
+
+/// An uncaptured wgpu error fails the next frame instead of panicking, and a frame after
+/// it draws again: wgpu's default handler would have panicked on the thread.
+#[test]
+fn an_uncaptured_error_fails_the_next_frame() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let device = opened.compositor.device().clone();
+    let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("zero-sized"),
+            size: wgpu::Extent3d {
+                width: 0,
+                height: 0,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+    }));
+    assert!(made.is_ok(), "the error is kept, not panicked on");
+    let scene = Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: Color::BLACK,
+        items: &[],
+    };
+    let failed = opened.compositor.render(&scene, true).map(|_| ());
+    assert!(
+        matches!(failed, Err(RenderError::Uncaptured { .. })),
+        "a zero-sized texture is a validation error: {failed:?}"
+    );
+    assert_eq!(opened.compositor.lost(), None);
+    draw(&mut opened.compositor, 4, 3, Color::BLACK, &[]);
+}
+
 /// An image of four equal quadrants: `colors` is top-left, top-right, bottom-left,
 /// bottom-right.
 fn quadrants(compositor: &Compositor, side: u32, colors: [[u8; 4]; 4]) -> crate::Image {
