@@ -6,6 +6,7 @@
 //! surrounding whitespace.
 
 use anyhow::{Context, bail};
+use jstream_crash::Secrets;
 use jstream_server::Token;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
@@ -40,8 +41,8 @@ pub fn device_file(token_file: &Path) -> PathBuf {
 /// else real access (#344, `jstream_platform_windows::check_private_file`). A new file
 /// is created atomically (it never replaces a file created meanwhile) and user-only:
 /// mode 0600 on Unix, a protected DACL for SYSTEM and the user on Windows. The token is
-/// registered with the crash reports' redaction.
-pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
+/// registered with the crash reports' redaction (`secrets`).
+pub fn load_or_create(path: &Path, secrets: &Secrets) -> anyhow::Result<(Token, Provenance)> {
     // Drawn first, so a failing random source leaves no empty file behind.
     let token = new_token()?;
     match create_new(path) {
@@ -53,7 +54,7 @@ pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
                     format!("could not write the token file `{}`", path.display())
                 });
             }
-            crate::crash::register_secret(&token);
+            secrets.register(&token);
             let token = Token::new(token).context("invariant: a hex token is valid")?;
             Ok((token, Provenance::Created))
         }
@@ -63,7 +64,7 @@ pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
             if error.kind() == io::ErrorKind::AlreadyExists
                 || fs::symlink_metadata(path).is_ok() =>
         {
-            Ok((read_existing(path)?, Provenance::Existing))
+            Ok((read_existing(path, secrets)?, Provenance::Existing))
         }
         Err(error) => Err(error)
             .with_context(|| format!("could not create the token file `{}`", path.display())),
@@ -99,7 +100,7 @@ fn new_token() -> anyhow::Result<String> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn read_existing(path: &Path) -> anyhow::Result<Token> {
+fn read_existing(path: &Path, secrets: &Secrets) -> anyhow::Result<Token> {
     let shown = path.display();
     let metadata =
         fs::metadata(path).with_context(|| format!("could not read the token file `{shown}`"))?;
@@ -136,13 +137,14 @@ fn read_existing(path: &Path) -> anyhow::Result<Token> {
     }
     let valid = Token::new(token)
         .with_context(|| format!("the token file `{shown}` holds no valid token"))?;
-    crate::crash::register_secret(token);
+    secrets.register(token);
     Ok(valid)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Provenance, device_file, load_or_create, new_token};
+    use jstream_crash::Secrets;
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -201,11 +203,16 @@ mod tests {
     fn a_missing_file_is_created_and_then_reused() {
         let dir = scratch("reuse");
         let path = dir.join("token");
-        let (_, provenance) = load_or_create(&path).expect("created");
+        let created = Secrets::new();
+        let (_, provenance) = load_or_create(&path, &created).expect("created");
         assert_eq!(provenance, Provenance::Created);
         let written = fs::read_to_string(&path).expect("readable");
         assert!(written.ends_with('\n'));
         assert_eq!(written.trim().len(), 64);
+        assert!(
+            created.is_registered(written.trim()),
+            "a new token is redacted from crash reports"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -213,8 +220,13 @@ mod tests {
             assert_eq!(mode & 0o777, 0o600, "user-only");
         }
 
-        let (_, provenance) = load_or_create(&path).expect("reused");
+        let reused = Secrets::new();
+        let (_, provenance) = load_or_create(&path, &reused).expect("reused");
         assert_eq!(provenance, Provenance::Existing);
+        assert!(
+            reused.is_registered(written.trim()),
+            "a reused token is redacted from crash reports"
+        );
         assert_eq!(
             fs::read_to_string(&path).expect("readable"),
             written,
@@ -228,23 +240,23 @@ mod tests {
         let dir = scratch("refused");
         let empty = dir.join("empty");
         write_private(&empty, "  \n");
-        let error = load_or_create(&empty).expect_err("empty");
+        let error = load_or_create(&empty, &Secrets::new()).expect_err("empty");
         assert!(error.to_string().contains("is empty"), "{error}");
 
         let spaced = dir.join("spaced");
         write_private(&spaced, "two words\n");
-        let error = load_or_create(&spaced).expect_err("not a token");
+        let error = load_or_create(&spaced, &Secrets::new()).expect_err("not a token");
         assert!(
             error.to_string().contains("holds no valid token"),
             "{error:#}"
         );
         assert_eq!(fs::read_to_string(&spaced).expect("kept"), "two words\n");
 
-        let error = load_or_create(&dir).expect_err("a directory");
+        let error = load_or_create(&dir, &Secrets::new()).expect_err("a directory");
         assert!(error.to_string().contains("not a regular file"), "{error}");
 
         let missing_dir = dir.join("missing").join("token");
-        let error = load_or_create(&missing_dir).expect_err("no parent directory");
+        let error = load_or_create(&missing_dir, &Secrets::new()).expect_err("no parent directory");
         assert!(error.to_string().contains("could not create"), "{error}");
         let _ = fs::remove_dir_all(&dir);
     }
@@ -284,11 +296,12 @@ mod tests {
         let path = dir.join("token");
         fs::write(&path, "s3cret-T0ken\n").expect("written");
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).expect("chmod");
-        let error = load_or_create(&path).expect_err("group and others can read it");
+        let error =
+            load_or_create(&path, &Secrets::new()).expect_err("group and others can read it");
         assert!(error.to_string().contains("mode 644"), "{error}");
 
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).expect("chmod");
-        let (_, provenance) = load_or_create(&path).expect("user-only now");
+        let (_, provenance) = load_or_create(&path, &Secrets::new()).expect("user-only now");
         assert_eq!(provenance, Provenance::Existing);
         let _ = fs::remove_dir_all(&dir);
     }

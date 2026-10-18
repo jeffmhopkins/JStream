@@ -40,14 +40,14 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds.
-- **Crash reports** (`crash.rs`): the panic hook that writes a redacted report beside
-  the log file, and `Redacting`, the key store wrapper that registers each stream key
-  with its redaction.
+- **Crash reports**: `jstream-crash`'s panic hook, which writes a redacted report beside
+  the log file, and its `Redacting` key store wrapper, which registers each stream key
+  with the redaction.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
   script's escaping, the command line, the virtual camera's status values, the
-  capped log file, and the crash hook in a child process, with a stream key loaded
-  through `crash::Redacting`), and one integration test, `tests/delay_load.rs` (Windows MSVC
+  capped log file, and the control token registered for redaction; the crash hook's own
+  tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
 
@@ -204,18 +204,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   app. With no device, pages play audio but show no frames.
 - **Logs and the token.** The token reaches only the bootstrap script. It is never
   logged, written to disk, or put in a URL (R-SEC-001).
-- **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)), as the
-  daemon writes them ([jstream-daemon › Design](../jstream-daemon/README.md#design)).
-  Both apps are layer 6, so the desktop can't use the daemon's module and has its own
-  copy. `main.rs` installs the panic hook as soon as it has the data folder, before the
+- **Crash reports** ([`jstream-crash`](../../crates/jstream-crash/README.md#purpose),
+  [R-SEC-004](../../docs/RULES.md#R-SEC-004)), as the daemon writes them
+  ([jstream-daemon › Design](../jstream-daemon/README.md#design)): both apps use the one
+  crate ([ADR-0067](../../docs/adr/0067-shared-crash-reports.md)). `main.rs` makes the
+  `Secrets` list, passes it on through `app::start` to the host, and installs the panic hook as soon as it has the data folder, before the
   log file, into the `logs` folder (created if missing). A report holds the app and
   protocol versions, OS and architecture, the UTC time, the process ID, the thread
   name, the panic's location and message (cut at 16 KiB) and a backtrace; never the
   environment, the command line or settings. The control token (registered by
   `Host::start`) and every stream key the live engine stores or reads (its Credential
-  Manager store is behind `crash::Redacting`) are replaced by `***` in the report and
+  Manager store is behind `jstream_crash::Redacting`) are replaced by `***` in the report and
   in its stderr line (R-SEC-001). Only their length and BLAKE3 digest are kept. The
   hook replaces the default one, whose stderr line would quote the message
-  unredacted. Before each report the oldest beyond 10 are deleted; the log file and
+  unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Before each report the oldest beyond 10 are deleted; the log file and
   the audit log in the same folder are left alone. A native crash writes nothing yet
   (the daemon's open question 4 holds here too).
