@@ -71,10 +71,14 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
 
     let known = super::backrefs::known_crates(repo.docs, repo.files.paths());
     let tests = test_list(repo);
+    let lints = workspace_lints(repo.root);
+    let deny = deny_sections(repo.root);
     let refs = RuleRefs {
         ci_checks: &ci_checks,
         known_crates: &known,
         tests: &tests,
+        lints: &lints,
+        deny_sections: &deny,
     };
     let mut ids: BTreeMap<&str, &str> = BTreeMap::new();
     for doc in repo.docs {
@@ -428,6 +432,58 @@ struct RuleRefs<'a> {
     ci_checks: &'a BTreeSet<String>,
     known_crates: &'a BTreeSet<String>,
     tests: &'a TestList,
+    /// Lints the root `[workspace.lints]` sets above `allow`: rustc's by name, clippy's
+    /// as `clippy::<name>`.
+    lints: &'a BTreeSet<String>,
+    /// `deny.toml`'s top-level tables.
+    deny_sections: &'a BTreeSet<String>,
+}
+
+/// The lints the root `Cargo.toml` sets above `allow` in `[workspace.lints]`, as
+/// `lint:` entries name them (docs/DOCS.md#rules).
+fn workspace_lints(root: &Path) -> BTreeSet<String> {
+    let Some(table) = read_toml(&root.join("Cargo.toml")) else {
+        return BTreeSet::new();
+    };
+    let Some(lints) = table
+        .get("workspace")
+        .and_then(|w| w.get("lints"))
+        .and_then(toml::Value::as_table)
+    else {
+        return BTreeSet::new();
+    };
+    let mut out = BTreeSet::new();
+    for (tool, set) in lints {
+        let Some(set) = set.as_table() else { continue };
+        for (name, level) in set {
+            // A level is a string, or a table with `level` (and `priority`).
+            let level = level
+                .as_str()
+                .or_else(|| level.get("level").and_then(toml::Value::as_str));
+            if level.is_some_and(|l| l != "allow") {
+                out.insert(if tool == "rust" {
+                    name.clone()
+                } else {
+                    format!("{tool}::{name}")
+                });
+            }
+        }
+    }
+    out
+}
+
+/// `deny.toml`'s top-level tables, as `deny:` entries name them (docs/DOCS.md#rules).
+fn deny_sections(root: &Path) -> BTreeSet<String> {
+    read_toml(&root.join("deny.toml")).map_or_else(BTreeSet::new, |t| {
+        t.iter()
+            .filter(|(_, v)| v.is_table())
+            .map(|(k, _)| k.clone())
+            .collect()
+    })
+}
+
+fn read_toml(path: &Path) -> Option<toml::Table> {
+    std::fs::read_to_string(path).ok()?.parse().ok()
 }
 
 fn check_rule_meta(
@@ -442,6 +498,8 @@ fn check_rule_meta(
         ci_checks,
         known_crates,
         tests,
+        lints,
+        deny_sections,
     } = refs;
     for k in meta.keys() {
         if !RULE_KEYS.contains(&k.as_str()) {
@@ -489,7 +547,32 @@ fn check_rule_meta(
     for e in string_array(meta, "enforced_by", doc, line, out) {
         let ok = match e.split_once(':') {
             Some(("ci", name)) => ci_checks.contains(name),
-            Some(("lint" | "deny", rest)) => !rest.is_empty(),
+            Some(("lint", name)) => {
+                if !lints.contains(name) {
+                    out.push(diag(
+                        &doc.path,
+                        line,
+                        format!(
+                            "rule `{id}`: `enforced_by` entry `{e}`: `{name}` is not set above \
+                             `allow` in the root Cargo.toml's `[workspace.lints]`"
+                        ),
+                    ));
+                }
+                true
+            }
+            Some(("deny", section)) => {
+                if !deny_sections.contains(section) {
+                    out.push(diag(
+                        &doc.path,
+                        line,
+                        format!(
+                            "rule `{id}`: `enforced_by` entry `{e}`: deny.toml has no \
+                             `[{section}]` section"
+                        ),
+                    ));
+                }
+                true
+            }
             Some(("test", path)) => {
                 if let Some(msg) = check_test_entry(path, known_crates, tests) {
                     out.push(diag(&doc.path, line, format!("rule `{id}`: {msg}")));
@@ -514,9 +597,7 @@ fn test_list(repo: &Repo<'_>) -> TestList {
     let crates: Vec<(String, String)> = super::backrefs::crates(repo.files.paths())
         .into_iter()
         .map(|(dir, _)| {
-            let name = std::fs::read_to_string(repo.root.join(dir).join("Cargo.toml"))
-                .ok()
-                .and_then(|t| t.parse::<toml::Table>().ok())
+            let name = read_toml(&repo.root.join(dir).join("Cargo.toml"))
                 .and_then(|t| t.get("package")?.get("name")?.as_str().map(str::to_owned))
                 .unwrap_or_else(|| dir.rsplit('/').next().unwrap_or(dir).to_owned());
             (dir.to_owned(), name)
