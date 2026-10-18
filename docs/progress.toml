@@ -467,6 +467,15 @@ status = "done"
 prs = [231]
 
 [[item]]
+id = "V0"
+milestone = "M1b"
+title = "Video filter chain runtime"
+status = "review"
+prs = [595]
+note = "part 1 runs the built-in kinds; then asset and scene references, effect-pack kinds, the bounds inset and scratch pooling"
+needs = ["build"]
+
+[[item]]
 id = "D5"
 milestone = "M1b"
 title = "Audio in the protocol"
@@ -559,8 +568,9 @@ prs = [213, 297]
 id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
-status = "done"
-prs = [235]
+status = "hardware"
+prs = [235, 565]
+note = "Windows run (#563)"
 
 [[item]]
 id = "G3d"

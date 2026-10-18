@@ -488,7 +488,7 @@ pub fn nudge(start: &ItemGeometry, dx: f32, dy: f32) -> Option<ItemGeometry> {
 }
 
 /// `base` with a new box, keeping its fit mode and 3D fields.
-fn with_box(
+pub(crate) fn with_box(
     base: &ItemGeometry,
     x: f32,
     y: f32,

@@ -259,7 +259,9 @@ state machine. Contents:
   queued, run without one),
   `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
   and is reconnected to, one that stops reading while a stop's deadline runs out, and
-  one that reads only a trickle of one large tag,
+  one that reads only a trickle of one large tag, and `connect_rtmp` with a plain
+  `rtmp://` URL to another machine logging one warning that names the host and
+  nothing from the path, and none for `rtmps://` or loopback,
   a publish opener connecting that fake server on every start (start, media, stop,
   twice) and one that cannot connect, a recording output writing MP4 to a temp dir
   (renamed into place on stop, refused when the file exists or the path is not
@@ -488,10 +490,12 @@ The engine's answers are the mock's for the differential script: `tests.rs` runs
 script of calls against both and compares results, error codes and fields, and events.
 That script does not call `video.snapshot`. The mock has no compositor and answers it
 with `internal`, so the two are not compared. Nor does it call `capture.targets`,
-which the mock answers with a made-up display, or send the folder, label and
-metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4), which
-the mock doesn't implement yet; `history.rs` checks the engine's undo of them. The mock stays the reference clients
-were developed against, and `jstream-graph` the only implementation of the edit rules
+which the mock answers with a made-up display. It does send the folder, label and
+metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): each
+refusal, the in-use deletes, the reads, undo and redo, and a filed scene's and a
+labelled source's delete, which the test checks applies, undone with their metadata;
+`history.rs` checks the engine's undo of them further. The mock stays the reference
+clients were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 
 ### Undo and redo
@@ -749,6 +753,34 @@ pass in every mix that shows the program: `compose` samples each track at the fr
 time and draws the sampled items over opaque black, bottom first, the nested scenes
 they show composited first. Without a scene to draw, the primary display's capture is
 scaled to fill the canvas, which is fitted the same way, or the output is black.
+
+**Video chains** (`chain.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md),
+roadmap V0). Planning copies each reached source's video chain into the `Shot`: its
+input (the source's upload or its capture) and its enabled filters of a kind
+`jstream-render` draws, in order. A disabled filter, or one of a kind it doesn't draw
+(an effect pack's), is bypassed, and a source with no filter left has no chain. Every
+item that places a source with a chain shows the chain's output (`GpuKey::Filtered`)
+instead of its input, in every mix and in a transition's tracks, at the size the chain
+reports. A chain over a capture keeps that capture among the shot's captures. Each
+compositor that draws shots (render, snapshot, preview) keeps a `Chains`: one
+`VideoFilter` per running filter, made when it first draws, updated in place when its
+settings change and kept while the shot keeps it, so a stateful kind sees its frames
+in order. `compose` runs every chain once per frame of the cache, after the uploads and
+captures, however many mixes the tick draws (`ResourceCache::frame`), each filter into
+a layer of the cache (`GpuKey::Chain`, the last into `GpuKey::Filtered`) through
+`Compositor::apply_filter_into`, so a steady chain allocates no output texture.
+`claim_layers` keeps those layers for a mix that isn't due. A filter no shot runs any
+more is retired into the cache (`ResourceCache::retire_filter`) and dropped with the
+images it reclaims, on that thread's collector. A chain whose filter fails (its layer
+can't be made, or it fails to draw) draws nothing that frame, logged once per filter
+until a frame it draws. Unlike a failed audio filter, which ADR-0026 bypasses, it
+doesn't show its unfiltered input, so a failing key or mask reveals nothing it hides.
+Each filter's layer key is made when the chain's shape changes, so a steady frame
+builds none. A shot with a chain counts as
+changing with time (`Shot::changes_with_time`), so the preview redraws it like a
+running transition. `video.snapshot` runs the chains on its own compositor, so a
+stateful kind (a video delay) starts empty there. The built-in video filter kinds are
+in `kind.list` and `filter.add` takes them on a video chain.
 A `display`, `window` or `webcam` source with no stored frame shows what the pipeline
 captures for it on the render thread, and nothing in `video.snapshot`, which has no
 capture; a stored frame wins. The `Shot` lists what the passes of the program, or the
@@ -1179,8 +1211,10 @@ resolution or rate, or `output.set_video_mix` on a running output changes nothin
 it restarts, and an
 output started after the update opens a session of its own rather than joining one
 with stale settings. `output.status` reports, per running output, the profile, the
-other outputs on the same session, whether its video encoder is a hardware one and
-whether the session is `dedicated` to it, plus the video sessions and hardware sessions open
+other outputs on the same session, whether its video encoder is a hardware one
+(read from `VideoSession::codec`, so a hardware encoder that fell back to software at
+its first frame reports software) and whether the session is `dedicated` to it, plus
+the video sessions and hardware sessions open
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
 guess a hardware cap. A hardware session limit fails the start with the encoder's own
 error for now, not a session-limit code.
@@ -1449,7 +1483,10 @@ into the buffer `AudioInput::push` keeps. Not measured. The mixer thread
 polls the audio sources' inputs into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
 publish target. Drops on a full encoder queue are counted in `output_stats`. The
-test records tags in memory. `connect_rtmp` is the live publisher: `RtmpPublish`
+test records tags in memory. `connect_rtmp` is the live publisher. When its URL is
+plain `rtmp://` to another machine (`RtmpUrl::sends_key_in_cleartext`), it logs a
+warning naming the host, never the path, since the key then crosses the network
+unencrypted (#353). `RtmpPublish`
 wraps `jstream-outputs`' `ReconnectingPublisher` with its default `ReconnectPolicy`
 (backoff from 1 s up to 30 s, giving up after a 5-minute outage). It opens the first
 session itself, on the caller's thread, so a refused first connect is still its
@@ -1491,7 +1528,10 @@ without the `FCUnpublish` … `deleteStream` goodbye. So a peer that has stopped
 reading holds `output.stop` for about 2 s, not 10 s per blocked write.
 `connect_rtmp`'s unit tests drive fake servers on loopback: a slow one, one that
 hangs up mid-stream, one that stops reading while the deadline runs out, and one
-that reads only a trickle of a 12 MiB tag.
+that reads only a trickle of a 12 MiB tag. One more drives no server: it captures
+the log while `connect_rtmp` refuses an empty key, and checks that a plain `rtmp://`
+URL to another machine logs one warning naming the host and nothing from the path,
+and that `rtmps://` and loopback log none.
 
 ### Locking
 
@@ -1656,7 +1696,12 @@ history, idempotency keys and the program and preview scenes are not saved (see 
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- Video filter kinds, and blend modes other than `normal`, in the compositor.
+- Blend modes other than `normal` in the compositor.
+- The rest of the video chain runtime (V0): the asset and scene references
+  `apply_lut`, `image_mask` and `scene_mask` read (they pass their input through until
+  then), effect-pack kinds in a chain (bypassed), placing a bounds-growing filter's
+  output at the original content box, and pooling a multi-pass filter's scratch
+  layers.
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the

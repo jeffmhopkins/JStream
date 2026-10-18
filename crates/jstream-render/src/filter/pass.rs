@@ -105,6 +105,10 @@ pub(crate) enum Blend {
     /// Clear the target to transparent and write the shader's output.
     Replace,
     /// Keep the target and draw premultiplied src-over it (a shadow under its shape).
+    #[expect(
+        dead_code,
+        reason = "the harness offers it for a multi-pass kind that draws under its shape; none does yet"
+    )]
     Over,
 }
 

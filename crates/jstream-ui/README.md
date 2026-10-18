@@ -121,12 +121,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   holds no handle of its own, so Disconnecting drops the last one, which closes the
   socket.
 - **Selection.** `Selection` is the scene being edited (shown by the sources list) and
-  an item in it (edited by the properties form). A new session reads the program scene
+  the items selected in it: a primary item (edited by the properties form) and any
+  others the canvas selected with it. A new session reads the program scene
   before the state, so it starts on the scene on program. It is fixed up after every
   change: a
   deleted scene falls back to the program scene, then the first listed scene, and an
-  item that left the scene is dropped. The canvas edits the same scene and selects the
-  same item, so a click on a box selects its row and opens its properties.
+  item that left the scene is dropped, the next selected one becoming primary. The
+  canvas edits the same scene and selects the same items, so a click on a box selects
+  its row and opens its properties, and every selected item's row is highlighted.
 - **Scenes and sources.** The scene list shows scenes in display order and leaves out
   groups (ADR-0024), marks the program scene, and puts a scene on program with
   `scene.switch`. The sources list shows the selected scene's items with the top of the
@@ -209,7 +211,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   card shows none of them; neither "Go live" nor "End stream" touches it. The card says
   what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
   read in `host.rs`): there an unregistered camera, or one turned off with `--no-vcam`,
-  can't be started, and the card gives the `jstream-daemon --register-vcam` hint. In a
+  can't be started, and the card gives the `jstream-daemon --register-vcam` hint, which
+  names the step as optional; an `outdated` one (registered, but not for a current copy
+  of this version's DLL) can still be started, and its hint offers registering again,
+  also optional. In a
   browser the page can't tell, so it lets the engine decide and explains its refusal:
   an unregistered camera ("is not registered") gets the full registration command, and
   an engine with no camera at all ("no virtual camera": not running on Windows, or the
@@ -264,6 +269,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
   sets or clears a key, since no event reports that. Another client's key change shows
   on the next re-read.
+- **Plain `rtmp://` gets a warning.** A stream output whose server URL is `rtmp://` to
+  a host other than `localhost` or a loopback address shows, under its target, that
+  the key is sent unencrypted and to use `rtmps://` if the service offers it
+  (`cleartext_warning`, #353). The panel works it out from the URL `state.get`
+  reports. `output.status` carries no such flag, so a client of its own does the same.
 - **Mixer** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)). The panel reads
   the audio sources (those `state.get` reports with `audio`), the buses and the sends
   into a copy of its own, not `Studio`'s, and re-reads them on `state.changed` and
@@ -304,11 +314,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   what "Add" sends, the form's sections, parsing and checks); only the components
   themselves need a browser.
 - **Debug bundle size.** A leptos view's type spells out every element and closure
-  inside it, and a debug build names each function with those types: most of its
-  `_bg.wasm` is that name section. The server refuses a file over its size limit
-  ([jstream-server › Design](../jstream-server/README.md#design)), so the mixer's strips, rows, meters, faders and mute buttons return `AnyView` rather than
-  `impl IntoView`, which keeps a nested view's type out of its parents' names. A
-  component that grows as large does the same.
+  inside it, and an unstripped build names each function with those types in the
+  `_bg.wasm`'s name section. The server refuses a file over its size limit
+  ([jstream-server › Design](../jstream-server/README.md#design)), so the debug build
+  uses the workspace's `ui-dev` Cargo profile (`data-cargo-profile-dev` in
+  `index.html`), which strips the symbols and leaves no name section
+  ([Build](#build)). The mixer's strips, rows, meters, faders and mute buttons also
+  return `AnyView` rather than `impl IntoView`, which keeps a nested view's type out of
+  its parents' types, and so out of their names in an unstripped build.
 
 <a id="canvas"></a>
 ## Canvas
@@ -319,9 +332,10 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
-handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
-scene and sends the edits. These three are pure and tested natively against
-`MockEngine`; `mod.rs` is the component.
+handles, and turns a drag into a new geometry; `group.rs` does the same for several
+selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scene and
+sends the edits. These are pure and tested natively, `model.rs` against `MockEngine`;
+`mod.rs` is the component.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
   `Layout::of` from the shared collection, so it follows every state change the app
@@ -332,9 +346,16 @@ scene and sends the edits. These three are pure and tested natively against
   on the source's runtime size, which the protocol doesn't report yet (ADR-0022's
   `source.sizes`), and a note top left counts such items. Hidden items are drawn
   dashed, and the box under the pointer gets a light outline.
-- **Selecting and dragging.** A press selects the topmost box under the pointer, or
-  clears the selection on empty canvas; either way the shared selection changes. The
-  cursor shows what a press would do. Dragging the box moves it. The selected box has
+- **Selecting and dragging.** A press selects the topmost box under the pointer and
+  drags it, or, on a box already selected, drags every selected box. Shift-click adds
+  a box to the selection (and drags them all) or takes a selected one out. A press on
+  empty canvas, or on the dark margin around the frame, draws a marquee that selects
+  every box whose bounds it touches (Shift keeps what was selected); a click there
+  clears the selection. Ctrl+A selects every box. The shared selection follows each of
+  these. A double click selects a box alone and shows the Inspector, in place of the
+  prototype's Properties dialog, which the UI doesn't have yet. The pointer is
+  followed over the whole canvas area, so handles reaching past the frame can be
+  grabbed. The cursor shows what a press would do. The selected box has
   a 2 px outline, eight resize handles, a rotate knob on a stem above its top edge, and
   a readout under it: its size (and rotation, if turned), or during a drag its
   top-left, size or angle. A resize keeps the box's aspect ratio (Ctrl stretches): a
@@ -344,8 +365,19 @@ scene and sends the edits. These three are pure and tested natively against
   flips. Rotation turns about the centre and snaps to the nearest multiple of 90°
   within 3°, else to 0.1°; Ctrl moves it in 45° steps. Shift drags at half speed for
   every gesture, following the pointer's movement so pressing it mid-drag doesn't
-  jump. Arrow keys nudge the selected box by 1 pixel (Shift: 10). Escape cancels a
+  jump. Arrow keys nudge the selected boxes by 1 pixel (Shift: 10). Escape cancels a
   drag, or clears the selection.
+- **Several selected.** Each selected box keeps its 2 px outline without handles, and
+  a dashed box 4 screen pixels outside their bounds gets the handles, a knob 42 pixels
+  above it, and a readout 12 pixels below (`N items · W × H`, the size while scaling,
+  the angle turned while rotating). Its handles scale every box from the far side of
+  the bounds (an edge handle scales the other axis about the centre), keeping the
+  aspect unless Ctrl is held, down to 20 pixels; the knob turns every box about the
+  bounds' centre, in 45° steps with Ctrl. A move of several boxes snaps their bounds
+  the way one box snaps, unless one of them is rotated.
+- **Crop** on the canvas (Alt on a handle, the crop tool) needs each source's size to
+  turn a dragged edge into source pixels, which the protocol doesn't report yet
+  (ADR-0022's `source.sizes`), so the canvas doesn't crop.
 - **Snapping.** A moved upright box's edges and centre snap, within 6 screen pixels,
   to the canvas's edges and centre lines and to the other boxes' edges and centres,
   using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
@@ -353,8 +385,12 @@ scene and sends the edits. These three are pure and tested natively against
   rotated box never snaps, and the Snapping button in the floating tools (top right)
   turns it off.
 - **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
-  draws the gesture locally, and on release one batch with one `item.set_geometry`
-  commits it, so each gesture (and each nudge) is one undo step. It carries no
+  draws the gesture locally, and on release one batch with an `item.set_geometry` per
+  item it changed commits it, so each gesture (and each nudge) is one undo step. The
+  local geometries stay drawn until no commit is in flight and the collection has
+  caught up with the last one's revision; a later drag replaces only its own items',
+  so a nudge still in flight isn't lost. A commit that fails shows its error and stops
+  drawing its geometries, unless a later gesture has replaced them. It carries no
   `expected_rev`: a drag is last writer wins per field
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
   (`live.set` with `ends_gesture` on the committing batch), which would show the drag
@@ -380,7 +416,7 @@ The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
 
 ```sh
 cd crates/jstream-ui
-trunk build            # debug, into dist/
+trunk build            # debug (the `ui-dev` profile), into dist/
 trunk build --release  # what the daemon and the desktop app ship
 trunk serve            # rebuilds on change and serves dist/ locally
 ```
@@ -392,6 +428,15 @@ and the stylesheet, with content hashes in their names. It is not committed. tru
 inline loader script carries a `{{__TRUNK NONCE__}}` placeholder (`create_nonce` in
 `Trunk.toml`), which the serving engine replaces with each response's
 Content-Security-Policy nonce.
+
+A debug build uses the workspace's `ui-dev` Cargo profile, which `index.html` picks with
+`data-cargo-profile-dev`: `dev` without debug info and with the symbols stripped. With
+`dev` itself, wasm-bindgen's `_bg.wasm` is many times larger, nearly all of it the name
+section, and over the server's size limit for a UI file
+([jstream-server › Design](../jstream-server/README.md#design)), so every load would
+get a 500. A release build keeps its own profile. The UI installs no panic hook, so a
+panic shows in the browser console only as `RuntimeError: unreachable`, with no message
+or location; in a debug build its stack frames are unnamed (`wasm-function[N]`) too.
 
 CI's `wasm` job builds the UI this way on every PR, with trunk and the `wasm-bindgen`
 CLI downloaded at pinned versions and checked against pinned SHA-256 sums, and runs

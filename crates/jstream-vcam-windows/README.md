@@ -60,7 +60,11 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   services can create them. The DLL then requires the contract's format
   (`format_matches`), requires the scope and session the block names to be the
   namespace it was found in, and after opening the shared objects re-checks that the
-  block is still live for the same producer.
+  block is still live for the same producer. The ring textures and the fence of a
+  session block pass the same owner rule (#356): each is opened by name as an NT handle
+  (`ID3D12Device::OpenSharedHandleByName`), its owner read with `GetSecurityInfo`, and
+  the D3D11 object opened from that handle (`OpenSharedResource1`, `OpenSharedFence`),
+  so the object checked is the object used.
 - **Panics.** Every COM method and export runs inside a panic guard that returns
   `E_UNEXPECTED` and logs ([R-UNSAFE-005](../../docs/RULES.md#R-UNSAFE-005)).
 - **Log.** Frame Server gives the DLL no `tracing` subscriber, so it writes short lines
@@ -69,9 +73,14 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   no interactive user can write), capped at 1 MiB with one older file.
 - **Registration.** `DllRegisterServer` (`regsvr32`, elevated) writes
   `HKLM\Software\Classes\CLSID\{…}` with `InprocServer32` pointing at the DLL and
-  `ThreadingModel = Both`; `DllUnregisterServer` removes it. The product registers it
-  the same way without `regsvr32`: `jstream-daemon --register-vcam`, through
-  `jstream-platform-windows` ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)).
+  `ThreadingModel = Both`; `DllUnregisterServer` removes it. That registers the DLL
+  where it is, so it is for development and the [hardware check](#hardware-check) only.
+  The product's optional step, `jstream-daemon --register-vcam` through
+  `jstream-platform-windows`, writes the same keys but points them at an
+  administrators-only copy under `%ProgramFiles%\JStream\vcam\`, never at the DLL in
+  the user-writable portable folder, and `--unregister-vcam` removes the keys and the
+  copy ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md),
+  [ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
 The DLL only opens the shared objects. The engine creates them, with the contract's DACL
 (`sddl_objects`), in `jstream-platform-windows`.

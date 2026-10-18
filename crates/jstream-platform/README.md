@@ -94,6 +94,9 @@ Contents:
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
   as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) says.
+  `VideoEncoder::info` names the implementation encoding: it changes only when an
+  encoder falls back before its first packet (a hardware one refusing its first frame,
+  #443).
   `Codecs::on_context` returns the backend on a `GpuContext`, whose video encoders take
   that context's encode targets ([GPU frames](#gpu-frames)); `Ok(None)`, the default,
   when the backend has no GPU path. `Codecs::capture_decoder` makes a `CaptureDecoder`

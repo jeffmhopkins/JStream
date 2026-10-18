@@ -2,13 +2,16 @@
 //!
 //! It has the AAC encoder (`aac`) and the H.264, HEVC and AV1 encoders (`video`), from
 //! CPU NV12, RGBA or BGRA frames, or from encode targets on the GPU once the backend is on
-//! a GPU context (`Codecs::on_context`). HEVC and AV1 run where the GPU (or an installed
+//! a GPU context (`Codecs::on_context`). On the CPU path with hardware `Prefer`, a
+//! hardware encoder that refuses its first frame falls back to software (`fallback`). HEVC and AV1 run where the GPU (or an installed
 //! software MFT) offers them. Video decoders follow; until then they report
 //! `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.
 #[cfg(any(windows, test))]
 mod aac;
+#[cfg(any(windows, test))]
+mod fallback;
 #[cfg(windows)]
 mod mf;
 #[cfg(any(windows, test))]
@@ -35,6 +38,7 @@ mod backend {
     };
 
     use super::aac::MfAacEncoder;
+    use super::fallback::FirstFrameFallback;
     use super::mf::{self, MfRuntime};
     use super::video::{Format, MfVideoEncoder};
     use crate::gpu::EncodeGpu;
@@ -105,10 +109,23 @@ mod backend {
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-            Ok(Box::new(match &self.gpu {
-                Some(gpu) => MfVideoEncoder::open_on(config, gpu)?,
-                None => MfVideoEncoder::open(config)?,
-            }))
+            // The GPU path has hardware encoders only, so nothing to fall back to.
+            if let Some(gpu) = &self.gpu {
+                return Ok(Box::new(MfVideoEncoder::open_on(config, gpu)?));
+            }
+            let encoder = MfVideoEncoder::open(config)?;
+            if !FirstFrameFallback::applies(config, encoder.info()) {
+                return Ok(Box::new(encoder));
+            }
+            // A hardware MFT can take the media types and still refuse its first frame
+            // at `ProcessInput` (#443): then the session moves to the software MFT.
+            Ok(Box::new(FirstFrameFallback::new(
+                Box::new(encoder),
+                *config,
+                Box::new(|config: &VideoEncoderConfig| {
+                    Ok(Box::new(MfVideoEncoder::open(config)?) as Box<dyn VideoEncoder>)
+                }),
+            )))
         }
 
         fn audio_encoder(
