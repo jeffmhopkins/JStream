@@ -283,7 +283,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     A panic on the capture thread (the decoder's included) ends it with `InvalidState`.
     Dropping the stream doesn't wait: the thread stops after its current read and then
     releases the device and drops the decoder.
-  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`: the first synchronous
+  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`, which
+    `MfCodecs::capture_decoder` makes for the engine: the first synchronous
     MJPEG decoder MFT Media Foundation ranks (Microsoft's, on Windows), created on the
     capture thread at the first frame and again if the size changes. It takes NV12
     output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
