@@ -39,7 +39,8 @@ and calls this crate.
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
   - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
     source pixels, fitted into the box by its fit mode (`stretch`, `fit` or `fill`,
-    which is clipped to the box), and rotated clockwise about the box's centre;
+    which is clipped to the box), mirrored inside the box by `flip_h` and `flip_v`, and
+    rotated clockwise about the box's centre;
   - a **legacy 0.3 placement** (decision 5): crop in source pixels, then scale the
     remaining rectangle by `scale` relative to the source's current size, put its
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
@@ -74,7 +75,7 @@ and calls this crate.
   endpoint at a time since the start, or nothing once the item is invisible; it is a
   pure function, so the render thread and the control thread that retargets a running
   transition get the same answer. Angles take the shortest way round, discrete fields
-  (fit mode, a perspective present at one end) switch halfway, and after easing the
+  (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
   opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
   perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
   `jstream-core`'s.
@@ -97,7 +98,9 @@ and calls this crate.
   alpha: exact for an opaque capture, a fringe at partly transparent edges. A browser
   page's texture holds sRGB code values already multiplied by alpha (CEF's layout), so
   `import_premultiplied` takes `Rgba8Unorm` or `Bgra8Unorm` and reads it that way, with
-  no fringe. A compositor opened `on_context` reports that context's `ContextKey`
+  no fringe. `import_opaque` takes what `import` takes and reads every texel's alpha as
+  1: for a captured frame, whose alpha means nothing, as the CPU capture path treats it
+  (#451). A compositor opened `on_context` reports that context's `ContextKey`
   (`Compositor::context`), so a caller can tell a texture from that context from one
   it can't sample. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
@@ -164,7 +167,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    without the banding 8 bits would give in the darks; it costs 8 bytes per texel
    instead of 4, and the conversion is CPU work at upload time only.
 
-   **Imported textures** (`import`, `import_frame`, `import_premultiplied`) are not
+   **Imported textures** (`import`, `import_frame`, `import_premultiplied`,
+   `import_opaque`) are not
    converted: a capture changes every frame while its `Image` lives, so a conversion
    would be a per-frame pass. A straight import is sampled as straight alpha and
    premultiplied after the filter. For an opaque texture, such as a captured frame,
@@ -173,7 +177,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    so the filter averages premultiplied code values and transparent edges stay clean;
    the shader then divides by alpha, decodes sRGB and multiplies by alpha again.
    Averaging code values rather than linear light differs from an upload only where
-   the filter mixes texels of different colour.
+   the filter mixes texels of different colour. An opaque import (a capture) is decoded
+   by the sampler and its alpha replaced by 1, in the composite shader and in a
+   filter's input alike.
 2. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is two triangles. The vertex buffer holds clip-space
@@ -251,8 +257,8 @@ textures of its own (a video delay's ring), so it waits for the same fence and c
 back in `Reclaimed` (`Reclaimed::filters` counts them) to be dropped with the images.
 
 `import` keyed by an ID samples a `GpuFrame` with no copy (`import_premultiplied`
-does the same for a premultiplied texture, and replaces an entry the key imported the
-other way, as a new import does). The entry's image carries
+does the same for a premultiplied texture, and `import_opaque` for a capture, and each
+replaces an entry the key imported another way, as a new import does). The entry's image carries
 the frame's `FrameSync` hold, so each `render` that draws it stages it, until
 `end_frame`, which drops every live entry's hold (as retiring does): a cached image
 never keeps a platform texture from being reused. The import itself, texture view and
@@ -275,9 +281,11 @@ what the compositor draws and what a UI overlay computes cannot disagree.
 **Geometry.** `ItemGeometry::content` gives the cropped image's rectangle in the box's
 local frame (origin at the box centre, before rotation) and its UVs: the whole box for
 `stretch`, the centred largest rectangle of the crop's aspect ratio for `fit`, the
-centred smallest covering one for `fill`. `place` intersects that rectangle with the
+centred smallest covering one for `fill`. `flip_h` and `flip_v` swap that rectangle's
+`u` or `v` pair, which mirrors the cropped, fitted image about the box centre without
+moving the box. `place` intersects that rectangle with the
 box, which only changes `fill`, and cuts the UVs in proportion, so the clip needs no
-scissor or shader change. Clipping in the local frame is exact for any in-plane
+scissor or shader change, and a flipped `fill` keeps the mirror of the same middle. Clipping in the local frame is exact for any in-plane
 rotation. `ItemGeometry::place` then maps the four clipped corners: rotation about the
 centre, then `center` added. With 3D neutral that mapping is affine, so linear UVs
 across the quad are correct; a non-neutral 3D field would need perspective-correct
@@ -383,8 +391,9 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
   colour helpers. `src`, `texel` and `aux` always return premultiplied linear colour:
   a straight import is premultiplied after sampling, and a premultiplied import (a
-  browser page) is divided by alpha, decoded from sRGB and multiplied again, as the
-  compositor's own draw does (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
+  browser page) is divided by alpha, decoded from sRGB and multiplied again, and an
+  opaque import (a capture) has its alpha read as 1, as the compositor's own draw does
+  (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
   kept for the compositor's life, keyed by the shader's label and source (up to four
   sources per label, so a reloaded pack's old and new filters don't evict each other).
   A shader wgpu refuses, by its own validation or a backend compiler's, is a
@@ -580,7 +589,10 @@ the expected layout in the diff. These are not R-TEST-003's golden PNGs under
 `tests/golden/`, which wait for `cargo xtask golden`. The grids cover `fit`
 (letterboxed), `fill` (clipped to the box, the middle of the image showing), `stretch`
 rotated 90° about the box centre, crop before fitting, a legacy item beside them, and
-a non-axis-aligned box turning about its centre.
+a non-axis-aligned box turning about its centre. A flip grid draws a four-quadrant
+image unflipped, with `flip_h`, `flip_v` and both, flipped then turned 90° (the mirror
+is in the box's own frame), and a flipped `fill`; another checks that a legacy
+negative scale and the geometry `from_legacy` makes of it draw the same grid.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
@@ -602,7 +614,10 @@ opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps r
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
 imported sRGB texture is read as straight alpha, and a premultiplied `Unorm` import
 of half-transparent red over white keeps full red and lets half the white through in
-linear light (each refused in the other's format). An image from another compositor on
+linear light (each refused in the other's format). An opaque import of
+half-transparent red draws full red over black, faded only by the item's opacity, and
+an identity filter over it keeps it opaque; the cache reuses an opaque import and
+replaces it with a straight one of the same texture. An image from another compositor on
 the same device is refused. GPU frames through the cache: a frame drawn from an
 import is staged once, and once the frame ends nothing but the frame holds its
 `FrameSync`; a second texture under the key is a second import, the first texture
@@ -659,8 +674,9 @@ a hardware GPU.
   ends the submit in `PRESENT`. Software adapters often lack `TEXTURE_FORMAT_NV12`,
   so that pass cannot be the CI path. Proposed default: keep this RGBA output, and
   let a later pass sample it into the platform `encode_target` on the real device.
-- **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are opaque
-  `Bgra8UnormSrgb`, which `import` takes as is, so they need no conversion pass. A
+- **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are
+  `Bgra8UnormSrgb`, which `import_opaque` takes as is, so they need no conversion pass;
+  their alpha, which a driver or HDR mode can leave below 1, is read as 1. A
   browser page's frames are premultiplied `Bgra8Unorm`, which `import_premultiplied`
   takes as is.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).

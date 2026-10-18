@@ -448,7 +448,10 @@ mod tests {
                 compositor,
                 (&mut *cache, &mut *chains),
                 (shot, at),
-                None,
+                snapshot::View {
+                    mix: None,
+                    privacy: None,
+                },
                 &LiveParams::default(),
                 &NoCaptures,
                 canvas,
