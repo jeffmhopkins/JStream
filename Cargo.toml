@@ -195,10 +195,10 @@ opt-level = 3
 
 # The web UI's debug build (`trunk build` without `--release`, which the UI tests use):
 # `crates/jstream-ui/index.html` picks it with `data-cargo-profile-dev`. Without it, the
-# wasm's name section alone is over 64 MiB, more than the server serves a UI file at
-# (`MAX_FILE_BYTES` in `jstream-server`'s `ui.rs`), and every page load gets a 500
-# (#674). A panic's message and location still reach the console; its stack has no
-# function names. No DWARF either: trunk drops it unless asked to keep it.
+# wasm's name section alone is larger than the server serves a UI file at
+# (`MAX_FILE_BYTES` in `jstream-server`'s `ui.rs`), and every page load gets a 500.
+# The cost: a panic's stack frames in the browser console are unnamed. No DWARF either:
+# trunk drops it unless asked to keep it.
 [profile.ui-dev]
 inherits = "dev"
 debug = false
