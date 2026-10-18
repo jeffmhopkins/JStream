@@ -1,0 +1,26 @@
+[package]
+name = "jstream-aac"
+version = "0.0.0"
+description = "JStream's AAC-LC encoder in safe Rust (ADR-0061, ADR-0062): MPEG-2 AAC LC tools only, encode only."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 0
+summary = "AAC-LC encoder in safe Rust (ADR-0061, within ADR-0062's limits): MDCT with sine and KBD windows, block switching, a psychoacoustic model, M/S stereo, two-loop quantization, Huffman coding and a bit reservoir; raw access units plus the AudioSpecificConfig; encode only"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+assert_no_alloc.workspace = true
+# Test-only reference decoder for the round-trip tests (ADR-0062: never shipped). Pure
+# Rust, MPL-2.0 (on the deny.toml allow list, R-DEP-001).
+symphonia-codec-aac.workspace = true
+symphonia-core.workspace = true

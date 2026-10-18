@@ -1676,8 +1676,14 @@ fn output_start_publishes_fake_audio_and_video() {
     }
     assert!(saw_media, "expected script, a video NAL and raw AAC");
     let stats = engine.output_stats().expect("stats");
-    assert!(stats.video.received >= 1, "video frames accepted");
-    assert!(stats.audio.received >= 1, "audio blocks accepted");
+    assert!(
+        stats.video.received >= 1,
+        "video frames accepted: {stats:?}"
+    );
+    assert!(
+        stats.audio.received >= 1,
+        "audio blocks accepted: {stats:?}"
+    );
     assert!(stats.readbacks >= 1, "the CPU path read a frame back");
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
@@ -2084,6 +2090,20 @@ fn output_start_returns_after_a_panicking_teardown() {
         thread::sleep(Duration::from_millis(20));
     }
     assert!(failed, "publish failure left the output running");
+    // `failed` settles before the watcher drops the pipeline, and a start that comes
+    // while the program stage is still alive shares it instead of waiting, so the
+    // restart would never see the panicking teardown (the first macOS run, #520).
+    // Wait for the stream's drop to fire; the start below then races the unwinding
+    // teardown's `draining`, which is what this test is about.
+    let mut dropped = false;
+    for _ in 0..500 {
+        if !armed.load(Ordering::Acquire) {
+            dropped = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(dropped, "the first pipeline never dropped its audio stream");
 
     let engine = engine.with_publish(Box::new(RecordingPublish::new()));
     let restart = connected(&engine);
@@ -2098,10 +2118,6 @@ fn output_start_returns_after_a_panicking_teardown() {
     let restarted = restart_thread.join().expect("restart thread");
     restarted.expect("second output.start");
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
-    assert!(
-        !armed.load(Ordering::Acquire),
-        "the first pipeline never dropped its audio stream"
-    );
 }
 
 /// Dropping the last engine handle stops a running pipeline. The publish watcher

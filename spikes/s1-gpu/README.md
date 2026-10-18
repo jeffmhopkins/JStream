@@ -11,7 +11,7 @@ review_every = "180d"
 Throwaway code for spike S1 in [ROADMAP M0](../../ROADMAP.md#m0), Track B. It checks,
 on real hardware, the Windows path that
 [ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md) and
-[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) fix: shared capture texture,
+[ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md) fix: shared capture texture,
 shared fence, wgpu on D3D12, NV12, Media Foundation H.264, with no CPU copy of frame data
 at 1080p60.
 

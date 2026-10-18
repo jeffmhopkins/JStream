@@ -150,7 +150,7 @@ pub struct Context {
     /// The audio the `waveform` and `spectrum` sources draw: the program mix's scope
     /// and each bus's, looked up by their `audio` setting. `None` draws silence.
     pub audio: Option<Arc<AudioScopes>>,
-    /// The platform's media files (ADR-0031): what the `media` kind demuxes and decodes
+    /// The platform's media files (ADR-0061): what the `media` kind demuxes and decodes
     /// with. `None` until the host injects the platform's backends; `media` sources
     /// then fail with [`SourceError::NoBackend`].
     pub media: Option<Arc<dyn MediaDecoders>>,
