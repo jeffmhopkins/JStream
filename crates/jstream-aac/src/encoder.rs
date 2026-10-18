@@ -1,5 +1,6 @@
-//! The encoder: input buffering, block switching, the filterbank, M/S stereo, rate
-//! control, and the `raw_data_block` syntax (ISO/IEC 14496-3 §4.4.2).
+//! The encoder: input buffering, block switching, the filterbank, temporal noise
+//! shaping (`tns`), M/S stereo, rate control, and the `raw_data_block` syntax
+//! (ISO/IEC 14496-3 §4.4.2).
 //!
 //! Rate control is ISO/IEC 13818-7 Annex B's bit reservoir: the mean bits per frame
 //! (`bit_rate * 1024 / sample_rate`) flow in every frame, a frame may spend what the
@@ -17,6 +18,7 @@ use crate::mdct::{Mdct, WindowShape, Windows};
 use crate::psy::{self, AttackDetector, Layout};
 use crate::quant::{Channel, MAX_BANDS, Quantizer, Shape};
 use crate::tables::{SWB_LONG, SWB_SHORT};
+use crate::tns::{self, Analyser};
 use crate::{Config, Error, FRAME_LEN};
 
 /// Samples the encoder holds before it encodes a frame: the frame's 2048-sample window
@@ -80,6 +82,7 @@ pub struct Encoder {
     layout_long: Layout,
     layout_short: Layout,
     quantizer: Quantizer,
+    tns: Analyser,
     detector: AttackDetector,
     /// Whether the next frame's short-window region holds an attack.
     attack_next: Option<bool>,
@@ -133,6 +136,7 @@ impl Encoder {
             layout_long: Layout::new(&SWB_LONG, 1024, config.sample_rate, bw),
             layout_short: Layout::new(&SWB_SHORT, 128, config.sample_rate, bw),
             quantizer: Quantizer::new(),
+            tns: Analyser::new(config.sample_rate, &SWB_LONG, &SWB_SHORT),
             detector: AttackDetector::default(),
             attack_next: None,
             prev_sequence: Sequence::OnlyLong,
@@ -317,11 +321,15 @@ impl Encoder {
             lines,
         };
 
-        // Filterbank and model.
+        // Filterbank, model and TNS. Each channel is filtered before M/S, since a decoder
+        // undoes M/S first and TNS after.
         let mut pe = [0.0f32; 2];
         for (c, pe) in pe.iter_mut().enumerate().take(self.channels) {
             self.analyse(c, sequence, shape);
             *pe = self.model(c, &frame, short);
+            if let Some(shaped) = self.shape_noise(c, &frame, short) {
+                *pe = shaped;
+            }
         }
         if self.channels == 2 {
             pe = self.decide_ms(&frame);
@@ -343,6 +351,7 @@ impl Encoder {
         let trailer = 3 + 7;
         let mut left = budget.saturating_sub(header + trailer);
         for c in 0..self.channels {
+            let fixed = fixed + self.state[c].tns.bits(&frame);
             let share = if c + 1 == self.channels {
                 1.0
             } else {
@@ -484,6 +493,56 @@ impl Encoder {
         pe
     }
 
+    /// Filters channel `c`'s spectrum with temporal noise shaping where it pays (`tns`),
+    /// and returns the perceptual entropy of the filtered spectrum, whose band energies
+    /// replace the model's; the thresholds stay the unfiltered spectrum's. `None` when
+    /// no window is filtered.
+    fn shape_noise(&mut self, c: usize, frame: &Shape<'_>, short: bool) -> Option<f32> {
+        let ch = &mut self.state[c];
+        if !self.config.tns {
+            ch.tns = Default::default();
+            return None;
+        }
+        // Only windows whose envelope is uneven in time: on a stationary one TNS would
+        // spread the noise between tonal peaks.
+        let x = &self.input[c];
+        let mut gate = [false; 8];
+        if short {
+            for (w, g) in gate.iter_mut().enumerate() {
+                *g = tns::uneven(&x[448 + 128 * w..704 + 128 * w]);
+            }
+        } else {
+            gate[0] = tns::uneven(&x[..2048]);
+        }
+        let mut gain = [1.0; 8];
+        self.tns
+            .apply(&mut ch.spec, frame, &gate, &mut ch.tns, &mut gain);
+        if !ch.tns.present(frame) {
+            return None;
+        }
+        // The decoder's filter amplifies the residual's quantization noise, so the
+        // filtered bands are quantized against thresholds lowered by its gain.
+        let (bands, lines) = (frame.bands, frame.lines);
+        for (w, &g) in gain[..frame.windows].iter().enumerate() {
+            for b in self.tns.bands(frame) {
+                ch.thr[w * bands + b] /= g;
+            }
+        }
+        let layout = if short {
+            &self.layout_short
+        } else {
+            &self.layout_long
+        };
+        let mut pe = 0.0;
+        for w in 0..frame.windows {
+            let spec = &ch.spec[w * lines..(w + 1) * lines];
+            let range = w * bands..(w + 1) * bands;
+            psy::band_energies(layout, spec, &mut ch.energy[range.clone()]);
+            pe += psy::entropy(layout, &ch.energy[range.clone()], &ch.thr[range]);
+        }
+        Some(pe)
+    }
+
     /// Chooses L/R or M/S per band, converts the M/S bands' spectra, energies and
     /// thresholds, and returns each channel's perceptual entropy afterwards.
     fn decide_ms(&mut self, frame: &Shape<'_>) -> [f32; 2] {
@@ -611,7 +670,11 @@ pub(crate) fn write_ics(
         }
     }
     w.bit(false); // pulse_data_present
-    w.bit(false); // tns_data_present
+    let tns = ch.tns.present(frame);
+    w.bit(tns);
+    if tns {
+        ch.tns.write(w, frame);
+    }
     w.bit(false); // gain_control_data_present
     for g in 0..frame.windows {
         for s in &ch.sections[g][..ch.section_count[g]] {

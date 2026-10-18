@@ -199,3 +199,62 @@ pub(super) fn pre_echo(input: &[f32], output: &[f32]) -> f64 {
     }
     worst
 }
+
+/// Temporal noise shaping keeps the quantization noise near the clicks of a click train
+/// that long windows code, so the gaps between them stay quieter than without it, and
+/// leaves steady signals as they were.
+#[test]
+fn temporal_noise_shaping_keeps_noise_by_the_clicks() {
+    // 100 clicks a second, each a 0.5 ms decaying burst, over a faint noise floor.
+    let period = 480;
+    let n = RATE as usize * 3 / 2;
+    let mut rng = Rng(3);
+    let mut clicks = Vec::with_capacity(2 * n);
+    for i in 0..n {
+        let p = i % period;
+        let click = if p < 24 {
+            (-(p as f32) / 4.0).exp() * 0.7 * if p % 2 == 0 { 1.0 } else { -0.6 }
+        } else {
+            0.0
+        };
+        let s = click + 0.002 * rng.unit();
+        clicks.push(s);
+        clicks.push(s * 0.9);
+    }
+    // The error energy in the gaps, 64 samples clear of each click, against the signal's.
+    let gap_noise = |output: &[f32]| -> f64 {
+        let (mut err, mut sig) = (0.0f64, 0.0f64);
+        for i in 4800..n {
+            let p = i % period;
+            sig += f64::from(clicks[2 * i]).powi(2);
+            if p > 64 && p < period - 64 {
+                err += f64::from(output[2 * i] - clicks[2 * i]).powi(2);
+            }
+        }
+        10.0 * (err / sig).log10()
+    };
+    let run = |input: &[f32], kbps: u32, tns: bool| -> Vec<f32> {
+        let mut config = Config::new(RATE, 2, kbps * 1000);
+        config.tns = tns;
+        let units = encode(config, input);
+        let pcm = decode([0x11, 0x90], &units).expect("decodes");
+        pcm[2 * DELAY..2 * DELAY + input.len()].to_vec()
+    };
+    for kbps in [64, 128] {
+        let without = gap_noise(&run(&clicks, kbps, false));
+        let with = gap_noise(&run(&clicks, kbps, true));
+        assert!(
+            with < without - 2.0,
+            "{kbps} kbps: gap noise {with:.1} dB with TNS, {without:.1} dB without"
+        );
+    }
+    for kind in ["tone", "two-tone"] {
+        let input = signal(kind, 1.5);
+        let without = snr_db(&input, &run(&input, 128, false));
+        let with = snr_db(&input, &run(&input, 128, true));
+        assert!(
+            with > without - 0.5,
+            "{kind}: SNR {with:.1} dB with TNS, {without:.1} dB without"
+        );
+    }
+}
