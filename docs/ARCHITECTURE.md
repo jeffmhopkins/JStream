@@ -47,7 +47,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
                    │ cross-process frames (shared texture + fence)
      ┌─────────────┴────────────────────────────────────┐
      │ jstream-vcam-windows (COM media source DLL,      │  loaded by the Windows
-     │ registered by the app on first use)              │  Frame Server service
+     │ an admin-only copy, registered only on opt-in)   │  Frame Server service
      └──────────────────────────────────────────────────┘
 ```
 
@@ -140,6 +140,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
+| 2 | `jstream-crash` | Local crash reports for the apps ([ADR-0067](adr/0067-shared-crash-reports.md)): the panic hook, redaction of registered secrets by BLAKE3 digest, the report format and pruning, and `Redacting`, which registers each stream key and refresh token passing through a credential store. The secrets live in a `Secrets` handle the app holds, not in global state | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
@@ -399,8 +400,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   records each as a mixer input, routed as its audio and sends say, running the
   source's enabled audio filters of the built-in kinds (`gain`, `noise_gate`,
   `compressor`, `limiter`, `delay`). A `browser` page's audio and a `media` file's
-  sound are mixer inputs of their running source, routed the same way. No video filter
-  kind is built in yet.
+  sound are mixer inputs of their running source, routed the same way. A source's
+  enabled video filters of `jstream-render`'s built-in kinds run in order over its
+  frame or capture before every placement of it, in every mix (roadmap V0,
+  [core › Design](../crates/jstream-core/README.md#design)); effect-pack kinds are
+  bypassed there for now.
   Outputs, ordered by ID, with their `kind`, an optional `encoder_profile` and an
   optional `video_mix`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
@@ -429,7 +433,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), video filter kinds, blend modes other than `normal`,
+  version is refused on load), video filters that read an asset or scene reference
+  (`apply_lut`, `image_mask` and `scene_mask` pass their input through), blend modes
+  other than `normal`,
   bus monitors, per-placement effects, 3D
   geometry, variants and overrides (so no edit drops
   any yet), `background`, output audio buses and chains, the `YouTube` kind, a virtual
@@ -932,8 +938,10 @@ on D3D11 into a texture of their own, fence-synchronized both ways, and
 Nothing writes the encode targets yet. Built-in video filters are kinds with
 descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
-([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
-runtime that runs a source's video chain before placement is not built yet. Still outside this crate: the render
+([jstream-render › Filters](../crates/jstream-render/README.md#filters));
+`apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
+chain runtime runs a source's video chain before placement without allocating per
+frame. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
 
@@ -1126,17 +1134,23 @@ Direct3D 12).
   `after-review.yml` builds it with the release UI its `dist-ui` job builds, names it
   after the commit tested (`--revision`), and uploads it as an artifact, as is, on `main`
   and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The sandboxed browser helper and the CEF runtime are not in it yet; they join it when the hosts turn their `cef` features on.
-- **Virtual camera:** the app registers the COM media source from its own folder the first
-  time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
-  because Frame Server ignores per-user registration. The registered DLL is the one in the app's
-  folder, which the user can usually write to (#242).
-  [ADR-0066](adr/0066-portable-windows-distribution-v2.md) (accepted) makes registering
-  optional and registers an administrators-only copy under `%ProgramFiles%` instead, in
-  the same prompt (#561; [THREAT-MODEL › Virtual camera](security/threat-model.md#vcam)). The app can unregister
-  the source and detects a moved folder. Until the desktop app has that mode, `jstream-daemon --register-vcam` is
-  that mode, and the daemon warns at startup when the registration names another folder
-  ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)); unregistering waits
-  for the app. Spike S2 (Windows 11 25H2, build 26200) found:
+- **Virtual camera:** registering the COM media source is **optional**, an explicit
+  step the user chooses; nothing registers it or asks for elevation on its own
+  ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The step costs **one UAC
+  prompt** (`jstream.exe --register-vcam`), because Frame Server ignores per-user
+  registration. Inside it, the elevated process creates `%ProgramFiles%\JStream\vcam\`
+  with a protected DACL (SYSTEM and Administrators full control, LOCAL SERVICE and Users
+  read and execute, nothing inherited), copies the shipped DLL there with the same DACL,
+  and points `InprocServer32` at the copy. The DLL in the app's folder, which the user
+  can usually write to, is never registered
+  ([THREAT-MODEL › Virtual camera](security/threat-model.md#vcam)). The app compares the
+  copy with the DLL it ships by content, without elevation, and offers to register again
+  when they differ, which is a new opt-in. Unregistering removes the keys and the copy,
+  with one prompt. Until the desktop app has those modes, `jstream-daemon
+  --register-vcam` and `--unregister-vcam` are them, and the daemon only logs the
+  registration's state at startup
+  ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)). Spike S2 (Windows
+  11 25H2, build 26200) found:
   - **Per user (`HKCU`) doesn't work.** `MFCreateVirtualCamera` succeeds, but
     `IMFVirtualCamera::Start` fails with `0x80070003`, and Frame Server never loads the
     DLL.

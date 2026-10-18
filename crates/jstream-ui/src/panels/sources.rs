@@ -243,15 +243,23 @@ pub fn Sources() -> impl IntoView {
         } = row;
         let selected = {
             let id = item_id.clone();
-            move || studio.selection.with(|s| s.item.as_ref() == Some(&id))
+            move || studio.selection.with(|s| s.contains(&id))
         };
         let is_renaming = {
             let id = source_id.clone();
             move || renaming.with(|r| r.as_ref() == Some(&id))
         };
+        // A click selects the item alone; Shift-click adds it to the selection or takes
+        // it out, as on the canvas.
         let select = {
             let id = item_id.clone();
-            move |_| studio.select_item(Some(id.clone()))
+            move |event: leptos::ev::MouseEvent| {
+                if event.shift_key() {
+                    studio.toggle_item(&id);
+                } else {
+                    studio.select_item(Some(id.clone()));
+                }
+            }
         };
         let start_rename = {
             let id = source_id.clone();

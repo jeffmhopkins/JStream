@@ -2669,16 +2669,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-crash"
+version = "0.0.0"
+dependencies = [
+ "blake3",
+ "jstream-platform",
+ "jstream-protocol",
+]
+
+[[package]]
 name = "jstream-daemon"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "blake3",
  "futures-util",
  "getrandom 0.4.3",
  "jstream-browser",
  "jstream-control",
  "jstream-core",
+ "jstream-crash",
  "jstream-media",
  "jstream-platform",
  "jstream-platform-windows",
@@ -2696,11 +2705,11 @@ name = "jstream-desktop"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "blake3",
  "getrandom 0.4.3",
  "jstream-browser",
  "jstream-control",
  "jstream-core",
+ "jstream-crash",
  "jstream-platform",
  "jstream-platform-windows",
  "jstream-protocol",
@@ -2807,6 +2816,7 @@ dependencies = [
  "jstream-platform",
  "jstream-plugin-proto",
  "jstream-vcam-proto",
+ "tracing",
  "wgpu",
  "windows",
  "windows-core",
@@ -2853,6 +2863,7 @@ name = "jstream-render"
 version = "0.0.0"
 dependencies = [
  "criterion",
+ "insta",
  "jstream-media",
  "jstream-platform",
  "jstream-protocol",
@@ -2888,6 +2899,7 @@ dependencies = [
  "assert_no_alloc",
  "gif",
  "image-webp",
+ "insta",
  "jstream-browser",
  "jstream-media",
  "jstream-platform",

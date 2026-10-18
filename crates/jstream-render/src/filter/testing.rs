@@ -177,6 +177,57 @@ mod tests {
         near(&snapshot, 1, 1, [128, 0, 0, 128], 2);
     }
 
+    /// `apply_filter_into` redraws a caller's layer frame after frame, and refuses an
+    /// output of the wrong size, the input itself, or an image that isn't a layer.
+    #[test]
+    fn a_filter_redraws_into_the_same_layer() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const R: [u8; 4] = [255, 0, 0, 255];
+        const G: [u8; 4] = [0, 255, 0, 255];
+        let mut filter = VideoFilter {
+            kind: "test-copy".into(),
+            pass: Box::new(Copy),
+        };
+        let output = opened.compositor.layer(2, 1).expect("layer");
+        for colour in [R, G] {
+            let input = image(&opened, 2, &[colour, colour]);
+            opened
+                .compositor
+                .apply_filter_into(&mut filter, &input, &output, FilterClock::default())
+                .expect("apply_filter_into");
+            let snapshot = read(&mut opened, &output);
+            near(&snapshot, 0, 0, colour, 1);
+            near(&snapshot, 1, 0, colour, 1);
+        }
+        let input = image(&opened, 2, &[R, R]);
+        let wrong = opened.compositor.layer(3, 1).expect("layer");
+        let refused = |result: Result<(), RenderError>| {
+            assert!(
+                matches!(result, Err(RenderError::Invalid { .. })),
+                "{result:?}"
+            );
+        };
+        let clock = FilterClock::default();
+        refused(
+            opened
+                .compositor
+                .apply_filter_into(&mut filter, &input, &wrong, clock),
+        );
+        refused(
+            opened
+                .compositor
+                .apply_filter_into(&mut filter, &output, &output, clock),
+        );
+        let upload = image(&opened, 2, &[R, R]);
+        refused(
+            opened
+                .compositor
+                .apply_filter_into(&mut filter, &input, &upload, clock),
+        );
+    }
+
     /// Every kind is a unique `video_filter` with valid defaults and a pass that its
     /// defaults build.
     #[test]

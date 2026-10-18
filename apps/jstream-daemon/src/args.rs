@@ -35,9 +35,15 @@ Options:
                        the JSON Google Cloud gives for a Desktop app client
                        (default: JSTREAM_YOUTUBE_CLIENT_ID and
                        JSTREAM_YOUTUBE_CLIENT_SECRET, else the built-in client)
-  --register-vcam      Windows: register the virtual camera (the DLL beside the
-                       daemon) for this machine, then exit. Asks for
-                       administrator rights once; takes no other options
+  --register-vcam      Windows, optional: register the virtual camera for this
+                       machine, then exit. Copies the DLL beside the daemon to
+                       an administrators-only folder under Program Files and
+                       registers that copy; run it again after an update to
+                       refresh the copy. Asks for administrator rights once;
+                       takes no other options
+  --unregister-vcam    Windows: remove the virtual camera's registration and its
+                       copy, then exit. Asks for administrator rights once;
+                       takes no other options
   -V, --version        print the daemon and protocol versions
   -h, --help           print this help
 
@@ -83,6 +89,8 @@ pub enum Invocation {
     Version,
     /// Register the virtual camera, then exit.
     RegisterVcam,
+    /// Unregister the virtual camera and delete its copy, then exit.
+    UnregisterVcam,
     /// Run the engine and serve it.
     Serve(Options),
 }
@@ -92,6 +100,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut options = Options::default();
     let mut port = None;
     let mut register_vcam = false;
+    let mut unregister_vcam = false;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || rest.next().ok_or_else(|| format!("`{arg}` needs a value"));
@@ -99,6 +108,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             "-h" | "--help" => return Ok(Invocation::Help),
             "-V" | "--version" => return Ok(Invocation::Version),
             "--register-vcam" => register_vcam = true,
+            "--unregister-vcam" => unregister_vcam = true,
             "--token-file" => {
                 let path = value()?;
                 if options.token_file.replace(path.clone()).is_some() {
@@ -154,6 +164,12 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             return Err("`--register-vcam` takes no other options".to_owned());
         }
         return Ok(Invocation::RegisterVcam);
+    }
+    if unregister_vcam {
+        if args.len() > 1 {
+            return Err("`--unregister-vcam` takes no other options".to_owned());
+        }
+        return Ok(Invocation::UnregisterVcam);
     }
     options.port = port.unwrap_or(0);
     Ok(Invocation::Serve(options))
@@ -281,5 +297,25 @@ mod tests {
             "`--register-vcam` takes no other options"
         );
         assert_eq!(parse(&args("--register-vcam --help")), Ok(Invocation::Help));
+    }
+
+    #[test]
+    fn unregister_vcam_stands_alone() {
+        assert_eq!(
+            parse(&args("--unregister-vcam")),
+            Ok(Invocation::UnregisterVcam)
+        );
+        assert_eq!(
+            error("--unregister-vcam --port 1"),
+            "`--unregister-vcam` takes no other options"
+        );
+        assert_eq!(
+            error("--register-vcam --unregister-vcam"),
+            "`--register-vcam` takes no other options"
+        );
+        assert_eq!(
+            parse(&args("--unregister-vcam --help")),
+            Ok(Invocation::Help)
+        );
     }
 }

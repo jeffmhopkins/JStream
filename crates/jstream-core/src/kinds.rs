@@ -1,18 +1,20 @@
 //! The source and filter kinds the engine describes (`kind.list`, `kind.describe`) and validates
 //! settings against (ADR-0025, docs/adr/0025-typed-settings-kind-descriptors.md): the
-//! descriptors of `jstream-sources`' built-in registry and the audio filter kinds of
-//! [`crate::filters`].
+//! descriptors of `jstream-sources`' built-in registry, the audio filter kinds of
+//! [`crate::filters`], and `jstream-render`'s built-in video filter kinds, which
+//! [`crate::chain`] runs.
 //!
 //! Frames still come from `Engine::set_source_frame`; rendering sources from the
 //! registry is the next step.
 
 use jstream_protocol::KindDescriptor;
 
-/// Every built-in kind, ordered by ID: the source kinds, then the audio filter kinds
-/// (ADR-0026), merged.
+/// Every built-in kind, ordered by ID: the source kinds, the audio filter kinds and the
+/// video filter kinds (ADR-0026), merged.
 pub(crate) fn builtin() -> Vec<KindDescriptor> {
     let mut kinds = jstream_sources::Registry::builtin().descriptors();
     kinds.extend(crate::filters::descriptors());
+    kinds.extend(jstream_render::video_filter_descriptors());
     kinds.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
     kinds
 }
