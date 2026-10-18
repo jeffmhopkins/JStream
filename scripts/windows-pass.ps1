@@ -1177,12 +1177,15 @@ function Test-Webcam {
         $a = @($probe.streams | Where-Object { $_.codec_type -eq 'audio' })
         Check ($v.Count -eq 1) 'webcam video recorded' "$($v.Count) video streams"
         if (-not $Unattended) { Invoke-Item -LiteralPath $file }
-        Ask 'webcam colours' 'webcam.mp4 is open: is the picture right, with natural colours?'
+        Ask 'webcam colours' 'webcam.mp4 is open: is the picture right, with natural colours? (Media Player cannot open it yet, #746: use VLC. A black first second or two is the camera starting.)'
         Ask 'paired microphone (#726)' 'Is your voice in the recording, from the webcam''s own microphone?'
         if ($seen.NoMic) { Warn 'audio stream' "$($a.Count) audio streams, but the daemon logged that the webcam has no paired audio input" }
         else { Check ($a.Count -ge 1) 'audio stream' "$($a.Count) audio streams in the recording" }
     }
     if (Confirm 'Run the interactive unplug test? It asks you to unplug the webcam mid-stream.') {
+        [void](Invoke-Cargo 'pr726' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--no-run') 'webcam-unplug-build')
+        Prompt-Do 'When you press Enter, the test opens the webcam and waits 30 s: unplug it then, and plug it back in after.' | Out-Null
+        Write-Host '  UNPLUG THE WEBCAM NOW (30 s)' -ForegroundColor Yellow
         $env:JSTREAM_UNPLUG_TEST = '1'
         try { $code = Invoke-Cargo 'pr726' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--', '--ignored', 'unplug', '--nocapture') 'webcam-unplug' }
         finally { Remove-Item Env:\JSTREAM_UNPLUG_TEST }

@@ -4566,7 +4566,7 @@ stamp = { hash = "b3:2a6f8f601d4598b2", by = "agent:windows-pass", note = "Writt
 stamp = { hash = "b3:9e3a9ddf79167120", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.ps1"]
-stamp = { hash = "b3:a428e9a66851f7eb", by = "agent:windows-pass", note = "Re-read after the webcam busy guard became case-sensitive on the Busy error and the video_device hw-tests run one at a time; the usage, sources and check table still hold." }
+stamp = { hash = "b3:eb75dc07db575ef6", by = "agent:windows-pass", note = "Re-read after the unplug test builds first and cues the person before its 30 s window, and the colour question points at VLC (#746); the usage, sources and check table still hold." }
 
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:4fabbaa71adf77ab", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
