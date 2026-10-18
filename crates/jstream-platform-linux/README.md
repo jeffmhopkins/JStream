@@ -68,8 +68,10 @@ It has:
   with timeouts over the session bus socket. Received messages are untrusted: lengths
   are checked, nesting is bounded, and malformed input is an error. The portal needs a
   few calls and two signals, which didn't justify a D-Bus crate and its async runtime,
-  and libdbus would be one more C library to load. It zeroes the messages it encodes
-  and decodes before freeing them, since the secret store's carry secrets.
+  and libdbus would be one more C library to load. As a best effort, it zeroes the
+  buffers of the messages it encodes and decodes, spare capacity included, before
+  freeing them, since the secret store's carry secrets; copies left when its receive
+  buffer grows are not reached.
 - **`LinuxSecrets`** (`StreamKeyStore`, `OAuthTokenStore`;
   [ADR-0071](../../docs/adr/0071-linux-secret-store.md),
   [R-SEC-001](../../docs/RULES.md#R-SEC-001)) keeps stream keys and OAuth refresh tokens

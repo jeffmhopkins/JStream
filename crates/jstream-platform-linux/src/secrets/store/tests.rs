@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use jstream_platform::{OAuthTokenStore, PlatformError, Secret, StreamKeyStore};
 
-use super::{LinuxSecrets, Vault};
+use super::{LinuxSecrets, Vault, no_session_bus};
 use crate::secrets::Name;
 
 /// A fresh, empty folder for one test, deleted when the test ends.
@@ -236,6 +236,30 @@ fn a_failing_keyring_never_falls_back_and_keeps_the_file() {
     StreamKeyStore::set(&store, "c", &Secret::new("three")).expect("set");
     assert_eq!(memory.ids().len(), 3);
     assert!(!store.file_path().exists());
+}
+
+#[test]
+fn only_a_missing_session_bus_means_no_keyring() {
+    let connect = |code: i32| PlatformError::Os {
+        call: "connecting to the D-Bus session bus",
+        code: u32::try_from(code).ok(),
+        message: "x".into(),
+    };
+    assert!(no_session_bus(&PlatformError::MissingComponent {
+        component: "D-Bus session bus",
+        remedy: "x".into(),
+    }));
+    assert!(no_session_bus(&connect(libc::ENOENT)));
+    assert!(no_session_bus(&connect(libc::ECONNREFUSED)));
+    // A bus that is there but fails is the keyring failing: no fallback.
+    assert!(!no_session_bus(&connect(libc::EACCES)));
+    for call in ["D-Bus authentication", "org.freedesktop.DBus.Hello"] {
+        assert!(!no_session_bus(&PlatformError::Os {
+            call,
+            code: None,
+            message: "timed out waiting for the reply".into(),
+        }));
+    }
 }
 
 /// Against a real Secret Service (R-TEST-004): behind `hw-tests` and `#[ignore]`d,

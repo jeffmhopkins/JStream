@@ -315,8 +315,10 @@ fn save(path: &Path, contents: &Contents) -> Result<(), PlatformError> {
         .mode(0o700)
         .create(dir)
         .map_err(|e| file_error(CALL, dir, &e))?;
+    // A name of this process's own, so two processes writing at once don't remove
+    // each other's temporary file; the last rename wins.
     let mut tmp = path.as_os_str().to_owned();
-    tmp.push(".tmp");
+    tmp.push(format!(".{}.tmp", std::process::id()));
     let tmp = PathBuf::from(tmp);
     match fs::remove_file(&tmp) {
         Ok(()) => {}
@@ -355,8 +357,10 @@ impl Keyring {
     /// reachable: no session bus, or nothing provides `org.freedesktop.secrets`.
     fn connect() -> Result<Option<Self>, PlatformError> {
         const WHAT: &str = "org.freedesktop.Secret.Service.OpenSession";
-        let Ok(mut bus) = Bus::session() else {
-            return Ok(None);
+        let mut bus = match Bus::session() {
+            Ok(bus) => bus,
+            Err(e) if no_session_bus(&e) => return Ok(None),
+            Err(e) => return Err(e),
         };
         let reply = bus.call_reply(&service::open_session(), None, WHAT, CALL)?;
         if reply.msg.kind == MessageKind::Error {
@@ -569,6 +573,24 @@ impl Vault for Keyring {
     fn is_set(&mut self, name: &Name) -> Result<bool, PlatformError> {
         let (unlocked, locked) = self.search(name)?;
         Ok(!unlocked.is_empty() || !locked.is_empty())
+    }
+}
+
+/// Whether opening the session bus failed because there is none (ADR-0071 §2): no
+/// address to connect to, or a socket that isn't there or refuses connections. A bus
+/// that is there but fails (authentication, `Hello`, a timeout) is an error, never a
+/// reason to use the file.
+fn no_session_bus(error: &PlatformError) -> bool {
+    match error {
+        PlatformError::MissingComponent { .. } => true,
+        PlatformError::Os {
+            call: "connecting to the D-Bus session bus",
+            code: Some(code),
+            ..
+        } => [libc::ENOENT, libc::ECONNREFUSED]
+            .into_iter()
+            .any(|c| u32::try_from(c).ok() == Some(*code)),
+        _ => false,
     }
 }
 

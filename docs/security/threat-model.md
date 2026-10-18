@@ -258,8 +258,8 @@ intercepted connection.
 
 **Controls on main:**
 - Keys and refresh tokens live in Windows Credential Manager. Where an app has no
-  store (the macOS Keychain store is built but not wired into an app yet; Linux has
-  none) `set_key` fails rather than fall back to a file. Secret types print `***` and
+  store (the macOS Keychain and Linux Secret Service stores are built but not wired
+  into an app yet) `set_key` fails rather than fall back to a file. Secret types print `***` and
   are zeroed on drop. The collection never holds a key, and target URLs that could carry
   one (user info, query, fragment) are refused.
 - RTMPS and the YouTube API use rustls with the OS roots and hostname checks; nothing

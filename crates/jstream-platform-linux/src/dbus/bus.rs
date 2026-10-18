@@ -357,11 +357,15 @@ impl Bus {
     }
 }
 
-/// Zeroes a buffer before it is freed. Best effort, as for `Secret`: `black_box` keeps
-/// the writes from being dropped as dead stores, and copies made when a buffer grew are
-/// not reached.
-fn wipe(bytes: &mut [u8]) {
-    bytes.fill(0);
+/// Zeroes a buffer, its spare capacity included, before it is freed. Best effort, as
+/// for `Secret`: `black_box` keeps the writes from being dropped as dead stores, and
+/// copies left behind when a buffer grew are not reached.
+fn wipe(bytes: &mut Vec<u8>) {
+    let capacity = bytes.capacity();
+    bytes.clear();
+    // Within the capacity, so this writes zeros over the whole allocation and never
+    // reallocates.
+    bytes.resize(capacity, 0);
     std::hint::black_box(&*bytes);
 }
 
