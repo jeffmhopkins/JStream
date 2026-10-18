@@ -90,7 +90,7 @@ stamp = { hash = "b3:be2cb77094d2d1e3" }
 stamp = { hash = "b3:45a0daff6f397ade" }
 
 ["ARCH#crate-map"."file:crates/jstream-server/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:419939266a782736" }
+stamp = { hash = "b3:20d58e59684af724", by = "agent:claude", note = "#548 (#344): jstream-server gains a Windows-only dependency on jstream-platform-windows (L2 under L4), within strict layering and R-ARCH-003 (no path to jstream-core); its row and metadata are unchanged; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-sources/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:5874b1d8a3880e50", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the platform row lists wave/m2's MediaDecoders (media files) with main's paths (P1); jstream-sources' jstream-meta summary is main's (YouTube chat cites ADR-0058) and it now depends on both jstream-platform (media decoders, GPU frames, audio, with its fake for tests) and main's jstream-browser (L3, below sources' L4); main's jstream-browser, outputs and apps rows stand; lint-deps passes; holds" }
@@ -588,10 +588,10 @@ stamp = { hash = "b3:6cd60a92a95bbce9", by = "agent:claude@session_01KvbMUfF6qWH
 stamp = { hash = "b3:1485046c80293f0f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
-stamp = { hash = "b3:e9241efe87e7e719" }
+stamp = { hash = "b3:df0a96f8fb4a7ed7", by = "agent:claude", note = "#548 (#344): only the server's device-file storage changed (a Windows user-only DACL, Cargo.toml, README, devices.rs); envelope, versioning, auth and pairing are unaffected" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:edd296024934cb42", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b: Privacy screen at placeholder 0.29 (privacy.set master stage, privacy.changed with replay, audit, refused in a batch), dedicated (0.29) in encoder sessions, and now that preview.subscribe has no post-master stage so preview streams are uncovered; merged wave/m1-2 at c763e23 (E2 video mixes 0.28, K1 hotkeys, I2 live values, C3 captures) (0.25-0.28); matches protocol and control READMEs | merge: merged wave/m1-3 at bf37f98f (wave/m1-2 landed via main, T1 transitions and studio preview at 0.30, master/output audio filter chains at 0.29): Privacy screen (protocol 0.31 placeholder) beside Studio mode and Transitions (0.30); dedicated (0.31); command/fixtures/query/version match" }
+stamp = { hash = "b3:2b9659b3acda98fe", by = "agent:claude", note = "#548 (#344): only the server's device-file storage changed (a Windows user-only DACL, Cargo.toml, README, devices.rs); envelope, versioning, auth and pairing are unaffected" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/admitted.rs"]
 stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
@@ -600,7 +600,7 @@ stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: t
 stamp = { hash = "b3:49da10ab71c38867", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354 adds a TCP connection cap in jstream-server's listener and a 64-call in-flight cap per WebSocket connection (stops reading, no new message or error); wave/m1-2 added the TLS-listener device token wording, the /pair page and device cookie (ADR-0047) and the pairing-off unsupported answer; envelope, versioning, transport and slow-client summary still hold, no protocol version change. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+stamp = { hash = "b3:c586b1f751e46d7b", by = "agent:claude", note = "#548 (#344): only the server's device-file storage changed (a Windows user-only DACL, Cargo.toml, README, devices.rs); envelope, versioning, auth and pairing are unaffected" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -1539,13 +1539,13 @@ stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmE
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:28ead4aa77305de7", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "C8b5 vs wave/m1-2 (#487 merged in): the Browser sources bullet (stage lends its context via Engine::use_gpu, taken back at stop, serve.rs browse's device covers paints before the first stage) still holds; the wave's crash-redaction text (crash::Redacting around key and token stores) doesn't touch it; dep core#design re-read for the merged Live sources and compose text; holds | merge: merged wave/m1-3 at ae19d3f1 (B11 folders/labels/metadata at 0.31 (#323), UI dark theme (#495), render filter frame report, browser permissions): core/server design deps changed by B11; daemon text unaffected" }
+stamp = { hash = "b3:220246aeff92e12e", by = "agent:claude", note = "#548 (#344): the paired-devices, log-file and token bullets describe the Windows protected DACL on creation and the DACL check on reuse (logs.rs, token.rs), and the dependencies bullet names jstream-platform-windows. The merge of #540's branch brought the wave's server design changes (the dep), which don't touch these bullets" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:4932ffbdbac67045", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via core#design (privacy screen, View-based compose) and server#design (privacy.changed mapping); the daemon wires neither directly; holds | merge: merged wave/m1-3 at 641ea3df (#592: a capture is read as opaque on both capture paths, import_opaque): core design dep changed by the opaque-capture wording; daemon text unaffected" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:8406f7925c09c878", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via core#design (privacy screen, View-based compose) and server#design (privacy.changed mapping); the daemon wires neither directly; holds | merge: merged wave/m1-3 at bf37f98f (wave/m1-2 landed via main, T1 transitions and studio preview at 0.30, master/output audio filter chains at 0.29): core and server design deps changed by the merge's privacy+transition union; daemon text unaffected" }
+stamp = { hash = "b3:e9a0f83c66d65124", by = "agent:claude", note = "#548 (#344): the paired-devices, log-file and token bullets describe the Windows protected DACL on creation and the DACL check on reuse (logs.rs, token.rs), and the dependencies bullet names jstream-platform-windows. The merge of #540's branch brought the wave's server design changes (the dep), which don't touch these bullets" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:a8a32200460f3f62", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Stale only through core#design and ARCH#persistence (flips written only when true). This PR changes neither core README text nor daemon code; the daemon's text on its backends and the collection file still matches serve.rs. The m1-3 merge brings the daemon's CLAP plugin scan thread (WindowsPluginHosts, scan_clap_plugins), ADR-0066's portable distribution and the longer flag list, plus core#design's wave edits; none involves geometry; holds" }
@@ -1569,7 +1569,7 @@ stamp = { hash = "b3:12f186b4fc1f9dbf", by = "agent:threat-model-covers", note =
 stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/logs.rs"]
-stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data-directory bullet now names jstream-platform's paths module (portable marker handled), Dependencies lists the data directory under jstream-platform, open question 5 says the log default uses it and the token/collection don't yet; matches logs.rs; sits beside main's #328 delay-load text without overlap" }
+stamp = { hash = "b3:0fc2fa0aa62af197", by = "agent:claude", note = "#548 (#344): the paired-devices, log-file and token bullets describe the Windows protected DACL on creation and the DACL check on reuse (logs.rs, token.rs), and the dependencies bullet names jstream-platform-windows. The merge of #540's branch brought the wave's server design changes (the dep), which don't touch these bullets" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/main.rs"]
 stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
@@ -1581,7 +1581,7 @@ stamp = { hash = "b3:1ac657a1accf6f5e" }
 stamp = { hash = "b3:34c8d3ddfb1f04f1", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "serve.rs: this PR changes only a test assertion (CallResult::batch); #312's OAuth client selection and developer override are the wave's and already described here. dep jstream-core#design gained removed_hotkeys in the batch result, and dep ARCH#persistence gained the rule that a new optional collection field (hotkeys) needs no schema_version bump; the daemon still just names the collection file and serves the engine, so neither changes this section. Merges since: serve.rs: this PR changes only that test assertion (CallResult::batch). The merge brings #485's shared engine wiring and #487's crash-report redaction, already described here by the wave. dep core#design: this PR adds removed_hotkeys to the batch result; the merge adds #491's key removal on output.delete and on a server change. The daemon still names the collection file and serves the engine, so neither changes this section. | merge: merged wave/m1-3 at bf37f98f (wave/m1-2 landed via main, T1 transitions and studio preview at 0.30, master/output audio filter chains at 0.29): core and server design deps changed by the merge's privacy+transition union; daemon text unaffected" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
+stamp = { hash = "b3:81d735426a095f1c", by = "agent:claude", note = "#548 (#344): the paired-devices, log-file and token bullets describe the Windows protected DACL on creation and the DACL check on reuse (logs.rs, token.rs), and the dependencies bullet names jstream-platform-windows. The merge of #540's branch brought the wave's server design changes (the dep), which don't touch these bullets" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/youtube.rs"]
 stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
@@ -1608,7 +1608,7 @@ stamp = { hash = "b3:12f186b4fc1f9dbf", by = "agent:threat-model-covers", note =
 stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/logs.rs"]
-stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: logs.rs's default dir now comes from jstream_platform::paths::data_dir (its own data_dir() removed); the Startup bullet's 'creates the log directory' still holds; main's WindowsVcam/delay-load text unaffected" }
+stamp = { hash = "b3:0fc2fa0aa62af197", by = "agent:claude", note = "#548 (#344): logs.rs and token.rs create the log and token files user-only on Windows through jstream_platform_windows::create_private_file and refuse a reused one that fails check_private_file; tests/daemon.rs covers it. The Token file bullet and the dependencies paragraph say so. Merging #540's branch (with wave/m1-3) changes nothing in the daemon's own files" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/main.rs"]
 stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: YouTube bullet (built-in client, developer override) sits beside the wave's pairing and browser bullets; Not-here-yet links ADR-0058; checked against serve.rs, youtube.rs, args.rs and main.rs" }
@@ -1620,13 +1620,13 @@ stamp = { hash = "b3:1ac657a1accf6f5e" }
 stamp = { hash = "b3:34c8d3ddfb1f04f1", by = "agent:wave-owner", note = "main into wave/m1-2: hand-resolved Serving bullet: the wave's live engine through live.rs plus main's CLAP plugin scan; serve.rs keeps the wave's with_youtube and main's scan_clap_plugins thread, both called from engine()" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:81d735426a095f1c", by = "agent:claude", note = "#548 (#344): logs.rs and token.rs create the log and token files user-only on Windows through jstream_platform_windows::create_private_file and refuse a reused one that fails check_private_file; tests/daemon.rs covers it. The Token file bullet and the dependencies paragraph say so. Merging #540's branch (with wave/m1-3) changes nothing in the daemon's own files" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/youtube.rs"]
 stamp = { hash = "b3:aee5be9862bbe730", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Superseded ADR-0041 mentions in serve.rs and youtube.rs dropped or moved to ADR-0058; the YouTube bullet still matches them" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/daemon.rs"]
-stamp = { hash = "b3:3a8d57d34037125c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "serve.rs (a unit test) and tests/daemon.rs only switch CallResult::Batch { rev } to CallResult::batch(rev) for the new removed_hotkeys field (serve.rs:434, daemon.rs:296). #312's YouTube sign-in with the built-in OAuth client and a developer override is the wave's and already named in the purpose text; the daemon's purpose is unchanged by hotkeys. Merges since: serve.rs: this PR's only hunk is a unit test switching CallResult::Batch { rev } to CallResult::batch(rev) for removed_hotkeys. The merge brings #485 (the e2e test runs the daemon's own engine wiring) and #487 (stream keys and refresh tokens redacted in crash reports), both the wave's and covered by its stamp; the daemon's purpose is unchanged by hotkeys." }
+stamp = { hash = "b3:7f10b4a50f525739", by = "agent:claude", note = "#548 (#344): logs.rs and token.rs create the log and token files user-only on Windows through jstream_platform_windows::create_private_file and refuse a reused one that fails check_private_file; tests/daemon.rs covers it. The Token file bullet and the dependencies paragraph say so. Merging #540's branch (with wave/m1-3) changes nothing in the daemon's own files" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/delay_load.rs"]
 stamp = { hash = "b3:fa55ac483c3bac65" }
@@ -1635,7 +1635,7 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:227d6b118e5f59c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents lists live.rs in the new lib target (lib.rs) as the live engine wiring moved out of serve.rs, and Serving says serve.rs makes the Windows engine live through it. Tests moves the opener and live-engine unit tests to live.rs. tests/e2e.rs now drives the library's jstream_daemon::live::{live, rtmp} instead of its deleted copy of live, the opener and Connect. It makes the engine live first, then sets the CPU compositor on a clone (B1), so 'on the platform fakes with the CPU compositor' holds: e2e passes with no Vulkan ICD and failed so before. Merge of wave/m1-2 (#312 YouTube, #482, #311): the YouTube Contents bullet and Not-here-yet text sit beside #278's live.rs and Serving bullets. Merged serve.rs calls with_youtube on the engine and then live(...) on Windows, so Serving still holds. cargo test -p jstream-daemon passes (lib 3, bin 30, daemon 9, e2e 1)" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:2617b4e456d60f33", by = "agent:vcam-242", note = "Only the portable-marker citation moved from ADR-0020 to ADR-0066, which keeps the data-folder rule; the --register-vcam text describes today's behaviour, which #561 will change" }
+stamp = { hash = "b3:db39bc5ef7aaa057", by = "agent:claude", note = "#548 (#344): the token-file bullet lists the Windows owner and DACL refusal beside Unix mode 077 and says a new file is user-only on both, matching token.rs; the example and options table are unchanged by #548 and by the merge of #540's branch" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
@@ -1644,7 +1644,7 @@ stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:81d735426a095f1c", by = "agent:claude", note = "#548 (#344): the token-file bullet lists the Windows owner and DACL refusal beside Unix mode 077 and says a new file is user-only on both, matching token.rs; the example and options table are unchanged by #548 and by the merge of #540's branch" }
 
 ["CRATE-jstream-desktop#design"."body"]
 stamp = { hash = "b3:a5efef7fc35ff2df", by = "agent:vcam-optin-561", note = "depends_on, the bundler-off note and lib.rs's Docs line now cite ADR-0066 instead of superseded ADR-0020; ADR-0066 keeps the no-installer portable folder, so the design holds | merge: re-read: wave/m1-3 brought the browser-sources bullet's lent stage context; this branch's ADR-0066 citation and bundler-off note still hold" }
@@ -2268,7 +2268,7 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:9d0bf281823755f8", by = "agent:claude", note = "#540 (#356): the new security.rs reads a mapping's owner and DACL as SDDL and refuses one the sink wouldn't have set; vcam/shared.rs and vcam/sink.rs make start InvalidState for an existing control mapping that fails it; lib.rs adds the module. The README paragraph on the control mapping says this. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 here, which the section's text still matches" }
+stamp = { hash = "b3:6848e6f5f6bc4057", by = "agent:claude", note = "#548 (#344): private_file.rs adds create_private_file (CREATE_NEW with sddl_user_only) and check_private_file (the security rule), exported from lib.rs, with the README bullet. Merging #540's branch combined lib.rs's module list and doc with the wave's plugin_block and plugin_hosts and #540's security module; #540's vcam bullets still hold" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:54d72e265b128a7b", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey); the WindowsVcam ADR-0066 citation still holds" }
@@ -2376,7 +2376,7 @@ stamp = { hash = "b3:a962082ddbf74417" }
 stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
-stamp = { hash = "b3:046b67b09a581f60", by = "agent:claude", note = "#540 (#356): the new security.rs reads a mapping's owner and DACL as SDDL and refuses one the sink wouldn't have set; vcam/shared.rs and vcam/sink.rs make start InvalidState for an existing control mapping that fails it; lib.rs adds the module. The README paragraph on the control mapping says this. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 here, which the section's text still matches" }
+stamp = { hash = "b3:a6f5ef1ac96615a7", by = "agent:claude", note = "#548 (#344): private_file.rs adds create_private_file (CREATE_NEW with sddl_user_only) and check_private_file (the security rule), exported from lib.rs, with the README bullet. Merging #540's branch combined lib.rs's module list and doc with the wave's plugin_block and plugin_hosts and #540's security module; #540's vcam bullets still hold" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/n_edition.rs"]
 stamp = { hash = "b3:ede57dd335c2eec0" }
@@ -2386,6 +2386,9 @@ stamp = { hash = "b3:7f14b3bb7eb52944", by = "agent:claude", note = "Adds the Pl
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/plugin_hosts.rs"]
 stamp = { hash = "b3:51ed695e06830a27", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
+
+["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/private_file.rs"]
+stamp = { hash = "b3:22e8afc263a3697a", by = "agent:claude", note = "#548 (#344): private_file.rs adds create_private_file (CREATE_NEW with sddl_user_only) and check_private_file (the security rule), exported from lib.rs, with the README bullet. Merging #540's branch combined lib.rs's module list and doc with the wave's plugin_block and plugin_hosts and #540's security module; #540's vcam bullets still hold" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/security.rs"]
 stamp = { hash = "b3:a1bef25f0a2483a1", by = "agent:claude", note = "#540 (#356): the new security.rs reads a mapping's owner and DACL as SDDL and refuses one the sink wouldn't have set; vcam/shared.rs and vcam/sink.rs make start InvalidState for an existing control mapping that fails it; lib.rs adds the module. The README paragraph on the control mapping says this. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 here, which the section's text still matches" }
@@ -3279,7 +3282,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:91d3e218d9dc1c9f", by = "agent:acc756d9", note = "Alpha-edges list now covers the two new tests in tests.rs: an_opaque_import_ignores_the_textures_alpha (full red over black, faded only by opacity, identity color_correction keeps it opaque) and the_cache_imports_a_capture_as_opaque (reused, and replaced by a straight import of the same texture). | merge: Wave brought #321: the placement grids paragraph adds the flip grid and the legacy negative-scale grid, matching the new tests in tests.rs. The alpha-edges list with the two opaque-import tests is unchanged" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:8406f7925c09c878", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "privacy.changed joins state.changed and studio.changed in the request-ID mapping (session.rs); deps control#design and ARCH#protocol add privacy; merged wave/m1-2 at c763e23 (E2 video mixes 0.28, K1 hotkeys, I2 live values, C3 captures); holds | merge: merged wave/m1-3 at bf37f98f (wave/m1-2 landed via main, T1 transitions and studio preview at 0.30, master/output audio filter chains at 0.29): session.rs privacy replay and caused_by mapping unchanged; control and ARCH#protocol deps re-read" }
+stamp = { hash = "b3:e9a0f83c66d65124", by = "agent:claude", note = "#548 (#344): the device-file bullet says user-only on Windows via create_private_file and refused via check_private_file (devices.rs), and the dependencies paragraph names jstream-platform-windows on Windows only (Cargo.toml) and why; the pairing text is unchanged" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:99f6d98a873b37b7", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "privacy.changed joins state.changed and studio.changed in the request-ID mapping (session.rs); deps control#design and ARCH#protocol add privacy; merged wave/m1-2 at c763e23 (E2 video mixes 0.28, K1 hotkeys, I2 live values, C3 captures); holds | merge: merged wave/m1-3 at ae19d3f1 (B11 folders/labels/metadata at 0.31 (#323), UI dark theme (#495), render filter frame report, browser permissions): session.rs privacy replay unchanged; control and ARCH#protocol deps re-read" }
@@ -3294,7 +3297,7 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/Cargo.toml"]
-stamp = { hash = "b3:e9241efe87e7e719" }
+stamp = { hash = "b3:df0a96f8fb4a7ed7", by = "agent:claude", note = "#548 (#344): the device-file bullet says user-only on Windows via create_private_file and refused via check_private_file (devices.rs), and the dependencies paragraph names jstream-platform-windows on Windows only (Cargo.toml) and why; the pairing text is unchanged" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/admitted.rs"]
 stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
@@ -3303,7 +3306,7 @@ stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: t
 stamp = { hash = "b3:49da10ab71c38867", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: limits table adds max_tcp_connections (128, every accepted stream incl. unauthenticated, keep-alive and upgraded WebSocket ones; closed unanswered when full), listener permit held until drop with once-per-run warn log, Sessions/Slow clients say 64 calls in flight (MAX_IN_FLIGHT), MCP limits note TCP connections count. wave/m1-2 brought ServerConfig::tls and ::pairing, the GET /pair page and __Host-jstream_device cookie (ADR-0047) and pairing-off answers (ADR-0057); re-read merged README against listener.rs, session.rs, config.rs, lib.rs: the cap counts /pair and cookie-admitted streams like any other, both sides' text kept, no contradiction. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+stamp = { hash = "b3:c586b1f751e46d7b", by = "agent:claude", note = "#548 (#344): the device-file bullet says user-only on Windows via create_private_file and refused via check_private_file (devices.rs), and the dependencies paragraph names jstream-platform-windows on Windows only (Cargo.toml) and why; the pairing text is unchanged" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -3354,7 +3357,7 @@ stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: C
 stamp = { hash = "b3:49da10ab71c38867", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet names the max_tcp_connections cap, Session bullet the in-flight cap; config.rs max_tcp_connections (zero refused). wave/m1-2 added the Pairing page (pair_page.rs, pair.html), tls/pairing config fields, Admitted's pairing switch and the TLS-listener note; merged Contents list matches the modules in lib.rs. Crate scope, layer and R-ARCH-003 unchanged. tests: cargo test -p jstream-server (101 passed, incl. tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+stamp = { hash = "b3:c586b1f751e46d7b", by = "agent:claude", note = "#548 (#344): devices.rs uses jstream-platform-windows on Windows for the device file's user-only DACL and its check; the purpose (dyn Control and protocol only, never the engine, layer 4) holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -3765,7 +3768,7 @@ stamp = { hash = "b3:0d8073cb5bcd806f", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:85d70c29aee0feda", by = "agent:claude-ui-features", note = "docking.spec.js is new and matches the Docking bullet (Editing zones, View toggle and (modified), drag to a strip and an empty zone, collapse, close twice, splitter resize, saved layout across reload, Live and reset); outputs.spec.js now works on the Outputs panel (Outputs bullet); scenes.spec.js only switches its inspector locator to .panel-inspector." }
 
 ["CRATE-jstream-vcam-proto#purpose"."body"]
-stamp = { hash = "b3:b6a3f609729e0f1f", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Review round 1: re-read against the code after B1/N2/N3: sddl_objects(user_sid) replaces the IU DACL, logging left out of the contract, choose_frame safety stated as a timing assumption, re-initialisation and format_matches listed" }
+stamp = { hash = "b3:242314833cdc02eb", by = "agent:claude", note = "#548 (#344): names.rs adds sddl_user_only (SYSTEM and the user) beside sddl_objects, sharing one builder and the SID check, exported from lib.rs; the object-names bullet says so; no contract layout or version change" }
 
 ["CRATE-jstream-vcam-proto#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-vcam-proto"]
 stamp = { hash = "b3:69317b1d67515848" }
@@ -3774,10 +3777,10 @@ stamp = { hash = "b3:69317b1d67515848" }
 stamp = { hash = "b3:5b94524313e254bb" }
 
 ["CRATE-jstream-vcam-proto#purpose"."file:crates/jstream-vcam-proto/src/lib.rs"]
-stamp = { hash = "b3:3abb295520fe814e", by = "agent:threat-model-covers", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds" }
+stamp = { hash = "b3:d30710eea4097ed3", by = "agent:claude", note = "#548 (#344): names.rs adds sddl_user_only (SYSTEM and the user) beside sddl_objects, sharing one builder and the SID check, exported from lib.rs; the object-names bullet says so; no contract layout or version change" }
 
 ["CRATE-jstream-vcam-proto#purpose"."file:crates/jstream-vcam-proto/src/names.rs"]
-stamp = { hash = "b3:5506fd7891457520" }
+stamp = { hash = "b3:4d6d8a46c85b1ca2", by = "agent:claude", note = "#548 (#344): names.rs adds sddl_user_only (SYSTEM and the user) beside sddl_objects, sharing one builder and the SID check, exported from lib.rs; the object-names bullet says so; no contract layout or version change" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."body"]
 stamp = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
@@ -3795,7 +3798,7 @@ stamp = { hash = "b3:52b22e31260a816a" }
 stamp = { hash = "b3:dd12e4c78e9ba9c3", by = "agent:claude", note = "#540 (#356): win/frames.rs and win/shared.rs open each ring texture and the fence by name as an NT handle (OpenSharedHandleByName), check its owner with GetSecurityInfo, then open the D3D11 object from that handle, so the object checked is the one used; the README sentence says so. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 in this crate | merge: wave/m1-3 brought #541 (#204): trust now takes the console session (check_session_choice) and a block in use is rechecked every RECHECK; merged with this branch, trust also returns the session's user for trust_object's texture and fence owner check, and the README's Trust bullet and the #356 sentence both still match frames.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:crates/jstream-vcam-proto/README.md#purpose"]
-stamp = { hash = "b3:b6a3f609729e0f1f" }
+stamp = { hash = "b3:242314833cdc02eb", by = "agent:claude", note = "vcam-proto's purpose gained sddl_user_only for the host's files (#548); the DLL uses only sddl_objects' contract and its Trust and #356 text hold" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows"]
 stamp = { hash = "b3:19af02a703359937", by = "agent:vcam-242", note = "Citation and depends_on (and lib.rs's doc) moved from superseded ADR-0020 to ADR-0066; Packaging gained the #242 sentence and the accepted Program Files copy. The section's COM, frames, pacing, trust and HKLM DllRegisterServer description is current behaviour and still matches the crate until #561" }
@@ -4191,7 +4194,7 @@ stamp = { hash = "b3:8b7bc73f164ea9f6", by = "agent:claude@session_01KvbMUfF6qWH
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:2617b4e456d60f33", by = "agent:vcam-242", note = "Re-read: daemon usage changed only by an ADR-0020 to ADR-0066 citation swap for the portable marker; the prerequisites are unaffected" }
+stamp = { hash = "b3:db39bc5ef7aaa057", by = "agent:claude", note = "daemon usage's token-file bullet now names the Windows DACL refusal (#548); the before-you-go-live steps don't depend on it and still hold" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -4200,7 +4203,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:74434a6df2a7edd9", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via cli#usage (privacy rows); smoke steps unchanged; hold | merge: merged wave/m1-3 at f23611b7 (V1b geometry flips at 0.32 (#321), UI dockable workspace (#496), ADR-0069 proposed), and set this PR's assigned protocol 0.33: CLI usage dep changed by V1b; smoke unaffected" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:2617b4e456d60f33", by = "agent:vcam-242", note = "Re-read: daemon usage changed only by an ADR-0020 to ADR-0066 citation swap; the smoke script's steps and options are unaffected" }
+stamp = { hash = "b3:db39bc5ef7aaa057", by = "agent:claude", note = "daemon usage's token-file text changed for #548's Windows DACL; the smoke steps are unaffected" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -4212,10 +4215,10 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:74434a6df2a7edd9", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via cli#usage (privacy rows) and server#design (privacy.changed mapping); go-live steps don't use privacy; hold | merge: merged wave/m1-3 at f23611b7 (V1b geometry flips at 0.32 (#321), UI dockable workspace (#496), ADR-0069 proposed), and set this PR's assigned protocol 0.33: CLI usage dep changed by V1b; steps unaffected" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:2617b4e456d60f33", by = "agent:vcam-242", note = "Re-read: daemon usage changed only by an ADR-0020 to ADR-0066 citation swap; the commands and checks are unaffected" }
+stamp = { hash = "b3:db39bc5ef7aaa057", by = "agent:claude", note = "daemon usage and server design now say the token and devices files are user-only on Windows with reuse refused on a loose DACL (#548); the go-live steps run the daemon the same way and still hold" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:8406f7925c09c878", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via cli#usage (privacy rows) and server#design (privacy.changed mapping); go-live steps don't use privacy; hold | merge: merged wave/m1-3 at bf37f98f (wave/m1-2 landed via main, T1 transitions and studio preview at 0.30, master/output audio filter chains at 0.29): CLI usage and server design deps changed by the union; steps unaffected" }
+stamp = { hash = "b3:e9a0f83c66d65124", by = "agent:claude", note = "daemon usage and server design now say the token and devices files are user-only on Windows with reuse refused on a loose DACL (#548); the go-live steps run the daemon the same way and still hold" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
@@ -4308,7 +4311,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:3d3001bba844d9a7", by = "agent:threat-model-covers", note = "#346 fixed on wave/m1-2 (#370, #482, ADR-0059): RTMP rejection text redacted, cut to 512 chars, control chars replaced (publisher.rs remote_text); server instructions mark remote_* fields and the action_failed reason as data; tools carry readOnly/destructive/openWorld hints. Gap removed, per-tool limit moved to Accepted. Added ADR-0059 dep." }
 
 ["THREAT-MODEL#pairing"."body"]
-stamp = { hash = "b3:f195d6ffab745ebd", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
+stamp = { hash = "b3:5f7aff4740007416", by = "agent:claude", note = "#548 (#344): the devices-file Windows ACL gap is marked fix in flight, matching devices.rs; controls and accepted risks unchanged" }
 
 ["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
 stamp = { hash = "b3:5670e6a5758601b2" }
@@ -4320,7 +4323,7 @@ stamp = { hash = "b3:8042c8d8d5117226" }
 stamp = { hash = "b3:5ee855226a39815e", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
+stamp = { hash = "b3:c586b1f751e46d7b", by = "agent:claude", note = "#548 (#344): the devices-file Windows ACL gap is marked fix in flight, matching devices.rs; controls and accepted risks unchanged" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/gate.rs"]
 stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:threat-model-covers", note = "Added covers (devices.rs, admitted.rs, pair.rs, pair_page.rs, gate.rs; #377). #288 merged: dropped 'in flight'; page and cookie exist but only a TLS listener serves them and the server has none, so no browser can pair. Checked 40-bit code, 120 s, 5 wrong attempts, digest-only, 30-day LAPSE, cookie attributes, repeat and Sec-Fetch-Site refusals." }
@@ -4350,7 +4353,7 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:60575ee8d38f9eed", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+stamp = { hash = "b3:1ba8b45c33668bc5", by = "agent:claude", note = "#548 (#344): the in-flight control says the Windows token, devices and log files are created with a protected DACL and reuse is refused on a foreign owner or loose DACL (token.rs), and the token-file gap is marked fix in flight; the wave's server text from #539 (covers) is unchanged" }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -4362,7 +4365,7 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
 
 ["THREAT-MODEL#server"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+stamp = { hash = "b3:81d735426a095f1c", by = "agent:claude", note = "#548 (#344): the in-flight control says the Windows token, devices and log files are created with a protected DACL and reuse is refused on a foreign owner or loose DACL (token.rs), and the token-file gap is marked fix in flight; the wave's server text from #539 (covers) is unchanged" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:49da10ab71c38867", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
@@ -4392,7 +4395,7 @@ stamp = { hash = "b3:3ca0e169f953f32d", by = "agent:claude", note = "#540's Cont
 stamp = { hash = "b3:236e602c403fbac8", by = "agent:claude", note = "#540's Controls (in flight) paragraph matches vcam/shared.rs and sink.rs (an existing control mapping is refused unless its owner and DACL are ones the producer sets) and win/frames.rs (the DLL checks the owner of a session block's textures and fence). The wave/m1-3 merge added the #242 Accepted paragraph (ADR-0066's %ProgramFiles% copy, #561); the merged Gaps line keeps both: the user-writable DLL until #561 lands, and the pre-existing mapping DACL (#356) with its fix in flight here" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-vcam-proto/src/names.rs"]
-stamp = { hash = "b3:5506fd7891457520", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
+stamp = { hash = "b3:4d6d8a46c85b1ca2", by = "agent:claude", note = "#548 adds sddl_user_only to vcam-proto's names.rs for the host's files; the vcam objects still use sddl_objects, and #540's in-flight controls and the merged gaps line hold" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-vcam-windows/src/trust.rs"]
 stamp = { hash = "b3:aef044a0d551961c", by = "agent:claude", note = "merge: wave/m1-3 added the #242 Accepted paragraph (ADR-0066's Program Files copy, #561) and the gaps line naming #561; this branch's trust.rs, session.rs and frames.rs changes (#204: only the console session's block when several sessions are active) narrow which session block the DLL uses, and the controls on main, the owner check and the accepted risks still hold" }
