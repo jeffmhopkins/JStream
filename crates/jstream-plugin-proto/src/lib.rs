@@ -29,6 +29,10 @@
 //! which checks [`MAGIC`] and [`VERSION`]. Any change to the layout or to the meaning of
 //! a field bumps [`VERSION`].
 //!
+//! **Control channel.** What is rare and variable-sized (the plugin's saved state, its
+//! parameter list, a scan of a plugin file) goes as framed messages over the host's
+//! standard input and output instead: [`control`].
+//!
 //! Naming and mapping the block, starting the host process and watching it need OS APIs
 //! and `unsafe`, so they live in `jstream-platform-windows` (engine side) and the host.
 //!
@@ -36,6 +40,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod control;
 mod params;
 mod ring;
 mod shared;

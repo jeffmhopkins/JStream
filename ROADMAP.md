@@ -164,6 +164,42 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   built once its own patent-check ADR is accepted. The virtual camera via v4l2loopback
   needs root, so it gets its own ADR.
 
+<a id="endgame"></a>
+## Endgame: what done means
+<!-- @section
+depends_on = ["docs/adr/0055-wave-branches.md#decision"]
+-->
+
+The Rust implementation is **done** when every item of M0 to M3 in
+[`docs/progress.toml`](docs/progress.toml) is `done`: merged on `main`, with its Windows
+run passed where it needs one. Then each milestone's demo above runs from a clean checkout.
+An item leaves M3 only when the maintainer moves it to [Later](#later). The README's
+[What's left](README.md#progress) table lists every unfinished item with the steps it still
+needs, from that file.
+
+The remaining work lands in this order. A step doesn't wait for the one before it to
+finish: builds, runs and decisions go on side by side, and the order is what lands first.
+
+1. **Land the open waves** in milestone order, M1, then M2, then M3
+   ([RUNBOOK-WAVES › Landing](docs/runbooks/waves.md#landing)). Items marked *build*
+   finish through review into their wave. Items marked *its wave lands* are already in
+   one.
+2. **Windows runs.** Every item marked *Windows run* passes its run on Windows hardware,
+   which only the maintainer can do. Items that a later build changes run again.
+3. **Maintainer decisions and actions**, for items marked *maintainer*:
+   - the Google Cloud project and OAuth client for YouTube sign-in
+     ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). Until then
+     the daemon's sign-in and the signed-in YouTube features stay hidden;
+   - which platforms besides Windows are supported (maintainer tier): Linux first, and
+     whether macOS stays in M3 or moves to Later.
+4. **Platform crates**: Linux, after its codec-path ADR, and macOS, if it stays, after
+   its own ADR ([M3](#m3)).
+5. **Release check.** With every item `done`, run the M1, M2 and M3 demos from a clean
+   checkout. Whether that becomes a first release, 1.0, is the maintainer's call: 1.0
+   removes the deprecated protocol forms
+   ([ADR-0022](docs/adr/0022-item-transform-and-canvas.md)), a public compatibility
+   promise.
+
 <a id="later"></a>
 ## Later
 <!-- @section

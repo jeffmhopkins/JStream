@@ -123,9 +123,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-
   picks, behind a 32-byte random token made at each start and kept only in memory: no
   token file, and no other client can connect. MCP is off. The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
-  token. No device file is set, so a device paired from the app
-  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) lasts only until it exits,
-  and, like the token, is accepted only on loopback. On Windows the engine is live with the same wiring as the daemon (OS backends,
+  token. The engine serves only the webview, so the server pairs no device
+  (`ServerConfig::pairing` off): `pairing.start`, `device.list` and `device.revoke`
+  answer `unsupported`, `jstream-ui`'s pairing panel stays hidden, and there is no
+  pairing page or device cookie
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
@@ -186,8 +188,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-
 - **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
   (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
   clock the mixer runs on. Its pages paint onto a device of the media adapter the app
-  opens for them (`WindowsGpu::open_device`), since the engine doesn't hand out its own
-  device yet. The backend is added after the OS backends, so sources open on the media
+  opens for them (`WindowsGpu::open_device`) until a program stage runs; the engine then
+  lends the backend the stage's own context in its place, so the mix draws the pages,
+  and takes it back when the stage stops. The backend is added after the OS backends, so sources open on the media
   clock. CEF runs only in the sandboxed browser helper, which the backend starts on the
   first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
   doesn't link CEF, so a missing helper or missing CEF files fail that source, not the

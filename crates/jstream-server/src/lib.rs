@@ -3,19 +3,23 @@
 //! [`Connector`] that opens one session per connection, in-process or otherwise. Every
 //! upgrade request must carry the control token and pass the `Origin` and `Host` checks,
 //! and it listens on `127.0.0.1` unless told otherwise (R-SEC-002, ADR-0006). It bounds
-//! how many connections are open at once and how long a connection has to send its
+//! how many TCP and WebSocket connections are open at once, how many calls each
+//! WebSocket connection has in flight, and how long a connection has to send its
 //! upgrade request and complete its handshake. When the host turns it on
 //! (`ServerConfig::mcp`), it also serves MCP's streamable-HTTP transport at [`MCP_PATH`],
 //! behind the same checks, with one MCP session per `initialize`. When the host names a
 //! directory (`ServerConfig::ui_dir`), it serves the web UI's files from it at every
 //! other path, behind the same checks, with a browser's `Basic` credentials carrying the
 //! token. It pairs devices (ADR-0044): `pairing.start` opens a one-time code, a device
-//! trades it for its own device token at [`PAIR_PATH`], the one request answered without
-//! a token, and a device token then gets in wherever the control token does, while the
-//! server listens on loopback. The server answers `pairing.start`, `device.list` and
-//! `device.revoke` itself, on every connection and MCP session. Layer 4.
+//! trades it for its own device token at [`PAIR_PATH`], answered without a token, and a
+//! device token then gets in wherever the control token does, while the server listens
+//! on loopback or on a TLS listener (`ServerConfig::tls`). On a TLS listener a browser
+//! pairs on the token-free page at [`PAIR_PAGE_PATH`] and keeps its device token in a
+//! cookie the gate also reads (ADR-0047). The server answers `pairing.start`,
+//! `device.list` and `device.revoke` itself, on every connection and MCP session.
+//! Layer 4.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md, docs/adr/0047-browser-pairing-page-and-device-cookie.md
 
 #![forbid(unsafe_code)]
 
@@ -27,6 +31,7 @@ mod gate;
 mod listener;
 mod mcp;
 mod pair;
+mod pair_page;
 mod preview;
 mod session;
 #[cfg(test)]
@@ -38,6 +43,7 @@ pub use error::ServerError;
 pub use jstream_control::WS_PATH;
 pub use mcp::MCP_PATH;
 pub use pair::PAIR_PATH;
+pub use pair_page::PAIR_PAGE_PATH;
 
 use admitted::Admitted;
 use axum::Router;
@@ -72,6 +78,7 @@ const MAX_MESSAGE_BYTES: usize = 4 << 20;
 pub struct Server {
     listener: TcpListener,
     local_addr: SocketAddr,
+    max_tcp_connections: usize,
     header_read_timeout: Duration,
     app: Arc<App>,
     shutdown: watch::Sender<bool>,
@@ -94,9 +101,14 @@ struct App {
     ui: Option<Ui>,
     /// The paired devices and the open pairing code (ADR-0044).
     devices: Arc<Devices>,
-    /// Whether the server listens on a loopback address, the only place pairing is
-    /// offered and device tokens are accepted until it has TLS.
-    loopback: bool,
+    /// Whether the server listens on a loopback address or on a TLS listener, the only
+    /// places pairing is offered and device tokens are accepted.
+    pairing_offered: bool,
+    /// Whether the listener is reached over TLS (`ServerConfig::tls`): only then are the
+    /// pairing page and the device cookie (ADR-0047) served.
+    tls: bool,
+    /// Whether the server pairs devices at all (`ServerConfig::pairing`).
+    pairing: bool,
 }
 
 impl App {
@@ -106,7 +118,8 @@ impl App {
             (self.connector)(),
             credential,
             Arc::clone(&self.devices),
-            self.loopback,
+            self.pairing_offered,
+            self.pairing,
         ))
     }
 }
@@ -143,11 +156,14 @@ impl Server {
             mcp,
             ui,
             devices,
-            loopback: local_addr.ip().is_loopback(),
+            pairing_offered: local_addr.ip().is_loopback() || config.tls,
+            tls: config.tls,
+            pairing: config.pairing,
         });
         Ok(Server {
             listener,
             local_addr,
+            max_tcp_connections: config.max_tcp_connections,
             header_read_timeout: config.header_read_timeout,
             app,
             shutdown,
@@ -159,27 +175,34 @@ impl Server {
         self.local_addr
     }
 
-    /// The WebSocket API's URL on this server, e.g. `ws://127.0.0.1:4455/api/v1/ws`.
+    /// The WebSocket API's URL on this server, e.g. `ws://127.0.0.1:4455/api/v1/ws`
+    /// (`wss://` with [`ServerConfig::tls`]).
     pub fn ws_url(&self) -> String {
-        format!("ws://{}{WS_PATH}", self.local_addr)
+        let scheme = if self.app.tls { "wss" } else { "ws" };
+        format!("{scheme}://{}{WS_PATH}", self.local_addr)
+    }
+
+    /// `http` or `https`, for the HTTP URLs.
+    fn http_scheme(&self) -> &'static str {
+        if self.app.tls { "https" } else { "http" }
     }
 
     /// The MCP endpoint's URL on this server, e.g. `http://127.0.0.1:4455/mcp`, when
-    /// [`ServerConfig::mcp`] is on.
+    /// [`ServerConfig::mcp`] is on (`https://` with [`ServerConfig::tls`]).
     pub fn mcp_url(&self) -> Option<String> {
         self.app
             .mcp
             .as_ref()
-            .map(|_| format!("http://{}{MCP_PATH}", self.local_addr))
+            .map(|_| format!("{}://{}{MCP_PATH}", self.http_scheme(), self.local_addr))
     }
 
     /// The web UI's URL on this server, e.g. `http://127.0.0.1:4455/`, when
-    /// [`ServerConfig::ui_dir`] is set.
+    /// [`ServerConfig::ui_dir`] is set (`https://` with [`ServerConfig::tls`]).
     pub fn ui_url(&self) -> Option<String> {
         self.app
             .ui
             .as_ref()
-            .map(|_| format!("http://{}/", self.local_addr))
+            .map(|_| format!("{}://{}/", self.http_scheme(), self.local_addr))
     }
 
     /// Serves until the listener fails.
@@ -198,6 +221,7 @@ impl Server {
     {
         let Server {
             listener,
+            max_tcp_connections,
             header_read_timeout,
             app,
             shutdown,
@@ -205,7 +229,9 @@ impl Server {
         } = self;
         let mut router = Router::new()
             .route(WS_PATH, get(upgrade))
-            .route(PAIR_PATH, any(pair::handle));
+            .route(PAIR_PATH, any(pair::handle))
+            // Always routed, so the UI's fallback never serves it; 404 without TLS.
+            .route(PAIR_PAGE_PATH, any(pair_page::handle));
         if app.mcp.is_some() {
             router = router.route(MCP_PATH, any(mcp::handle));
         }
@@ -223,7 +249,8 @@ impl Server {
         };
         // The peer address is only logged, never trusted: the gate decides on the headers.
         let service = router.into_make_service_with_connect_info::<Accepted>();
-        axum::serve(Limited::new(listener, header_read_timeout), service)
+        let listener = Limited::new(listener, max_tcp_connections, header_read_timeout);
+        axum::serve(listener, service)
             .with_graceful_shutdown(signal)
             .await
             .map_err(ServerError::Serve)?;
@@ -291,6 +318,7 @@ async fn upgrade(
     let number = app.connections.fetch_add(1, Ordering::Relaxed) + 1;
     let span = tracing::info_span!("connection", id = number, peer = %peer);
     // Opened inside the span, so a session span the connector creates nests under it.
+    let renewal = credential.clone();
     let control = span.in_scope(|| {
         match credential.device() {
             Some(device_id) => tracing::info!(device_id = %device_id, "connection accepted"),
@@ -301,7 +329,7 @@ async fn upgrade(
     let shutdown = app.shutdown.clone();
     // A browser client offers `jstream` beside the token's subprotocol and fails the
     // connection unless one is selected; the token's is never echoed.
-    upgrade
+    let mut response = upgrade
         .protocols([WS_PROTOCOL])
         .max_message_size(MAX_MESSAGE_BYTES)
         .on_upgrade(move |socket| {
@@ -310,7 +338,9 @@ async fn upgrade(
                 drop(slot);
             }
             .instrument(span)
-        })
+        });
+    gate::renew_cookie(&renewal, &headers, &mut response);
+    response
 }
 
 // The two tests below sit at the crate root because RULES.md names them by path
