@@ -249,7 +249,8 @@ state machine. Contents:
   the stage stops, an output leaving the GPU path mid-run when every GPU frame
   fails to import or the context breaks (taking the context from browser pages, and
   failing when that fallback fails, or at its deadline when it hangs, still repeating
-  the last frame meanwhile), an output surviving a lost device (its own, reopened on a
+  the last frame meanwhile), a recording started after that fallback, whose encoder
+  could take GPU frames, encoding the readback with every output staying up, an output surviving a lost device (its own, reopened on a
   new one; the context's, left at once) and failing at the third loss in a minute, and
   an output whose encoder takes GPU frames getting NV12 encode targets with no
   readback and riding out 20 composite errors in a row with no fallback, on a software
@@ -1764,7 +1765,8 @@ draws the primary display's capture scaled to fill the canvas, fitted to the fra
 capture whose mailbox is empty repeats its last frame.
 
 **Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
-platform's context when there is one (`VideoSession::open_on`): it takes GPU frames when
+platform's context when there is one and the render thread hasn't left it (`VideoSession::open_on`,
+`Program::session_context`): it takes GPU frames when
 the codecs can encode the context's encode targets (`Codecs::on_context`), and CPU
 frames otherwise, which is logged. The render thread learns which with the session's
 input. For each mix with a session on the GPU path it allocates a ring of
@@ -1836,9 +1838,10 @@ context's, which a compositor on its own device can't write. If one runs when th
 errors reach that count, there is no fallback and the errors run on: the outputs fail
 at the 31st in a row, as they did before the fallback existed. If one runs when the
 context's device is lost, the outputs fail at once, since nothing can draw into its
-targets. A session that opens on the context after a fallback has no context to draw
-for, so its first due tick fails the outputs too, whether or not its mix still holds
-targets from before (#699).
+targets. Once the render thread has left the context (a fallback, or a lost context
+device), it says so to the program stage, which from then on opens each new video
+session without the context: on the CPU path, taking the readback like any other, so a
+recording started after a fallback encodes and fails nothing (#699).
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as

@@ -11,7 +11,7 @@
 //! installs one, fails instead.
 
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -1390,4 +1390,150 @@ fn a_gpu_encoder_rides_out_errors_past_the_fallback_count() {
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(engine.output_stats().is_none());
+}
+
+/// The fake codecs, whose encoders take GPU frames on any context once `gpu` is set,
+/// and only CPU frames before: so an output started first runs on the CPU path, where a
+/// fallback can follow it.
+struct LateGpuCodecs {
+    gpu: Arc<AtomicBool>,
+}
+
+impl Codecs for LateGpuCodecs {
+    fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+        FakeCodecs.list()
+    }
+
+    fn video_encoder(
+        &self,
+        config: &VideoEncoderConfig,
+    ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+        FakeCodecs.video_encoder(config)
+    }
+
+    fn audio_encoder(
+        &self,
+        config: &AudioEncoderConfig,
+    ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+        FakeCodecs.audio_encoder(config)
+    }
+
+    fn video_decoder(
+        &self,
+        config: &VideoDecoderConfig,
+    ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+        FakeCodecs.video_decoder(config)
+    }
+
+    fn on_context(&self, _context: &GpuContext) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
+        Ok(self
+            .gpu
+            .load(Ordering::Acquire)
+            .then(|| Arc::new(FakeCodecs) as Arc<dyn Codecs>))
+    }
+}
+
+/// After the render thread has fallen back off the context, an output whose codecs
+/// could take the context's GPU frames opens its session on the CPU path instead: the
+/// render thread has no encode targets to give it, and a GPU session would fail every
+/// output on the stage, the running stream included (#699).
+#[test]
+fn an_output_started_after_a_gpu_fallback_reads_back_and_fails_nothing() {
+    use jstream_protocol::{
+        EncoderProfile, EncoderProfileId, OutputKind, RateControl, RecordContainer,
+    };
+
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let gpu_codecs = Arc::new(AtomicBool::new(false));
+    let mut backends = backends(&clock, Arc::new(SoftwareGpu), GpuMode::Deliver);
+    backends.codecs = Arc::new(LateGpuCodecs {
+        gpu: Arc::clone(&gpu_codecs),
+    });
+    let opens = Arc::new(Mutex::new(Opens::default()));
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(breaking_draw(Breaks::Context, Arc::clone(&opens)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    let dir = std::env::temp_dir().join(format!("jstream-core-699-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let path = dir.join("show.mp4");
+    // A recording on a profile of its own, so it opens a session rather than sharing
+    // `yt`'s.
+    let mut profile = EncoderProfile::DEFAULT;
+    profile.video.rate_control = RateControl::Cbr { kbps: 6000 };
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::OutputCreate {
+                    output_id: OutputId::new("rec"),
+                    kind: OutputKind::Record {
+                        path: path.to_str().expect("a UTF-8 temp path").into(),
+                        container: RecordContainer::Mp4,
+                    },
+                },
+                Edit::EncoderCreate {
+                    profile_id: EncoderProfileId::new("hq"),
+                    name: "Recording".into(),
+                    profile,
+                },
+                Edit::OutputSetEncoder {
+                    output_id: OutputId::new("rec"),
+                    profile_id: Some(EncoderProfileId::new("hq")),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("encoder edits");
+
+    block_on(control.call(output_call("yt", true))).expect("yt start");
+    let fell_back = tick_until(&clock, || {
+        engine
+            .output_stats()
+            .is_some_and(|stats| stats.gpu_fallbacks == 1)
+    });
+    assert!(fell_back, "no fallback: {:?}", engine.output_stats());
+
+    // From here a new session could take the context's GPU frames.
+    gpu_codecs.store(true, Ordering::Release);
+    block_on(control.call(output_call("rec", true))).expect("rec start");
+    let rec = OutputId::new("rec");
+    let before = engine.output_stats().expect("running").readbacks;
+    let mut later = None;
+    let encoded = tick_until(&clock, || {
+        let now = engine.output_stats_of(&rec);
+        let done = now
+            .as_ref()
+            .is_some_and(|stats| stats.video.encoded >= 3 && stats.readbacks >= before + 3);
+        later = now;
+        done
+    });
+    assert!(
+        encoded,
+        "the recording never encoded read-back frames: {later:?}"
+    );
+    assert_eq!(
+        output_state(&control, "yt"),
+        OutputState::Active,
+        "the stream"
+    );
+    assert_eq!(
+        output_state(&control, "rec"),
+        OutputState::Active,
+        "the recording"
+    );
+    assert_eq!(later.map(|stats| stats.gpu_fallbacks), Some(1));
+    block_on(control.call(output_call("rec", false))).expect("rec stop");
+    block_on(control.call(output_call("yt", false))).expect("yt stop");
+    let _ = std::fs::remove_dir_all(&dir);
 }
