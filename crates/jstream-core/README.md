@@ -252,9 +252,10 @@ state machine. Contents:
   the last frame meanwhile), an output surviving a lost device (its own, reopened on a
   new one; the context's, left at once) and failing at the third loss in a minute, and
   an output whose encoder takes GPU frames getting NV12 encode targets with no
-  readback and riding out 20 composite errors in a row with no fallback, on a software
-  device that stands in for the platform's (`src/tests/gpu_capture.rs`; the last two
-  skip without `TEXTURE_FORMAT_NV12`), a page's
+  readback, riding out 20 composite errors in a row with no fallback, and failing at
+  once when the context's device is lost, on a software device that stands in for the
+  platform's (`src/tests/gpu_capture.rs`; the last three skip without
+  `TEXTURE_FORMAT_NV12`), a page's
   GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a

@@ -1426,7 +1426,11 @@ fn a_gpu_encoder_fails_at_once_on_a_lost_context() {
     let failed = tick_until(&clock, || {
         output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none()
     });
-    assert!(failed, "the output did not fail: {:?}", engine.output_stats());
+    assert!(
+        failed,
+        "the output did not fail: {:?}",
+        engine.output_stats()
+    );
     assert_eq!(
         *opens.lock().unwrap_or_else(PoisonError::into_inner),
         vec![true],
