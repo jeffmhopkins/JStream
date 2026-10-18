@@ -389,10 +389,9 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 
 - `VideoFilter::new(kind_id, settings)` builds a kind's pass; `set_settings` updates it
   in place, keeping its state; `output_size` is the size it draws for a given input,
-  so a filter can change the source's reported size (for example aspect ratio, padding,
-  a drop shadow, an outside outline or a glow). `content_box` is where the input's
-  frame sits in that output (a `ContentBox`, see **Bounds** below), and
-  `ContentBox::then` carries a box down a chain.
+  so a filter can change the source's reported size. Only aspect ratio does (its crop,
+  pad and stretch reshape the frame); every other kind keeps its input's size
+  (**Bounds** below).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `apply_filter_into(filter, input, output,
   clock)` draws into a layer the caller keeps (a `ResourceCache` layer), so a chain
@@ -522,17 +521,16 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   shown are reused. A new input size empties the ring, and so does a clock that goes
   backwards.
 
-**Bounds.** Drop shadow, outline (outside) and glow grow their output by the effect's
-extent on each side, rounded up to whole pixels: the blur radius plus the offset
-toward that side, or the stroke width. The input is drawn 1:1 at the matching inset, so
-**these filters change the source's reported size**. Each reports where the input
-landed as its `content_box`: the inset and the input's own size. Every other kind
-reports its whole output, aspect ratio included, since its output is the reshaped
-frame. Down a chain, `ContentBox::then` adds the offsets while each next filter holds
-the previous output 1:1, and takes the next filter's box when it reshapes or resamples
-it. The chain runtime places the grown output as the source's frame; fitting that box,
-not the grown frame, to the item's bounds (so a shadow hangs outside them) is a V0
-follow-up, and until then nothing reads the box and a placement fits the grown frame.
+**Bounds.** Drop shadow, outline (outside) and glow draw within their input's frame,
+as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for a
+source or scene chain: the output is the input's size, the input is drawn 1:1, and
+the part of the effect past the frame's edge is cut. So they don't change the
+source's reported size, and around an opaque frame a shadow, an outside stroke or a
+glow is cut away whole; on a shape with transparent margins (a keyed camera, a logo)
+they show inside them. A drop shadow and a glow still blur the shape in a scratch
+frame grown by the blur radius, so the blur fades out instead of stopping at the
+frame's edge. An effect that hangs outside a placement is an item effect, whose layer
+ADR-0065 pads by the chain's `max_outset_px` (not built yet).
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
