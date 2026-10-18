@@ -8,14 +8,18 @@
 //! which the shader converts to premultiplied linear after the filter.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use jstream_platform::{FrameSync, GpuFrame};
 
 use crate::color::srgb_channel_to_linear;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
-use crate::mips::Mips;
+use crate::mips::{Mips, Region};
+
+/// How many mip chains an image keeps, one per crop it was placed in 3D with, the most
+/// recently used first. An animated crop makes a chain per crop, so older ones go.
+const MAX_CHAINS: usize = 4;
 
 /// The format uploaded images are stored in: premultiplied linear light.
 pub(crate) const UPLOAD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -75,10 +79,16 @@ pub struct Image {
     /// The render-target view of a layer, kept so drawing into it again allocates no
     /// view. `None` for uploads and imports, which are never drawn into.
     target: Option<wgpu::TextureView>,
-    /// How many times an upload has been rewritten, so its mips know when to rebuild.
-    generation: AtomicU64,
-    /// The mip chain, made the first time the image is placed in 3D.
-    mips: OnceLock<Mips>,
+    /// How many times the texels have changed: an upload rewritten, a layer drawn into,
+    /// or an import given a new frame. A mip chain is rebuilt when this moved since its
+    /// last build (ADR-0050 decision 5), so once per change, however many calls draw it.
+    changes: AtomicU64,
+    /// The hold of the last frame an import was given, so the same frame given again is
+    /// not a change. `Weak`, so the allocation it compares by can't be reused.
+    last_frame: Option<Weak<dyn FrameSync>>,
+    /// Mip chains, one per crop the image was placed in 3D with, most recently used
+    /// first, at most [`MAX_CHAINS`].
+    mips: Mutex<Vec<Arc<Mips>>>,
 }
 
 impl Image {
@@ -102,20 +112,39 @@ impl Image {
         &self.bind_group
     }
 
-    /// Whether only [`rewrite`] changes the texels: an upload. A layer is drawn into and
-    /// an import is the platform's, so neither is.
-    pub(crate) fn is_static(&self) -> bool {
-        self.alpha == Alpha::Premultiplied && self.target.is_none()
+    /// How many times the texels have changed ([`Self::changed`]).
+    pub(crate) fn changes(&self) -> u64 {
+        self.changes.load(Ordering::Relaxed)
     }
 
-    /// How many times [`rewrite`] has refilled the image.
-    pub(crate) fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Relaxed)
+    /// Records that the texels changed, so each mip chain is rebuilt before its next
+    /// draw.
+    pub(crate) fn changed(&self) {
+        self.changes.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// The mip chain, made by `make` the first time it is asked for.
-    pub(crate) fn mips(&self, make: impl FnOnce() -> Mips) -> &Mips {
-        self.mips.get_or_init(make)
+    /// The mip chain of `region`, made by `make` the first time it is asked for. The
+    /// chain stays on the image, and goes when the image does or when [`MAX_CHAINS`]
+    /// newer regions pushed it out.
+    pub(crate) fn chain(&self, region: Region, make: impl FnOnce() -> Mips) -> Arc<Mips> {
+        let mut chains = self.mips.lock().unwrap_or_else(PoisonError::into_inner);
+        let chain = match chains.iter().position(|chain| chain.region() == region) {
+            Some(index) => chains.remove(index),
+            None => Arc::new(make()),
+        };
+        chains.insert(0, Arc::clone(&chain));
+        chains.truncate(MAX_CHAINS);
+        chain
+    }
+
+    /// How many chains the image keeps, and how many builds they recorded in all.
+    #[cfg(test)]
+    pub(crate) fn chain_builds(&self) -> (usize, u64) {
+        let chains = self.mips.lock().unwrap_or_else(PoisonError::into_inner);
+        (
+            chains.len(),
+            chains.iter().map(|chain| chain.builds()).sum(),
+        )
     }
 
     pub(crate) fn alpha(&self) -> Alpha {
@@ -132,7 +161,21 @@ impl Image {
 
     /// Replaces the hold staged on each frame that draws the image. The cache keeps an
     /// import across frames and attaches each frame's hold only while that frame uses it.
+    ///
+    /// A frame other than the last one given is a change ([`Self::changed`]): the
+    /// platform wrote the texture again. The same frame given again (a source repeating
+    /// its last frame) is not.
     pub(crate) fn set_sync(&mut self, sync: Option<Arc<dyn FrameSync>>) {
+        if let Some(sync) = &sync {
+            let same = self
+                .last_frame
+                .as_ref()
+                .is_some_and(|last| Weak::ptr_eq(last, &Arc::downgrade(sync)));
+            if !same {
+                self.changed();
+                self.last_frame = Some(Arc::downgrade(sync));
+            }
+        }
         self.sync = sync;
     }
 
@@ -264,7 +307,7 @@ pub(crate) fn rewrite(maker: &Maker<'_>, image: &Image, rgba: &[u8]) -> Result<(
     }
     check_bytes(image.width, image.height, rgba)?;
     write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)?;
-    image.generation.fetch_add(1, Ordering::Relaxed);
+    image.changed();
     Ok(())
 }
 
@@ -438,10 +481,11 @@ fn finish(
         height,
         alpha,
         owner: maker.owner.clone(),
+        last_frame: sync.as_ref().map(Arc::downgrade),
         sync,
         target: None,
-        generation: AtomicU64::new(0),
-        mips: OnceLock::new(),
+        changes: AtomicU64::new(0),
+        mips: Mutex::new(Vec::new()),
     }
 }
 

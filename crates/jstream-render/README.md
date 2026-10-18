@@ -102,7 +102,7 @@ and calls this crate.
   shared functions ([Placement math](#design)). A geometry with non-neutral 3D draws
   [ADR-0050](../../docs/adr/0050-3d-transforms-rendering.md)'s drawn polygon,
   perspective-correct, with antialiased edges, and sampled from a mip chain of its
-  source with 16× anisotropic filtering. The engine still refuses non-neutral 3D before
+  cropped source with 16× anisotropic filtering. The engine still refuses non-neutral 3D before
   it reaches here.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
@@ -174,14 +174,22 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    Averaging code values rather than linear light differs from an upload only where
    the filter mixes texels of different colour.
 2. **Mips** (ADR-0050 decision 5). Before the composite pass, each source a visible 3D
-   item draws gets its mip chain rebuilt: an `Rgba16Float` texture with every level down
-   to 1×1, premultiplied linear. Level 0 copies the source texel for texel, converting
-   an import as the composite shader would. Each further level is one pass that samples
-   the level above at its own texel centres, so the linear filter averages 2×2 texels.
-   A chain is rebuilt at most once per `render` or `render_into` call. An upload is
-   rebuilt only after `rewrite_rgba8`. A layer or an import is rebuilt every call that
-   draws it in 3D, since a nested scene, a filter or the platform changes it out of
-   sight. A 3D item samples its chain, which is always premultiplied linear (mode 0),
+   item draws gets its mip chain rebuilt if its image changed: an `Rgba16Float` texture
+   with every level down to 1×1, premultiplied linear. A chain is of the item's crop,
+   not the whole source: level 0 copies the cropped texels one for one (a `Region` of
+   whole source texels, which `vs_region` maps the pass onto), converting an import as
+   the composite shader would. So no coarser level averages a texel past the crop into
+   the item, and clamping to the chain's edge keeps the anisotropic footprint inside the
+   crop too (#641). The item's UVs and UV bounds are mapped into the chain's. An image
+   keeps a chain per crop it is drawn with, the four most recently used. Each further
+   level is one pass that samples the level above at its own texel centres, so the
+   linear filter averages 2×2 texels. A chain is rebuilt when its image's change count
+   moved since its last build: `rewrite_rgba8` bumps an upload's, `render_into` a
+   layer's, and the cache giving an import a new frame (a hold other than the last one)
+   an import's. So a source drawn in 3D by several items or calls (two mixes, a nested
+   scene) is rebuilt once per change. An image imported directly, outside the cache,
+   keeps the chain of its first 3D draw. A 3D item samples its chain, which is always
+   premultiplied linear (mode 0),
    with trilinear filtering and `anisotropy_clamp` 16; wgpu clamps that to 1 on an
    adapter without anisotropic filtering. A source with no 3D placement gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
@@ -273,7 +281,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, dropped with it |
-| Mip chain, its level views and bind groups | Made the first time the `Image` is drawn in 3D; dropped with it |
+| Mip chains (one per crop, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D with that crop; dropped with it, or when four newer crops pushed it out |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -626,7 +634,8 @@ a non-axis-aligned box turning about its centre.
 **3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a
 240×136 canvas from a 64² checkerboard with a texel grid (512² for C), against a CPU
 reference that averages 8×8 (16×16 for C and D) point samples per pixel, each mapped
-back with `unplace` and sampled bilinearly from level 0. The tests assert a mean and a
+back with `unplace` and sampled bilinearly from level 0, clamped to the crop as the
+chain is. The tests assert a mean and a
 p99 error per channel in sRGB 8-bit steps. On lavapipe:
 
 | Scenario | Pixels | Limit (mean) | Measured | Without the feature |
@@ -635,12 +644,19 @@ p99 error per channel in sRGB 8-bit steps. On lavapipe:
 | B, tilted toward the viewer, a corner behind it | all | 2 | 0.24 | 78 affinely |
 | C, a floor tilted 75°, minified | interior | 8 | 6.2 | 18 with trilinear mips alone, 29 with one level |
 | D, a small rotated and turned item | edge | 6 | 3.2 | 53 with a hard edge, 13 affinely |
-| D cropped, a smaller D cropped just past a texel ring | edge | 8 | 6.6 | 8.2 without the UV clamp |
+| D cropped, a smaller D cropped just past a texel ring | edge | 5 | 2.8 | 6.6 with the chain built from the whole source, 8.2 without the UV clamp either |
 | E, two items turned through each other | all | 2 | 0.53 | 15 affinely |
 
 The p99 limit is 40 throughout. C's pattern is much finer than the spike's (one-texel
-rings every 16 texels), which is why its mean is higher than the spike's 1.16. A
-further test checks that an upload's chain is rebuilt after `rewrite_rgba8`.
+rings every 16 texels), which is why its mean is higher than the spike's 1.16. Further
+tests check:
+- that an upload's chain is rebuilt after `rewrite_rgba8`;
+- that a layer's is built once for two items and two calls, and rebuilt once after
+  `render_into` changes it;
+- that an import's is rebuilt for a new frame from the cache but not for the same one;
+- that two crops of one source get a chain each;
+- that a cropped floor minified onto coarse levels shows nothing of a red border just
+  past its crop (red 160 with the chain built from the whole source).
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
@@ -732,14 +748,7 @@ a hardware GPU.
 
 - **3D.** The compositor draws ADR-0050 decisions 1, 2, 4, 5 and 6. Open: whether
   rotated 2D items should get edge coverage too, which changes their goldens; whether
-  strongly minified 2D items should get mips; and whether a layer or an import should
-  carry a change count, so its chain is rebuilt only when it changed rather than each
-  call that draws it in 3D. Decision 5 asks for once per source and frame; a source
-  drawn in 3D by two mixes, or inside a nested scene, is rebuilt once per call that
-  draws it. Also open: a cropped 3D item samples the whole source's chain, so at coarser
-  levels, and along the anisotropic footprint, texels just past the crop bleed into its
-  edge (the UV clamp keeps the sample point inside, not the footprint). Clamping the
-  level near the crop, or building the chain from the cropped region, would fix that.
+  strongly minified 2D items should get mips.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and

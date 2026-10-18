@@ -48,6 +48,9 @@ pub(crate) struct Shape {
     /// to it, so a fringe pixel samples the content's edge, not the crop or what `fill`
     /// clips away. [`NO_UV_BOUNDS`] for a 2D item.
     pub uv_bounds: [f32; 4],
+    /// `[u0, v0, u1, v1]`, the crop in the source's texture coordinates: what a 3D
+    /// item's mip chain is built from. The whole source for a 2D item.
+    pub crop_uv: [f32; 4],
 }
 
 impl Shape {
@@ -61,6 +64,26 @@ impl Shape {
         self.edges[0] != NO_EDGE
     }
 
+    /// Maps the texture coordinates, the vertices' and the clamp bounds, from the
+    /// source's into a chain's whose `[0, 1]` spans `[u, v, width, height]` of it.
+    pub(crate) fn remap_uv(&mut self, onto: [f32; 4]) {
+        let map = |value: f32, start: f32, span: f32| (value - start) / span;
+        for vertex in &mut self.vertices[..self.len] {
+            vertex.uv = [
+                map(vertex.uv[0], onto[0], onto[2]),
+                map(vertex.uv[1], onto[1], onto[3]),
+            ];
+        }
+        if self.uv_bounds != NO_UV_BOUNDS {
+            self.uv_bounds = [
+                map(self.uv_bounds[0], onto[0], onto[2]),
+                map(self.uv_bounds[1], onto[1], onto[3]),
+                map(self.uv_bounds[2], onto[0], onto[2]),
+                map(self.uv_bounds[3], onto[1], onto[3]),
+            ];
+        }
+    }
+
     /// A 2D quad: `w = 1` and no edge coverage.
     fn flat(corners: [[f32; 2]; 4], uvs: [[f32; 2]; 4]) -> Self {
         let mut vertices = [UNUSED; MAX_VERTICES];
@@ -72,6 +95,7 @@ impl Shape {
             len: 4,
             edges: [NO_EDGE; MAX_VERTICES],
             uv_bounds: NO_UV_BOUNDS,
+            crop_uv: [0.0, 0.0, 1.0, 1.0],
         }
     }
 }
@@ -210,6 +234,7 @@ fn drawn(geometry: ItemGeometry, content: &ContentRect) -> Result<Option<Shape>,
         len,
         edges,
         uv_bounds,
+        crop_uv: [content.u0, content.v0, content.u1, content.v1],
     }))
 }
 
