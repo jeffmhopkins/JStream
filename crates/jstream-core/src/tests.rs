@@ -1676,8 +1676,14 @@ fn output_start_publishes_fake_audio_and_video() {
     }
     assert!(saw_media, "expected script, a video NAL and raw AAC");
     let stats = engine.output_stats().expect("stats");
-    assert!(stats.video.received >= 1, "video frames accepted");
-    assert!(stats.audio.received >= 1, "audio blocks accepted");
+    assert!(
+        stats.video.received >= 1,
+        "video frames accepted: {stats:?}"
+    );
+    assert!(
+        stats.audio.received >= 1,
+        "audio blocks accepted: {stats:?}"
+    );
     assert!(stats.readbacks >= 1, "the CPU path read a frame back");
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");

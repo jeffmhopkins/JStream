@@ -13,8 +13,9 @@
 //!   address itself, is the user's own and may. The check reads the URL, whose host
 //!   Chromium has already canonicalised (an address such as `0x7f.1` arrives as
 //!   `127.0.0.1`). It can't see a public name that resolves to a local address, whether
-//!   fixed (`*.nip.io`) or by DNS rebinding; that needs Chromium's own Private Network
-//!   Access checks.
+//!   fixed (`*.nip.io`) or by DNS rebinding. Chromium's own Local Network Access checks
+//!   can, at the network layer: they ask the page's permission handler first, which
+//!   answers with [`local_allowed`](RequestPolicy::local_allowed) (`permission.rs`).
 //! - `data:` and `blob:` are allowed: they hold only what the page itself made.
 //! - `about:blank` and `about:srcdoc` are allowed; other `about:` pages are not.
 //! - `file:` is allowed only for a page loaded from a local file, and only for files in
@@ -109,6 +110,13 @@ impl RequestPolicy {
             self.denied.fetch_add(1, Ordering::Relaxed);
         }
         verdict
+    }
+
+    /// Whether the page may make requests to this computer and the local network: its
+    /// source opted in, or the page is itself local, a file or blank. Chromium's Local
+    /// Network Access prompt is answered with this (`permission.rs`).
+    pub fn local_allowed(&self) -> bool {
+        !self.local_refused
     }
 
     /// How many requests the page has had refused.
@@ -527,6 +535,8 @@ mod tests {
             assert_eq!(web.check(url), Verdict::Allow, "{url}");
         }
         assert_eq!(web.denied(), local.len() as u64);
+        // And Chromium's Local Network Access prompt is refused for it (`permission.rs`).
+        assert!(!web.local_allowed());
 
         // The source opted in.
         let spec = PageSpec {
@@ -537,6 +547,7 @@ mod tests {
             local_network: true,
         };
         let allowed = RequestPolicy::for_page(&spec);
+        assert!(allowed.local_allowed());
         for url in local.iter().chain(&public) {
             assert_eq!(allowed.check(url), Verdict::Allow, "{url}");
         }
@@ -546,6 +557,7 @@ mod tests {
             ..spec
         });
         assert!(deny(refused.check(local[0])));
+        assert!(!refused.local_allowed());
 
         // A page that is itself local (a dev server, a LAN widget), a local file and a
         // blank page are the user's own: no refusal.
@@ -557,6 +569,7 @@ mod tests {
             PageLocation::Blank,
         ] {
             let policy = RequestPolicy::for_location(&location);
+            assert!(policy.local_allowed(), "{location:?}");
             for url in local {
                 assert_eq!(policy.check(url), Verdict::Allow, "{location:?} {url}");
             }

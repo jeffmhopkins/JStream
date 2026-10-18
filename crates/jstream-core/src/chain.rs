@@ -112,8 +112,8 @@ impl Chain {
     }
 
     /// The size the chain draws for an input of `width` by `height`: the source's
-    /// reported size once filtered (aspect ratio, padding and the bounds-growing kinds
-    /// change it).
+    /// reported size once filtered (only aspect ratio changes it; a drop shadow, an
+    /// outline or a glow draws within the frame, ADR-0065 §5).
     pub(crate) fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         self.filters
             .iter()

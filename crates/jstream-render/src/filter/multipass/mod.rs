@@ -5,7 +5,7 @@
 //!
 //! Shared pieces: [`gauss`] is the bounded separable blur that blur, drop shadow and
 //! glow use; [`area`] is the whole / inside / outside rectangle that blur and pixelate
-//! share; [`bounds`] is how drop shadow, outline and glow grow the frame; `common.wgsl`
+//! share; [`bounds`] is the room drop shadow and glow blur their shape in; `common.wgsl`
 //! holds the WGSL helpers these shaders share.
 
 /// A shader of this group: `common.wgsl`, then the named file.
