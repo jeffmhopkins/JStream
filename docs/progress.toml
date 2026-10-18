@@ -851,7 +851,7 @@ milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
 prs = [481, 490, 509, 510, 606, 652]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); DMA-BUF capture frames imported into Vulkan (#606)"
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652)"
 
 [[item]]
 id = "LNX2"
