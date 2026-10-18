@@ -1455,7 +1455,8 @@ threads have dropped their senders, and the program stage (`Program`) joins it r
 after them. While the stage has no encoder session and no virtual camera it draws nothing but still adopts
 each new snapshot, so it never holds a gesture up. The compositor
 and its cache drop on the render thread when it exits, after the tick loop, or when it
-leaves the GPU path. What it rides out
+leaves the GPU path, and its video chains with them, so after a fallback a stateful
+filter (a video delay) starts empty, as on `video.snapshot`'s compositor. What it rides out
 and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 - **Recoverable:** a capture error or a missing frame repeats that capture's last
   frame (a missing source frame,
