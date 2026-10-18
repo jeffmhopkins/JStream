@@ -169,14 +169,23 @@ impl Nv12Converter {
         }
         let params = params(color)?;
         let bytes: Vec<u8> = params.iter().flat_map(|v| v.to_le_bytes()).collect();
-        let buffer = wgpu::util::DeviceExt::create_buffer_init(
-            &self.device,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("jstream-render nv12 params"),
-                contents: &bytes,
-                usage: wgpu::BufferUsages::UNIFORM,
-            },
-        );
+        // Not `create_buffer_init`, which panics when the buffer can't be mapped, as on
+        // a lost device: that is an error the caller recovers from.
+        let size = (bytes.len() as u64).next_multiple_of(wgpu::COPY_BUFFER_ALIGNMENT);
+        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("jstream-render nv12 params"),
+            size,
+            usage: wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: true,
+        });
+        buffer
+            .get_mapped_range_mut(..)
+            .map_err(|err| RenderError::Uncaptured {
+                detail: format!("mapping the nv12 parameters: {err}"),
+            })?
+            .slice(..bytes.len())
+            .copy_from_slice(&bytes);
+        buffer.unmap();
         let view = source.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("jstream-render nv12"),

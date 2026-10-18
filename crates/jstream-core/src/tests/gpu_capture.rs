@@ -1391,3 +1391,45 @@ fn a_gpu_encoder_rides_out_errors_past_the_fallback_count() {
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(engine.output_stats().is_none());
 }
+
+/// An output whose encoder takes the context's GPU frames can't follow the program off
+/// the context, so a lost context device fails it at once instead of switching: the
+/// compositor is never reopened (review B2/N10 on #695).
+#[test]
+fn a_gpu_encoder_fails_at_once_on_a_lost_context() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    if let Err(err) = Nv12Gpu::open_context() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the lost-context encode-target test: {err}"
+        );
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let gpu = Arc::new(Nv12Gpu {
+        stages: Arc::new(AtomicU64::new(0)),
+    });
+    let mut backends = backends(&clock, gpu, GpuMode::Deliver);
+    backends.codecs = Arc::new(GpuCodecs);
+    let opens = Arc::new(Mutex::new(Vec::new()));
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(losing_draw(1, 5, Arc::clone(&opens)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let failed = tick_until(&clock, || {
+        output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none()
+    });
+    assert!(failed, "the output did not fail: {:?}", engine.output_stats());
+    assert_eq!(
+        *opens.lock().unwrap_or_else(PoisonError::into_inner),
+        vec![true],
+        "opened on the context only: no switch off it"
+    );
+}

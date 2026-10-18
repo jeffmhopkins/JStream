@@ -963,7 +963,11 @@ treats a lost device as one event: it opens the compositor on a new device at on
 the render thread with the fallback's deadline, and the output repeats its last frame
 meanwhile and stays up. On the platform's context that is step 6's fallback, so capture
 moves to CPU frames. On a device of its own it is a new device, the hardware adapter
-first again. Encoders take the CPU readback, so they don't reopen. The third loss within
+first again. Encoders on the CPU path take the readback, so they don't reopen. A session
+that takes the context's encode targets (step 4) rules out leaving the context, so a lost
+context device fails its outputs at once instead
+([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass
+reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
 engine event for a loss (a protocol change), attributing a loss to the effect pack that
