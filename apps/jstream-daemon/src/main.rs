@@ -178,7 +178,8 @@ fn crash_line(line: &str) {
 fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Failure> {
     logs::create_dir(dir)
         .with_context(|| format!("could not create the log directory `{}`", dir.display()))?;
-    jstream_crash::install(
+    // Reports are made like the log files: user-only on Unix and on Windows (#656).
+    jstream_crash::install_creating(
         dir.to_owned(),
         Program {
             name: env!("CARGO_PKG_NAME"),
@@ -186,6 +187,7 @@ fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Fa
         },
         secrets.clone(),
         crash_line,
+        logs::create_new,
     );
     let files = logs::LogFiles::open(dir)
         .with_context(|| format!("could not create a log file in `{}`", dir.display()))?;
