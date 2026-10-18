@@ -690,7 +690,7 @@ stamp = { hash = "b3:56b6301e2e6a132b" }
 stamp = { hash = "b3:1bdcbe942d9c36a8", by = "agent:claude", note = "docs-duty now says to use docs verify --renote, not --note or a hand edit, when a reviewer asks for a better note on a fresh section; matches DOCS#verification's new --renote paragraph and DOCS#notes' added sentence; the merge-main and other duty bullets are unchanged" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#notes"]
-stamp = { hash = "b3:cd989fd464110f64", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "DOCS#notes now says merge-main, --merge and --renote list the merged PRs per section and that the note credits each by number; the duty to re-read and verify each stale section with --note/--renote is unchanged" }
+stamp = { hash = "b3:e7e07a6e7bd6f5e6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "DOCS#notes now says merge-main lists the merged PRs per stale section, that --merge and --renote list the PRs behind the entries they rewrite and name any the note leaves out, and that after a wave lands this is the wave's squash PR. The duty bullets still hold: per-section --merge or --note after merge-main, and --renote for a better note on a fresh section" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
 stamp = { hash = "b3:27408c8c2a136c01", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#596: DOCS#verification and #notes now say verify --merge keeps the merged side's entry as it is on an input whose hash equals it, and the branch's note only on inputs it changes; the duty to verify each stale section with --merge, keeping your earlier notes and adding per-section text, is unchanged and still accurate" }
@@ -3894,7 +3894,7 @@ stamp = { hash = "b3:a842476030f67423", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:b593d1da7528ba61" }
 
 ["DOCS#bootstrap"."body"]
-stamp = { hash = "b3:b443f1a0f1b88137", by = "agent:claude", note = "merge-main bullet now says docs verify --merge refuses an input whose file the branch changed after the merge, which is what verify_merge and merge::changed_after do (#525); the rest of the list is untouched by this change" }
+stamp = { hash = "b3:d9ce97990fd6caac", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#677: the merge-main stage bullet now says merge-main lists the PRs its stale inputs' merged commits came from, and that verify --merge and --renote list the merged PRs behind the entries they rewrite and name any the note leaves out. That matches merged_commits, pr_numbers and unnamed_prs in merge.rs and report_merged_prs in mod.rs, which gets the rewritten entries' files from verify_merge and verify_renote. Nothing that was refused or accepted before changes" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/backrefs.rs"]
 stamp = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
@@ -3918,10 +3918,10 @@ stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:11013826c82c4f2a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#596: verify --merge now takes the merged side's ledger entry unchanged on an input whose hash equals it (ledger::restamp_merge gets the merged stamp, merge::merged_ledger reads it at the merge's second parent, verify_merge skips those entries in the changed-after refusal), plus a regression test; the merge-main bullet's 'keeps those notes and adds what the merge changed' still holds, since the notes it lists are the branch's own on inputs it changed" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/merge.rs"]
-stamp = { hash = "b3:6ead89a2c699cdcb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#677 adds merged_commits/pr_numbers/unnamed_prs to merge.rs and per-section PR lines to merge-main, --merge and --renote output in mod.rs; the stage list doesn't name merge-main output, so it still holds" }
+stamp = { hash = "b3:6ead89a2c699cdcb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#677: the merge-main stage bullet now says merge-main lists the PRs its stale inputs' merged commits came from, and that verify --merge and --renote list the merged PRs behind the entries they rewrite and name any the note leaves out. That matches merged_commits, pr_numbers and unnamed_prs in merge.rs and report_merged_prs in mod.rs, which gets the rewritten entries' files from verify_merge and verify_renote. Nothing that was refused or accepted before changes" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/mod.rs"]
-stamp = { hash = "b3:f954283e428ad89d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#677 adds merged_commits/pr_numbers/unnamed_prs to merge.rs and per-section PR lines to merge-main, --merge and --renote output in mod.rs; the stage list doesn't name merge-main output, so it still holds" }
+stamp = { hash = "b3:442fb45027f26a1e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#677: the merge-main stage bullet now says merge-main lists the PRs its stale inputs' merged commits came from, and that verify --merge and --renote list the merged PRs behind the entries they rewrite and name any the note leaves out. That matches merged_commits, pr_numbers and unnamed_prs in merge.rs and report_merged_prs in mod.rs, which gets the rewritten entries' files from verify_merge and verify_renote. Nothing that was refused or accepted before changes" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/parse.rs"]
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
