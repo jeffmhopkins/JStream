@@ -68,7 +68,8 @@ It has:
   four frames are in flight, after which `can_accept` says no. The session's maximum
   frame delay is three, so the encoder can't hold all four while it waits for input that
   `can_accept` keeps out; VideoToolbox's default is no limit, and an encoder without the
-  property keeps its own. It also lists and opens
+  property keeps its own. While three are held, `encode` may wait for the oldest to be
+  emitted. It also lists and opens
   the **AudioToolbox AAC-LC encoder** for a configuration `aac_settings` accepts: an
   `AudioConverter` from interleaved `f32` PCM (planar input is interleaved first) at
   constant bit rate, at the rate it offers nearest the configured one

@@ -15,7 +15,10 @@
 //! [`can_accept`](VideoEncoder::can_accept) says no and the engine drops the frame
 //! (R-RT-004). The session's maximum frame delay is one less, so the encoder has emitted
 //! a frame before the call that submits the next one returns: an encoder that held more
-//! (the default is no limit) would wait for input that `can_accept` never lets in.
+//! (the default is no limit) would wait for input that `can_accept` never lets in. The
+//! cost is that `encode` may wait, while three frames are held, for the oldest to be
+//! emitted: at most about one frame's encode time, which a real-time hardware encoder
+//! rarely needs.
 //!
 //! GPU frames (IOSurface encode targets) follow once the Metal interop spike lands
 //! (ADR-0063 §8).
