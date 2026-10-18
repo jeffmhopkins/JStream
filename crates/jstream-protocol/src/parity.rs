@@ -696,20 +696,6 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 item_id: ItemId::new("i1"),
                 scene_id: None,
                 geometry: ItemGeometry {
-                    tilt_deg: finite(10.0),
-                    ..BOXED
-                },
-            }),
-            invalid(
-                "edits.0.geometry.tilt_deg",
-                "tilt, turn, depth and perspective are not drawn yet, so they must be neutral",
-            ),
-        ),
-        (
-            Batch::single(Edit::ItemSetGeometry {
-                item_id: ItemId::new("i1"),
-                scene_id: None,
-                geometry: ItemGeometry {
                     size: Size {
                         width: finite(0.0),
                         height: finite(10.0),

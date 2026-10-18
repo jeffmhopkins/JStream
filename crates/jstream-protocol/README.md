@@ -140,7 +140,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.29 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.34 because the
+  engine accepts non-neutral 3D: `tilt_deg`, `turn_deg`, `depth_px` and
+  `perspective_px`, which earlier minors rejected with `invalid_argument`, are stored
+  and drawn (ADR-0050). The wire form is unchanged, so a client that sends only neutral
+  3D sees no difference. 0.30 to 0.33 are assigned to other changes in the protocol
+  queue (0.33 is #317's), and 0.34 merges only after them. 0.29 added
   the master stage's and outputs' filter chains (the `master` and `output` filter
   owners, `OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes
   (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and the mixes in
@@ -229,8 +234,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":29},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":29},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":34},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":34},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -1102,8 +1107,8 @@ function in this crate so the compositor and the UI share one implementation.
   local point (canvas point, texture coordinate and `w`, as the polygon's own), or
   nothing past the near plane: the compositor uses it for the corners it pushes out
   for edge coverage. All three allocate nothing, for the render thread. They are pure
-  functions with no wire form. `jstream-render` draws from them; lifting the rejection
-  below is the next X1 part.
+  functions with no wire form. `jstream-render` draws from them, and from 0.34 the
+  engine accepts the 3D they draw (Validation below).
 
 **On the wire (0.11).** ADR-0022 names these additions as 0.4, which had already
 shipped with `events.dropped`, so they ship as 0.11, an additive minor under
@@ -1123,10 +1128,12 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   transform. Each one's inverse restores the previous placement in its own form.
 - **Validation.** A stored geometry has a size greater than zero
   (`edits.N.geometry.size`), a `perspective_px` greater than zero if present
-  (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). Until
-  the compositor draws 3D, a non-neutral `tilt_deg`, `turn_deg`, `depth_px` or any
-  `perspective_px` is `invalid_argument` naming that field; `is_neutral_3d` is that
-  predicate. Accepting them later is not a breaking change.
+  (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). From
+  0.34 any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is accepted and
+  drawn. An item wholly behind the viewer or seen edge-on is valid and draws nothing.
+  Before 0.34 a non-neutral one was `invalid_argument` naming that field, with
+  `is_neutral_3d` as the predicate. ADR-0022 said accepting them is not a breaking
+  change.
 - **Reads.** `ItemInfo.placement` is `legacy` or `geometry` (missing from a pre-0.11
   server, it parses as `legacy`). A legacy item reports its transform exactly as
   written and no `geometry`, because its box depends on the source's runtime size. A

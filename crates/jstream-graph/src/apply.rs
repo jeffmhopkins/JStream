@@ -807,8 +807,9 @@ fn apply_edit(
 }
 
 /// Checks a geometry an edit stores (ADR-0022): a positive size, a positive perspective
-/// if any, neutral 3D fields, since the compositor doesn't draw them yet, and finite
-/// corners. Errors name `geometry` or `geometry.<field>`.
+/// if any, and finite corners. Any 3D is accepted (protocol 0.34, ADR-0050 decision 8):
+/// the compositor draws it, and an item wholly behind the viewer or seen edge-on draws
+/// nothing. Errors name `geometry` or `geometry.<field>`.
 fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolError> {
     if let Err(err) = geometry.validate() {
         let name = match err {
@@ -817,19 +818,6 @@ fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolErro
             _ => "geometry",
         };
         return Err(invalid(at, name, err.to_string()));
-    }
-    let non_neutral = [
-        ("geometry.tilt_deg", geometry.tilt_deg.get() != 0.0),
-        ("geometry.turn_deg", geometry.turn_deg.get() != 0.0),
-        ("geometry.depth_px", geometry.depth_px.get() != 0.0),
-        ("geometry.perspective_px", geometry.perspective_px.is_some()),
-    ];
-    if let Some((name, _)) = non_neutral.iter().find(|(_, set)| *set) {
-        return Err(invalid(
-            at,
-            name,
-            "tilt, turn, depth and perspective are not drawn yet, so they must be neutral",
-        ));
     }
     // Finite fields can still put a corner past f32's range (a centre near f32::MAX).
     geometry
