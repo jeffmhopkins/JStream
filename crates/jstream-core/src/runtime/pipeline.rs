@@ -44,7 +44,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_audio::{BusControl, Mixer, MixerConfig};
+use jstream_audio::{BusControl, Mixer, MixerConfig, OutputTapId};
 use jstream_encode::{
     AudioInput, AudioSession, PushError, SessionOptions, SessionRegistry, SessionStats, StreamEnd,
     SubscriberStats, Subscription, VideoInput, VideoSession,
@@ -78,14 +78,15 @@ use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_came
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
 };
-use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot};
+use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot, View};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 pub(crate) const FRAME_NUM: u32 = 1;
 pub(crate) const FRAME_DEN: u32 = 30;
 const SAMPLE_RATE: u32 = 48_000;
 /// How long `output.start` waits for the render thread to open the compositor, on the
-/// platform's GPU context or, without one, on the software adapter, unless the engine
+/// platform's GPU context or, without one, hardware first with the software adapter as
+/// the fallback, unless the engine
 /// was given another bound. It only keeps a stuck adapter from blocking the call
 /// forever; a slower open is not a pipeline fault.
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -106,15 +107,17 @@ const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 /// render snapshot's [`Shot`] at the frame's size, with the live values in [`LiveParams`]
 /// applied and `display` and `window` sources showing their captures (or, with no scene
 /// to draw, the primary display's filling the canvas fitted to the frame, or black when
-/// there is none yet), read back as RGBA8 into its `out` (replacing its contents).
-/// Returns the GPU images its cache let go of, for the collector. Created on the render
-/// thread and kept there, so it need not be `Send`.
+/// there is none yet), read back as RGBA8 into its `out` (replacing its contents), as it
+/// is at the tick's time on the media clock (a running transition samples it). Returns
+/// the GPU images its cache let go of, for the collector. Created on the render thread
+/// and kept there, so it need not be `Send`.
 pub(crate) type DrawFn = Box<
     dyn FnMut(
         &Shot,
         &LiveParams,
         &dyn Captures,
         &mut [MixFrame],
+        MediaTime,
     ) -> Result<Option<Reclaimed>, String>,
 >;
 
@@ -129,38 +132,51 @@ pub(crate) struct MixFrame {
     /// It is drawn on every `divisor`th base tick, or on the first one after that when
     /// the render thread skipped it ([`Frames::schedule`]).
     pub(crate) divisor: u32,
+    /// The output whose own video chain it runs through, or `None` when it is shared.
+    /// It is drawn on its own even when another frame shows the same mix.
+    pub(crate) owner: Option<OutputId>,
     /// Whether this tick draws it.
     pub(crate) due: bool,
     /// The first base tick it is due on again.
     pub(crate) next: u64,
+    /// Whether the privacy screen covers it on this tick (ADR-0027 §4).
+    pub(crate) privacy: bool,
     /// Where it is drawn: RGBA8 at `size` once a draw succeeds.
     pub(crate) out: Vec<u8>,
 }
 
 /// Opens the render thread's [`DrawFn`], on that thread, on the platform's GPU context
 /// when the pipeline has one. The engine's opens the wgpu compositor on that context,
-/// or on the software adapter without one ([`gpu_draw`]). Tests inject [`cpu_draw`]
+/// or without one on a hardware adapter first ([`gpu_draw`]). Tests inject [`cpu_draw`]
 /// (or a variant) so the pipeline runs without an adapter.
 pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, String> + Send + Sync>;
 
 /// A CPU stand-in for [`gpu_draw`]: each due frame copies the first capture the shot
 /// places when that is an RGBA8 frame, scaled nearest-neighbour to the frame's size, or
 /// fills black, which is what the GPU path draws for a collection with no scene. It
-/// ignores the scenes and the mixes. Tests use it to run the pipeline without a wgpu
-/// adapter
+/// ignores the scenes and the mixes, and it can't blur, so under the privacy screen it
+/// draws black, as the GPU path does when its blur fails. Tests use it to run the
+/// pipeline without a wgpu adapter
 /// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|_: Option<&GpuContext>| {
         let draw: DrawFn = Box::new(
-            |shot: &Shot, _: &LiveParams, captures: &dyn Captures, frames: &mut [MixFrame]| {
+            |shot: &Shot,
+             _: &LiveParams,
+             captures: &dyn Captures,
+             frames: &mut [MixFrame],
+             _: MediaTime| {
                 let first = shot
                     .captures()
                     .first()
                     .and_then(|spec| captures.frame(spec));
                 for frame in frames.iter_mut().filter(|frame| frame.due) {
-                    let (size, out) = (frame.size, &mut frame.out);
+                    let (size, private, out) = (frame.size, frame.privacy, &mut frame.out);
                     out.clear();
                     match first.map(|capture| capture.image) {
+                        _ if private => {
+                            out.resize(size.width() as usize * size.height() as usize * 4, 0)
+                        }
                         Some(CaptureImage::Rgba { size: own, rgba }) if own == size => {
                             out.extend_from_slice(rgba);
                         }
@@ -369,6 +385,9 @@ pub(crate) struct MixKey {
     pub(crate) size: Option<FrameSize>,
     /// Frames are drawn on every `divisor`th base tick.
     pub(crate) divisor: u32,
+    /// The output whose own video chain the picture runs through, or `None` when the
+    /// output has no chain and shares the picture with every output on the same mix.
+    pub(crate) owner: Option<OutputId>,
 }
 
 impl MixKey {
@@ -377,14 +396,41 @@ impl MixKey {
         mix: None,
         size: None,
         divisor: 1,
+        owner: None,
     };
 }
 
-/// The key that decides which outputs share an encoder session: the mix they show, and
-/// the profile they name (`None` for the engine's default) with its encoding when the
-/// session opened. No output has a video chain yet, so the chain part of ADR-0027's key
-/// is the same for all of them.
+/// The key that decides which outputs share an encoder session (ADR-0027 §3): the mix
+/// they show, the profile they name (`None` for the engine's default) with its encoding
+/// when the session opened, and, for an output with its own video chain, that output.
+/// An output with an audio chain of its own shares the video session but encodes its
+/// own audio ([`OwnAudio`]).
 pub(crate) type EncodeKey = (MixKey, Option<EncoderProfileId>, EncoderProfile);
+
+/// How one output encodes: the sessions it shares, and whether its audio is its own.
+pub(crate) struct OutputEncode {
+    pub(crate) key: EncodeKey,
+    /// Whether the output has an audio chain of its own, so an output tap and an audio
+    /// encode only it reads.
+    pub(crate) own_audio: bool,
+}
+
+/// Undoes something once its output has stopped.
+pub(crate) type Release = Box<dyn FnOnce() + Send>;
+
+/// An audio encode the mixer thread feeds: from the master bus, or from one output's
+/// tap (ADR-0027's per-output chain).
+pub(crate) struct AudioTap {
+    input: AudioInput,
+    /// The output tap it reads, or `None` for the master bus.
+    tap: Option<OutputTapId>,
+    /// The first time it takes: a tap's blocks run its chain's latency early, and the
+    /// stream's muxer refuses packets before its origin.
+    from: MediaTime,
+    /// Whether the tap has given a block yet. A tap that gave one and then has none was
+    /// removed, so its encode is let go of.
+    seen: std::cell::Cell<bool>,
+}
 
 /// The stage every running output shares: capture, the render thread compositing the
 /// program, the audio devices and the mixer thread. It runs while any output holds it
@@ -409,7 +455,7 @@ pub(crate) struct Program {
     /// sits that far back.
     latency: MediaTime,
     video_taps: Sender<(Feed, VideoInput)>,
-    audio_taps: Sender<AudioInput>,
+    audio_taps: Sender<AudioTap>,
     /// Virtual cameras for the render thread to publish to.
     vcam_taps: Sender<VcamTap>,
     failures: Arc<Failures>,
@@ -445,39 +491,78 @@ impl Program {
                 mix: key.0.mix.clone(),
                 size: key.0.size.unwrap_or(self.size),
                 divisor: key.0.divisor,
+                owner: key.0.owner.clone(),
             };
             let video = Arc::new(open_video(self.codecs.as_ref(), &feed, &key.2)?);
-            let audio = Arc::new(open_audio_encoder(
-                self.codecs.as_ref(),
-                self.format,
-                &key.2,
-            )?);
-            let ids = vec![
-                engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&video))),
-                engine.add_drop_source(AudioEncodeDrops::new(Arc::clone(&audio))),
-            ];
+            let ids = vec![engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&video)))];
             Ok(Encoders {
                 key,
                 feed,
                 video,
-                audio,
+                audio: Mutex::new(None),
                 attached: AtomicBool::new(false),
                 drop_guard: Some(DropGuard::new(engine.drop_ledger(), ids)),
             })
         })
     }
 
-    /// Starts feeding `encoders` from the render and mixer threads, once.
+    /// The master bus's audio encode on `encoders`, shared by every output on them
+    /// without an audio chain of its own. Opened by the first such output, and fed by
+    /// the mixer thread from then on.
+    fn shared_audio(
+        &self,
+        engine: &Engine,
+        encoders: &Encoders,
+        origin: MediaTime,
+    ) -> Result<Arc<AudioSession>, String> {
+        let mut audio = lock(&encoders.audio);
+        if let Some(open) = audio.as_ref() {
+            return Ok(Arc::clone(&open.session));
+        }
+        let open = self.open_audio(engine, &encoders.key.2, None, origin)?;
+        let session = Arc::clone(&open.session);
+        *audio = Some(open);
+        Ok(session)
+    }
+
+    /// Opens an audio encode for `profile`, for the mixer thread to feed from the master
+    /// bus, or from `tap` from `origin` on, once [`fed`](AudioEncode::feed).
+    fn open_audio(
+        &self,
+        engine: &Engine,
+        profile: &EncoderProfile,
+        tap: Option<OutputTapId>,
+        origin: MediaTime,
+    ) -> Result<AudioEncode, String> {
+        let session = Arc::new(open_audio_encoder(
+            self.codecs.as_ref(),
+            self.format,
+            profile,
+        )?);
+        let ids = vec![engine.add_drop_source(AudioEncodeDrops::new(Arc::clone(&session)))];
+        let pending = AudioTap {
+            input: session.input(),
+            tap,
+            from: origin,
+            seen: std::cell::Cell::new(false),
+        };
+        Ok(AudioEncode {
+            session,
+            pending: Mutex::new(Some(pending)),
+            drop_guard: Some(DropGuard::new(engine.drop_ledger(), ids)),
+        })
+    }
+
+    /// Starts feeding `encoders`' video from the render thread, once.
     fn attach(&self, encoders: &Encoders) {
         if encoders.attached.swap(true, Ordering::AcqRel) {
             return;
         }
-        // The threads hold the receivers until the program stops; a send fails only
+        // The thread holds the receiver until the program stops; a send fails only
         // after that, when nothing is fed anyway.
         let _ = self
             .video_taps
             .send((encoders.feed.clone(), encoders.video.input()));
-        let _ = self.audio_taps.send(encoders.audio.input());
     }
 
     /// Where an output that starts now puts its stream's time zero: the mixer's
@@ -636,36 +721,45 @@ struct Feed {
     mix: Option<VideoMixId>,
     size: FrameSize,
     divisor: u32,
+    /// The output whose own chain it runs through; `None` is shared.
+    owner: Option<OutputId>,
 }
 
-/// One video and one audio encoder session, shared by every running output with the
-/// same [`EncodeKey`]. The output that lets go of it last finishes it.
+/// One video encoder session, and the master bus's audio encode once an output without
+/// an audio chain of its own uses them, shared by every running output with the same
+/// [`EncodeKey`]. The output that lets go of them last finishes them.
 pub(crate) struct Encoders {
     key: EncodeKey,
     /// What the render thread draws for the video session.
     feed: Feed,
     video: Arc<VideoSession>,
-    audio: Arc<AudioSession>,
-    /// Whether the program threads feed it yet.
+    audio: Mutex<Option<AudioEncode>>,
+    /// Whether the render thread feeds the video yet.
     attached: AtomicBool,
     drop_guard: Option<DropGuard>,
 }
 
 impl Encoders {
-    /// Drains both encoders and ends their subscriptions, so the last output gets
-    /// every packet.
+    /// Drains the encoders and ends their subscriptions, so the last output gets every
+    /// packet.
     fn finish(&self) {
         if let Err(err) = self.video.finish() {
             tracing::info!(error = %err, "video session finish failed");
         }
-        if let Err(err) = self.audio.finish() {
-            tracing::info!(error = %err, "audio session finish failed");
+        if let Some(audio) = lock(&self.audio).as_ref() {
+            audio.finish();
         }
     }
 
     /// The profile the sessions were opened with, or `None` for the default.
     pub(crate) fn profile_id(&self) -> Option<&EncoderProfileId> {
         self.key.1.as_ref()
+    }
+
+    /// Whether the sessions belong to one output because it has its own video chain,
+    /// rather than being shared by every output with the same mix and profile.
+    pub(crate) fn dedicated(&self) -> bool {
+        self.key.0.owner.is_some()
     }
 
     /// Whether the video encoder is a hardware one.
@@ -678,6 +772,56 @@ impl Drop for Encoders {
     fn drop(&mut self) {
         // Latches the sessions' drop counters once they are done.
         self.drop_guard.take();
+    }
+}
+
+/// One audio encoder session the mixer thread feeds, and its drop counters.
+struct AudioEncode {
+    session: Arc<AudioSession>,
+    /// Its input, until it is handed to the mixer thread.
+    pending: Mutex<Option<AudioTap>>,
+    drop_guard: Option<DropGuard>,
+}
+
+impl AudioEncode {
+    /// Hands the input to `program`'s mixer thread, once.
+    fn feed(&self, program: &Program) {
+        if let Some(tap) = lock(&self.pending).take() {
+            // The mixer thread holds the receiver until the program stops; a send fails
+            // only after that, when nothing is fed anyway.
+            let _ = program.audio_taps.send(tap);
+        }
+    }
+
+    /// Drains the encoder and ends its subscriptions.
+    fn finish(&self) {
+        if let Err(err) = self.session.finish() {
+            tracing::info!(error = %err, "audio session finish failed");
+        }
+    }
+}
+
+impl Drop for AudioEncode {
+    fn drop(&mut self) {
+        // Latches the session's drop counters once it is done.
+        self.drop_guard.take();
+    }
+}
+
+/// The audio encode of an output with an audio chain of its own (ADR-0027): an output
+/// tap on the master bus runs the chain, and only this output reads the encode. Its
+/// drop removes the tap.
+pub(crate) struct OwnAudio {
+    encode: AudioEncode,
+    /// Takes the tap out of the engine's audio routing, which removes it from the mixer.
+    release: Option<Release>,
+}
+
+impl Drop for OwnAudio {
+    fn drop(&mut self) {
+        if let Some(release) = self.release.take() {
+            release();
+        }
     }
 }
 
@@ -701,6 +845,10 @@ pub(crate) struct Running {
     /// it stopped waiting for does not keep the publish watcher waiting too.
     output_fail: FailLine,
     encoders: Option<Arc<Encoders>>,
+    /// The audio encode it reads: the master bus's shared one, or its own.
+    audio: Option<Arc<AudioSession>>,
+    /// Its own audio encode, for an output with an audio chain of its own.
+    own_audio: Option<OwnAudio>,
     stats: Arc<PipelineStats>,
     /// Packets the output thread dropped itself: the muxer rejected them, or the stop's
     /// drain deadline ([`STOP_DRAIN`]) passed before they were sent. Distinct from the
@@ -743,9 +891,9 @@ impl Running {
                 .map(|e| e.video.stats())
                 .unwrap_or_default(),
             audio: self
-                .encoders
+                .audio
                 .as_ref()
-                .map(|e| e.audio.stats())
+                .map(|audio| audio.stats())
                 .unwrap_or_default(),
             video_subscriber: *lock(&self.stats.video_subscriber),
             audio_subscriber: *lock(&self.stats.audio_subscriber),
@@ -816,9 +964,16 @@ impl Drop for Running {
         {
             encoders.finish();
         }
+        // Only this output reads its own audio encode.
+        if let Some(own) = &self.own_audio {
+            own.encode.finish();
+        }
         self.cut.store(true, Ordering::Release);
         let ended = self.join_output(deadline + OUTPUT_GRACE);
         self.output_fail.close();
+        // After the output thread, which may still be draining it; removes the tap.
+        self.own_audio.take();
+        self.audio.take();
         // A thread left behind has not counted what is still queued for it, and won't
         // before the latch below. The stop drops and counts that itself, and latches
         // while it still holds the queues, so a count the thread makes is either wholly
@@ -870,6 +1025,9 @@ pub(crate) struct Parts {
     /// The collection's canvas (width, height) when the program stage opens: the output
     /// size follows it ([`output_size`]).
     canvas: (u32, u32),
+    /// Whether the privacy screen is on: the engine sets it, the render thread reads it
+    /// every tick, with no lock (ADR-0027 §4).
+    privacy: Arc<AtomicBool>,
 }
 
 pub(crate) fn parts_from(
@@ -879,6 +1037,7 @@ pub(crate) fn parts_from(
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
     canvas: (u32, u32),
+    privacy: Arc<AtomicBool>,
 ) -> Parts {
     Parts {
         canvas,
@@ -891,11 +1050,14 @@ pub(crate) fn parts_from(
         open_timeout,
         render,
         audio_sources,
+        privacy,
     }
 }
 
 /// The wgpu compositor, reading every frame back to the CPU: on the platform's GPU
-/// context when there is one, else on the software adapter. Its [`ResourceCache`] keeps
+/// context when there is one, else on a hardware adapter, or the software one when there
+/// is none (`OpenOptions::hardware`; WARP missed the 1/30 s budget at 720p, about 10 fps,
+/// #433). Its [`ResourceCache`] keeps
 /// the uploads, the imported capture textures and the nested-scene layers from tick to
 /// tick.
 pub(crate) fn gpu_draw() -> OpenDraw {
@@ -903,7 +1065,7 @@ pub(crate) fn gpu_draw() -> OpenDraw {
         let mut compositor = match context {
             Some(context) => Compositor::on_context(context),
             None => {
-                Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?
+                Compositor::open(OpenOptions::hardware()).map_err(|err| render_open_error(&err))?
             }
         };
         tracing::info!(
@@ -912,11 +1074,11 @@ pub(crate) fn gpu_draw() -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
+        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
-            // this tick claims its layers without drawing, so they aren't retired and
-            // reallocated when it is due again.
+            // this tick claims its layers, and its privacy blur's, without drawing, so
+            // they aren't retired and reallocated when it is due again.
             cache.begin_frame();
             for frame in frames.iter().filter(|frame| !frame.due) {
                 snapshot::claim_layers(
@@ -926,14 +1088,19 @@ pub(crate) fn gpu_draw() -> OpenDraw {
                     frame.mix.as_ref(),
                     frame.size,
                 )
+                .and_then(|()| snapshot::privacy_layers(&compositor, &mut cache, frame.size))
                 .map_err(|err| err.to_string())?;
             }
             for frame in frames.iter_mut().filter(|frame| frame.due) {
+                let view = View {
+                    mix: frame.mix.as_ref(),
+                    privacy: Some(frame.privacy),
+                };
                 snapshot::compose(
                     &mut compositor,
                     &mut cache,
-                    shot,
-                    frame.mix.as_ref(),
+                    (shot, at),
+                    view,
                     live,
                     captures,
                     frame.size,
@@ -1081,6 +1248,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             size,
             period,
             stop: Arc::clone(&stop),
+            privacy: Arc::clone(&parts.privacy),
             ready: ready_tx,
             readbacks: Arc::clone(&readbacks),
             gpu_captures: Arc::clone(&gpu_captures),
@@ -1181,14 +1349,16 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
 }
 
 /// Starts one output on `program`: its encoder sessions (shared with the running
-/// outputs that have the same `key`), then the destination, then its output thread.
+/// outputs that have the same `key`; with `own_audio`, an audio encode of its own from
+/// an output tap that runs its audio chain), then the destination, then its output
+/// thread.
 /// On failure the publish target is dropped: a one-shot target has to be set again,
 /// an opener opens a new one on the next start. A recording opened before the failure
 /// is removed, so its `.part` file doesn't block the next start.
 pub(crate) fn launch(
     engine: &Engine,
     program: Arc<Program>,
-    key: EncodeKey,
+    encode: OutputEncode,
     destination: Destination,
     output_id: OutputId,
     generation: u64,
@@ -1197,8 +1367,28 @@ pub(crate) fn launch(
     let registration = program
         .failures
         .add(output_id.clone(), generation, fail_tx.clone());
+    let OutputEncode { key, own_audio } = encode;
     let encoders = program.encoders(engine, key)?;
     let origin = program.origin()?;
+    let own_audio = if own_audio {
+        let (tap, release) = engine.add_output_tap(&output_id)?;
+        match program.open_audio(engine, &encoders.key.2, Some(tap), origin) {
+            Ok(encode) => Some(OwnAudio {
+                encode,
+                release: Some(release),
+            }),
+            Err(err) => {
+                release();
+                return Err(err);
+            }
+        }
+    } else {
+        None
+    };
+    let audio = match &own_audio {
+        Some(own) => Arc::clone(&own.encode.session),
+        None => program.shared_audio(engine, &encoders, origin)?,
+    };
     // Set once the start has succeeded; until then a recording is provisional.
     let keep = Arc::new(AtomicBool::new(false));
     let info = stream_info(&encoders.feed, origin, &encoders.key.2)?;
@@ -1216,11 +1406,19 @@ pub(crate) fn launch(
     // session already running gives this output a keyframe on request.
     let queues = Arc::new(Queues {
         video: Mutex::new(encoders.video.subscribe()),
-        audio: Mutex::new(encoders.audio.subscribe()),
+        audio: Mutex::new(audio.subscribe()),
         abandon: Mutex::new(()),
     });
     let shared_queues = Arc::downgrade(&queues);
     program.attach(&encoders);
+    match &own_audio {
+        Some(own) => own.encode.feed(&program),
+        None => {
+            if let Some(shared) = lock(&encoders.audio).as_ref() {
+                shared.feed(&program);
+            }
+        }
+    }
     let (started_tx, started_rx) = mpsc::channel();
     let output_fail = FailLine::new(fail_tx);
     let (done_tx, done_rx) = mpsc::channel::<()>();
@@ -1262,6 +1460,8 @@ pub(crate) fn launch(
         output_done: publishing.then_some(done_rx),
         output_fail,
         encoders: Some(encoders),
+        audio: Some(audio),
+        own_audio,
         stats,
         output_drops,
         link_drops,
@@ -1326,6 +1526,8 @@ pub(crate) fn launch_vcam(
         output_done: Some(done_rx),
         output_fail: fail,
         encoders: None,
+        audio: None,
+        own_audio: None,
         stats: PipelineStats::new(),
         output_drops,
         link_drops: Arc::new(AtomicU64::new(0)),
@@ -1439,9 +1641,9 @@ fn video_config(feed: &Feed, profile: &EncoderProfile) -> Result<VideoEncoderCon
         _ => return Err("the encoder profile's rate control is not one this engine knows".into()),
     };
     let hardware = match video.hardware {
-        ProfileHardware::Prefer => HardwarePreference::Prefer,
+        ProfileHardware::Avoid => HardwarePreference::Avoid,
         ProfileHardware::Require => HardwarePreference::Require,
-        _ => HardwarePreference::Avoid,
+        _ => HardwarePreference::Prefer,
     };
     Ok(VideoEncoderConfig {
         codec: video_codec(profile)?,
@@ -1541,6 +1743,8 @@ struct RenderJob {
     size: FrameSize,
     period: MediaTime,
     stop: Arc<AtomicBool>,
+    /// Whether the privacy screen is on, read at every tick.
+    privacy: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
     readbacks: Arc<AtomicU64>,
     gpu_captures: Arc<AtomicU64>,
@@ -1576,11 +1780,26 @@ struct Frames {
 }
 
 impl Frames {
+    /// Turns the last drawn frame of every due mix opaque black, in place, so a tick
+    /// that could not draw under the privacy screen repeats nothing it showed before.
+    fn blacken_due(&mut self) {
+        for (frame, shown) in self.mixes.iter().zip(&mut self.shown) {
+            if frame.due {
+                for pixel in shown.chunks_exact_mut(4) {
+                    pixel.copy_from_slice(&[0, 0, 0, 255]);
+                }
+            }
+        }
+    }
+
     /// Feeds `input` the frames of `feed`, drawn alongside an existing session's with
     /// the same feed.
     fn add(&mut self, feed: Feed, input: VideoInput) {
         let found = self.mixes.iter().position(|frame| {
-            frame.mix == feed.mix && frame.size == feed.size && frame.divisor == feed.divisor
+            frame.mix == feed.mix
+                && frame.size == feed.size
+                && frame.divisor == feed.divisor
+                && frame.owner == feed.owner
         });
         match found {
             Some(at) => self.targets[at].push(input),
@@ -1589,8 +1808,10 @@ impl Frames {
                     mix: feed.mix,
                     size: feed.size,
                     divisor: feed.divisor,
+                    owner: feed.owner,
                     due: false,
                     next: 0,
+                    privacy: false,
                     out: Vec::new(),
                 });
                 self.shown.push(Vec::new());
@@ -1625,8 +1846,10 @@ impl Frames {
                 mix: None,
                 size,
                 divisor: 1,
+                owner: None,
                 due: false,
                 next: 0,
+                privacy: false,
                 out: Vec::new(),
             });
             self.shown.push(Vec::new());
@@ -1642,10 +1865,12 @@ impl Frames {
     /// Marks the mixes due on base tick `index` and returns how many are. A mix is due
     /// once `index` reaches its `next` tick, which is then `divisor` ticks on, so an
     /// overrun that skips its tick delays it rather than starving it, and it never gets
-    /// frames closer together than its divisor.
-    fn schedule(&mut self, index: u64) -> u64 {
+    /// frames closer together than its divisor. Each is covered by the privacy screen
+    /// when `privacy`.
+    fn schedule(&mut self, index: u64, privacy: bool) -> u64 {
         let mut due = 0;
         for frame in &mut self.mixes {
+            frame.privacy = privacy;
             frame.due = index >= frame.next;
             if frame.due {
                 frame.next = index.saturating_add(u64::from(frame.divisor.max(1)));
@@ -1655,17 +1880,18 @@ impl Frames {
         due
     }
 
-    /// Composites the due mixes of `shot`, with the live values `live` applied, and, on
-    /// success, makes each the shown frame. Returns the GPU images the compositor let go
-    /// of.
+    /// Composites the due mixes of `shot` as it is at `at`, with the live values `live`
+    /// applied, and, on success, makes each the shown frame. Returns the GPU images the
+    /// compositor let go of.
     fn draw(
         &mut self,
         draw: &mut DrawFn,
         shot: &Shot,
         live: &LiveParams,
         captures: &RenderCaptures,
+        at: MediaTime,
     ) -> Result<Option<Reclaimed>, String> {
-        let freed = draw(shot, live, captures, &mut self.mixes)?;
+        let freed = draw(shot, live, captures, &mut self.mixes, at)?;
         for (frame, shown) in self.mixes.iter_mut().zip(&mut self.shown) {
             if frame.due {
                 std::mem::swap(&mut frame.out, shown);
@@ -1717,6 +1943,7 @@ fn render_loop(job: RenderJob) {
         size,
         period,
         stop,
+        privacy,
         ready,
         readbacks,
         gpu_captures,
@@ -1785,8 +2012,11 @@ fn render_loop(job: RenderJob) {
         };
         skipped = skipped.saturating_add(missed);
         index = index.saturating_add(missed);
-        let drawn = frames.schedule(index);
+        let private = privacy.load(Ordering::Acquire);
+        let drawn = frames.schedule(index, private);
         index = index.saturating_add(1);
+        // Whether this tick's due frames were drawn; if not, the last ones repeat.
+        let mut fresh = false;
         if !broken && drawn > 0 {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 reader.adopt();
@@ -1795,10 +2025,11 @@ fn render_loop(job: RenderJob) {
                 // The shot's captures cover every mix's passes, so a display or window
                 // only a video mix shows is started too.
                 captures.tick(shot.captures(), now);
-                frames.draw(&mut draw, shot, live, &captures)
+                frames.draw(&mut draw, shot, live, &captures, due)
             }));
             match tick {
                 Ok(Ok(freed)) => {
+                    fresh = true;
                     draw_errors = 0;
                     readbacks.fetch_add(drawn, Ordering::Relaxed);
                     if let Some(freed) = freed {
@@ -1836,10 +2067,15 @@ fn render_loop(job: RenderJob) {
         }
         drops.publish(capture_drops(captures.stats()).saturating_add(render_tick_drops(skipped)));
         gpu_captures.store(captures.gpu_captures(), Ordering::Relaxed);
+        if private && !fresh {
+            // The privacy screen fails closed: a frame it didn't cover is never repeated,
+            // black goes out instead (ADR-0027 §4).
+            frames.blacken_due();
+        }
         for ((frame, shown), targets) in frames
             .mixes
             .iter()
-            .zip(&frames.shown)
+            .zip(&mut frames.shown)
             .zip(&mut frames.targets)
         {
             if frame.due && !shown.is_empty() {
@@ -1885,7 +2121,7 @@ fn render_loop(job: RenderJob) {
 /// Whether `frame` is the program at the program stage's `size` on every base tick: what an
 /// output with no mix, and every virtual camera, is fed.
 fn is_program(frame: &MixFrame, size: FrameSize) -> bool {
-    frame.mix.is_none() && frame.size == size && frame.divisor == 1
+    frame.mix.is_none() && frame.size == size && frame.divisor == 1 && frame.owner.is_none()
 }
 
 /// The tick to draw when the clock reads `now` and the next tick was `due`, and how
@@ -1977,7 +2213,7 @@ fn push_each<T>(targets: &mut Vec<T>, mut push: impl FnMut(&T) -> bool, mut reti
 /// Where the mixer thread's blocks go.
 struct MixOut {
     /// The encoder sessions the program hands the thread.
-    inputs: Receiver<AudioInput>,
+    inputs: Receiver<AudioTap>,
     /// The blocks' format.
     format: AudioFormat,
     /// What the `waveform` and `spectrum` sources draw: the program mix's scope gets
@@ -2017,10 +2253,11 @@ struct Mixing {
 
 /// Mixes on the media clock, meters the master, and pushes each block into the program
 /// mix's audio scope and each drawn bus's and source's block into its scope (pushes
-/// neither lock nor allocate, and the list of scopes is adopted lock-free), and into every encoder
-/// session the program has handed it, letting go of one that has finished. A rejected block or a poll error
-/// is fatal: both mean the mixer and the encoder disagree about the format, which no
-/// retry fixes.
+/// neither lock nor allocate, and the list of scopes is adopted lock-free), and into every
+/// encoder session the program has handed it, letting go of one that has finished: the
+/// master bus's block, or for an output tap's session that tap's block, from its origin
+/// on. A rejected block or a poll error is fatal: both mean the mixer and the encoder
+/// disagree about the format, which no retry fixes.
 fn mixer_loop(
     Mixing {
         mut mixer,
@@ -2045,7 +2282,7 @@ fn mixer_loop(
     let mut samples = vec![0.0f32; samples_len];
     // What a silent drawn source's scope gets.
     let silence = vec![0.0f32; samples_len];
-    let mut targets: Vec<AudioInput> = Vec::new();
+    let mut targets: Vec<AudioTap> = Vec::new();
     'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
@@ -2074,14 +2311,32 @@ fn mixer_loop(
                 // early end themselves.
                 push_each(
                     &mut targets,
-                    |input| match AudioBuffer::new(format, block.pts, samples.clone()) {
-                        Ok(buffer) => !matches!(input.push(buffer), Err(PushError::Closed)),
-                        Err(err) => {
-                            rejected = Some(err);
-                            true
+                    |target| {
+                        let (pts, block) = match target.tap {
+                            None => (block.pts, samples.as_slice()),
+                            Some(tap) => match mixer.output_block(tap) {
+                                Some(tapped) => {
+                                    target.seen.set(true);
+                                    tapped
+                                }
+                                // Not installed yet, or removed once its output stopped.
+                                None => return !target.seen.get(),
+                            },
+                        };
+                        if pts < target.from {
+                            return true;
+                        }
+                        match AudioBuffer::new(format, pts, block.to_vec()) {
+                            Ok(buffer) => {
+                                !matches!(target.input.push(buffer), Err(PushError::Closed))
+                            }
+                            Err(err) => {
+                                rejected = Some(err);
+                                true
+                            }
                         }
                     },
-                    |input| collector.free(Garbage::Audio(input)),
+                    |target| collector.free(Garbage::Audio(target.input)),
                 );
                 if let Some(err) = rejected {
                     report(fail, format!("mixer block rejected: {err}"));
@@ -2326,18 +2581,21 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        Feed, Frames, catch_up, open_video, output_size, push_each, stream_info, video_config,
+        Feed, Frames, MixFrame, catch_up, open_video, output_size, push_each, stream_info,
+        video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
+    use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
     use jstream_media::{
         Codec, ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane,
         Timebase, VideoFrame, VideoFrameInfo,
     };
     use jstream_platform::{HardwarePreference, RateControl, VideoSurface};
     use jstream_protocol::{
-        EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
-        VideoCodec, VideoMixId,
+        EncoderProfile, HardwarePreference as ProfileHardware, OutputId,
+        RateControl as ProfileRate, VideoCodec, VideoMixId,
     };
+    use jstream_sources::CaptureSpec;
 
     /// Every target is pushed once; exactly the ones that refuse are taken out and
     /// retired (handed to the collector), and the rest stay.
@@ -2370,11 +2628,12 @@ mod tests {
             mix: None,
             size: FrameSize::new(64, 36).expect("size"),
             divisor: 1,
+            owner: None,
         };
         let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.rate_control, RateControl::Cbr { kbps: 2500 });
         assert_eq!(config.keyframe_interval, 60);
-        assert_eq!(config.hardware, HardwarePreference::Avoid);
+        assert_eq!(config.hardware, HardwarePreference::Prefer);
 
         let mut profile = EncoderProfile::DEFAULT;
         profile.video.rate_control = ProfileRate::Vbr {
@@ -2397,6 +2656,9 @@ mod tests {
         profile.video.hardware = ProfileHardware::Prefer;
         let config = video_config(size, &profile).expect("prefer");
         assert_eq!(config.hardware, HardwarePreference::Prefer);
+        profile.video.hardware = ProfileHardware::Avoid;
+        let config = video_config(size, &profile).expect("avoid");
+        assert_eq!(config.hardware, HardwarePreference::Avoid);
         profile.video.rate_control = ProfileRate::Unknown;
         assert!(video_config(size, &profile).is_err());
 
@@ -2484,7 +2746,8 @@ mod tests {
         rgba_from_surface(&grey, &mut out).expect("NV12 full");
         assert_eq!(&out[..4], [200, 200, 200, 255]);
 
-        // BGRA is swizzled; another format is refused and leaves `out` alone.
+        // BGRA is swizzled, and its alpha read as opaque (#451); another format is
+        // refused and leaves `out` alone.
         let bgra = frame(
             PixelFormat::Bgra8,
             1,
@@ -2493,7 +2756,16 @@ mod tests {
             vec![Plane::new(vec![1, 2, 3, 4], 4)],
         );
         rgba_from_surface(&bgra, &mut out).expect("BGRA");
-        assert_eq!(out, [3, 2, 1, 4]);
+        assert_eq!(out, [3, 2, 1, 255]);
+        let rgba = frame(
+            PixelFormat::Rgba8,
+            1,
+            1,
+            ColorInfo::default(),
+            vec![Plane::new(vec![1, 2, 3, 4], 4)],
+        );
+        rgba_from_surface(&rgba, &mut out).expect("RGBA");
+        assert_eq!(out, [1, 2, 3, 255]);
         let i420 = VideoSurface::Cpu(
             VideoFrame::zeroed(VideoFrameInfo {
                 size: FrameSize::new(2, 2).expect("size"),
@@ -2504,7 +2776,7 @@ mod tests {
             .expect("frame"),
         );
         assert_eq!(rgba_from_surface(&i420, &mut out), None);
-        assert_eq!(out, [3, 2, 1, 4]);
+        assert_eq!(out, [1, 2, 3, 255]);
     }
 
     /// Frames with no mix and no session yet.
@@ -2525,6 +2797,7 @@ mod tests {
             mix: Some(VideoMixId::new("half")),
             size: FrameSize::new(1280, 720).expect("size"),
             divisor: 2,
+            owner: None,
         };
         let config = video_config(&feed, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.size, feed.size);
@@ -2554,6 +2827,7 @@ mod tests {
             mix: mix.map(VideoMixId::new),
             size,
             divisor,
+            owner: None,
         };
         let mut frames = no_frames();
         let session = open_video(
@@ -2568,15 +2842,17 @@ mod tests {
         frames.add(feed(None, 1), input());
         assert_eq!(frames.mixes.len(), 2);
         assert_eq!(frames.targets[0].len(), 2);
-        assert_eq!(frames.schedule(0), 2);
-        assert_eq!(frames.schedule(1), 1);
+        assert_eq!(frames.schedule(0, false), 2);
+        assert_eq!(frames.schedule(1, false), 1);
         assert!(frames.mixes[0].due && !frames.mixes[1].due);
         // An overrun that skips tick 2 and lands on 3 still draws the half-rate mix,
         // so a steady overrun landing on odd ticks can't starve it (review N5), and
-        // the tick after that is too soon for it.
-        assert_eq!(frames.schedule(3), 2);
-        assert_eq!(frames.schedule(4), 1);
-        assert_eq!(frames.schedule(5), 2);
+        // the tick after that is too soon for it. The privacy screen covers every
+        // frame due while it is on.
+        assert_eq!(frames.schedule(3, false), 2);
+        assert_eq!(frames.schedule(4, true), 1);
+        assert!(frames.mixes.iter().all(|frame| frame.privacy));
+        assert_eq!(frames.schedule(5, false), 2);
         frames.targets[0].clear();
         let mut freed = 0;
         frames.prune(|_| freed += 1);
@@ -2584,6 +2860,117 @@ mod tests {
         assert_eq!(frames.mixes.len(), 1);
         assert_eq!(frames.mixes[0].mix, Some(VideoMixId::new("half")));
         assert_eq!(frames.shown.len(), 1);
+    }
+
+    /// An output with its own video chain gets its own drawn frame even when another
+    /// session shows the same mix at the same size and rate (ADR-0027 §3).
+    #[test]
+    fn an_owned_feed_is_drawn_on_its_own() {
+        let shared = Feed {
+            mix: None,
+            size: FrameSize::new(64, 36).expect("size"),
+            divisor: 1,
+            owner: None,
+        };
+        let owned = Feed {
+            owner: Some(OutputId::new("rec")),
+            ..shared.clone()
+        };
+        let mut frames = no_frames();
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            &shared,
+            &EncoderProfile::DEFAULT,
+        )
+        .expect("fake session");
+        frames.add(shared.clone(), session.input());
+        frames.add(owned.clone(), session.input());
+        frames.add(owned, session.input());
+        frames.add(shared, session.input());
+        assert_eq!(frames.mixes.len(), 2);
+        assert_eq!(frames.mixes[1].owner, Some(OutputId::new("rec")));
+        assert_eq!((frames.targets[0].len(), frames.targets[1].len()), (2, 2));
+        assert_eq!(frames.schedule(0, false), 2, "both are drawn");
+    }
+
+    /// Under the privacy screen, a tick that could not draw blackens the frames due on
+    /// it rather than repeating what they showed; frames not due keep theirs.
+    #[test]
+    fn the_privacy_screen_fails_closed() {
+        let feed = |divisor| Feed {
+            mix: None,
+            size: FrameSize::new(2, 1).expect("size"),
+            divisor,
+            owner: None,
+        };
+        let mut frames = no_frames();
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            &feed(1),
+            &EncoderProfile::DEFAULT,
+        )
+        .expect("fake session");
+        frames.add(feed(1), session.input());
+        frames.add(feed(2), session.input());
+        assert_eq!(frames.schedule(0, false), 2);
+        for shown in &mut frames.shown {
+            *shown = vec![200; 8];
+        }
+        assert_eq!(frames.schedule(1, true), 1);
+        frames.blacken_due();
+        assert_eq!(frames.shown[0], [0, 0, 0, 255, 0, 0, 0, 255]);
+        assert_eq!(frames.shown[1], [200; 8], "not due, not pushed");
+    }
+
+    /// The CPU stand-in draws a covered frame black whatever the capture's size, and
+    /// copies or scales the capture into an uncovered one (review B2).
+    #[test]
+    fn the_cpu_stand_in_draws_covered_frames_black() {
+        struct One<'a>(CaptureImage<'a>);
+        impl Captures for One<'_> {
+            fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+                Some(CaptureFrame {
+                    version: 1,
+                    image: self.0,
+                })
+            }
+        }
+        let mut draw = (super::cpu_draw())(None).expect("cpu draw");
+        let shot = Shot::default();
+        let size = FrameSize::new(2, 1).expect("size");
+        let frame = |privacy| MixFrame {
+            mix: None,
+            size,
+            divisor: 1,
+            owner: None,
+            due: true,
+            next: 0,
+            privacy,
+            out: Vec::new(),
+        };
+        let same = [200; 8];
+        let other = [100; 16];
+        for (own, rgba) in [
+            (size, &same[..]),
+            (FrameSize::new(2, 2).expect("size"), &other[..]),
+        ] {
+            let captures = One(CaptureImage::Rgba { size: own, rgba });
+            let mut frames = [frame(true), frame(false)];
+            draw(
+                &shot,
+                &LiveParams::default(),
+                &captures,
+                &mut frames,
+                MediaTime::zero(Timebase::NANOS),
+            )
+            .expect("draw");
+            assert_eq!(frames[0].out, [0; 8], "covered, from a {own:?} capture");
+            assert_eq!(
+                frames[1].out,
+                rgba[..8],
+                "uncovered, from a {own:?} capture"
+            );
+        }
     }
 
     /// A virtual camera holds the program at the program stage's size: its frame is drawn on
@@ -2598,12 +2985,13 @@ mod tests {
         frames.prune(|_| panic!("held"));
         assert_eq!(frames.program_frame(size), Some(0));
         assert_eq!(frames.mixes.len(), 1);
-        assert_eq!(frames.schedule(1), 1, "drawn on every tick");
+        assert_eq!(frames.schedule(1, false), 1, "drawn on every tick");
 
         let program = Feed {
             mix: None,
             size,
             divisor: 1,
+            owner: None,
         };
         let session = open_video(
             &jstream_platform::fake::FakeCodecs,

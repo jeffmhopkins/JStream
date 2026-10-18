@@ -218,8 +218,11 @@ pub struct Studio {
     pub kinds: RwSignal<Option<Vec<KindSummary>>>,
     /// The kind descriptors read so far, by kind ID.
     pub descriptors: RwSignal<HashMap<String, KindDescriptor>>,
-    /// The last call that failed, for the status bar.
+    /// The last call that failed, for the problem bar.
     pub problem: RwSignal<Option<String>>,
+    /// Bumped when an output's stream key was set or cleared, which no event reports, so
+    /// the header re-reads the outputs Go Live may start.
+    pub keys_changed: RwSignal<u64>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
     /// The counter [`fresh_id`] continues from.
@@ -236,6 +239,7 @@ impl Studio {
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
             problem: RwSignal::new(None),
+            keys_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
             next_id: StoredValue::new(0),
         }
@@ -257,7 +261,7 @@ impl Studio {
         let studio = *self;
         let first = session.clone();
         spawn_local(async move {
-            if let Ok(QueryResult::StudioGet { program_scene }) =
+            if let Ok(QueryResult::StudioGet { program_scene, .. }) =
                 query(&first, Query::StudioGet).await
             {
                 studio.program.set(program_scene);
@@ -273,7 +277,7 @@ impl Studio {
     }
 
     /// Keeps the kinds `kind.list` answered. A failed `kind.list` shows its error in the
-    /// status bar and leaves "New source" empty, as an engine that lists no kinds does;
+    /// problem bar and leaves "New source" empty, as an engine that lists no kinds does;
     /// existing sources and scenes can still be placed.
     fn take_kinds(&self, listed: Result<Vec<KindSummary>, ControlError>) {
         let kinds = listed.unwrap_or_else(|error| {
@@ -377,12 +381,12 @@ impl Studio {
         id
     }
 
-    /// Shows a failed call in the status bar.
+    /// Shows a failed call in the problem bar.
     pub fn report(&self, error: &ControlError) {
         self.problem.set(Some(error.to_string()));
     }
 
-    /// Sends `edits` as one batch, reporting a failure in the status bar. The state
+    /// Sends `edits` as one batch, reporting a failure in the problem bar. The state
     /// follows from the `state.changed` the batch causes.
     pub fn apply(&self, session: &Session, edits: Vec<Edit>) {
         let studio = *self;
@@ -394,7 +398,7 @@ impl Studio {
         });
     }
 
-    /// Runs an action, reporting a failure in the status bar.
+    /// Runs an action, reporting a failure in the problem bar.
     pub fn act(&self, session: &Session, action: jstream_control::protocol::Action) {
         let studio = *self;
         let session = session.clone();
@@ -622,6 +626,7 @@ mod tests {
         assert!(!c.id_taken("z"));
         let other = QueryResult::StudioGet {
             program_scene: None,
+            preview_scene: None,
         };
         assert_eq!(Collection::from_result(other), None);
     }
@@ -707,7 +712,7 @@ mod tests {
     }
 
     /// An engine that lists no kinds offers none, quietly; a failed `kind.list` offers
-    /// none either, but says why in the status bar (#401).
+    /// none either, but says why in the problem bar (#401).
     #[test]
     fn a_failed_kind_list_is_reported() {
         let engine = MockEngine::new();

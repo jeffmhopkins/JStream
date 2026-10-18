@@ -5,7 +5,7 @@
 //! this library; like every host, the daemon only wires the engine to its interfaces
 //! (ADR-0001).
 //!
-//! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
+//! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md, docs/security/threat-model.md#server
 
 #![forbid(unsafe_code)]
 

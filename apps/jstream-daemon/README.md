@@ -38,10 +38,10 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   creates the file with a new random token, and names the device file beside it
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, through `live.rs`, which
-  with the `cef` feature also opens browser sources, [Design](#design)), installs the
-  signal handlers that stop it, then binds the server with MCP on and, with
-  `--ui-dir`, the web UI's files.
+  file and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
+  the CLAP plugins, and with the `cef` feature also opens browser sources,
+  [Design](#design)), installs the signal handlers that stop it, then binds the server
+  with MCP on and, with `--ui-dir`, the web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -82,7 +82,7 @@ only there), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
-Why a crate: it is a host binary of its own (ADR-0020 ships `jstream-daemon.exe` next
+Why a crate: it is a host binary of its own (ADR-0066 ships `jstream-daemon.exe` next
 to the desktop app), and only an app may link both `jstream-core` and `jstream-server`
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)).
 
@@ -156,7 +156,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   directory is `logs` in the data directory: `%APPDATA%\JStream` on Windows,
   `~/Library/Application Support/JStream` on macOS, `$XDG_DATA_HOME/jstream` (else
   `~/.local/share/jstream`) elsewhere, or a `data` folder beside the exe when a file
-  named `portable` sits there (ADR-0020). At `info` and above, the first line logged
+  named `portable` sits there (ADR-0066). At `info` and above, the first line logged
   names the file. A log directory that can't be created, or a data directory that can't
   be found (no portable marker, and no `HOME` or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
@@ -263,7 +263,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `crash::Redacting` before calling `live`, so each key is registered with the crash reports' redaction, [Crash reports](#design)), and a
   publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
-  starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
+  starts. A `jstream-clap-scan` thread then scans the CLAP plugins with
+  `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
+  audio-filter kinds once found, and logs each file it couldn't scan; the daemon
+  serves meanwhile. Without `jstream-plugin-host.exe` beside the daemon every file
+  fails to scan, and is logged. Elsewhere there are no backends yet, so outputs stay the placeholder state
   machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **The publish opener.** On each `output.start` it reads the output's server URL with
   `Engine::output_kind` and its key from the store, then calls `connect_rtmp`, so each
@@ -449,7 +453,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `FILE_SHARE_DELETE`, so the same is expected, untested).
 - **The data directory** comes from `jstream-platform`'s `paths` module, the desktop
   app's too: `%APPDATA%\JStream`, or a `data` folder beside the exe when a `portable`
-  marker file sits there ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md),
+  marker file sits there ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md),
   [jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)). The panic
   hook, installed as soon as the log directory exists, writes the daemon and protocol
@@ -473,7 +477,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   deleted before each new one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
-  (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
+  (`--token-file`, `--port`, `--output`, `--collection`, `--ui-dir`, `--log-dir`,
+  `--log-level`, `--youtube-client`, `--register-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-platform` (`Backends`, the key store trait, the data directory),
@@ -508,7 +513,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    question 5).
 2. **Default token file location.** The platform config directory
    ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence); `%APPDATA%\JStream`
-   or the portable folder per [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)),
+   or the portable folder per [ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)),
    once the engine's settings code locates it. Until then the path is required, and the
    same variable serves the daemon and the CLI.
 3. **Windows ACL on real hardware.** The token, devices and log files are now created
@@ -524,7 +529,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    an out-of-process monitor (`crash-handler` and `minidumper`), whose attach call is
    `unsafe` too and which adds a helper process. Either needs testing on Windows.
 5. **Data directory.** The log directory's default is `logs` in the data directory
-   (`jstream-platform`'s `paths`, which handles ADR-0020's `portable` marker), and
+   (`jstream-platform`'s `paths`, which handles ADR-0066's `portable` marker), and
    `--log-dir` overrides it. The token file (question 2) and the collection
    (question 6) don't default to it yet.
 6. **Default collection file.** Without `--collection` the collection is not saved.

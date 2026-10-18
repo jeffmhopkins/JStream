@@ -29,7 +29,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
-- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`):
+- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`,
+  its audio in `mock/audio.rs` and its folders and labels in `mock/organise.rs`):
   `MockEngine` and `MockControl`, an in-memory implementation for developing and
   testing clients without the engine, which they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
@@ -106,14 +107,15 @@ its own, and is used with default features off.
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
 `dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
-mixes, buses, sends and hotkey bindings in memory, with an
+mixes, buses, sends, hotkey bindings, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but the transition ones (below), with the
+  checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -147,9 +149,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `item.set_opacity` and `item.set_blend`;
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
     a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
-    `scene` source, a full chain and an index out of range. `source.duplicate` copies
-    the chains and `source.delete`'s inverse re-adds them; a reference in a filter's
-    settings blocks deleting its target, as a source's own does;
+    `scene` source, a full chain and an index out of range. The master stage and
+    outputs ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)) take
+    audio filters only, an output only if it carries audio, and their filters no scene
+    or source reference. `source.duplicate` copies the chains, and `source.delete`'s
+    and `output.delete`'s inverses re-add them; a reference in a filter's settings
+    blocks deleting its target, as a source's own does;
   - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
@@ -158,7 +163,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB;
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
-    `Action::bind_problem` refuses and a missing named scene or output, in that order, and
+    `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`
+    exists), in that order, and
     `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
     profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.
 
@@ -170,7 +176,16 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
   cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
-  `internal`, and its refused deletes carry no `blockers`;
+  `internal`, and its refused deletes carry no `blockers`, except a folder's and a
+  label's. The folder, label and metadata edits
+  ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`, `label.*`,
+  `scene.set_folder`, `scene.set_meta` and `source.set_meta`, in `mock/organise.rs`)
+  make the graph's checks with the protocol's own `check_color`, `check_icon` and
+  `SceneMeta::problem`: a missing parent, folder or label, a folder inside itself, a
+  label listed twice, and no deleting a folder that holds a scene or folder or a label a
+  source carries (with the graph's `blockers`). Reads report the folders, labels and
+  each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
+  a scene's or source's delete restores its folder and metadata;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -221,9 +236,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and sends, a deleted source's audio and sends, and each audio edit back to the values
   it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
-  back with its encoder profile and video mix and the hotkeys its delete removed,
-  hotkey edits undo to the binding as it was, encoder profile and video mix edits undo
-  to the profile or mix as it was,
+  back with its encoder profile, video mix and filters and the hotkeys its delete
+  removed, hotkey edits undo to the binding as it was, encoder profile and video mix
+  edits undo to the profile or mix as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
@@ -250,13 +265,20 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - `state.changed` events carrying the request ID (and `cause` for an undo or redo), and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
-- the program scene with the engine's rules
+- the program and preview scenes with the engine's rules
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
-  (`not_found` for a missing scene, no `rev`), `studio.get`, and `studio.changed` for a
-  switch and after a batch, undo or redo that creates the first scene or deletes the
-  program scene;
+  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.get`,
+  and `studio.changed` for each and after a batch, undo or redo that creates the first
+  scene or deletes the program or preview scene. The mock knows only the initial `cut`
+  preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every
+  switch cuts and reports it, a switch naming another preset is `not_found`, and the
+  `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
+  `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`;
+- the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
+  `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
+  stream opened while it is on gets first;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.
@@ -270,9 +292,9 @@ The mock re-implements these checks and reads rather than calling
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
-its outputs and a filter chain, the exact answer to every read of it, and the exact
-error for batches rejected against it, RTMP URL, recording path, filter and audio
-rejections included. The mock's
+its outputs and filter chains on a source, the master and an output, the exact answer to
+every read of it, and the exact error for batches rejected against it, RTMP URL,
+recording path, filter and audio rejections included. The mock's
 undo test tears that collection down in one batch and checks that undo gives back
 exactly the fixture's state, which `jstream-graph`'s inverse property test guarantees
 for the graph.

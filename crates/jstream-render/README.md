@@ -39,7 +39,8 @@ and calls this crate.
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
   - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
     source pixels, fitted into the box by its fit mode (`stretch`, `fit` or `fill`,
-    which is clipped to the box), and rotated clockwise about the box's centre;
+    which is clipped to the box), mirrored inside the box by `flip_h` and `flip_v`, and
+    rotated clockwise about the box's centre;
   - a **legacy 0.3 placement** (decision 5): crop in source pixels, then scale the
     remaining rectangle by `scale` relative to the source's current size, put its
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
@@ -47,8 +48,8 @@ and calls this crate.
   Both depend on the image's size, which is runtime state, so the compositor evaluates
   the placement on every `render`.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
-- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1. The graph does not
-  store it; the snapshot carries it so `jstream-core` can pass it when it does
+- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
+  an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). The only blend is
   premultiplied src-over. Other modes stay rejected by the engine until a later change
   draws them.
@@ -65,6 +66,20 @@ and calls this crate.
   picks the thread that drops it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
 
+- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
+  a `Track` is one item's part in a transition: a `Pair` that interpolates between two
+  `Endpoint`s (a geometry, a crop and an opacity), an `Appear` or a `Disappear` with
+  its effect (`Fade`, `Scale` to 65 %, `Slide` to the nearest canvas edge, or `None`),
+  each with its `Timing` (delay, duration and easing); `None` waits for the delay,
+  then shows or hides the item at once. `Track::sample` gives the
+  endpoint at a time since the start, or nothing once the item is invisible; it is a
+  pure function, so the render thread and the control thread that retargets a running
+  transition get the same answer. Angles take the shortest way round, discrete fields
+  (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
+  opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
+  perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
+  `jstream-core`'s.
+
 **Where it sits on the existing APIs.**
 
 - It does **not** open the media adapter. When platform interop works, the engine
@@ -72,8 +87,9 @@ and calls this crate.
   ([jstream-platform › GPU frames](../jstream-platform/README.md#gpu-frames)), so
   capture, composite and encode share one device. `Compositor::open` is the other
   path: no interop (the fakes, CI, a headless machine). It opens a device itself,
-  software adapter first, as ARCH principle 7 and that section's "when there is no
-  interop" paragraph say.
+  a hardware adapter first by default (`OpenOptions::hardware`), with the software
+  adapter as the fallback, so ARCH principle 7's "runs with a software adapter" still
+  holds on a machine with no GPU. `OpenOptions::headless` asks for software first.
 - A source image is either straight-alpha sRGB RGBA8 bytes the compositor uploads, or
   a `GpuFrame` / `wgpu::Texture` already on this device. An upload is premultiplied in
   linear light and stored as `Rgba16Float`, so filtering cannot darken transparent
@@ -82,7 +98,9 @@ and calls this crate.
   alpha: exact for an opaque capture, a fringe at partly transparent edges. A browser
   page's texture holds sRGB code values already multiplied by alpha (CEF's layout), so
   `import_premultiplied` takes `Rgba8Unorm` or `Bgra8Unorm` and reads it that way, with
-  no fringe. A compositor opened `on_context` reports that context's `ContextKey`
+  no fringe. `import_opaque` takes what `import` takes and reads every texel's alpha as
+  1: for a captured frame, whose alpha means nothing, as the CPU capture path treats it
+  (#451). A compositor opened `on_context` reports that context's `ContextKey`
   (`Compositor::context`), so a caller can tell a texture from that context from one
   it can't sample. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
@@ -108,7 +126,7 @@ and calls this crate.
 (`runtime/`), not this crate's. Also not here: NV12 or
 P010 conversion, encode-target export, loading WGSL effect packs
 (`jstream-effects`; this crate only draws them), the video filter chain runtime (the built-in filters' passes are here, see
-[Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
+[Filters](#filters)), 3D tilt/turn/depth/perspective, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
 steps stay in
@@ -149,7 +167,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    without the banding 8 bits would give in the darks; it costs 8 bytes per texel
    instead of 4, and the conversion is CPU work at upload time only.
 
-   **Imported textures** (`import`, `import_frame`, `import_premultiplied`) are not
+   **Imported textures** (`import`, `import_frame`, `import_premultiplied`,
+   `import_opaque`) are not
    converted: a capture changes every frame while its `Image` lives, so a conversion
    would be a per-frame pass. A straight import is sampled as straight alpha and
    premultiplied after the filter. For an opaque texture, such as a captured frame,
@@ -158,7 +177,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    so the filter averages premultiplied code values and transparent edges stay clean;
    the shader then divides by alpha, decodes sRGB and multiplies by alpha again.
    Averaging code values rather than linear light differs from an upload only where
-   the filter mixes texels of different colour.
+   the filter mixes texels of different colour. An opaque import (a capture) is decoded
+   by the sampler and its alpha replaced by 1, in the composite shader and in a
+   filter's input alike.
 2. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is two triangles. The vertex buffer holds clip-space
@@ -232,8 +253,8 @@ only that callback; a frame that fails before `end_frame` leaves its retirees to
 next frame's fence, which covers it.
 
 `import` keyed by an ID samples a `GpuFrame` with no copy (`import_premultiplied`
-does the same for a premultiplied texture, and replaces an entry the key imported the
-other way, as a new import does). The entry's image carries
+does the same for a premultiplied texture, and `import_opaque` for a capture, and each
+replaces an entry the key imported another way, as a new import does). The entry's image carries
 the frame's `FrameSync` hold, so each `render` that draws it stages it, until
 `end_frame`, which drops every live entry's hold (as retiring does): a cached image
 never keeps a platform texture from being reused. The import itself, texture view and
@@ -256,9 +277,11 @@ what the compositor draws and what a UI overlay computes cannot disagree.
 **Geometry.** `ItemGeometry::content` gives the cropped image's rectangle in the box's
 local frame (origin at the box centre, before rotation) and its UVs: the whole box for
 `stretch`, the centred largest rectangle of the crop's aspect ratio for `fit`, the
-centred smallest covering one for `fill`. `place` intersects that rectangle with the
+centred smallest covering one for `fill`. `flip_h` and `flip_v` swap that rectangle's
+`u` or `v` pair, which mirrors the cropped, fitted image about the box centre without
+moving the box. `place` intersects that rectangle with the
 box, which only changes `fill`, and cuts the UVs in proportion, so the clip needs no
-scissor or shader change. Clipping in the local frame is exact for any in-plane
+scissor or shader change, and a flipped `fill` keeps the mirror of the same middle. Clipping in the local frame is exact for any in-plane
 rotation. `ItemGeometry::place` then maps the four clipped corners: rotation about the
 centre, then `center` added. With 3D neutral that mapping is affine, so linear UVs
 across the quad are correct; a non-neutral 3D field would need perspective-correct
@@ -294,12 +317,25 @@ Vulkan, DX12 and Metal (one `wgpu` pin, ADR-0004; features are additive,
 without an EGL stack. Instance flags start empty and `with_env()`, so a debug build
 does not require the Khronos validation layer; `WGPU_VALIDATION` still opts in.
 
-Adapter order when `OpenOptions` asks for software (the test and headless default):
+Adapter order when `OpenOptions` asks for software (`OpenOptions::headless`):
 
 1. `force_fallback_adapter: true`, which is a CPU adapter when the backend has one
    (lavapipe, WARP).
 2. Any adapter, so a machine with a GPU and no software rasterizer still runs.
 3. `RenderError::NoAdapter` when the instance has none.
+
+When it asks for hardware (`OpenOptions::hardware`, the default, which the engine's
+render, snapshot and preview threads, the tests and the benchmarks use; on WARP a 720p
+program ran at about 10 fps, #433): on Windows, a D3D12 hardware adapter first, since
+the platform's capture, interop and encoders are D3D11/D3D12 and wgpu's own pick on a
+Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped, and WARP,
+which D3D12 offers when it has no GPU, is skipped too); then, everywhere, the
+high-performance adapter without `force_fallback_adapter`, then the software adapter,
+then `RenderError::NoAdapter`. A hardware adapter whose device refuses to open (limits
+below the defaults, a removed or hung GPU) falls back to the software adapter too, and
+the error names both when that fails as well. When the pick already was the software
+adapter (no GPU), its device error is returned without a second try. A machine with no
+GPU still runs, on lavapipe or WARP.
 
 `Compositor::on_context` does not search. It uses the `GpuContext` it is given.
 
@@ -331,7 +367,9 @@ kinds.
 - `VideoFilter::new(kind_id, settings)` builds a kind's pass; `set_settings` updates it
   in place, keeping its state; `output_size` is the size it draws for a given input,
   so a filter can change the source's reported size (for example aspect ratio, padding,
-  a drop shadow, an outside outline or a glow).
+  a drop shadow, an outside outline or a glow). `content_box` is where the input's
+  frame sits in that output (a `ContentBox`, see **Bounds** below), and
+  `ContentBox::then` carries a box down a chain.
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
   that move or hold frames. An imported input's `FrameSync`, and that of any image the
@@ -346,8 +384,9 @@ kinds.
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
   colour helpers. `src`, `texel` and `aux` always return premultiplied linear colour:
   a straight import is premultiplied after sampling, and a premultiplied import (a
-  browser page) is divided by alpha, decoded from sRGB and multiplied again, as the
-  compositor's own draw does (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
+  browser page) is divided by alpha, decoded from sRGB and multiplied again, and an
+  opaque import (a capture) has its alpha read as 1, as the compositor's own draw does
+  (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
   kept for the compositor's life, keyed by the shader's label and source (up to four
   sources per label, so a reloaded pack's old and new filters don't evict each other).
   A shader wgpu refuses, by its own validation or a backend compiler's, is a
@@ -457,9 +496,14 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
 **Bounds.** Drop shadow, outline (outside) and glow grow their output by the effect's
 extent on each side, rounded up to whole pixels: the blur radius plus the offset
 toward that side, or the stroke width. The input is drawn 1:1 at the matching inset, so
-**these filters change the source's reported size**. Until the chain runtime (V0)
-reports the inset, a placement fits the grown frame rather than the original content
-box.
+**these filters change the source's reported size**. Each reports where the input
+landed as its `content_box`: the inset and the input's own size. Every other kind
+reports its whole output, aspect ratio included, since its output is the reshaped
+frame. Down a chain, `ContentBox::then` adds the offsets while each next filter holds
+the previous output 1:1, and takes the next filter's box when it reshapes or resamples
+it. The chain runtime (V0) is meant to fit that box, not the grown frame, to the
+item's bounds, so a shadow hangs outside them; until it lands nothing reads the box,
+and a placement would fit the grown frame.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
@@ -509,7 +553,9 @@ Linux lavapipe for a render smoke, Windows WARP as the golden-frame reference.
 [R-TEST-003](../../docs/RULES.md#R-TEST-003) says files under `tests/golden/` change
 only through that command on WARP. This cut therefore does **not** add golden PNGs.
 It renders offscreen and checks pixels in the crate tests, with a tolerance, so the
-same tests run on lavapipe and on WARP.
+same tests run on lavapipe and on WARP. They open the compositor hardware first, so a
+machine with a GPU runs them there (what the Windows hardware runs check); CI has no
+GPU and gets the software adapter.
 
 **Filters.** `filter::testing` runs one filter over a small uploaded image and reads
 the result back through a 1:1 scene on a transparent canvas, so each kind's golden
@@ -535,7 +581,10 @@ the expected layout in the diff. These are not R-TEST-003's golden PNGs under
 `tests/golden/`, which wait for `cargo xtask golden`. The grids cover `fit`
 (letterboxed), `fill` (clipped to the box, the middle of the image showing), `stretch`
 rotated 90° about the box centre, crop before fitting, a legacy item beside them, and
-a non-axis-aligned box turning about its centre.
+a non-axis-aligned box turning about its centre. A flip grid draws a four-quadrant
+image unflipped, with `flip_h`, `flip_v` and both, flipped then turned 90° (the mirror
+is in the box's own frame), and a flipped `fill`; another checks that a legacy
+negative scale and the geometry `from_legacy` makes of it draw the same grid.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
@@ -557,7 +606,10 @@ opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps r
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
 imported sRGB texture is read as straight alpha, and a premultiplied `Unorm` import
 of half-transparent red over white keeps full red and lets half the white through in
-linear light (each refused in the other's format). An image from another compositor on
+linear light (each refused in the other's format). An opaque import of
+half-transparent red draws full red over black, faded only by the item's opacity, and
+an identity filter over it keeps it opaque; the cache reuses an opaque import and
+replaces it with a straight one of the same texture. An image from another compositor on
 the same device is refused. GPU frames through the cache: a frame drawn from an
 import is staged once, and once the frame ends nothing but the frame holds its
 `FrameSync`; a second texture under the key is a second import, the first texture
@@ -596,8 +648,8 @@ adds a package so tests can render, and it does not weaken a check.
 A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
 (`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
 and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
-`cargo bench -p jstream-render --bench composite`; the `bench` workflow records them on
-lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
+`cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
+one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the
 compositor submits, and say nothing about GPU frame time. **Not measured:** frame time on
 a hardware GPU.
@@ -614,8 +666,9 @@ a hardware GPU.
   ends the submit in `PRESENT`. Software adapters often lack `TEXTURE_FORMAT_NV12`,
   so that pass cannot be the CI path. Proposed default: keep this RGBA output, and
   let a later pass sample it into the platform `encode_target` on the real device.
-- **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are opaque
-  `Bgra8UnormSrgb`, which `import` takes as is, so they need no conversion pass. A
+- **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are
+  `Bgra8UnormSrgb`, which `import_opaque` takes as is, so they need no conversion pass;
+  their alpha, which a driver or HDR mode can leave below 1, is read as 1. A
   browser page's frames are premultiplied `Bgra8Unorm`, which `import_premultiplied`
   takes as is.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).

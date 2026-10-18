@@ -16,12 +16,13 @@ mod gpu;
 mod image;
 mod place;
 mod scene;
+pub mod transition;
 
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
 pub use error::RenderError;
 pub use filter::{
-    ExternalFilter, FilterClock, PRELUDE as FILTER_PRELUDE, VideoFilter,
+    ContentBox, ExternalFilter, FilterClock, PRELUDE as FILTER_PRELUDE, VideoFilter,
     descriptors as video_filter_descriptors,
 };
 pub use gpu::OpenOptions;

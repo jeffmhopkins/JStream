@@ -16,7 +16,7 @@ use super::bounds::Insets;
 use super::{copy, premultiplied};
 use crate::error::RenderError;
 use crate::filter::params::{Read, Uniforms, choice, color, filter, float};
-use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
+use crate::filter::{Blend, ContentBox, Ctx, Draw, Pass, Shader};
 use crate::image::Image;
 
 pub(super) const KIND: &str = "outline";
@@ -115,6 +115,10 @@ impl Pass for Outline {
         self.0.insets().grow(width, height)
     }
 
+    fn content_box(&self, width: u32, height: u32) -> ContentBox {
+        self.0.insets().content(width, height)
+    }
+
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
@@ -195,12 +199,25 @@ mod tests {
 
     #[test]
     fn sizes_grow_outside_and_not_inside() {
+        use crate::filter::ContentBox;
+
         assert_eq!(
             filter("outline", json!({"width": 2.5})).output_size(8, 4),
             (14, 10)
         );
         let inside = filter("outline", json!({"width": 2.5, "position": "inside"}));
         assert_eq!(inside.output_size(8, 4), (8, 4));
+        // The frame sits 3 px in on every side outside, and fills the output inside.
+        assert_eq!(
+            filter("outline", json!({"width": 2.5})).content_box(8, 4),
+            ContentBox {
+                x: 3,
+                y: 3,
+                width: 8,
+                height: 4
+            }
+        );
+        assert_eq!(inside.content_box(8, 4), ContentBox::whole((8, 4)));
         assert_eq!(
             filter("outline", json!({"width": 0.0})).output_size(8, 4),
             (8, 4)

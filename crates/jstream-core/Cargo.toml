@@ -34,6 +34,8 @@ jstream-media.workspace = true
 jstream-mux.workspace = true
 jstream-outputs.workspace = true
 jstream-platform.workspace = true
+# The plugin-host control messages and block the CLAP supervisor reads (ADR-0035).
+jstream-plugin-proto.workspace = true
 jstream-protocol.workspace = true
 jstream-render.workspace = true
 # The built-in source kinds and their descriptors (ADR-0031, ADR-0025).
@@ -41,7 +43,8 @@ jstream-sources.workspace = true
 # PNG for `video.snapshot` (ADR-0031). Encoding only; deflate stays pure Rust.
 png.workspace = true
 # Settings values: the audio filter kinds' defaults and the mixer kernels read from them
-# (ADR-0025, ADR-0026), and saved collection files in the engine tests.
+# (ADR-0025, ADR-0026), the CLAP kinds' parameter defaults, and saved collection files in
+# the engine tests.
 serde_json.workspace = true
 thiserror.workspace = true
 # Sign-in and the Live API for YouTube outputs and the YouTube commands (ADR-0058).
