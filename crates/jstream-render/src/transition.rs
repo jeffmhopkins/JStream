@@ -242,6 +242,8 @@ fn lerp_geometry(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> ItemGeometry {
             height: finite(lerp(a.size.height.get(), b.size.height.get(), k).max(0.0)),
         },
         fit_mode: if later { b.fit_mode } else { a.fit_mode },
+        flip_h: if later { b.flip_h } else { a.flip_h },
+        flip_v: if later { b.flip_v } else { a.flip_v },
         rotation_deg: angle(a.rotation_deg, b.rotation_deg),
         tilt_deg: angle(a.tilt_deg, b.tilt_deg),
         turn_deg: angle(a.turn_deg, b.turn_deg),
@@ -364,6 +366,23 @@ mod tests {
         let end = track.sample(5000.0, CANVAS).expect("drawn");
         assert_eq!(centre(&end), (300.0, 500.0));
         assert_eq!(track.end_ms(), 1200.0);
+    }
+
+    #[test]
+    fn flips_switch_halfway() {
+        let mut to = at(100.0, 100.0, 200.0, 100.0);
+        to.geometry.flip_h = true;
+        to.geometry.flip_v = true;
+        let track = Track::Pair {
+            from: at(100.0, 100.0, 200.0, 100.0),
+            to,
+            timing: linear(0.0),
+            source: None,
+        };
+        let before = track.sample(499.0, CANVAS).expect("drawn");
+        assert!(!before.geometry.flip_h && !before.geometry.flip_v);
+        let after = track.sample(500.0, CANVAS).expect("drawn");
+        assert!(after.geometry.flip_h && after.geometry.flip_v);
     }
 
     #[test]

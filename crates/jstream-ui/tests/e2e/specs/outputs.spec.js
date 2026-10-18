@@ -1,11 +1,12 @@
-// The outputs panel: adding outputs, the write-only stream key, start and stop, go-live,
+// The Outputs panel and the header: adding outputs, the write-only stream key, start and
+// stop, Go Live and Record in the header,
 // the encoder profile and deleting, through a real browser and the WebSocket API.
-import { test, expect, connect, inspectorPage } from '../fixtures.js';
+import { test, expect, connect, showPanel } from '../fixtures.js';
 
 /** Connects and opens the inspector's Outputs page. */
 async function openOutputs(page, daemon) {
   await connect(page, daemon);
-  await inspectorPage(page, 'Outputs');
+  await showPanel(page, 'Outputs');
 }
 
 /** The card of output `id`. */
@@ -63,6 +64,13 @@ test('a recording starts and stops on its own buttons', async ({ page, daemon })
   await recording.getByRole('button', { name: 'Start' }).click();
   await expect(recording.locator('.badge')).toHaveText('Live');
   await recording.getByRole('button', { name: 'Stop' }).click();
+  await expect(recording.locator('.badge')).toHaveText('Stopped');
+
+  // The header's Record starts every recording, and stops them while they run.
+  const header = page.locator('header.app-header');
+  await header.getByRole('button', { name: 'Record', exact: true }).click();
+  await expect(recording.locator('.badge')).toHaveText('Live');
+  await header.getByRole('button', { name: 'Stop recording' }).click();
   await expect(recording.locator('.badge')).toHaveText('Stopped');
 });
 
