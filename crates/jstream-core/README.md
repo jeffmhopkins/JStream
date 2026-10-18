@@ -249,7 +249,9 @@ state machine. Contents:
   the stage stops, and an output leaving the GPU path mid-run when every GPU frame
   fails to import or the context breaks (taking the context from browser pages, and
   failing when that fallback fails, or at its deadline when it hangs, still repeating
-  the last frame meanwhile), on a software device that stands in for the platform's
+  the last frame meanwhile), an output surviving a lost device (its own, reopened on a
+  new one; the context's, left at once) and failing at the third loss in a minute, on
+  a software device that stands in for the platform's
   (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -1466,10 +1468,11 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   composite error repeats the last composited frame, up to 30 in a row. On the
   platform's GPU context, the 10th in a row leaves the GPU path once instead, for CPU
   capture on a device of the thread's own, and the last frames repeat while that opens
-  (see [Runtime](#runtime)).
+  (see [Runtime](#runtime)). A lost GPU device switches at once, to a new device or
+  off the context, the same way (#349).
 - **Fatal, reported:** a 31st composite error in a row (counted again after a
   fallback), a fallback from the GPU path whose compositor does not open, panics or
-  isn't done in time, a panic
+  isn't done in time, the third lost device within 60 s, a panic
   inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
@@ -1780,6 +1783,22 @@ instead of freezing it (#577). A fallback thread that times out is left to finis
 its own and drops what it opened; none of it uses the context. Errors that go on after the fallback are counted again from zero
 and fail the output as they would on the CPU path. The context itself stays until the
 render loop ends.
+
+**A lost device** (#349; a driver reset after a hang, Windows' TDR, a removed GPU) is
+one event, not a run of errors. `gpu_draw` turns a draw that failed on a lost device
+(`Compositor::lost`) into `DrawError::Lost`, and the render thread starts the same
+switch at once, without counting to 10. On the context, it is the fallback above, so
+the captures move to the CPU path. On the render thread's own device, it is a new
+device (`open(None)` again, hardware adapter first), and the captures stay where they
+are. Meanwhile the output repeats its last frames (black under the privacy screen) and stays
+`active`. Encoders take the
+CPU readback, so they don't reopen. A virtual camera gets the repeated frame, not its
+test pattern. Each loss is logged as a warning and counted
+(`OutputStats::gpu_device_losses`; leaving the context also counts in
+`gpu_fallbacks`). The third loss within 60 s fails the output instead ("the GPU was
+lost ... and the compositor could not reopen"), as does a switch that fails as above.
+There is no engine event for a loss yet (a protocol change), and no pack attribution
+or quarantine (X1).
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as
