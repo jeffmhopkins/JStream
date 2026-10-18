@@ -22,6 +22,7 @@ use crate::{
     IssueSeverity, RateControl, StreamHealth, StreamInfo, StreamStatus, VideoCodec, VideoEncoding,
     YoutubeAuth,
 };
+use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
 use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
@@ -938,7 +939,19 @@ pub(crate) fn queries() -> Vec<Query> {
             },
         },
         Query::DeviceList,
+        Query::YoutubeStats,
     ]
+}
+
+/// A live broadcast's audience, every count reported.
+fn audience_stats() -> AudienceStatsInfo {
+    AudienceStatsInfo {
+        output_id: OutputId::new("out_live"),
+        broadcast_id: "dQw4w9WgXcQ".into(),
+        concurrent_viewers: Some(1520),
+        likes: Some(3400),
+        views: Some(98_765),
+    }
 }
 
 /// A broadcast in every lifecycle state and privacy, the first with every field.
@@ -1459,6 +1472,33 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             broadcasts: broadcasts(),
             next_page_token: Some("CAEQAA".into()),
         },
+        QueryResult::YoutubeStats {
+            outputs: vec![audience_stats()],
+            quota: QuotaInfo {
+                used: 1234,
+                daily: 10_000,
+                exhausted: false,
+                stats: StatsPolling::Normal,
+            },
+        },
+        QueryResult::YoutubeStats {
+            outputs: Vec::new(),
+            quota: QuotaInfo {
+                used: 10_000,
+                daily: 10_000,
+                exhausted: true,
+                stats: StatsPolling::Stopped,
+            },
+        },
+        QueryResult::YoutubeStats {
+            outputs: Vec::new(),
+            quota: QuotaInfo {
+                used: 8500,
+                daily: 10_000,
+                exhausted: false,
+                stats: StatsPolling::Slowed,
+            },
+        },
         QueryResult::YoutubeListStreams {
             streams: [
                 (StreamStatus::Active, StreamHealth::Good),
@@ -1642,6 +1682,18 @@ pub(crate) fn events() -> Vec<Event> {
             description: "Please use a keyframe frequency of four seconds or less.".into(),
         })
         .collect(),
+    });
+    events.push(Event::YoutubeStats {
+        stats: audience_stats(),
+    });
+    events.push(Event::YoutubeStats {
+        stats: AudienceStatsInfo {
+            output_id: OutputId::new("out_live"),
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            concurrent_viewers: None,
+            likes: None,
+            views: None,
+        },
     });
     events.push(Event::MetersTick {
         sources: vec![SourceMeter {

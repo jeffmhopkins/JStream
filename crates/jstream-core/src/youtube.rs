@@ -1,6 +1,7 @@
 //! YouTube in the engine (ADR-0058): the sign-in, the account's [`LiveClient`], the
-//! broadcast actions and queries, the ingest a `youtube` output publishes to, and the
-//! health poll while one runs.
+//! broadcast actions and queries, the ingest a `youtube` output publishes to, the
+//! health and audience polls while one runs, and the estimate of the day's API quota
+//! (ADR-0041 §3 and §5).
 //!
 //! **Secrets (R-SEC-001).** The refresh token goes from the code exchange straight to
 //! the host's [`OAuthTokenStore`], and the stream key from the Live API straight to the
@@ -11,17 +12,31 @@
 //! token sits under the fixed, opaque account ID [`TOKEN_ACCOUNT`] in the store. No
 //! email address or other personal detail becomes part of a credential's name.
 //!
+//! **Quota.** Every Live API call the engine makes is charged to the day's estimate at
+//! YouTube's published unit cost before it is sent: 1 for a read (a list, a stream's
+//! health, a broadcast's audience) and 50 for a write (an insert, a bind, a
+//! transition). The estimate starts again at midnight Pacific Time, when YouTube resets
+//! the quota; the engine takes that as UTC−8 all year, so during daylight time its day
+//! starts an hour after YouTube's. Audience stats slow to one read every
+//! [`STATS_SLOWDOWN`] intervals when less than a fifth of [`DAILY_QUOTA`] is left, and
+//! stop when less than a tenth is, so the actions and the health poll keep what is
+//! left. A call YouTube refuses for quota marks the day exhausted: stats and health
+//! polls stop until the estimate's day ends, and actions still go to YouTube, which
+//! answers for itself.
+//!
 //! **Locks.** `auth` is taken before `client` when both are held. Neither is ever taken
 //! under the engine's collection lock, and the client's lock is held across its
-//! blocking Live API calls, so YouTube calls run one at a time.
+//! blocking Live API calls, so YouTube calls run one at a time. `watches` is taken
+//! before `stats`. `quota` is a leaf: nothing else is taken while it is held.
 
 use crate::lock;
 use crate::runtime::{LivePublish, PublishError, connect_rtmp};
 use jstream_platform::{OAuthTokenStore, Secret};
 use jstream_protocol::{
-    ActionResult, BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy,
-    BroadcastTransition, BroadcastType, Event, HealthIssue, IssueSeverity, OutputId, ProtocolError,
-    QueryResult, StreamHealth, StreamInfo, StreamStatus, YoutubeAuth,
+    ActionResult, AudienceStatsInfo, BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus,
+    BroadcastPrivacy, BroadcastTransition, BroadcastType, Event, HealthIssue, IssueSeverity,
+    OutputId, ProtocolError, QueryResult, QuotaInfo, StatsPolling, StreamHealth, StreamInfo,
+    StreamStatus, YoutubeAuth,
 };
 use jstream_youtube::live::{
     self, Broadcast, BroadcastFilter, BroadcastStatusFilter, LiveStream, LiveStreamStatus,
@@ -36,7 +51,7 @@ use std::fmt;
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime};
 
 /// The account ID the refresh token is stored under in the [`OAuthTokenStore`].
 pub const TOKEN_ACCOUNT: &str = "youtube";
@@ -47,6 +62,30 @@ pub const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// How often a running `youtube` output's stream health is read. Each read costs one
 /// unit of the day's API quota.
 pub const HEALTH_INTERVAL: Duration = Duration::from_secs(15);
+
+/// How often a running `youtube` output's audience is read while the day's quota
+/// allows ([`jstream_youtube::stats::STATS_INTERVAL`]). Each read costs one unit.
+pub const STATS_INTERVAL: Duration = jstream_youtube::stats::STATS_INTERVAL;
+
+/// How many [`STATS_INTERVAL`]s apart audience reads are once the quota runs low.
+pub const STATS_SLOWDOWN: u32 = 5;
+
+/// The units of YouTube Data API quota the engine assumes a day has: the default a
+/// Google Cloud project gets. A project granted more can say so with
+/// [`YoutubeSetup::with_daily_quota`].
+pub const DAILY_QUOTA: u64 = 10_000;
+
+/// What a Live API read costs: a list, a stream's health, a broadcast's audience.
+const READ_UNITS: u64 = 1;
+
+/// What a Live API write costs: an insert, a bind, a transition.
+const WRITE_UNITS: u64 = 50;
+
+/// The offset of the day the quota estimate counts, from UTC: Pacific standard time.
+const QUOTA_DAY_OFFSET_SECS: i64 = -8 * 60 * 60;
+
+/// The wall clock the quota's day is read from.
+pub(crate) type WallClock = Arc<dyn Fn() -> SystemTime + Send + Sync>;
 
 /// Connects an RTMP(S) publish target to a server URL with a stream key. The engine
 /// uses [`connect_rtmp`] unless a test swapped it.
@@ -72,6 +111,9 @@ pub struct YoutubeSetup {
     tokens: Arc<dyn OAuthTokenStore>,
     sign_in_timeout: Duration,
     health_interval: Duration,
+    stats_interval: Duration,
+    daily_quota: u64,
+    clock: WallClock,
 }
 
 impl fmt::Debug for YoutubeSetup {
@@ -81,6 +123,8 @@ impl fmt::Debug for YoutubeSetup {
             .field("client_secret", &self.client_secret)
             .field("sign_in_timeout", &self.sign_in_timeout)
             .field("health_interval", &self.health_interval)
+            .field("stats_interval", &self.stats_interval)
+            .field("daily_quota", &self.daily_quota)
             .finish_non_exhaustive()
     }
 }
@@ -132,6 +176,9 @@ impl YoutubeSetup {
             tokens,
             sign_in_timeout: SIGN_IN_TIMEOUT,
             health_interval: HEALTH_INTERVAL,
+            stats_interval: STATS_INTERVAL,
+            daily_quota: DAILY_QUOTA,
+            clock: Arc::new(SystemTime::now),
         }
     }
 
@@ -147,6 +194,30 @@ impl YoutubeSetup {
     #[must_use]
     pub fn with_health_interval(mut self, interval: Duration) -> Self {
         self.health_interval = interval;
+        self
+    }
+
+    /// Reads a running output's audience every `interval` instead of
+    /// [`STATS_INTERVAL`].
+    #[must_use]
+    pub fn with_stats_interval(mut self, interval: Duration) -> Self {
+        self.stats_interval = interval;
+        self
+    }
+
+    /// Assumes the day's quota is `units` instead of [`DAILY_QUOTA`], for a Google Cloud
+    /// project YouTube granted more (or less).
+    #[must_use]
+    pub fn with_daily_quota(mut self, units: u64) -> Self {
+        self.daily_quota = units;
+        self
+    }
+
+    /// Reads the quota's day from `clock` instead of the system clock, for tests.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_clock(mut self, clock: WallClock) -> Self {
+        self.clock = clock;
         self
     }
 
@@ -177,9 +248,22 @@ struct PendingSignIn {
     url: String,
 }
 
-/// A running output's health poll. Dropping it ends the poll.
-struct HealthWatch {
+/// A running output's health and audience poll. Dropping it ends the poll.
+struct Watch {
     _stop: Sender<()>,
+    /// Numbers the polls, so one that ends on its own forgets only itself.
+    generation: u64,
+}
+
+/// The day's quota estimate.
+#[derive(Default)]
+struct Quota {
+    /// The day it counts, in days since the epoch at [`QUOTA_DAY_OFFSET_SECS`].
+    day: i64,
+    /// Units charged that day.
+    used: u64,
+    /// YouTube refused a call that day for quota.
+    exhausted: bool,
 }
 
 /// Where a `youtube` output publishes: the ingest its broadcast's bound stream names.
@@ -196,8 +280,11 @@ pub(crate) struct Youtube {
     client: Mutex<Option<LiveClient>>,
     emit: Emit,
     connect: Mutex<ConnectRtmp>,
-    /// One poll per running `youtube` output.
-    health: Mutex<BTreeMap<OutputId, HealthWatch>>,
+    /// One poll per running `youtube` output, and the number the next one gets.
+    watches: Mutex<(BTreeMap<OutputId, Watch>, u64)>,
+    /// Each running `youtube` output's last audience reading.
+    stats: Mutex<BTreeMap<OutputId, AudienceStatsInfo>>,
+    quota: Mutex<Quota>,
 }
 
 impl Youtube {
@@ -229,7 +316,9 @@ impl Youtube {
                 connect_rtmp(url, key.expose())
                     .map(|publish| Box::new(publish) as Box<dyn LivePublish>)
             })),
-            health: Mutex::new(BTreeMap::new()),
+            watches: Mutex::new((BTreeMap::new(), 0)),
+            stats: Mutex::new(BTreeMap::new()),
+            quota: Mutex::new(Quota::default()),
         }
     }
 
@@ -434,9 +523,77 @@ impl Youtube {
         (self.emit)(Event::YoutubeStatusChanged { auth: state });
     }
 
-    /// Runs `call` on the signed-in client, then stores a rotated refresh token.
+    /// The day the quota estimate counts now.
+    fn quota_day(&self) -> i64 {
+        let now = (self.setup.clock)();
+        let secs = match now.duration_since(SystemTime::UNIX_EPOCH) {
+            Ok(since) => i64::try_from(since.as_secs()).unwrap_or(i64::MAX),
+            Err(before) => -i64::try_from(before.duration().as_secs()).unwrap_or(i64::MAX),
+        };
+        secs.saturating_add(QUOTA_DAY_OFFSET_SECS)
+            .div_euclid(24 * 60 * 60)
+    }
+
+    /// The quota estimate, started again if its day has ended.
+    fn quota(&self) -> std::sync::MutexGuard<'_, Quota> {
+        let day = self.quota_day();
+        let mut quota = lock(&self.quota);
+        if quota.day != day {
+            *quota = Quota {
+                day,
+                ..Quota::default()
+            };
+        }
+        quota
+    }
+
+    /// Charges `units` to the day's estimate.
+    fn charge(&self, units: u64) {
+        let mut quota = self.quota();
+        quota.used = quota.used.saturating_add(units);
+    }
+
+    /// Whether YouTube refused a call today for quota.
+    fn quota_exhausted(&self) -> bool {
+        self.quota().exhausted
+    }
+
+    /// How audience stats are polled at the quota left now.
+    fn stats_polling(&self) -> StatsPolling {
+        let quota = self.quota();
+        let daily = self.setup.daily_quota;
+        let left = daily.saturating_sub(quota.used);
+        if quota.exhausted || left.saturating_mul(10) < daily {
+            StatsPolling::Stopped
+        } else if left.saturating_mul(5) < daily {
+            StatsPolling::Slowed
+        } else {
+            StatsPolling::Normal
+        }
+    }
+
+    /// `youtube.stats`: the last audience reading of each running output and the day's
+    /// quota estimate. Never calls YouTube.
+    pub(crate) fn audience(&self) -> QueryResult {
+        let outputs = lock(&self.stats).values().cloned().collect();
+        let stats = self.stats_polling();
+        let quota = self.quota();
+        QueryResult::YoutubeStats {
+            outputs,
+            quota: QuotaInfo {
+                used: quota.used,
+                daily: self.setup.daily_quota,
+                exhausted: quota.exhausted,
+                stats,
+            },
+        }
+    }
+
+    /// Runs `call` on the signed-in client, charging `units` to the day's quota first,
+    /// then stores a rotated refresh token.
     fn with_client<T>(
         &self,
+        units: u64,
         call: impl FnOnce(&mut LiveClient) -> Result<T, YoutubeError>,
     ) -> Result<T, ProtocolError> {
         // The rotated token is stored before the client is released, so a sign-out or a
@@ -448,6 +605,7 @@ impl Youtube {
                     reason: "not signed in to YouTube: send `youtube.sign_in`".into(),
                 });
             };
+            self.charge(units);
             let outcome = call(client);
             let kept = client
                 .take_rotated_refresh_token()
@@ -456,6 +614,12 @@ impl Youtube {
         };
         if let Some(Err(err)) = kept {
             tracing::error!(error = %err, "the credential store did not keep the rotated YouTube token");
+        }
+        if let Err(err) = &outcome
+            && err.is_quota()
+        {
+            self.quota().exhausted = true;
+            tracing::warn!("YouTube's API quota is used up for the day");
         }
         match outcome {
             Err(YoutubeError::SignInRequired) => {
@@ -486,7 +650,7 @@ impl Youtube {
             BroadcastType::Persistent => live::BroadcastType::Persistent,
             _ => live::BroadcastType::All,
         };
-        let page = self.with_client(|client| {
+        let page = self.with_client(READ_UNITS, |client| {
             client.list_broadcasts_of_type(
                 &BroadcastFilter::Status(status),
                 Some(broadcast_type),
@@ -507,7 +671,7 @@ impl Youtube {
         &self,
         page_token: Option<String>,
     ) -> Result<QueryResult, ProtocolError> {
-        let page = self.with_client(|client| {
+        let page = self.with_client(READ_UNITS, |client| {
             client.list_streams(
                 &StreamFilter::Mine,
                 &PageRequest {
@@ -546,7 +710,7 @@ impl Youtube {
         let mut new = NewBroadcast::new(title, scheduled_start_time, privacy);
         new.description = description;
         new.made_for_kids = made_for_kids;
-        let broadcast = self.with_client(|client| client.insert_broadcast(&new))?;
+        let broadcast = self.with_client(WRITE_UNITS, |client| client.insert_broadcast(&new))?;
         Ok(ActionResult::YoutubeCreateBroadcast {
             broadcast: broadcast_info(broadcast),
         })
@@ -559,7 +723,13 @@ impl Youtube {
         broadcast_id: &str,
         stream_id: Option<String>,
     ) -> Result<ActionResult, ProtocolError> {
-        let broadcast = self.with_client(|client| {
+        // Without a stream: the broadcast's read, the stream's insert and the bind.
+        let units = if stream_id.is_some() {
+            WRITE_UNITS
+        } else {
+            READ_UNITS + 2 * WRITE_UNITS
+        };
+        let broadcast = self.with_client(units, |client| {
             let stream_id = match stream_id {
                 Some(stream_id) => stream_id,
                 None => {
@@ -585,7 +755,8 @@ impl Youtube {
             BroadcastTransition::Live => Transition::Live,
             _ => Transition::Complete,
         };
-        let broadcast = self.with_client(|client| client.transition(broadcast_id, to))?;
+        let broadcast =
+            self.with_client(WRITE_UNITS, |client| client.transition(broadcast_id, to))?;
         Ok(ActionResult::YoutubeTransitionBroadcast {
             broadcast: broadcast_info(broadcast),
         })
@@ -594,7 +765,7 @@ impl Youtube {
     /// The `rtmps://` ingest of `broadcast_id`'s bound stream, with its key.
     pub(crate) fn ingest(&self, broadcast_id: &str) -> Result<Ingest, String> {
         let found = self
-            .with_client(|client| {
+            .with_client(2 * READ_UNITS, |client| {
                 let broadcast = client.broadcast(broadcast_id)?;
                 let Some(stream_id) = broadcast.content_details.bound_stream_id else {
                     return Ok(Err(format!(
@@ -626,10 +797,13 @@ impl Youtube {
         connect(&ingest.url, &ingest.key)
     }
 
-    /// Starts reading the health of `stream_id` every interval while `alive` says
-    /// `output_id` still runs, emitting `youtube.health_changed` when it changes. A poll
-    /// already running for `output_id` ends; other outputs' polls keep running.
-    pub(crate) fn watch_health(
+    /// Starts reading the health of `stream_id` and the audience of `broadcast_id`
+    /// while `alive` says `output_id` still runs: health every health interval, emitting
+    /// `youtube.health_changed` when it changes, and the audience every stats interval
+    /// (slower or not at all when the quota runs low), emitting `youtube.stats` when it
+    /// changes. A poll already running for `output_id` ends; other outputs' polls keep
+    /// running.
+    pub(crate) fn watch(
         self: &Arc<Self>,
         output_id: OutputId,
         broadcast_id: String,
@@ -638,44 +812,85 @@ impl Youtube {
     ) {
         let (stop, stopped) = mpsc::channel::<()>();
         let this = Arc::downgrade(self);
-        let interval = self.setup.health_interval;
+        let health_every = self.setup.health_interval;
+        let stats_every = self.setup.stats_interval;
         let watched = output_id.clone();
+        let mut watches = lock(&self.watches);
+        let generation = watches.1;
+        watches.1 += 1;
         let spawned = thread::Builder::new()
             .name("jstream-youtube-health".into())
             .spawn(move || {
                 let mut last = None;
+                let start = Instant::now();
+                let mut next_health = start + health_every;
+                let mut next_stats = start + stats_every;
                 loop {
-                    match stopped.recv_timeout(interval) {
+                    let wait = next_health
+                        .min(next_stats)
+                        .saturating_duration_since(Instant::now());
+                    match stopped.recv_timeout(wait) {
                         Err(RecvTimeoutError::Timeout) => {}
                         Ok(()) | Err(RecvTimeoutError::Disconnected) => return,
-                    }
-                    if !alive() {
-                        return;
                     }
                     let Some(youtube) = this.upgrade() else {
                         return;
                     };
+                    if !alive() {
+                        youtube.watch_ended(&watched, generation);
+                        return;
+                    }
+                    let now = Instant::now();
+                    let health_due = now >= next_health;
+                    let stats_due = now >= next_stats;
+                    let polling = youtube.stats_polling();
+                    if health_due {
+                        next_health = now + health_every;
+                    }
+                    if stats_due {
+                        next_stats = now
+                            + match polling {
+                                StatsPolling::Slowed => stats_every * STATS_SLOWDOWN,
+                                _ => stats_every,
+                            };
+                    }
                     // Signed out while the output runs: wait quietly for a sign-in.
-                    if !youtube.signed_in() {
+                    if !youtube.signed_in() || youtube.quota_exhausted() {
                         continue;
                     }
-                    match youtube.with_client(|client| client.stream_health(&stream_id)) {
-                        Ok(health) => {
-                            let event = health_event(&watched, &broadcast_id, &stream_id, health);
-                            if last.as_ref() != Some(&event) {
-                                last = Some(event.clone());
-                                (youtube.emit)(event);
+                    if health_due {
+                        match youtube
+                            .with_client(READ_UNITS, |client| client.stream_health(&stream_id))
+                        {
+                            Ok(health) => {
+                                let event =
+                                    health_event(&watched, &broadcast_id, &stream_id, health);
+                                if last.as_ref() != Some(&event) {
+                                    last = Some(event.clone());
+                                    (youtube.emit)(event);
+                                }
+                            }
+                            Err(err) => {
+                                tracing::warn!(output_id = %watched, error = %err, "reading YouTube stream health");
                             }
                         }
-                        Err(err) => {
-                            tracing::warn!(output_id = %watched, error = %err, "reading YouTube stream health");
-                        }
+                    }
+                    if stats_due && polling != StatsPolling::Stopped {
+                        youtube.read_audience(&watched, generation, &broadcast_id);
                     }
                 }
             });
         match spawned {
             Ok(_) => {
-                lock(&self.health).insert(output_id, HealthWatch { _stop: stop });
+                watches.0.insert(
+                    output_id.clone(),
+                    Watch {
+                        _stop: stop,
+                        generation,
+                    },
+                );
+                // A new poll starts with no reading.
+                lock(&self.stats).remove(&output_id);
             }
             Err(err) => {
                 tracing::error!(output_id = %output_id, error = %err, "starting the YouTube health poll");
@@ -683,10 +898,55 @@ impl Youtube {
         }
     }
 
-    /// Ends the health poll of `output_id`, if one runs. The thread notices at once,
-    /// unless a read is in flight, and is not waited for.
-    pub(crate) fn unwatch_health(&self, output_id: &OutputId) {
-        lock(&self.health).remove(output_id);
+    /// Reads `broadcast_id`'s audience for poll `generation` of `output_id`, keeps it,
+    /// and emits `youtube.stats` when it differs from the last reading.
+    fn read_audience(&self, output_id: &OutputId, generation: u64, broadcast_id: &str) {
+        let read = match self.with_client(READ_UNITS, |client| client.audience_stats(broadcast_id))
+        {
+            Ok(read) => read,
+            Err(err) => {
+                tracing::warn!(output_id = %output_id, error = %err, "reading the YouTube audience");
+                return;
+            }
+        };
+        let stats = AudienceStatsInfo {
+            output_id: output_id.clone(),
+            broadcast_id: broadcast_id.to_owned(),
+            concurrent_viewers: read.concurrent_viewers,
+            likes: read.likes,
+            views: read.views,
+        };
+        {
+            // Kept only while this poll is the output's: a stop during the read wins.
+            let watches = lock(&self.watches);
+            if watches.0.get(output_id).map(|watch| watch.generation) != Some(generation) {
+                return;
+            }
+            let mut kept = lock(&self.stats);
+            if kept.get(output_id) == Some(&stats) {
+                return;
+            }
+            kept.insert(output_id.clone(), stats.clone());
+        }
+        (self.emit)(Event::YoutubeStats { stats });
+    }
+
+    /// Poll `generation` of `output_id` saw the output stop: forget it, unless a newer
+    /// poll has replaced it.
+    fn watch_ended(&self, output_id: &OutputId, generation: u64) {
+        let mut watches = lock(&self.watches);
+        if watches.0.get(output_id).map(|watch| watch.generation) == Some(generation) {
+            watches.0.remove(output_id);
+            lock(&self.stats).remove(output_id);
+        }
+    }
+
+    /// Ends the poll of `output_id`, if one runs, and forgets its audience. The thread
+    /// notices at once, unless a read is in flight, and is not waited for.
+    pub(crate) fn unwatch(&self, output_id: &OutputId) {
+        let mut watches = lock(&self.watches);
+        watches.0.remove(output_id);
+        lock(&self.stats).remove(output_id);
     }
 }
 

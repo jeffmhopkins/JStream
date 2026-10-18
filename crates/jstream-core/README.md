@@ -59,7 +59,11 @@ state machine. Contents:
   a `youtube` target reads the broadcast's bound stream and connects to its `rtmps://`
   ingest with its key, which goes only to the connection; while it runs, a thread reads
   the stream's health every `HEALTH_INTERVAL` and emits `youtube.health_changed` when
-  it changes. A refresh token Google refuses signs the engine out.
+  it changes, and the broadcast's audience every `STATS_INTERVAL` and emits
+  `youtube.stats` when it changes. Every Live API call is charged to an estimate of
+  the day's quota (`DAILY_QUOTA` by default), which `youtube.stats` reports and which
+  slows and then stops the audience reads as it runs low. A refresh token Google
+  refuses signs the engine out.
 - **Audit log** (`audit.rs`): one `AuditEntry` per executed batch, undo, redo and action
   (but `live.set` and `live.cancel`), and one per gesture that ends without a commit, sent to
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
@@ -315,9 +319,10 @@ state machine. Contents:
   resolution, a fade that ends on the clock, a switch mid-transition, and a GPU
   snapshot mid-fade), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
-  broadcast actions and lists, quota and refused tokens, and a `youtube` output
+  broadcast actions and lists, quota and refused tokens, a `youtube` output
   publishing to its broadcast's ingest on the CPU stand-in, with the key and tokens in
-  no event or response), and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
+  no event or response, its audience in `youtube.stats`, and the quota estimate slowing
+  and stopping the audience reads and starting again on a new day), and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
   engine in-process. The audio routing (`audio.rs` and
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
@@ -1265,6 +1270,15 @@ token found there at setup signs the engine in.
   Google refuses (`SignInRequired`) drops the client and the stored token and emits
   `signed_out`. `jstream-youtube` errors become `action_failed`, prefixed "YouTube's
   API quota is used up" for quota reasons (ADR-0041 §5, kept by ADR-0058); none carries a token.
+- **Quota** (ADR-0041 §5). Each call is charged to the day's estimate before it is
+  sent, at YouTube's published unit costs: 1 for a read (a list, the ingest's two
+  reads, a health or audience read) and 50 for a write (`create_broadcast`,
+  `transition_broadcast`, `bind_broadcast`, which is 101 when it creates the stream
+  first). The day is assumed to have `DAILY_QUOTA` (10,000) units, or what
+  `YoutubeSetup::with_daily_quota` says. The estimate starts again at midnight
+  Pacific Time, which the engine takes as UTC−8 all year, so in daylight time its day
+  starts an hour after YouTube's. A call YouTube refuses for quota marks the day
+  exhausted.
 - An output whose target is `youtube { broadcast_id }` needs a signed-in client, which
   `output.start` checks before `starting` (`action_failed` otherwise, no event). In
   the start's open step, outside the locks, the engine reads the broadcast's bound
@@ -1275,9 +1289,17 @@ token found there at setup signs the engine in.
 - Once such an output is `active`, its own `jstream-youtube-health` thread reads the
   stream's health every `HEALTH_INTERVAL` (15 s, one quota unit each) and emits
   `youtube.health_changed` on the first reading and whenever the status, rating or
-  issues change. While signed out it skips its reads. It ends when the output stops,
-  fails or the engine goes away.
+  issues change. The same thread reads the broadcast's audience (`videos.list`, one
+  unit) every `STATS_INTERVAL` (60 s), every `STATS_SLOWDOWN` (5) intervals while
+  less than a fifth of the day's quota is left, and not at all below a tenth, and
+  emits `youtube.stats` on the first reading and whenever the viewers, likes or views
+  change; the last reading is what the `youtube.stats` query lists. While signed out,
+  or once the day is exhausted, it skips both reads, so the actions keep what quota is
+  left. It ends when the output stops, fails or the engine goes away, and its
+  reading goes with it.
   Issue text is cut to 512 characters with control characters replaced.
+  The engine does not poll chat yet, so ADR-0041 §3's chat rate and §5's slowing of
+  chat polling after stats come with that.
 
 **Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
@@ -1594,7 +1616,10 @@ engine's other changes are single inserts or assignments, so the data stays
 consistent. Nothing is logged while a lock is held. The YouTube side has two more
 mutexes, the sign-in state and then the `LiveClient`, taken in that order, after the
 start lock and never under the collection lock; the client's is held across its
-blocking Live API calls, so a start waiting on it holds only the start lock.
+blocking Live API calls, so a start waiting on it holds only the start lock. The
+running outputs' polls and then their audience readings have a mutex each, taken in
+that order, and the quota estimate's is a leaf, taken under the client's to charge a
+call and never while taking another.
 
 ### Logging
 

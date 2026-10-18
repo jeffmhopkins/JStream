@@ -527,6 +527,51 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "AudienceStatsInfo": {
+      "description": "A running `youtube` output's audience, as YouTube last reported it (ADR-0041 §3,\n0.38): what the `youtube.stats` event sends and the `youtube.stats` query lists.\nThe engine reads it at a low fixed rate, about once a minute, while the output runs.\nA count YouTube doesn't report (the owner hides it, or the broadcast has no viewers\nnow or has ended) is omitted.",
+      "properties": {
+        "broadcast_id": {
+          "description": "The broadcast it sends to.",
+          "type": "string"
+        },
+        "concurrent_viewers": {
+          "description": "People watching now.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "likes": {
+          "description": "Likes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "output_id": {
+          "$ref": "#/$defs/OutputId",
+          "description": "The output."
+        },
+        "views": {
+          "description": "Views.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "output_id",
+        "broadcast_id"
+      ],
+      "type": "object"
+    },
     "AudioCodec": {
       "description": "An audio codec. Serialized as a snake_case string.",
       "oneOf": [
@@ -3911,6 +3956,56 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "A running `youtube` output's audience (ADR-0041 §3, 0.38): sent when a reading\ndiffers from the last one, and once on the first. The engine reads it about once\na minute while the output runs, less often or not at all when the day's quota\nruns low (the `youtube.stats` query says which).",
+          "properties": {
+            "broadcast_id": {
+              "description": "The broadcast it sends to.",
+              "type": "string"
+            },
+            "concurrent_viewers": {
+              "description": "People watching now.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "likes": {
+              "description": "Likes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "youtube.stats",
+              "type": "string"
+            },
+            "views": {
+              "description": "Views.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "broadcast_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The mixer's levels (ADR-0028): sent about ten times a second while the mixer runs\n(an output is running), and never while it doesn't. Runtime state: a client that\nmisses one just shows the next. Until event subscriptions exist, every client\nreceives it.",
           "properties": {
             "buses": {
@@ -5652,6 +5747,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The audience of each running `youtube` output, as last read, and the engine's\nestimate of the day's API quota (ADR-0041 §3 and §5, 0.38). Never calls YouTube.",
+          "properties": {
+            "type": {
+              "const": "youtube.stats",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the collection's audio buses, ordered by ID, and every send into them.",
           "properties": {
             "type": {
@@ -6280,6 +6388,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `youtube.stats`. Runtime state, so it carries no `rev`.",
+          "properties": {
+            "outputs": {
+              "description": "The audience of each running `youtube` output YouTube has reported one for,\nordered by output ID.",
+              "items": {
+                "$ref": "#/$defs/AudienceStatsInfo"
+              },
+              "type": "array"
+            },
+            "quota": {
+              "$ref": "#/$defs/QuotaInfo",
+              "description": "The day's estimated quota."
+            },
+            "type": {
+              "const": "youtube.stats",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "outputs",
+            "quota"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `bus.list`.",
           "properties": {
             "buses": {
@@ -6389,6 +6523,37 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         }
       ]
+    },
+    "QuotaInfo": {
+      "description": "The engine's estimate of the day's YouTube API quota (ADR-0041 §5). It adds up what\neach call the engine makes costs by YouTube's published unit costs. YouTube's own\ncount, which other apps on the same Google project share, can differ.",
+      "properties": {
+        "daily": {
+          "description": "The units the engine assumes a day has.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exhausted": {
+          "description": "Whether YouTube refused a call since the quota last reset because it is used up.\nOmitted when it hasn't.",
+          "type": "boolean"
+        },
+        "stats": {
+          "$ref": "#/$defs/StatsPolling",
+          "description": "How audience stats are polled now."
+        },
+        "used": {
+          "description": "Units used since the quota last reset, by the engine's count.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "used",
+        "daily",
+        "stats"
+      ],
+      "type": "object"
     },
     "RateControl": {
       "description": "How a video encoder spends bits. Serialized with an internal `type` tag.",
@@ -6985,6 +7150,31 @@ source: crates/jstream-protocol/src/fixtures.rs
         "rms"
       ],
       "type": "object"
+    },
+    "StatsPolling": {
+      "description": "How the engine polls audience stats, by how much of the day's estimated YouTube\nquota is left (ADR-0041 §5). Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "normal",
+          "description": "At the normal rate.",
+          "type": "string"
+        },
+        {
+          "const": "slowed",
+          "description": "Less often, because the quota is running low.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "Not at all until the quota resets, because it is nearly or entirely used up.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A value this version doesn't know, from a newer server.",
+          "type": "string"
+        }
+      ]
     },
     "StreamHealth": {
       "description": "How YouTube rates what a stream receives (`status.healthStatus.status`). Serialized\nas a snake_case string.",
@@ -7665,5 +7855,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.33"
+  "title": "JStream protocol 0.38"
 }

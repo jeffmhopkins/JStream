@@ -19,7 +19,10 @@ use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
 use crate::transition::{ItemTransition, TransitionsInfo};
-use crate::youtube::{BroadcastInfo, BroadcastListStatus, BroadcastType, StreamInfo, YoutubeAuth};
+use crate::youtube::{
+    AudienceStatsInfo, BroadcastInfo, BroadcastListStatus, BroadcastType, QuotaInfo, StreamInfo,
+    YoutubeAuth,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -128,6 +131,10 @@ pub enum Query {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         page_token: Option<String>,
     },
+    /// The audience of each running `youtube` output, as last read, and the engine's
+    /// estimate of the day's API quota (ADR-0041 §3 and §5, 0.38). Never calls YouTube.
+    #[serde(rename = "youtube.stats")]
+    YoutubeStats,
     /// Lists the collection's audio buses, ordered by ID, and every send into them.
     #[serde(rename = "bus.list")]
     BusList,
@@ -218,6 +225,7 @@ impl Query {
             Query::YoutubeStatus => "youtube.status",
             Query::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
             Query::YoutubeListStreams { .. } => "youtube.list_streams",
+            Query::YoutubeStats => "youtube.stats",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
             Query::CaptureTargets => "capture.targets",
@@ -437,6 +445,15 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         next_page_token: Option<String>,
     },
+    /// The result of `youtube.stats`. Runtime state, so it carries no `rev`.
+    #[serde(rename = "youtube.stats")]
+    YoutubeStats {
+        /// The audience of each running `youtube` output YouTube has reported one for,
+        /// ordered by output ID.
+        outputs: Vec<AudienceStatsInfo>,
+        /// The day's estimated quota.
+        quota: QuotaInfo,
+    },
     /// The result of `bus.list`.
     #[serde(rename = "bus.list")]
     BusList {
@@ -501,6 +518,7 @@ impl QueryResult {
             QueryResult::YoutubeStatus { .. } => "youtube.status",
             QueryResult::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
             QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",
+            QueryResult::YoutubeStats { .. } => "youtube.stats",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
             QueryResult::CaptureTargets { .. } => "capture.targets",

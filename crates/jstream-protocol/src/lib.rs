@@ -94,8 +94,9 @@ pub use transition::{
 };
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
 pub use youtube::{
-    BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy, BroadcastTransition,
-    BroadcastType, HealthIssue, IssueSeverity, StreamHealth, StreamInfo, StreamStatus, YoutubeAuth,
+    AudienceStatsInfo, BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy,
+    BroadcastTransition, BroadcastType, HealthIssue, IssueSeverity, QuotaInfo, StatsPolling,
+    StreamHealth, StreamInfo, StreamStatus, YoutubeAuth,
 };
 
 #[cfg(test)]

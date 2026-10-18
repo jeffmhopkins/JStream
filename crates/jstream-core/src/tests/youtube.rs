@@ -1,5 +1,6 @@
 //! YouTube in the engine (ADR-0058): the sign-in, the broadcast actions and queries,
-//! and a `youtube` output publishing to its broadcast's ingest, all on
+//! a `youtube` output publishing to its broadcast's ingest, its audience stats and the
+//! day's quota estimate (ADR-0041 §3 and §5), all on
 //! `jstream-youtube`'s `FakeTransport` and its JSON fixtures (R-TEST-004).
 
 use super::{batch, block_on, code, connected, drain, edits, output_call, query};
@@ -15,8 +16,8 @@ use jstream_platform::{Backends, OAuthTokenStore, Secret};
 use jstream_protocol::{
     Action, ActionResult, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy,
     BroadcastTransition, BroadcastType, Call, CallResult, Edit, Event, IssueSeverity, OutputId,
-    OutputKind, OutputState, Query, QueryResult, RtmpTarget, StreamHealth, StreamStatus,
-    YoutubeAuth,
+    OutputKind, OutputState, Query, QueryResult, QuotaInfo, RtmpTarget, StatsPolling, StreamHealth,
+    StreamStatus, YoutubeAuth,
 };
 use jstream_youtube::fake::FakeTransport;
 use jstream_youtube::http::{HttpRequest, HttpResponse};
@@ -25,7 +26,7 @@ use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex, mpsc};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 const REFRESH: &str = include_str!("../../../jstream-youtube/fixtures/token_refresh.json");
 const INVALID_GRANT: &str =
@@ -38,6 +39,7 @@ const STREAMS: &str = include_str!("../../../jstream-youtube/fixtures/streams_li
 const NEW_STREAM: &str = include_str!("../../../jstream-youtube/fixtures/stream_insert.json");
 const HEALTH: &str = include_str!("../../../jstream-youtube/fixtures/stream_health.json");
 const QUOTA: &str = include_str!("../../../jstream-youtube/fixtures/error_quota.json");
+const AUDIENCE: &str = include_str!("../../../jstream-youtube/fixtures/video_stats_live.json");
 
 /// The token endpoint's answer to a sign-in with the full scope (ADR-0041 §4, kept by ADR-0058).
 const EXCHANGE: &str = r#"{
@@ -182,6 +184,8 @@ fn without_a_setup_youtube_is_unavailable() {
     let err = action(&control, Action::YoutubeSignIn).expect_err("no client");
     assert_eq!(code(&err), Some("action_failed"));
     let err = query(&control, list_all()).expect_err("no client");
+    assert_eq!(code(&err), Some("action_failed"));
+    let err = query(&control, Query::YoutubeStats).expect_err("no client");
     assert_eq!(code(&err), Some("action_failed"));
 }
 
@@ -631,6 +635,11 @@ fn quota_and_revoked_tokens_are_reported() {
     assert_eq!(code(&err), Some("action_failed"));
     assert!(err.to_string().contains("quota"), "{err}");
     assert_eq!(status(&control), YoutubeAuth::SignedIn);
+    // The refusal marks the day used up, whatever the estimate said.
+    let quota = quota(&control);
+    assert!(quota.exhausted);
+    assert_eq!(quota.used, 1);
+    assert_eq!(quota.stats, StatsPolling::Stopped);
 
     let transport = FakeTransport::new();
     transport.respond(400, INVALID_GRANT);
@@ -983,4 +992,222 @@ fn a_youtube_output_needs_a_sign_in_and_a_bound_stream() {
         })
         .collect();
     assert_eq!(steps, vec![OutputState::Starting, OutputState::Failed]);
+}
+
+/// `youtube.stats`: the running outputs' audience and the day's quota estimate.
+fn audience(control: &dyn Control) -> (Vec<jstream_protocol::AudienceStatsInfo>, QuotaInfo) {
+    match query(control, Query::YoutubeStats).expect("youtube.stats") {
+        QueryResult::YoutubeStats { outputs, quota } => (outputs, quota),
+        other => panic!("not youtube stats: {other:?}"),
+    }
+}
+
+fn quota(control: &dyn Control) -> QuotaInfo {
+    audience(control).1
+}
+
+/// A wall clock a test sets.
+fn settable_clock(at: SystemTime) -> (Arc<Mutex<SystemTime>>, crate::youtube::WallClock) {
+    let now = Arc::new(Mutex::new(at));
+    let read = Arc::clone(&now);
+    (now, Arc::new(move || *read.lock().expect("lock")))
+}
+
+/// 2026-10-17T20:00:00Z, noon Pacific standard time.
+fn noon_pacific() -> SystemTime {
+    SystemTime::UNIX_EPOCH + Duration::from_secs(1_792_267_200)
+}
+
+/// A running `youtube` output's audience comes in `youtube.stats` once per reading
+/// that differs from the last, and `youtube.stats` lists it until the output stops.
+/// Each read costs a unit of the day's estimate (ADR-0041 §3 and §5).
+#[test]
+fn a_youtube_output_reports_its_audience() {
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, REFRESH)
+        .respond(200, BROADCASTS)
+        .respond(200, STREAMS)
+        .respond(200, AUDIENCE)
+        .respond(200, AUDIENCE);
+    let engine = Engine::new()
+        .with_backends(backends())
+        .with_draw(cpu_draw())
+        .with_youtube(
+            setup(&transport, &signed_in_store())
+                .with_health_interval(Duration::from_secs(3600))
+                .with_stats_interval(Duration::from_millis(20)),
+        );
+    let publish = RecordingPublish::new();
+    engine
+        .youtube()
+        .expect("youtube")
+        .set_connect(Arc::new(move |_: &str, _: &Secret| {
+            Ok(Box::new(publish.clone()) as Box<dyn LivePublish>)
+        }));
+    let control = connected(&engine);
+    batch(&control, edits(vec![youtube_output("dQw4w9WgXcQ")])).expect("creates");
+    let mut events = control.events();
+    block_on(control.call(output_call("live", true))).expect("output.start");
+
+    // Both scripted readings are taken, then reads fail on the empty script.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while transport.pending() > 0 {
+        assert!(Instant::now() < deadline, "the audience is not read");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    std::thread::sleep(Duration::from_millis(60));
+    let reported: Vec<_> = drain(&mut events)
+        .into_iter()
+        .filter_map(|event| match event {
+            Event::YoutubeStats { stats } => Some(stats),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reported.len(), 1, "the same reading twice is one event");
+    let stats = &reported[0];
+    assert_eq!(stats.output_id, OutputId::new("live"));
+    assert_eq!(stats.broadcast_id, "dQw4w9WgXcQ");
+    assert_eq!(stats.concurrent_viewers, Some(1287));
+    assert_eq!(stats.likes, Some(412));
+    assert_eq!(stats.views, Some(5321));
+
+    // The ingest's two reads, then every audience read, the failed ones included,
+    // each charged before it is sent.
+    let reads = transport
+        .requests()
+        .iter()
+        .filter(|request| request.endpoint == "videos.list")
+        .count() as u64;
+    let (outputs, quota) = audience(&control);
+    assert_eq!(outputs, reported);
+    assert!(reads >= 2, "{reads} reads");
+    assert!(quota.used >= 2 + reads, "{quota:?}");
+    assert_eq!(quota.daily, crate::DAILY_QUOTA);
+    assert!(!quota.exhausted);
+    assert_eq!(quota.stats, StatsPolling::Normal);
+    let videos = transport
+        .requests()
+        .into_iter()
+        .find(|request| request.endpoint == "videos.list")
+        .expect("an audience read");
+    assert_eq!(videos.query("id").as_deref(), Some("dQw4w9WgXcQ"));
+
+    block_on(control.call(output_call("live", false))).expect("output.stop");
+    assert!(
+        audience(&control).0.is_empty(),
+        "a stopped output has no audience"
+    );
+}
+
+/// Stats slow when less than a fifth of the day's quota is left and stop below a
+/// tenth; a new day starts the estimate again (ADR-0041 §5).
+#[test]
+fn stats_polling_slows_then_stops_as_the_quota_runs_low() {
+    let transport = FakeTransport::new();
+    transport.respond(200, REFRESH);
+    for _ in 0..10 {
+        transport.respond(200, STREAMS);
+    }
+    let (now, clock) = settable_clock(noon_pacific());
+    let engine = Engine::new().with_youtube(
+        setup(&transport, &signed_in_store())
+            .with_daily_quota(10)
+            .with_clock(clock),
+    );
+    let control = connected(&engine);
+    let list = || Query::YoutubeListStreams { page_token: None };
+    assert_eq!(
+        quota(&control),
+        QuotaInfo {
+            used: 0,
+            daily: 10,
+            exhausted: false,
+            stats: StatsPolling::Normal,
+        }
+    );
+    for _ in 0..8 {
+        query(&control, list()).expect("lists");
+    }
+    // 2 of 10 left: a fifth, not less.
+    assert_eq!(quota(&control).stats, StatsPolling::Normal);
+    query(&control, list()).expect("lists");
+    assert_eq!(quota(&control).used, 9);
+    assert_eq!(quota(&control).stats, StatsPolling::Slowed);
+    query(&control, list()).expect("lists");
+    assert_eq!(quota(&control).used, 10);
+    assert_eq!(quota(&control).stats, StatsPolling::Stopped);
+
+    // 07:59 UTC the next day is still the same day at UTC−8.
+    *now.lock().expect("lock") = noon_pacific() + Duration::from_secs(11 * 3600 + 59 * 60);
+    assert_eq!(quota(&control).used, 10);
+    *now.lock().expect("lock") = noon_pacific() + Duration::from_secs(12 * 3600);
+    assert_eq!(
+        quota(&control),
+        QuotaInfo {
+            used: 0,
+            daily: 10,
+            exhausted: false,
+            stats: StatsPolling::Normal,
+        }
+    );
+}
+
+/// With the quota nearly used up, a running output's audience is not read at all, and
+/// the actions are still charged at a write's cost.
+#[test]
+fn a_low_quota_stops_audience_reads() {
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, REFRESH)
+        .respond(200, BROADCASTS)
+        .respond(200, STREAMS);
+    let engine = Engine::new()
+        .with_backends(backends())
+        .with_draw(cpu_draw())
+        .with_youtube(
+            setup(&transport, &signed_in_store())
+                .with_daily_quota(2)
+                .with_health_interval(Duration::from_secs(3600))
+                .with_stats_interval(Duration::from_millis(10)),
+        );
+    let publish = RecordingPublish::new();
+    engine
+        .youtube()
+        .expect("youtube")
+        .set_connect(Arc::new(move |_: &str, _: &Secret| {
+            Ok(Box::new(publish.clone()) as Box<dyn LivePublish>)
+        }));
+    let control = connected(&engine);
+    batch(&control, edits(vec![youtube_output("dQw4w9WgXcQ")])).expect("creates");
+    block_on(control.call(output_call("live", true))).expect("output.start");
+    // The ingest's two reads use the whole day.
+    assert_eq!(quota(&control).used, 2);
+    assert_eq!(quota(&control).stats, StatsPolling::Stopped);
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(
+        !transport
+            .requests()
+            .iter()
+            .any(|request| request.endpoint == "videos.list"),
+        "the audience was read with no quota left"
+    );
+    assert!(audience(&control).0.is_empty());
+    assert_eq!(quota(&control).used, 2);
+
+    // Actions keep going to YouTube, charged as writes.
+    transport.respond(200, INSERTED);
+    action(
+        &control,
+        Action::YoutubeCreateBroadcast {
+            title: "Late show".into(),
+            description: String::new(),
+            scheduled_start_time: "2026-10-18T03:00:00Z".into(),
+            privacy: BroadcastPrivacy::Private,
+            made_for_kids: false,
+        },
+    )
+    .expect("creates");
+    assert_eq!(quota(&control).used, 52);
+    block_on(control.call(output_call("live", false))).expect("output.stop");
 }
