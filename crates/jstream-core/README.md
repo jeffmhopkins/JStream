@@ -1765,8 +1765,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   it.
 - Blend modes other than `normal` in the compositor.
 - The rest of the video chain runtime (V0): effect-pack kinds in a chain (bypassed),
-  placing a bounds-growing filter's output at the original content box, and pooling a
-  multi-pass filter's scratch layers.
+  and pooling a multi-pass filter's scratch layers.
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the
