@@ -47,6 +47,9 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
   otherwise a CPU one; `path()` returns the `VideoPath` it took.
   `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `request_keyframe()`,
   `info()`, `stats()` and `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
+  `VideoSession::codec()` is the codec encoding now: `info()`'s, or the one the encoder
+  fell back to after it opened (a hardware encoder refusing its first frame, #443),
+  which the encode thread records once.
 - `VideoInput` / `AudioInput`: cloneable push handles. `push` never blocks.
 - `Subscription`: `recv`, `try_recv`, `recv_timeout`, each returning packets in decode
   order and then a `StreamEnd`; `info()`, per-subscriber `stats()`, and
@@ -96,10 +99,12 @@ and polls again, leaving inputs in the queue. It never waits on the control plan
 and the packet and subscriber vectors are reused, so this crate's loop does not
 allocate per frame (the encoder itself may).
 
-Handles talk to the thread through `std::sync::mpsc` channels and atomics only: a
-bounded channel for inputs, an unbounded one for new subscribers, atomic counters, and
-`finishing`/`aborting` flags, with a `Wake` message and `unpark` so a flag is seen
-without waiting out the interval. `std` covers this; the workspace has no channel
+Handles talk to the thread through `std::sync::mpsc` channels, atomics and two set-once
+`OnceLock` cells only: a bounded channel for inputs, an unbounded one for new
+subscribers, atomic counters, and `finishing`/`aborting` flags, with a `Wake` message
+and `unpark` so a flag is seen without waiting out the interval. The encode thread sets
+the cells, the stream's end and the codec a fallback moved to (`VideoSession::codec`),
+and reading one never waits on it. `std` covers this; the workspace has no channel
 crate.
 
 ### Queues and drop policies (R-RT-004)

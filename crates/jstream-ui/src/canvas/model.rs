@@ -128,29 +128,32 @@ impl Layout {
     }
 }
 
-/// The batch that places `item_id` in `scene_id` at `geometry`: one edit, so one undo
-/// step. It carries no `expected_rev`: a drag's commit is last writer wins per field
-/// (ADR-0032).
-pub fn set_geometry(scene_id: SceneId, item_id: ItemId, geometry: ItemGeometry) -> Call {
-    Call::Batch(Batch::single(Edit::ItemSetGeometry {
-        item_id,
-        scene_id: Some(scene_id),
-        geometry,
-    }))
+/// The batch that places each item in `scene_id` at its new geometry: one batch, so one
+/// undo step however many items a gesture moved. It carries no `expected_rev`: a drag's
+/// commit is last writer wins per field (ADR-0032).
+pub fn set_geometry(scene_id: SceneId, placed: Vec<(ItemId, ItemGeometry)>) -> Call {
+    Call::Batch(Batch {
+        edits: placed
+            .into_iter()
+            .map(|(item_id, geometry)| Edit::ItemSetGeometry {
+                item_id,
+                scene_id: Some(scene_id.clone()),
+                geometry,
+            })
+            .collect(),
+        expected_rev: None,
+        idempotency_key: None,
+        ends_gesture: None,
+    })
 }
 
 /// Sends [`set_geometry`]'s batch and returns the revision it produced.
 pub async fn commit(
     control: &dyn Control,
     scene_id: SceneId,
-    item_id: ItemId,
-    geometry: ItemGeometry,
+    placed: Vec<(ItemId, ItemGeometry)>,
 ) -> Result<Rev, CanvasError> {
-    match control
-        .call(set_geometry(scene_id, item_id, geometry))
-        .await?
-        .result
-    {
+    match control.call(set_geometry(scene_id, placed)).await?.result {
         CallResult::Batch { rev, .. } => Ok(rev),
         _ => Err(CanvasError::UnexpectedAnswer {
             call: "item.set_geometry",
@@ -325,7 +328,7 @@ mod tests {
         let control = engine();
         let before = load(&control, "s2");
         let moved = geometry(100.0, 100.0, 320.0, 180.0);
-        let rev = now(commit(&control, "s2".into(), "box".into(), moved)).expect("commit");
+        let rev = now(commit(&control, "s2".into(), vec![("box".into(), moved)])).expect("commit");
         assert_eq!(rev.0, before.rev.0 + 1);
         let after = load(&control, "s2");
         assert_eq!(after.geometry_of(&"box".into()), Some(moved));

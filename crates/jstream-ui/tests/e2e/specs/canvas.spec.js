@@ -2,9 +2,10 @@
 // and undo and redo through the engine. The seed's box is 640×360 at the centre of a 1920×1080 canvas.
 import { test, expect, connect, rev } from '../fixtures.js';
 
-/** The seed item's outline: its polygon's corners, in canvas pixels. */
+/** The seed item's outline: its polygon's corners, in canvas pixels. It is the bottom
+ *  item, so the first of the Backdrop source's outlines. */
 function outline(page) {
-  return page.locator('.stage-overlay g').filter({ hasText: 'Backdrop' }).locator('polygon');
+  return page.locator('.stage-overlay g').filter({ hasText: 'Backdrop' }).locator('polygon').first();
 }
 
 /** The outline's corners as `[x, y]` pairs. */
@@ -166,4 +167,100 @@ test('another client sees a move', async ({ page, context, daemon }) => {
   await page.mouse.click(centre.x, centre.y);
   await page.keyboard.press('Shift+ArrowLeft');
   await expectCorners(other, shifted(before, -10, 0));
+});
+
+test('a marquee from the margin selects what it touches', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  const row = page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' });
+
+  // It starts on the dark margin just outside the frame's top-left corner.
+  const from = await onScreen(page, -20, -20);
+  const to = await onScreen(page, 700, 400);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await expect(page.locator('.stage-overlay .marquee')).toHaveCount(1);
+  await page.mouse.up();
+  await expect(page.locator('.stage-overlay .marquee')).toHaveCount(0);
+  await expect(row).toHaveClass(/selected/);
+  await expect(readout(page)).toHaveText('640 × 360');
+
+  await page.keyboard.press('Escape');
+  await expect(row).not.toHaveClass(/selected/);
+});
+
+test('several items are selected, moved and dropped from the selection together', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  // A second item of the same source, which covers the canvas.
+  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
+  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.sources-panel li.row')).toHaveCount(2);
+  const before = await corners(page);
+
+  await page.getByLabel('Scene canvas, Main').focus();
+  await page.keyboard.press('Control+a');
+  await expect(readout(page)).toHaveText('2 items · 1920 × 1080');
+  await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(2);
+
+  // One nudge moves both, as one edit.
+  const startRev = await rev(page);
+  await page.keyboard.press('ArrowRight');
+  await expectCorners(page, shifted(before, 1, 0));
+  await expect.poll(() => rev(page)).toBe(startRev + 1);
+
+  // Shift-click on the covering item takes it out of the selection.
+  const centre = await onScreen(page, 961, 540);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(centre.x, centre.y);
+  await page.keyboard.up('Shift');
+  await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(1);
+  await expect(readout(page)).toHaveText('640 × 360');
+
+  // Shift-click in the sources list adds it back.
+  await page.locator('.sources-panel li.row:not(.selected) .row-main').click({ modifiers: ['Shift'] });
+  await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(2);
+  await expect(readout(page)).toHaveText('2 items · 1920 × 1080');
+});
+
+test('a double click shows the item in the Inspector', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  // Close the Inspector from the View menu.
+  await page.getByRole('button', { name: 'View' }).click();
+  await page.getByRole('menu', { name: 'View' }).getByRole('menuitemcheckbox', { name: /Inspector/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.panel-inspector')).toBeHidden();
+
+  const centre = await onScreen(page, 960, 540);
+  await page.mouse.dblclick(centre.x, centre.y);
+  await expect(page.locator('.panel-inspector .source-title')).toHaveText('Backdrop');
+});
+
+test('a double click on the canvas tools selects nothing under them', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  // A second item covering the canvas, nudged up and right so it reaches under the
+  // tools, which sit above the frame's top-right corner.
+  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
+  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.sources-panel li.row')).toHaveCount(2);
+  await page.getByLabel('Scene canvas, Main').focus();
+  for (let i = 0; i < 25; i += 1) {
+    await page.keyboard.press('Shift+ArrowUp');
+  }
+  for (let i = 0; i < 10; i += 1) {
+    await page.keyboard.press('Shift+ArrowRight');
+  }
+  // Select the seed's item, then double-click Snapping over the covering one.
+  const seed = page.locator('.sources-panel li.row').last();
+  await seed.locator('.row-main').click();
+  const snapping = page.getByRole('toolbar', { name: 'Canvas tools' }).getByRole('button', { name: 'Snapping' });
+  await snapping.dblclick();
+  await expect(snapping).toHaveAttribute('aria-pressed', 'true');
+  // Give a stray double click time to land before checking nothing changed.
+  await page.waitForTimeout(200);
+  await expect(seed).toHaveClass(/selected/);
+  await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(1);
 });
