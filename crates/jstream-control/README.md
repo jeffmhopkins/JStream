@@ -29,8 +29,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
-- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs` and
-  its audio in `mock/audio.rs`):
+- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`,
+  its audio in `mock/audio.rs` and its folders and labels in `mock/organise.rs`):
   `MockEngine` and `MockControl`, an in-memory implementation for developing and
   testing clients without the engine, which they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
@@ -107,14 +107,15 @@ its own, and is used with default features off.
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
 `dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
-mixes, buses, sends and hotkey bindings in memory, with an
+mixes, buses, sends, hotkey bindings, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but the transition ones (below), with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but the transition ones (below), with the
+  checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -175,7 +176,16 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
   cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
-  `internal`, and its refused deletes carry no `blockers`;
+  `internal`, and its refused deletes carry no `blockers`, except a folder's and a
+  label's. The folder, label and metadata edits
+  ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`, `label.*`,
+  `scene.set_folder`, `scene.set_meta` and `source.set_meta`, in `mock/organise.rs`)
+  make the graph's checks with the protocol's own `check_color`, `check_icon` and
+  `SceneMeta::problem`: a missing parent, folder or label, a folder inside itself, a
+  label listed twice, and no deleting a folder that holds a scene or folder or a label a
+  source carries (with the graph's `blockers`). Reads report the folders, labels and
+  each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
+  a scene's or source's delete restores its folder and metadata;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -266,6 +276,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`;
+- the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
+  `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
+  stream opened while it is on gets first;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.

@@ -121,7 +121,7 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
                 &mut cache,
                 (shot, at),
                 // A preview stream shows the program mix, never a video mix.
-                None,
+                snapshot::View::default(),
                 live,
                 &snapshot::NoCaptures,
                 size,

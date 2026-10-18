@@ -56,11 +56,11 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   (MSVC), so that check can run at all.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
-- **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
-  log directory ([Design](#design)).
-- **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
-  crash hook in a child process, with a stream key and a refresh token loaded through
-  `crash::Redacting`; the real `connect_rtmp` failing against loopback servers without
+- **Crash reports**: `jstream-crash`'s panic hook, which writes a redacted report into
+  the log directory ([Design](#design)).
+- **Tests** (`serve.rs`, `token.rs`, `args.rs` and `logs.rs` unit tests, the token
+  registered for redaction, and the stream key registered through the live engine's
+  `Redacting` store; the real `connect_rtmp` failing against loopback servers without
   naming the key, through `serve::live_redacting`, in `serve.rs`; the publish opener and
   the live engine on the platform fakes, in `live.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
@@ -82,7 +82,7 @@ only there), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
-Why a crate: it is a host binary of its own (ADR-0020 ships `jstream-daemon.exe` next
+Why a crate: it is a host binary of its own (ADR-0066 ships `jstream-daemon.exe` next
 to the desktop app), and only an app may link both `jstream-core` and `jstream-server`
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)).
 
@@ -153,7 +153,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   directory is `logs` in the data directory: `%APPDATA%\JStream` on Windows,
   `~/Library/Application Support/JStream` on macOS, `$XDG_DATA_HOME/jstream` (else
   `~/.local/share/jstream`) elsewhere, or a `data` folder beside the exe when a file
-  named `portable` sits there (ADR-0020). At `info` and above, the first line logged
+  named `portable` sits there (ADR-0066). At `info` and above, the first line logged
   names the file. A log directory that can't be created, or a data directory that can't
   be found (no portable marker, and no `HOME` or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
@@ -253,7 +253,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `MFCreateVirtualCamera` (before Windows 11) or before `--register-vcam`),
   `WindowsCredentials` as its
   stream key store (`with_key_store`; `serve.rs`'s `live_redacting` puts it behind
-  `crash::Redacting` before calling `live`, so each key is registered with the crash reports' redaction, [Crash reports](#design)), and a
+  `jstream_crash::Redacting` before calling `live`, so each key is registered with the crash reports' redaction, [Crash reports](#design)), and a
   publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
   starts. A `jstream-clap-scan` thread then scans the CLAP plugins with
@@ -274,8 +274,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   opener upgrades it only to read the target. `live` (`live.rs`, in the library
   target) is that wiring over any backends, key store and connect function, and `rtmp`
   the `connect_rtmp` connect function: `serve.rs` passes them the Windows backends and
-  Credential Manager (behind `crash::Redacting`, which is the binary's, so the library
-  never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
+  Credential Manager (behind `jstream_crash::Redacting`, which the binary adds, so the
+  library never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
   fakes, so the end-to-end test runs the daemon's wiring, not a copy of it.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
@@ -322,7 +322,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   and before the token is touched. `serve.rs` then calls `Engine::with_youtube` with
   that client, else with `YoutubeSetup::built_in` (JStream's client, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), `None`
   while it is empty), over `jstream_youtube::HttpsTransport` (the OS's root store) with
-  `WindowsCredentials` behind `crash::Redacting` as the token store (so each refresh
+  `WindowsCredentials` behind `jstream_crash::Redacting` as the token store (so each refresh
   token is redacted from crash reports, [Crash reports](#design)), before the engine
   goes live; core keeps the
   token under its fixed account ID. Off Windows there is no OAuth token store, so a
@@ -439,9 +439,12 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `FILE_SHARE_DELETE`, so the same is expected, untested).
 - **The data directory** comes from `jstream-platform`'s `paths` module, the desktop
   app's too: `%APPDATA%\JStream`, or a `data` folder beside the exe when a `portable`
-  marker file sits there ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md),
+  marker file sits there ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md),
   [jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
-- **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)). The panic
+- **Crash reports** ([`jstream-crash`](../../crates/jstream-crash/README.md#purpose),
+  [ADR-0067](../../docs/adr/0067-shared-crash-reports.md),
+  [R-SEC-004](../../docs/RULES.md#R-SEC-004)). `main` makes the `Secrets` list and hands
+  it to the hook, to `token.rs` and to `serve.rs`. The panic
   hook, installed as soon as the log directory exists, writes the daemon and protocol
   versions, OS and architecture, the UTC time, the process ID, the thread name, the
   panic's location and message (cut at 16 KiB), and a backtrace (`std`'s, always
@@ -450,15 +453,16 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   line ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): the control token, by `token.rs`,
   and every stream key the live engine stores or reads, since `serve::live_redacting` hands
   `live`, and through it the engine and the publish opener, its key store behind
-  `crash::Redacting`, which
+  `Redacting`, which
   registers each secret as it is stored or loaded, and every YouTube refresh token,
   since `serve.rs` hands YouTube its Credential Manager token store behind
-  `crash::Redacting` too. Secrets that pass through neither store are not registered
+  `Redacting` too. Secrets that pass through neither store are not registered
   yet: a YouTube-bound output's stream key, which core reads with `Youtube::ingest`
   and hands straight to its connect, and the OAuth access token (left open on #353);
   only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
-  whose stderr line would quote the message unredacted. A panic in a tokio task writes
+  whose stderr line would quote the message unredacted; `main.rs`'s `crash_line` prints
+  the hook's redacted line instead (the crate never prints). A panic in a tokio task writes
   a report too, even though the daemon carries on. The oldest reports beyond 10 are
   deleted before each new one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
@@ -473,8 +477,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
-  OAuth client file), `anyhow`, `tracing` (the startup line) and `blake3` (the crash
-  reports' secret digests), all already in the tree through core and the server, tokio (`rt-multi-thread` for the runtime,
+  OAuth client file), `anyhow` and `tracing` (the startup line), all already in the
+  tree through core and the server; `jstream-crash` (the crash reports,
+  [ADR-0067](../../docs/adr/0067-shared-crash-reports.md)), a workspace crate only the
+  two apps use; tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
   only `sharded-slab` and `thread_local`), and `getrandom`
@@ -483,8 +489,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`), for the live engine and opener tests and
-  `crash.rs`'s `Redacting` tests (`MemoryKeyStore`, `MemoryTokenStore`);
+  `jstream-platform` (feature `fake`), for the live engine and opener tests;
   `jstream-browser` (feature `fake`), for the browser wiring's test;
   `jstream-youtube` (feature `fake`), for the YouTube setup's test.
 
@@ -498,7 +503,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    question 5).
 2. **Default token file location.** The platform config directory
    ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence); `%APPDATA%\JStream`
-   or the portable folder per [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)),
+   or the portable folder per [ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)),
    once the engine's settings code locates it. Until then the path is required, and the
    same variable serves the daemon and the CLI.
 3. **Windows ACL.** On Windows the new file gets its directory's ACL, which is
@@ -512,9 +517,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    which is `unsafe` and so belongs in `jstream-platform-windows`
    ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001); the daemon forbids `unsafe`), or
    an out-of-process monitor (`crash-handler` and `minidumper`), whose attach call is
-   `unsafe` too and which adds a helper process. Either needs testing on Windows.
+   `unsafe` too and which adds a helper process. Either needs testing on Windows, and
+   would be shared with the desktop app through `jstream-crash` (ADR-0067).
 5. **Data directory.** The log directory's default is `logs` in the data directory
-   (`jstream-platform`'s `paths`, which handles ADR-0020's `portable` marker), and
+   (`jstream-platform`'s `paths`, which handles ADR-0066's `portable` marker), and
    `--log-dir` overrides it. The token file (question 2) and the collection
    (question 6) don't default to it yet.
 6. **Default collection file.** Without `--collection` the collection is not saved.
