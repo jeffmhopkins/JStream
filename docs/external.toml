@@ -619,3 +619,11 @@ relied_on = "US8311809: Philips, converting a decoded sub-band signal into stere
 review_every = "365d"
 status = "ok"
 checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "secret-service-spec"
+url = "https://specifications.freedesktop.org/secret-service/latest/"
+relied_on = "Secret Service API: the service object is /org/freedesktop/secrets and the default collection is also reached at /org/freedesktop/secrets/aliases/default; secrets cross the bus with a negotiated algorithm, plain (no encryption) or dh-ietf1024-sha256-aes128-cbc-pkcs7; Unlock takes item or collection paths and may return a prompt that must be acted on to finish (ADR-0071)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the object paths, the plain algorithm and the unlocking chapter"
