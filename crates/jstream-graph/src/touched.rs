@@ -4,7 +4,8 @@
 //! history logs it and checks a step's touched set against other clients' later ones.
 
 use jstream_protocol::{
-    BusId, Edit, EncoderProfileId, FilterId, ItemId, OutputId, SceneId, SourceId, SourceKind,
+    BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, FilterOwner, ItemId, OutputId,
+    SceneId, SourceId, SourceKind, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -16,11 +17,15 @@ enum Object {
     Source(SourceId),
     Output(OutputId),
     Encoder(EncoderProfileId),
-    /// A filter, by its owner's source and its ID there (ADR-0026).
-    Filter(SourceId, FilterId),
+    VideoMix(VideoMixId),
+    /// A filter, by its owner and its ID there (ADR-0026).
+    Filter(FilterOwner, FilterId),
+    /// An audio bus.
     Bus(BusId),
     /// One source's send into one bus.
     Send(SourceId, BusId),
+    /// A hotkey binding, by its chord.
+    Hotkey(Chord),
 }
 
 /// A property an edit sets, on its object.
@@ -50,6 +55,10 @@ enum Prop {
     EncoderChoice,
     /// An encoder profile's encoding.
     Encoding,
+    /// The video mix an output shows.
+    MixChoice,
+    /// A video mix's input, resolution and rate.
+    Mix,
     /// Whether a filter runs.
     Enabled,
     /// Whether a source's audio is open.
@@ -199,22 +208,53 @@ impl Touched {
                 self.prop(encoder.clone(), Prop::Name);
                 self.prop(encoder, Prop::Encoding);
             }
+            Edit::VideoMixCreate { mix_id, mix, .. } => {
+                self.exists.insert(Object::VideoMix(mix_id.clone()));
+                if let Some(scene_id) = mix.scene() {
+                    self.uses.insert(Object::Scene(scene_id.clone()));
+                }
+            }
+            Edit::VideoMixDelete { mix_id } => {
+                self.exists.insert(Object::VideoMix(mix_id.clone()));
+            }
+            Edit::VideoMixUpdate { mix_id, mix, .. } => {
+                let video_mix = Object::VideoMix(mix_id.clone());
+                self.prop(video_mix.clone(), Prop::Name);
+                self.prop(video_mix, Prop::Mix);
+                if let Some(scene_id) = mix.scene() {
+                    self.uses.insert(Object::Scene(scene_id.clone()));
+                }
+            }
+            Edit::OutputSetVideoMix { output_id, mix_id } => {
+                self.prop(Object::Output(output_id.clone()), Prop::MixChoice);
+                if let Some(mix_id) = mix_id {
+                    self.uses.insert(Object::VideoMix(mix_id.clone()));
+                }
+            }
             Edit::FilterAdd {
                 owner, filter_id, ..
             } => {
-                let source_id = owner.source_id();
                 self.exists
-                    .insert(Object::Filter(source_id.clone(), filter_id.clone()));
-                self.uses.insert(Object::Source(source_id.clone()));
+                    .insert(Object::Filter(owner.clone(), filter_id.clone()));
+                match owner {
+                    FilterOwner::Source { source_id } => {
+                        self.uses.insert(Object::Source(source_id.clone()));
+                    }
+                    FilterOwner::Output { output_id } => {
+                        self.uses.insert(Object::Output(output_id.clone()));
+                    }
+                    // The master stage always exists.
+                    _ => {}
+                }
             }
             Edit::FilterRemove { owner, filter_id } => {
                 self.exists
-                    .insert(Object::Filter(owner.source_id().clone(), filter_id.clone()));
+                    .insert(Object::Filter(owner.clone(), filter_id.clone()));
             }
             Edit::FilterSetEnabled {
                 owner, filter_id, ..
             } => {
-                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                let filter = Object::Filter(owner.clone(), filter_id.clone());
                 self.prop(filter, Prop::Enabled);
             }
             Edit::FilterSetSettings {
@@ -223,7 +263,7 @@ impl Touched {
                 patch,
             } => {
                 for param in patch.0.keys() {
-                    let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                    let filter = Object::Filter(owner.clone(), filter_id.clone());
                     self.prop(filter, Prop::Setting(param.clone()));
                 }
             }
@@ -231,7 +271,7 @@ impl Touched {
             Edit::FilterReorder {
                 owner, filter_id, ..
             } => {
-                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                let filter = Object::Filter(owner.clone(), filter_id.clone());
                 self.prop(filter, Prop::Index);
             }
             Edit::SourceSetAudio {
@@ -285,6 +325,26 @@ impl Touched {
                     .insert(Object::Send(source_id.clone(), bus_id.clone()));
                 self.uses.insert(Object::Source(source_id.clone()));
                 self.uses.insert(Object::Bus(bus_id.clone()));
+            }
+            // A binding uses what its action names, so deleting that object (which
+            // removes the binding) and binding to it conflict.
+            Edit::HotkeySet { chord, action } => {
+                self.exists.insert(Object::Hotkey(chord.clone()));
+                for (entity, id) in action.named_objects() {
+                    let object = match entity {
+                        EntityKind::Scene => Object::Scene(SceneId::new(id)),
+                        EntityKind::Source => Object::Source(SourceId::new(id)),
+                        EntityKind::Output => Object::Output(OutputId::new(id)),
+                        _ => {
+                            self.unknown = true;
+                            continue;
+                        }
+                    };
+                    self.uses.insert(object);
+                }
+            }
+            Edit::HotkeyClear { chord } => {
+                self.exists.insert(Object::Hotkey(chord.clone()));
             }
             _ => self.unknown = true,
         }

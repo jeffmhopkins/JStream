@@ -10,7 +10,7 @@
 #[cfg(any(windows, test))]
 mod format;
 #[cfg(windows)]
-mod shared;
+pub(crate) mod shared;
 #[cfg(windows)]
 mod sink;
 

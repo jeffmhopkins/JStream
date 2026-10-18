@@ -1,16 +1,18 @@
 //! Media Foundation codecs: the [`Codecs`](jstream_platform::Codecs) backend.
 //!
-//! It has the AAC encoder (`aac`) and the H.264 encoder (`h264`), from CPU NV12, RGBA or
-//! BGRA frames, or from encode targets on the GPU once the backend is on a GPU context
-//! (`Codecs::on_context`). Video decoders follow; until then they report `Unsupported`.
+//! It has the AAC encoder (`aac`) and the H.264, HEVC and AV1 encoders (`video`), from
+//! CPU NV12, RGBA or BGRA frames, or from encode targets on the GPU once the backend is on
+//! a GPU context (`Codecs::on_context`). HEVC and AV1 run where the GPU (or an installed
+//! software MFT) offers them. Video decoders follow; until then they report
+//! `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.
 #[cfg(any(windows, test))]
 mod aac;
-#[cfg(any(windows, test))]
-mod h264;
 #[cfg(windows)]
 mod mf;
+#[cfg(any(windows, test))]
+mod video;
 
 #[cfg(windows)]
 pub use backend::MfCodecs;
@@ -28,12 +30,12 @@ mod backend {
         MFAudioFormat_AAC, MFAudioFormat_PCM, MFMediaType_Audio, MFMediaType_Video,
         MFT_CATEGORY_AUDIO_ENCODER, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
         MFT_ENUM_FLAG_LOCALMFT, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
-        MFVideoFormat_H264, MFVideoFormat_NV12,
+        MFVideoFormat_NV12,
     };
 
     use super::aac::MfAacEncoder;
-    use super::h264::MfH264Encoder;
     use super::mf::{self, MfRuntime};
+    use super::video::{Format, MfVideoEncoder};
     use crate::gpu::EncodeGpu;
 
     /// Codecs through Media Foundation, the OS codecs ADR-0061 chooses.
@@ -81,19 +83,19 @@ mod backend {
                     .take(1)
                     .map(|f| info(f, Codec::Aac, CodecRole::AudioEncoder, false)),
             );
-            let h264 = (
-                (MFMediaType_Video, MFVideoFormat_NV12),
-                (MFMediaType_Video, MFVideoFormat_H264),
-            );
-            for (flags, hardware) in [
-                (MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER, true),
-                (sync, false),
-            ] {
-                out.extend(
-                    mf::enumerate(MFT_CATEGORY_VIDEO_ENCODER, flags, h264.0, h264.1)?
-                        .into_iter()
-                        .map(|f| info(f, Codec::H264, CodecRole::VideoEncoder, hardware)),
-                );
+            for format in Format::ALL {
+                let nv12 = (MFMediaType_Video, MFVideoFormat_NV12);
+                let coded = (MFMediaType_Video, format.subtype());
+                for (flags, hardware) in [
+                    (MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER, true),
+                    (sync, false),
+                ] {
+                    out.extend(
+                        mf::enumerate(MFT_CATEGORY_VIDEO_ENCODER, flags, nv12, coded)?
+                            .into_iter()
+                            .map(|f| info(f, format.codec(), CodecRole::VideoEncoder, hardware)),
+                    );
+                }
             }
             Ok(out)
         }
@@ -103,8 +105,8 @@ mod backend {
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
             Ok(Box::new(match &self.gpu {
-                Some(gpu) => MfH264Encoder::open_on(config, gpu)?,
-                None => MfH264Encoder::open(config)?,
+                Some(gpu) => MfVideoEncoder::open_on(config, gpu)?,
+                None => MfVideoEncoder::open(config)?,
             }))
         }
 
@@ -199,9 +201,80 @@ mod device_tests {
         );
     }
 
-    /// Encodes 60 frames of a moving gradient from `format` frames (NV12, or the
-    /// compositor's RGBA that the engine's pipeline hands the encoder).
+    /// The NAL unit types after each start code of an Annex B payload, with `kind`
+    /// reading the type from the first header byte.
+    fn nal_types(data: &[u8], kind: fn(u8) -> u8) -> Vec<u8> {
+        data.windows(4)
+            .filter(|w| w[..3] == [0, 0, 1])
+            .map(|w| kind(w[3]))
+            .collect()
+    }
+
+    /// The OBU types of a low-overhead AV1 payload, or `None` when it doesn't parse.
+    fn obu_types(mut data: &[u8]) -> Option<Vec<u8>> {
+        let mut types = Vec::new();
+        while let Some(&header) = data.first() {
+            if header & 0x80 != 0 {
+                return None;
+            }
+            let mut at = 1 + usize::from(header & 0x04 != 0);
+            let size = if header & 0x02 != 0 {
+                let mut size = 0usize;
+                for i in 0..8 {
+                    let byte = *data.get(at)?;
+                    at += 1;
+                    size |= usize::from(byte & 0x7F) << (7 * i);
+                    if byte & 0x80 == 0 {
+                        break;
+                    }
+                }
+                size
+            } else {
+                data.len().checked_sub(at)?
+            };
+            types.push((header >> 3) & 0x0F);
+            data = data.get(at + size..)?;
+        }
+        Some(types)
+    }
+
+    /// Checks that every packet is framed as `jstream-media` says for `codec`, and that
+    /// the first keyframe carries the decoder configuration in-band, which the FLV
+    /// muxer's enhanced RTMP track builds its sequence header from.
+    fn assert_framing(codec: Codec, out: &[jstream_platform::media::Packet]) {
+        for p in out {
+            assert_eq!(p.codec(), codec);
+            assert_eq!(p.pts(), p.dts());
+            let data = p.data();
+            match codec {
+                Codec::Av1 => assert!(obu_types(data).is_some(), "low-overhead OBUs"),
+                _ => assert!(
+                    data.starts_with(&[0, 0, 1]) || data.starts_with(&[0, 0, 0, 1]),
+                    "Annex B: a start code first"
+                ),
+            }
+        }
+        let key = out[0].data();
+        match codec {
+            Codec::H264 => assert!(nal_types(key, |b| b & 0x1F).contains(&7), "an SPS"),
+            Codec::Hevc => {
+                let types = nal_types(key, |b| (b >> 1) & 0x3F);
+                assert!(
+                    [32, 33, 34].iter().all(|t| types.contains(t)),
+                    "VPS, SPS and PPS: {types:?}"
+                );
+            }
+            _ => {
+                let types = obu_types(key).expect("OBUs");
+                assert!(types.contains(&1), "a sequence header: {types:?}");
+            }
+        }
+    }
+
+    /// Encodes 60 frames of a moving gradient in `codec` from `format` frames (NV12, or
+    /// the compositor's RGBA that the engine's pipeline hands the encoder).
     fn encode_two_seconds(
+        codec: Codec,
         hardware: jstream_platform::HardwarePreference,
         format: jstream_platform::media::PixelFormat,
     ) {
@@ -214,7 +287,7 @@ mod device_tests {
         let size = FrameSize::new(1280, 720).expect("size");
         let mut enc = codecs
             .video_encoder(&VideoEncoderConfig {
-                codec: Codec::H264,
+                codec,
                 size,
                 input_format: format,
                 frame_period: Timebase::new(1, 30).expect("30 fps"),
@@ -222,7 +295,7 @@ mod device_tests {
                 keyframe_interval: 30,
                 hardware,
             })
-            .expect("open H.264 encoder");
+            .unwrap_or_else(|e| panic!("open a {codec:?} encoder: {e}"));
         assert_eq!(
             enc.info().hardware,
             hardware == jstream_platform::HardwarePreference::Require
@@ -276,12 +349,7 @@ mod device_tests {
         for w in out.windows(2) {
             assert!(w[0].pts().ticks() < w[1].pts().ticks(), "pts increase");
         }
-        for p in &out {
-            assert_eq!(p.codec(), Codec::H264);
-            assert_eq!(p.pts(), p.dts());
-            // Annex B: a start code first.
-            assert!(p.data().starts_with(&[0, 0, 1]) || p.data().starts_with(&[0, 0, 0, 1]));
-        }
+        assert_framing(codec, &out);
         assert!(
             out.iter().filter(|p| p.is_keyframe()).count() >= 2,
             "keyframe every 30"
@@ -293,6 +361,7 @@ mod device_tests {
     fn encodes_h264_in_software() {
         use jstream_platform::media::PixelFormat;
         encode_two_seconds(
+            Codec::H264,
             jstream_platform::HardwarePreference::Avoid,
             PixelFormat::Nv12,
         );
@@ -304,6 +373,7 @@ mod device_tests {
     fn encodes_h264_from_rgba() {
         use jstream_platform::media::PixelFormat;
         encode_two_seconds(
+            Codec::H264,
             jstream_platform::HardwarePreference::Avoid,
             PixelFormat::Rgba8,
         );
@@ -314,6 +384,29 @@ mod device_tests {
     fn encodes_h264_in_hardware() {
         use jstream_platform::media::PixelFormat;
         encode_two_seconds(
+            Codec::H264,
+            jstream_platform::HardwarePreference::Require,
+            PixelFormat::Rgba8,
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a GPU with a hardware HEVC encoder"]
+    fn encodes_hevc_in_hardware() {
+        use jstream_platform::media::PixelFormat;
+        encode_two_seconds(
+            Codec::Hevc,
+            jstream_platform::HardwarePreference::Require,
+            PixelFormat::Rgba8,
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a GPU with a hardware AV1 encoder (NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer)"]
+    fn encodes_av1_in_hardware() {
+        use jstream_platform::media::PixelFormat;
+        encode_two_seconds(
+            Codec::Av1,
             jstream_platform::HardwarePreference::Require,
             PixelFormat::Rgba8,
         );
@@ -384,6 +477,22 @@ mod device_tests {
     #[test]
     #[ignore = "needs a DX12 GPU with NV12 textures and a D3D11-aware hardware H.264 encoder"]
     fn encodes_h264_from_encode_targets() {
+        encode_from_targets(Codec::H264);
+    }
+
+    #[test]
+    #[ignore = "needs a DX12 GPU with NV12 textures and a D3D11-aware hardware HEVC encoder"]
+    fn encodes_hevc_from_encode_targets() {
+        encode_from_targets(Codec::Hevc);
+    }
+
+    #[test]
+    #[ignore = "needs a DX12 GPU with NV12 textures and a D3D11-aware hardware AV1 encoder"]
+    fn encodes_av1_from_encode_targets() {
+        encode_from_targets(Codec::Av1);
+    }
+
+    fn encode_from_targets(codec: Codec) {
         use std::sync::Arc;
 
         use jstream_platform::media::{FrameSize, MediaTime, PixelFormat, Timebase};
@@ -403,7 +512,7 @@ mod device_tests {
         let size = FrameSize::new(1280, 720).expect("size");
         let mut enc = codecs
             .video_encoder(&VideoEncoderConfig {
-                codec: Codec::H264,
+                codec,
                 size,
                 input_format: PixelFormat::Nv12,
                 frame_period: Timebase::new(1, 30).expect("30 fps"),
@@ -411,7 +520,9 @@ mod device_tests {
                 keyframe_interval: 30,
                 hardware: HardwarePreference::Require,
             })
-            .expect("a D3D11-aware hardware H.264 encoder on the context's adapter");
+            .unwrap_or_else(|e| {
+                panic!("a D3D11-aware hardware {codec:?} encoder on the context's adapter: {e}")
+            });
         assert!(enc.info().hardware);
         let ring: Vec<_> = (0..3)
             .map(|_| gpu.encode_target(&context, size).expect("encode target"))
@@ -472,10 +583,7 @@ mod device_tests {
         for w in out.windows(2) {
             assert!(w[0].pts().ticks() < w[1].pts().ticks(), "pts increase");
         }
-        for p in &out {
-            assert_eq!(p.codec(), Codec::H264);
-            assert!(p.data().starts_with(&[0, 0, 1]) || p.data().starts_with(&[0, 0, 0, 1]));
-        }
+        assert_framing(codec, &out);
         // Release the encoder's textures before the context's device.
         drop(enc);
         drop(codecs);
