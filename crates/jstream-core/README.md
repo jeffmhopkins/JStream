@@ -672,7 +672,10 @@ sampler makes each halving a box filter). Those layers live in the frame's
 `ResourceCache` whenever a mix is drawn, and a mix not due on a tick claims them with
 its other layers, so turning privacy on allocates nothing on the render thread. A
 virtual camera is fed the program frame, so it is covered too. It fails closed: a covered tick whose draw failed blackens the
-frames due on it instead of repeating them, including after a fatal draw error. The
+frames due on it instead of repeating them, including after a fatal draw error. A
+session on the GPU encode path is not pushed the mix's last encode target on such a
+tick, since that target holds an uncovered frame: it misses the tick, counted in
+`encode_frames`, until a covered draw succeeds. The
 CPU stand-in draws covered frames black. `video.snapshot` and the preview streams show
 the editing view and are never covered. Only the default blur exists: the look setting, the slate and muting
 sources come later.
