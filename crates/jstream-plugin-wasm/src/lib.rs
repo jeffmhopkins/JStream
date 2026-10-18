@@ -2,8 +2,8 @@
 //! core WASM module that reaches the engine only through [`Control`]: it gets no WASI, no
 //! filesystem, no network and no clock, and every call it makes must name commands its
 //! user-granted [`Capabilities`] list, which is empty by default. Each invocation runs on
-//! a fixed fuel budget and a wall-time deadline, and the plugin's memory and tables are
-//! capped ([`Limits`]).
+//! a fixed fuel budget and a wall-time deadline, the plugin's memory and tables are
+//! capped, and so are the calls it sends to `Control` a second ([`Limits`]).
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-plugin-wasm/README.md#purpose, crates/jstream-plugin-wasm/README.md#abi, docs/adr/0035-clap-plugins-out-of-process.md
 
@@ -17,6 +17,7 @@ mod limits;
 #[cfg(test)]
 mod no_ambient_capabilities;
 mod plugin;
+mod rate;
 
 pub use capability::{Capabilities, command_names};
 pub use error::Error;

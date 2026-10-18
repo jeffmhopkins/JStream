@@ -5,12 +5,13 @@ use crate::block_on::block_on;
 use crate::capability::Capabilities;
 use crate::error::Error;
 use crate::limits::{self, Limits};
+use crate::rate::CallRate;
 use jstream_control::protocol::Call;
 use jstream_control::{Control, ControlError};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use wasmtime::{
     AsContextMut, Caller, Config, Engine, Extern, Instance, Linker, Memory, Module, Store,
     StoreLimits, StoreLimitsBuilder,
@@ -108,6 +109,8 @@ struct HostState {
     result: Vec<u8>,
     /// What the host passed to the current invocation, for `input_read`.
     input: Vec<u8>,
+    /// The calls sent to `Control` in the last second, against the plugin's cap.
+    rate: CallRate,
     /// The deadline of one invocation, in epoch ticks.
     call_ticks: u64,
     /// The deadline of the current entry into the plugin, the load's or an
@@ -165,6 +168,7 @@ impl Plugin {
                 .build(),
             result: Vec::new(),
             input: Vec::new(),
+            rate: CallRate::new(limits.calls_per_second()),
             call_ticks: limits::ticks(limits.call_deadline(), EPOCH_TICK),
             entry_ticks: limits::ticks(limits.load_deadline(), EPOCH_TICK),
         };
@@ -238,7 +242,7 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
             }
             let mut bytes = vec![0; len];
             memory.read(&caller, offset(ptr), &mut bytes)?;
-            let (status, result) = call(caller.data(), &bytes);
+            let (status, result) = call(caller.data_mut(), &bytes);
             caller.data_mut().result = result;
             // The time the engine took to answer doesn't count against the plugin.
             let ticks = caller.data().entry_ticks;
@@ -285,9 +289,9 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
     Ok(linker)
 }
 
-/// Checks one call against the plugin's grants and, if allowed, sends it. Answers the
-/// status and the result bytes the plugin reads back.
-fn call(state: &HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
+/// Checks one call against the plugin's grants and its cap of calls a second and, if both
+/// allow it, sends it. Answers the status and the result bytes the plugin reads back.
+fn call(state: &mut HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
     let call: Call = match serde_json::from_slice(bytes) {
         Ok(call) => call,
         Err(e) => return (abi::STATUS_MALFORMED, e.to_string().into_bytes()),
@@ -295,6 +299,10 @@ fn call(state: &HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
     if let Err(denied) = state.capabilities.check(&call) {
         let body = serde_json::json!({ "denied": denied });
         return (abi::STATUS_DENIED, body.to_string().into_bytes());
+    }
+    if !state.rate.admit(Instant::now()) {
+        let body = serde_json::json!({ "limited": { "per_second": state.rate.cap() } });
+        return (abi::STATUS_LIMITED, body.to_string().into_bytes());
     }
     let answer = block_on(state.control.call(call));
     let encoded = match answer {

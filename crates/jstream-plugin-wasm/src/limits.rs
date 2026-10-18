@@ -15,6 +15,7 @@ pub struct Limits {
     table_elements: usize,
     call_deadline: Duration,
     load_deadline: Duration,
+    calls_per_second: u32,
 }
 
 impl Limits {
@@ -39,6 +40,11 @@ impl Limits {
     /// The default wall time of the load: instantiating the module and its `start`
     /// function, re-armed after each of its `call`s returns like an invocation's.
     pub const DEFAULT_LOAD_DEADLINE: Duration = Duration::from_secs(1);
+
+    /// The default cap on the calls a plugin sends to `Control` in any second (ADR-0069's
+    /// 50 commands a second). A call past it gets [`STATUS_LIMITED`](crate::abi::STATUS_LIMITED)
+    /// and never reaches `Control`; the plugin isn't stopped.
+    pub const DEFAULT_CALLS_PER_SECOND: u32 = 50;
 
     /// Lowers the fuel per invocation to `fuel`, if that is lower.
     #[must_use]
@@ -72,6 +78,13 @@ impl Limits {
     #[must_use]
     pub fn with_load_deadline(mut self, deadline: Duration) -> Self {
         self.load_deadline = self.load_deadline.min(deadline);
+        self
+    }
+
+    /// Lowers the cap on calls a second to `calls`, if that is lower.
+    #[must_use]
+    pub fn with_calls_per_second(mut self, calls: u32) -> Self {
+        self.calls_per_second = self.calls_per_second.min(calls);
         self
     }
 
@@ -109,6 +122,11 @@ impl Limits {
     pub fn load_deadline(&self) -> Duration {
         self.load_deadline
     }
+
+    /// The most calls the plugin may send to `Control` in any second.
+    pub fn calls_per_second(&self) -> u32 {
+        self.calls_per_second
+    }
 }
 
 /// The epoch deadline for `deadline`: its whole ticks, rounded up, plus one for the tick
@@ -127,6 +145,7 @@ impl Default for Limits {
             table_elements: Self::DEFAULT_TABLE_ELEMENTS,
             call_deadline: Self::DEFAULT_CALL_DEADLINE,
             load_deadline: Self::DEFAULT_LOAD_DEADLINE,
+            calls_per_second: Self::DEFAULT_CALLS_PER_SECOND,
         }
     }
 }
@@ -143,8 +162,10 @@ mod tests {
             .with_memory_bytes(65_536)
             .with_table_elements(10)
             .with_call_deadline(Duration::from_millis(20))
-            .with_load_deadline(Duration::from_millis(30));
+            .with_load_deadline(Duration::from_millis(30))
+            .with_calls_per_second(5);
         assert_eq!(lowered.fuel(), 1_000);
+        assert_eq!(lowered.calls_per_second(), 5);
         assert_eq!(lowered.call_deadline(), Duration::from_millis(20));
         assert_eq!(lowered.load_deadline(), Duration::from_millis(30));
         assert_eq!(lowered.memory_bytes(), 65_536);
@@ -155,7 +176,8 @@ mod tests {
             .with_memory_bytes(usize::MAX)
             .with_table_elements(usize::MAX)
             .with_call_deadline(Duration::MAX)
-            .with_load_deadline(Duration::MAX);
+            .with_load_deadline(Duration::MAX)
+            .with_calls_per_second(u32::MAX);
         assert_eq!(raised, Limits::default());
         assert_eq!(lowered.with_fuel(2_000).fuel(), 1_000);
     }
