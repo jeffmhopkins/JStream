@@ -61,9 +61,9 @@ jstream-platform-windows.workspace = true
 # `BUILT_IN_CLIENT_ID`, to skip the transport while the built-in client is empty.
 jstream-youtube.workspace = true
 
-# The live engine on macOS: ScreenCaptureKit, Core Audio, VideoToolbox and AudioToolbox,
-# the Mach clock, AVFoundation media files and the Keychain key store, as far as
-# ADR-0063's parts are built.
+# The live engine on macOS: ScreenCaptureKit, AVFoundation webcams, Core Audio,
+# VideoToolbox and AudioToolbox, the Mach clock, AVFoundation media files and the
+# Keychain key store, as far as ADR-0063's parts are built.
 [target.'cfg(target_os = "macos")'.dependencies]
 jstream-platform-macos.workspace = true
 
