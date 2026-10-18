@@ -87,11 +87,13 @@ Contents:
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
   a frame it rejects is dropped and the stream goes on.
-- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes
+- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
+  process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
   format an input target would open in (`input_format`, so the engine can build the
   handler for it before opening), and opens input (microphone, output loopback,
-  process loopback) and output streams. Each stream calls an
+  process loopback: a process and its children on Windows, the one process on macOS)
+  and output streams. Each stream calls an
   engine-supplied `AudioInputHandler` or `AudioOutputHandler` on the backend's real-time
   audio thread, so handlers must not allocate, lock, block or log
   ([R-RT-001](../../docs/RULES.md#R-RT-001)). An `AudioPacket` carries interleaved `f32`
