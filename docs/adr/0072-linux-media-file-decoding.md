@@ -100,8 +100,8 @@ under [Options considered](#options).
 - Only this choice plays H.264 on NVIDIA, on Fedora's stock Mesa and in virtual machines.
 - VP8, VP9 and AV1 go through VA-API first, then through FFmpeg the same way.
 - Until the fallback's gates pass, a file VA-API can't decode is a missing component. Its
-  remedy names the driver or the distribution's full build. The gates differ by codec,
-  as [(g)](#patent-scope) says.
+  remedy names the driver or the distribution's full build. Every FFmpeg path waits for
+  both gates, as [(g)](#patent-scope) says.
 
 **(c) Audio decode: symphonia first, FFmpeg for what it can't decode.**
 - symphonia decodes the patent-free codecs: PCM, FLAC, Vorbis and MP3.
@@ -152,20 +152,24 @@ A licence for FFmpeg's code isn't a patent licence.
   encoding today.
 
 <a id="patent-scope"></a>
-By default, (g) holds back only software H.264 and AAC decoding. FFmpeg's royalty-free
-paths don't wait for it: VP8, VP9 and AV1 video, Opus audio, and `libavformat`'s
-containers. Their makers license them royalty-free. (A third-party pool, Sisvel, claims
-patents on VP9 and AV1; (g) doesn't cover that claim, and the follow-up ADR may take it
-up.) These paths wait only for the [GPL legal view](#gpl-precondition), which every
-FFmpeg path needs.
-So the FFmpeg fallback comes in two stages:
+**Every FFmpeg path waits for (g), as well as for the [GPL legal view](#gpl-precondition).**
+This is the reading the maintainer accepted: (b)'s fallback comes "only after (g)'s patent
+check", and VP9 and AV1 go through FFmpeg "the same way". So (g)'s follow-up ADR covers
+every codec decoded through FFmpeg, not only H.264 and AAC:
 
-| Path through FFmpeg | GPL legal view | (g)'s patent check |
+| Path | GPL legal view | (g)'s patent check |
 |---|---|---|
-| VP8, VP9, AV1, Opus, the extra containers | needed | not needed |
-| H.264, AAC (LC and HE) | needed | needed |
+| FFmpeg: H.264, AAC (LC and HE) | needed | needed |
+| FFmpeg: VP8, VP9, AV1, Opus, the extra containers | needed | needed |
+| symphonia: AAC-LC | not needed (no FFmpeg) | needed |
+| symphonia: PCM, FLAC, Vorbis, MP3 | not needed | not needed |
+| VA-API | not needed | not needed |
 
-symphonia's AAC-LC decoder needs (g) only, since it loads no FFmpeg.
+**Open question, for a later maintainer-tier ADR:** could the royalty-free FFmpeg paths
+(VP8, VP9, AV1, Opus and the extra containers) go ahead after the GPL legal view alone,
+leaving only software H.264 and AAC behind (g)? Their makers license them royalty-free,
+but the follow-up would need to check third-party patent claims on them too. Until a
+maintainer decision says otherwise, they wait for (g).
 
 **Either way:**
 - A container or codec outside the chosen set is `Unsupported`, naming it.
@@ -273,8 +277,7 @@ exception:
 > that VA-API and the pure-Rust crates can't read. They are loaded at run time through
 > hand-written declarations. JStream never ships, builds or links them, so the FFmpeg
 > binding crates stay banned, and nothing encodes through FFmpeg. The fallback lands only
-> once ADR-0072's GPL legal view is done, and its H.264 and AAC decoding only once
-> ADR-0072's decoder patent check is done too (ADR-0072).
+> once ADR-0072's GPL legal view and its decoder patent check are both done (ADR-0072).
 
 In RULES.md, that last ADR-0072 links here, and the rule's first sentence cites ADR-0072
 beside ADR-0061. The rule's title, its enforcement and `deny.toml`'s bans don't change.
@@ -307,10 +310,9 @@ beside ADR-0061. The rule's title, its enforcement and `deny.toml`'s bans don't 
 - **Playback grows in stages:**
   - **First:** H.264, VP8, VP9 and AV1 on a VA-API GPU that decodes them, PCM, FLAC,
     Vorbis and MP3 audio, and MP4, MOV, Matroska, WebM, WAV, FLAC, Ogg and MP3 files.
-  - **After the GPL legal view:** the FFmpeg fallback for VP8, VP9 and AV1 without
-    VA-API, Opus, and the other containers.
-  - **After (g)'s check says yes as well:** AAC-LC through symphonia (which needs only
-    (g)), and FFmpeg's H.264 and AAC decoding, HE-AAC included.
+  - **After (g)'s check says yes:** AAC-LC through symphonia.
+  - **After both (g) and the GPL legal view:** the whole FFmpeg fallback: H.264, VP8, VP9
+    and AV1 without VA-API, HE-AAC, Opus, and the other containers.
   - **Until then:** most `.mp4` files play without sound, and machines without VA-API
     H.264 play no H.264 video.
 - **The work is large.** VA-API decode means parsing H.264 headers, filling libva's

@@ -334,7 +334,9 @@ applies_to = ["Cargo.toml", "deny.toml"]
 Dependencies may only use the licenses on the `deny.toml` allow list: permissive
 licenses plus MPL-2.0 (file-level copyleft). No GPL, LGPL or AGPL. The one exception is the
 prebuilt CEF runtime for browser sources, which contains LGPL-2.1 FFmpeg and ships with
-its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)).
+its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)). A system library
+loaded at run time and never shipped, such as R-DEP-002's FFmpeg exception, is not a
+dependency here.
 
 <a id="R-DEP-002"></a>
 ### R-DEP-002: No FFmpeg, GStreamer or bundled C codec libraries
@@ -358,10 +360,9 @@ media-file source may decode through the system's FFmpeg libraries (`libavformat
 pure-Rust crates can't read. They are loaded at run time through hand-written
 declarations. JStream never ships, builds or links them, so the FFmpeg binding crates stay
 banned, and nothing encodes through FFmpeg. The fallback lands only once ADR-0072's GPL
-legal view is done, and its H.264 and AAC decoding only once ADR-0072's decoder patent
-check is done too ([ADR-0072](adr/0072-linux-media-file-decoding.md)). Pure-Rust image
-and font crates are not banned codec libraries, and neither is JStream's own AAC-LC
-encoder.
+legal view and its decoder patent check are both done
+([ADR-0072](adr/0072-linux-media-file-decoding.md)). Pure-Rust image and font crates are
+not banned codec libraries, and neither is JStream's own AAC-LC encoder.
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions
