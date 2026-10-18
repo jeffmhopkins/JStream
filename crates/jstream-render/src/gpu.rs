@@ -4,7 +4,7 @@
 use std::future::Future;
 use std::task::{Context, Poll, Waker};
 
-use jstream_platform::{ContextKey, GpuContext};
+use jstream_platform::{ContextKey, GpuContext, SubmitLock};
 
 use crate::error::RenderError;
 
@@ -49,6 +49,9 @@ pub(crate) struct Gpu {
     pub max_buffer_size: u64,
     /// The platform context the device came from, or `None` for a device of its own.
     pub context: Option<ContextKey>,
+    /// Held from staging a frame through the submit it arms: the context's, which
+    /// platform threads that submit on the same queue take too, or one of its own.
+    pub submit: SubmitLock,
 }
 
 impl Gpu {
@@ -103,6 +106,7 @@ impl Gpu {
         let adapter = ctx.adapter().clone();
         let mut gpu = Self::bundle(adapter, ctx.device().clone(), ctx.queue().clone());
         gpu.context = Some(ctx.key());
+        gpu.submit = ctx.submit_lock().clone();
         gpu.log_open("platform context");
         gpu
     }
@@ -132,6 +136,7 @@ impl Gpu {
             max_texture_dimension_2d: limits.max_texture_dimension_2d,
             max_buffer_size: limits.max_buffer_size,
             context: None,
+            submit: SubmitLock::new(),
         }
     }
 

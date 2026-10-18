@@ -42,7 +42,7 @@ pub use codec::{
     RateControl, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
 };
 pub use error::PlatformError;
-pub use gpu::{AdapterId, ContextKey, FrameSync, GpuContext, GpuFrame, GpuInterop};
+pub use gpu::{AdapterId, ContextKey, FrameSync, GpuContext, GpuFrame, GpuInterop, SubmitLock};
 pub use id::DeviceId;
 pub use keys::{OAuthTokenStore, Secret, StreamKeyStore};
 pub use media_file::{

@@ -921,6 +921,9 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 `Capture::on_context`: each captured texture is imported once into the cache and
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
+Staging attaches to the queue's next submit, so render holds the context's
+`SubmitLock` from staging through its submit, and other threads that submit on that
+queue (the browser source's copies) take it too.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
 browser source's page paints on the same context and is imported the same way, read
