@@ -142,10 +142,11 @@ impl std::fmt::Debug for AudioScope {
 /// Where the `waveform` and `spectrum` sources find the audio they draw (their `audio`
 /// setting, #362, and their `audio_source` setting, #459): the program mix's scope,
 /// which always exists, one scope per bus that a source draws and one per source that a
-/// source draws, each made when it is first asked for. The engine keeps one, feeds the
-/// program scope, [`buses`](Self::buses)' and [`sources`](Self::sources)' from the
-/// mixer thread, and calls [`retain`](Self::retain) and
-/// [`retain_sources`](Self::retain_sources) with what the collection's sources draw.
+/// source draws. The engine keeps one, feeds the program scope,
+/// [`buses`](Self::buses)' and [`sources`](Self::sources)' from the mixer thread, and
+/// calls [`retain`](Self::retain) and [`retain_sources`](Self::retain_sources) with what
+/// the collection's sources draw, before it builds the sources an edit changed, so a
+/// source drawing a new bus or source finds its scope already made.
 ///
 /// Its locks are taken only to find, make or drop a scope, on the threads that create
 /// sources or apply edits, never by the mixer thread: that thread gets each scope's
@@ -176,14 +177,18 @@ impl AudioScopes {
         &self.program
     }
 
-    /// Bus `bus`'s scope, made now if no source has drawn the bus since the last
-    /// [`retain`](Self::retain) that dropped it.
+    /// Bus `bus`'s scope. Before the first [`retain`](Self::retain) it is made when first
+    /// asked for. After one, only the buses the last `retain` kept have scopes: for any
+    /// other this returns a scope of its own, which nothing feeds and
+    /// [`buses`](Self::buses) doesn't list. A source built from settings that an edit
+    /// has since changed can then not bring back a scope the edit's `retain` dropped
+    /// (#701), and it is built again from the new settings anyway.
     pub fn bus(&self, bus: &BusId) -> Arc<AudioScope> {
         self.buses.get(bus)
     }
 
-    /// Source `source`'s scope, made now if no source has drawn it since the last
-    /// [`retain_sources`](Self::retain_sources) that dropped it.
+    /// Source `source`'s scope, kept and made as [`bus`](Self::bus) says, by
+    /// [`retain_sources`](Self::retain_sources).
     pub fn source(&self, source: &SourceId) -> Arc<AudioScope> {
         self.sources.get(source)
     }
@@ -231,29 +236,52 @@ impl AudioScopes {
 /// One scope per key (a bus or a source), behind a lock that only the control plane
 /// takes.
 #[derive(Debug)]
-struct Keyed<K>(Mutex<BTreeMap<K, Arc<AudioScope>>>);
+struct Keyed<K>(Mutex<KeyedScopes<K>>);
+
+#[derive(Debug)]
+struct KeyedScopes<K> {
+    scopes: BTreeMap<K, Arc<AudioScope>>,
+    /// The keys the last `retain` kept, `None` before the first. Once set, only these
+    /// have scopes: `get` makes none for another key, so a source built from settings
+    /// an edit has since changed can't bring back a scope that `retain` dropped.
+    drawn: Option<BTreeSet<K>>,
+}
 
 impl<K> Default for Keyed<K> {
     fn default() -> Self {
-        Self(Mutex::default())
+        Self(Mutex::new(KeyedScopes {
+            scopes: BTreeMap::new(),
+            drawn: None,
+        }))
     }
 }
 
 impl<K: Ord + Clone> Keyed<K> {
     fn get(&self, key: &K) -> Arc<AudioScope> {
-        Arc::clone(lock(&self.0).entry(key.clone()).or_default())
+        let mut keyed = lock(&self.0);
+        if keyed
+            .drawn
+            .as_ref()
+            .is_some_and(|drawn| !drawn.contains(key))
+        {
+            // Not drawn any more: a scope of its own, which nothing feeds.
+            return Arc::new(AudioScope::new());
+        }
+        Arc::clone(keyed.scopes.entry(key.clone()).or_default())
     }
 
     fn retain(&self, drawn: &BTreeSet<K>) {
-        let mut scopes = lock(&self.0);
-        scopes.retain(|key, _| drawn.contains(key));
+        let mut keyed = lock(&self.0);
+        keyed.scopes.retain(|key, _| drawn.contains(key));
         for key in drawn {
-            scopes.entry(key.clone()).or_default();
+            keyed.scopes.entry(key.clone()).or_default();
         }
+        keyed.drawn = Some(drawn.clone());
     }
 
     fn list(&self) -> Vec<(K, Arc<AudioScope>)> {
         lock(&self.0)
+            .scopes
             .iter()
             .map(|(key, scope)| (key.clone(), Arc::clone(scope)))
             .collect()
