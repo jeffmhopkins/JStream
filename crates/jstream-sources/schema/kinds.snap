@@ -115,6 +115,15 @@ source: crates/jstream-sources/tests/kinds.rs
         "label": "Custom CSS",
         "description": "CSS added to the page after it loads. The default makes the page's background transparent.",
         "live": true
+      },
+      {
+        "id": "local_network",
+        "type": "bool",
+        "default": false,
+        "label": "Allow local network",
+        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. A local file or a page on the local network may always.",
+        "advanced": true,
+        "live": false
       }
     ]
   },
