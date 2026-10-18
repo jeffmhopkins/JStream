@@ -93,7 +93,8 @@ pub struct Report {
     pub dropped_late_ticks: u64,
     pub dropped_ring_full: u64,
     pub frames_encoded: u64,
-    /// Producer submit to the consumer holding a finished frame.
+    /// From the tick thread starting frame `n` (before the producer records it) to the
+    /// consumer holding the finished frame.
     pub latency_ms: Summary,
     /// CPU time the tick thread spends per frame, waits included.
     pub tick_work_ms: Summary,

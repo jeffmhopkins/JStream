@@ -78,8 +78,10 @@ The `--sync` modes:
 the wait on its own command buffer, committed just before the submit's own. Its
 documentation calls that "best-effort under cross-CB GPU concurrency", because Metal may
 overlap command buffers that share no tracked resource. Strict mode makes every command
-buffer of the submit wait on the event, at the cost of one more wait and one more
-internal command buffer per submit.
+buffer of the submit wait on the event: one more `encodeWaitForEvent` at the start of each
+command buffer (wgpu-core's pending-writes and transit buffers included, so several per
+submit here), plus a relay signal on the internal wait buffer, which `event` already
+commits every frame. It adds no command buffer over `event`.
 
 <a id="run"></a>
 ## How to run it (macOS)
@@ -158,9 +160,11 @@ A mode **passes** when, in both runs at the load where `none` shows early reads:
 
 Then, in this order:
 
-1. **`event` passes:** the macOS backend uses shared events, staged with `add_wait_event`
-   and `add_signal_event`, the counterpart of S1's shared fence. ARCH › GPU pipeline
-   records it, with `event`'s `latency_ms.p95`.
+1. **`event` passes,** and either `completion` fails or `event`'s `latency_ms.p95` is at
+   most 2 ms worse than `completion`'s: the macOS backend uses shared events, staged with
+   `add_wait_event` and `add_signal_event`, the counterpart of S1's shared fence.
+   ARCH › GPU pipeline records it, with `event`'s `latency_ms.p95`. (If `event` passes but
+   is more than 2 ms worse than a passing `completion`, go to rule 3.)
 2. **`event` fails but `event-strict` passes:** shared events, with
    `enable_strict_event_sync` on the engine's queue.
 3. **Neither event mode passes but `completion` does:** command-buffer completion, with
@@ -169,8 +173,7 @@ Then, in this order:
    import, hand-over, or torn frames. The backend stays on CPU frames until a fix is
    found.
 
-If both event modes pass, `event` wins: it costs less. If `completion` passes and `event`
-passes too, `event` still wins, unless its `latency_ms.p95` is more than 2 ms worse.
+If both event modes pass, `event` wins: it costs less.
 
 <a id="risks"></a>
 ## Known risks and uncertainties

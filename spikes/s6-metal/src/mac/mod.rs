@@ -198,6 +198,7 @@ pub fn run(args: &Args, mode: Mode) -> Result<Report> {
         let end = started + Duration::from_secs_f64(args.seconds);
         let mut deadline = started;
         let mut n = 0u64;
+        let mut consumer_stopped = false;
         while Instant::now() < end {
             deadline += period;
             let now = Instant::now();
@@ -241,21 +242,31 @@ pub fn run(args: &Args, mode: Mode) -> Result<Report> {
             }
             let index = engine.queue.submit([cb]);
             tick_work.push(t0.elapsed().as_secs_f64() * 1000.0);
-            job_tx
-                .send(Job {
-                    n,
-                    slot,
-                    index,
-                    start: t0,
-                })
-                .context("the consumer stopped")?;
+            let job = Job {
+                n,
+                slot,
+                index,
+                start: t0,
+            };
+            if job_tx.send(job).is_err() {
+                // The consumer stopped early: join it below, so its own error is the one
+                // reported, not the closed channel.
+                consumer_stopped = true;
+                break;
+            }
             submitted += 1;
             n += 1;
         }
         drop(job_tx);
-        consumer
+        let checked = consumer
             .join()
-            .map_err(|_| crate::err::Error::msg("the consumer thread panicked"))?
+            .map_err(|_| crate::err::Error::msg("the consumer thread panicked"))??;
+        if consumer_stopped {
+            return Err(crate::err::Error::msg(
+                "the consumer stopped before the run ended, without an error",
+            ));
+        }
+        Ok(checked)
     })?;
     let measured = started.elapsed().as_secs_f64();
     let cpu = cpu_seconds() - cpu_start;
