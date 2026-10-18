@@ -18,7 +18,7 @@ use crate::mdct::{Mdct, WindowShape, Windows};
 use crate::psy::{self, AttackDetector, Layout};
 use crate::quant::{Channel, MAX_BANDS, Quantizer, Shape};
 use crate::tables::{SWB_LONG, SWB_SHORT};
-use crate::tns::Analyser;
+use crate::tns::{self, Analyser};
 use crate::{Config, Error, FRAME_LEN};
 
 /// Samples the encoder holds before it encodes a frame: the frame's 2048-sample window
@@ -503,16 +503,36 @@ impl Encoder {
             ch.tns = Default::default();
             return None;
         }
-        self.tns.apply(&mut ch.spec, frame, &mut ch.tns);
+        // Only windows whose envelope is uneven in time: on a stationary one TNS would
+        // spread the noise between tonal peaks.
+        let x = &self.input[c];
+        let mut gate = [false; 8];
+        if short {
+            for (w, g) in gate.iter_mut().enumerate() {
+                *g = tns::uneven(&x[448 + 128 * w..704 + 128 * w]);
+            }
+        } else {
+            gate[0] = tns::uneven(&x[..2048]);
+        }
+        let mut gain = [1.0; 8];
+        self.tns
+            .apply(&mut ch.spec, frame, &gate, &mut ch.tns, &mut gain);
         if !ch.tns.present(frame) {
             return None;
+        }
+        // The decoder's filter amplifies the residual's quantization noise, so the
+        // filtered bands are quantized against thresholds lowered by its gain.
+        let (bands, lines) = (frame.bands, frame.lines);
+        for (w, &g) in gain[..frame.windows].iter().enumerate() {
+            for b in self.tns.bands(frame) {
+                ch.thr[w * bands + b] /= g;
+            }
         }
         let layout = if short {
             &self.layout_short
         } else {
             &self.layout_long
         };
-        let (bands, lines) = (frame.bands, frame.lines);
         let mut pe = 0.0;
         for w in 0..frame.windows {
             let spec = &ch.spec[w * lines..(w + 1) * lines];

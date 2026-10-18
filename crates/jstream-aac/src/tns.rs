@@ -5,16 +5,23 @@
 //! J. D. Johnston, "Enhancing the performance of perceptual audio coders by using
 //! temporal noise shaping (TNS)", AES 101st Convention, 1996, preprint 4384).
 //!
-//! Per window, the lines from about 1.4 kHz up to the standard's `TNS_MAX_BANDS` limit
-//! are analysed: their autocorrelation, smoothed by a Gaussian lag window (Y. Tohkura,
-//! F. Itakura and S. Hashimoto, "Spectral smoothing technique in PARCOR speech
-//! analysis-synthesis", IEEE Trans. ASSP 26(6), 1978), gives the reflection coefficients
-//! through the Levinson-Durbin recursion (N. Levinson, 1947; J. Durbin, 1960). A filter
-//! is used only when its prediction gain clears [`MIN_GAIN`]. Its coefficients are
-//! quantized as the standard's decoder dequantizes them (`sin` of the index over its
-//! arcsine step, at 4-bit resolution), and the spectrum is filtered with the dequantized
-//! ones, so the decoder's all-pole filter inverts it exactly. One filter per window,
-//! upward in frequency.
+//! A window is tried only when its input's high-passed envelope is uneven in time
+//! ([`uneven`]): on a steady signal TNS has nothing to shape. Then the lines from about
+//! 1.4 kHz up to the standard's `TNS_MAX_BANDS` limit are analysed, each weighted by its
+//! band's RMS so loud bands don't rule the prediction: their autocorrelation, smoothed
+//! by a Gaussian lag window (Y. Tohkura, F. Itakura and S. Hashimoto, "Spectral smoothing
+//! technique in PARCOR speech analysis-synthesis", IEEE Trans. ASSP 26(6), 1978), gives
+//! the reflection coefficients through the Levinson-Durbin recursion (N. Levinson, 1947;
+//! J. Durbin, 1960). The coefficients are quantized as the standard's decoder
+//! dequantizes them (`sin` of the index over its arcsine step, at 4-bit resolution), and
+//! the spectrum is filtered with the dequantized ones, so the decoder's all-pole filter
+//! inverts it exactly. One filter per window, upward in frequency.
+//!
+//! The decoder's filter amplifies the residual's quantization noise by its power gain on
+//! white noise, which the encoder divides the filtered bands' thresholds by. A filter is
+//! kept only when its weighted prediction gain clears [`MIN_GAIN`] and the residual is
+//! smaller than the spectrum by at least that noise gain, so the residual costs no more
+//! bits than the spectrum at the same noise.
 
 use std::f32::consts::FRAC_PI_2;
 
@@ -25,9 +32,9 @@ use crate::quant::Shape;
 /// for short ones.
 pub(crate) const MAX_ORDER_LONG: usize = 12;
 pub(crate) const MAX_ORDER_SHORT: usize = 7;
-/// Below this prediction gain (about 1.5 dB) the filter's side information costs more
-/// than it shapes.
-pub(crate) const MIN_GAIN: f32 = 2.5;
+/// The weighted spectrum's prediction gain (about 4 dB) below which a filter isn't tried:
+/// its side information would cost more than it shapes.
+const MIN_GAIN: f32 = 2.5;
 /// Where the analysed range starts, in Hz: below it the ear's temporal resolution gives
 /// TNS little to do.
 const START_HZ: f64 = 1400.0;
@@ -35,6 +42,12 @@ const START_HZ: f64 = 1400.0;
 const RES_BITS: u32 = 4;
 /// The fewest lines a window's range may hold for a filter to be tried.
 const MIN_LINES: usize = 16;
+/// How uneven a window's high-passed envelope must be for a filter to be tried: its
+/// loudest block's energy over the mean block's. A stationary signal, tonal or not, sits
+/// near 1, and there TNS would only spread the noise it keeps between tonal peaks.
+const MIN_PEAK_TO_MEAN: f32 = 2.0;
+/// Blocks a window's samples are split into for that envelope.
+const ENVELOPE_BLOCKS: usize = 16;
 
 /// One window's filter: `order` 0 for none.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -109,6 +122,28 @@ fn coef_bits(compress: bool) -> u32 {
     RES_BITS - u32::from(compress)
 }
 
+/// Whether the envelope of `x`, a window's input samples, is uneven enough for TNS: the
+/// energy of its first difference (a high-pass that stresses the range TNS shapes) in
+/// [`ENVELOPE_BLOCKS`] blocks, the loudest at least [`MIN_PEAK_TO_MEAN`] times the mean.
+pub(crate) fn uneven(x: &[f32]) -> bool {
+    let len = x.len() / ENVELOPE_BLOCKS;
+    if len < 2 {
+        return false;
+    }
+    let mut peak = 0.0f64;
+    let mut sum = 0.0f64;
+    for block in x.chunks_exact(len) {
+        let e: f64 = block
+            .windows(2)
+            .map(|d| f64::from(d[1] - d[0]).powi(2))
+            .sum();
+        peak = peak.max(e);
+        sum += e;
+    }
+    let mean = sum / ENVELOPE_BLOCKS as f64;
+    mean > 0.0 && peak >= f64::from(MIN_PEAK_TO_MEAN) * mean
+}
+
 /// The arcsine quantizer's steps for positive and negative indices (14496-3 §4.6.9.3).
 fn steps() -> (f32, f32) {
     let half = (1u32 << (RES_BITS - 1)) as f32;
@@ -153,6 +188,26 @@ pub(crate) fn analysis_filter(x: &mut [f32], lpc: &[f32]) {
             e += a * x[i - j - 1];
         }
         x[i] = e;
+    }
+}
+
+/// The power gain on white noise of the decoder's all-pole filter `lpc` over `lines`
+/// lines: the energy of its impulse response.
+fn noise_gain(lpc: &[f32], lines: usize) -> f32 {
+    let mut h = [0.0f32; 1024];
+    let h = &mut h[..lines];
+    h[0] = 1.0;
+    synthesis_filter(h, lpc);
+    h.iter().map(|v| v * v).sum()
+}
+
+/// The decoder's all-pole filter, in place, as 14496-3 §4.6.9.3 runs it upward:
+/// `y[i] = x[i] - Σ a[j] y[i-j]`.
+fn synthesis_filter(y: &mut [f32], lpc: &[f32]) {
+    for i in 0..y.len() {
+        for (j, &a) in lpc.iter().enumerate().take(i) {
+            y[i] -= y[i - j - 1] * a;
+        }
     }
 }
 
@@ -230,9 +285,33 @@ impl Analyser {
         }
     }
 
-    /// Analyses each window of `frame` in `spec` and, where a filter pays, filters that
-    /// window's range in place and records the filter in `tns`; other windows get none.
-    pub(crate) fn apply(&self, spec: &mut [f32], frame: &Shape<'_>, tns: &mut Tns) {
+    /// The bands TNS covers in `frame`: from the first at or above [`START_HZ`] to the
+    /// standard's `TNS_MAX_BANDS` limit or `max_sfb`, whichever is lower.
+    pub(crate) fn bands(&self, frame: &Shape<'_>) -> std::ops::Range<usize> {
+        let (start, max) = if frame.windows == 1 {
+            (self.start_long, self.max_long)
+        } else {
+            (self.start_short, self.max_short)
+        };
+        let top = max.min(frame.bands);
+        start.min(top)..top
+    }
+
+    /// Analyses each window of `frame` in `spec` whose `gate` is set (see [`uneven`])
+    /// and, where a filter pays, filters that window's range in place and records the
+    /// filter in `tns`; other windows get none.
+    ///
+    /// `noise_gain` gets each window's power gain of the decoder's filter on white noise
+    /// (1 where there's none): the factor by which the quantization noise of the
+    /// filtered lines grows when the decoder undoes the filter.
+    pub(crate) fn apply(
+        &self,
+        spec: &mut [f32],
+        frame: &Shape<'_>,
+        gate: &[bool; 8],
+        tns: &mut Tns,
+        noise_gain: &mut [f32; 8],
+    ) {
         let long = frame.windows == 1;
         let (start, max, swb, max_order) = if long {
             (
@@ -254,30 +333,35 @@ impl Analyser {
         let lo = usize::from(frame.offsets[bottom]);
         let hi = usize::from(frame.offsets[top]);
         *tns = Tns::default();
-        for w in 0..frame.windows {
+        *noise_gain = [1.0; 8];
+        for w in (0..frame.windows).filter(|&w| gate[w]) {
             let base = w * frame.lines;
             // Each line weighted by its band's RMS, so loud bands don't rule the
             // prediction.
             let mut weight = [0.0f32; 49];
-            for b in bottom..top {
-                let range = base + usize::from(frame.offsets[b])..base + usize::from(frame.offsets[b + 1]);
+            for (g, edge) in weight[bottom..top]
+                .iter_mut()
+                .zip(frame.offsets[bottom..=top].windows(2))
+            {
+                let range = base + usize::from(edge[0])..base + usize::from(edge[1]);
                 let width = range.len() as f32;
                 let e: f32 = spec[range].iter().map(|v| v * v).sum();
-                weight[b] = if e > 0.0 { (width / e).sqrt() } else { 0.0 };
+                *g = if e > 0.0 { (width / e).sqrt() } else { 0.0 };
             }
             let x = &mut spec[base + lo..base + hi];
             let offsets = &frame.offsets[bottom..=top];
-            if let Some(f) = self.filter(x, offsets, &weight[bottom..top], max_order) {
+            if let Some((f, gain)) = self.filter(x, offsets, &weight[bottom..top], max_order) {
                 tns.filters[w] = Filter {
                     length: (swb - bottom) as u8,
                     ..f
                 };
+                noise_gain[w] = gain;
             }
         }
     }
 
-    /// The filter for one window's range `x`, applied to it, or `None` (and `x` as it
-    /// was) when none pays.
+    /// The filter for one window's range `x`, applied to it, with its noise gain (see
+    /// [`apply`](Self::apply)), or `None` (and `x` as it was) when none pays.
     ///
     /// `offsets` are the range's band edges and `weight` each band's weight for the
     /// analysis.
@@ -287,7 +371,7 @@ impl Analyser {
         offsets: &[u16],
         weight: &[f32],
         max_order: usize,
-    ) -> Option<Filter> {
+    ) -> Option<(Filter, f32)> {
         if x.len() < MIN_LINES.max(2 * max_order) {
             return None;
         }
@@ -343,28 +427,30 @@ impl Analyser {
         }
         let mut lpc = [0.0f32; MAX_ORDER_LONG];
         step_up(&kq[..order], &mut lpc);
-        analysis_filter(x, &lpc[..order]);
-        Some(f)
+        let lpc = &lpc[..order];
+        let gain = noise_gain(lpc, x.len());
+        let mut residual = [0.0f32; 1024];
+        let residual = &mut residual[..x.len()];
+        residual.copy_from_slice(x);
+        analysis_filter(residual, lpc);
+        let left: f64 = residual.iter().map(|v| f64::from(*v).powi(2)).sum();
+        if !(left > 0.0 && energy / left >= f64::from(gain)) {
+            return None;
+        }
+        x.copy_from_slice(residual);
+        Some((f, gain))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Analyser, MAX_ORDER_LONG, Tns, analysis_filter, dequantize, levinson, quantize, step_up,
+        Analyser, MAX_ORDER_LONG, Tns, analysis_filter, dequantize, levinson, noise_gain, quantize,
+        step_up, synthesis_filter,
     };
     use crate::bits::BitWriter;
     use crate::quant::Shape;
     use crate::tables::{SWB_LONG, SWB_SHORT};
-
-    /// The decoder's all-pole filter, as 14496-3 §4.6.9.3 runs it upward.
-    fn synthesis_filter(y: &mut [f32], lpc: &[f32]) {
-        for i in 0..y.len() {
-            for (j, &a) in lpc.iter().enumerate().take(i) {
-                y[i] -= y[i - j - 1] * a;
-            }
-        }
-    }
 
     #[test]
     fn coefficients_quantize_as_the_decoder_reads_them() {
@@ -375,8 +461,12 @@ mod tests {
         assert_eq!(quantize(0.999), 7);
         assert_eq!(quantize(-0.999), -8);
         // The decoder's step: (8 - 0.5) / (pi/2) for positive indices.
-        assert!((dequantize(1) - (1.0f32 / (7.5 / std::f32::consts::FRAC_PI_2)).sin()).abs() < 1e-7);
-        assert!((dequantize(-1) + (1.0f32 / (8.5 / std::f32::consts::FRAC_PI_2)).sin()).abs() < 1e-7);
+        assert!(
+            (dequantize(1) - (1.0f32 / (7.5 / std::f32::consts::FRAC_PI_2)).sin()).abs() < 1e-7
+        );
+        assert!(
+            (dequantize(-1) + (1.0f32 / (8.5 / std::f32::consts::FRAC_PI_2)).sin()).abs() < 1e-7
+        );
     }
 
     #[test]
@@ -393,9 +483,14 @@ mod tests {
     #[test]
     fn the_decoder_filter_inverts_the_analysis_filter() {
         let mut lpc = [0.0; MAX_ORDER_LONG];
-        let k: Vec<f32> = [3i8, -2, 5, 1, -7, 0, 2].iter().map(|&i| dequantize(i)).collect();
+        let k: Vec<f32> = [3i8, -2, 5, 1, -7, 0, 2]
+            .iter()
+            .map(|&i| dequantize(i))
+            .collect();
         step_up(&k, &mut lpc);
-        let x: Vec<f32> = (0..300).map(|i| ((i * 37 % 101) as f32 - 50.0) * 3.0).collect();
+        let x: Vec<f32> = (0..300)
+            .map(|i| ((i * 37 % 101) as f32 - 50.0) * 3.0)
+            .collect();
         let mut y = x.clone();
         analysis_filter(&mut y, &lpc[..k.len()]);
         assert_ne!(x, y);
@@ -414,6 +509,21 @@ mod tests {
         assert!((k[0] + 0.9).abs() < 1e-6, "{k:?}");
         assert!(k[1].abs() < 1e-6, "{k:?}");
         assert!((err - (1.0 - 0.81)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_noise_gain_is_the_inverse_filter_power_gain() {
+        // No filter passes noise unchanged.
+        assert_eq!(noise_gain(&[], 100), 1.0);
+        // y[n] = e[n] + 0.9 y[n-1]: an impulse response 0.9^n, of energy 1 / (1 - 0.81).
+        let g = noise_gain(&[-0.9], 400);
+        assert!((g - 1.0 / 0.19).abs() < 1e-3, "{g}");
+        // The prediction gain of that process is the same: what the predictor takes
+        // from the signal, the decoder's filter gives back to the noise.
+        let r: Vec<f32> = (0..2).map(|k| 0.9f32.powi(k)).collect();
+        let mut k = [0.0; 1];
+        let err = levinson(&r, &mut k).expect("stable");
+        assert!((r[0] / err - g).abs() < 1e-3);
     }
 
     fn long() -> Shape<'static> {
@@ -445,7 +555,7 @@ mod tests {
         let mut spec = click_spectrum();
         let before = spec.clone();
         let mut tns = Tns::default();
-        a.apply(&mut spec, &frame, &mut tns);
+        a.apply(&mut spec, &frame, &[true; 8], &mut tns, &mut [1.0; 8]);
         let f = tns.filters[0];
         assert!(f.order > 0, "{f:?}");
         assert!(tns.present(&frame));
@@ -453,28 +563,36 @@ mod tests {
         // 48 kHz), and filtered between.
         let lo = usize::from(SWB_LONG[49 - usize::from(f.length)]);
         let hi = usize::from(SWB_LONG[40]);
-        assert!((1400.0..2000.0).contains(&(lo as f64 * 24_000.0 / 1024.0)), "{lo}");
+        assert!(
+            (1400.0..2000.0).contains(&(lo as f64 * 24_000.0 / 1024.0)),
+            "{lo}"
+        );
         assert_eq!(&spec[..lo], &before[..lo]);
         assert_eq!(&spec[hi..], &before[hi..]);
         let e = |s: &[f32]| s.iter().map(|v| f64::from(*v).powi(2)).sum::<f64>();
-        assert!(e(&spec[lo..hi]) < 0.5 * e(&before[lo..hi]), "the residual is smaller");
+        assert!(
+            e(&spec[lo..hi]) < 0.5 * e(&before[lo..hi]),
+            "the residual is smaller"
+        );
 
         // White noise doesn't predict.
         let mut seed = 1u64;
         let mut noise: Vec<f32> = (0..1024)
             .map(|_| {
-                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 ((seed >> 33) as f32 / (1u64 << 31) as f32 - 0.5) * 1000.0
             })
             .collect();
         let kept = noise.clone();
-        a.apply(&mut noise, &frame, &mut tns);
+        a.apply(&mut noise, &frame, &[true; 8], &mut tns, &mut [1.0; 8]);
         assert!(!tns.present(&frame));
         assert_eq!(noise, kept);
 
         // Silence neither.
         let mut silence = vec![0.0; 1024];
-        a.apply(&mut silence, &frame, &mut tns);
+        a.apply(&mut silence, &frame, &[true; 8], &mut tns, &mut [1.0; 8]);
         assert!(!tns.present(&frame));
     }
 
@@ -488,7 +606,7 @@ mod tests {
         let mut spec = click_spectrum();
         let before = spec.clone();
         let mut tns = Tns::default();
-        a.apply(&mut spec, &frame, &mut tns);
+        a.apply(&mut spec, &frame, &[true; 8], &mut tns, &mut [1.0; 8]);
         assert!(tns.present(&frame));
         let hi = usize::from(SWB_LONG[30]);
         assert_eq!(&spec[hi..], &before[hi..]);
@@ -510,22 +628,24 @@ mod tests {
             for w in 0..frame.windows {
                 let n = 2.0 * frame.lines as f64;
                 let n0 = (n / 2.0 + 1.0) / 2.0;
-                // Clicks in every other window; the rest silent.
+                // Clicks in every other window, three quarters of the way through it;
+                // the rest silent.
                 if w % 2 == 0 {
+                    let at = 0.73 * n;
                     for k in 0..frame.lines {
                         spec[w * frame.lines + k] = (1000.0
-                            * (2.0 * std::f64::consts::PI / n * (100.0 + n0) * (k as f64 + 0.5))
-                                .cos()) as f32;
+                            * (2.0 * std::f64::consts::PI / n * (at + n0) * (k as f64 + 0.5)).cos())
+                            as f32;
                     }
                 }
             }
             let mut tns = Tns::default();
-            a.apply(&mut spec, &frame, &mut tns);
+            a.apply(&mut spec, &frame, &[true; 8], &mut tns, &mut [1.0; 8]);
             assert!(tns.present(&frame), "{frame:?}");
             let mut out = Vec::new();
             let mut w = BitWriter::new(&mut out);
             tns.write(&mut w, &frame);
-            assert_eq!(w.finish() as u32, tns.bits(&frame), "{frame:?}");
+            assert_eq!(w.bits() as u32, tns.bits(&frame), "{frame:?}");
         }
     }
 }
