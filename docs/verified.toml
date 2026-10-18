@@ -3549,7 +3549,7 @@ stamp = { hash = "b3:0c768a21be15de21" }
 stamp = { hash = "b3:3adcff769a347c8c" }
 
 ["CRATE-jstream-ui#build"."body"]
-stamp = { hash = "b3:d5d04df86b3b2eb8", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: added the pointer to CI's ui-e2e job and tests/e2e/README.md; trunk build steps unchanged and still what CI runs" }
+stamp = { hash = "b3:cb355e96baf13697", by = "agent:claude", note = "Build now says a debug trunk build uses the ui-dev profile through index.html's data-cargo-profile-dev (dev, debug = false, strip = symbols), why (78 MiB over the server's 64 MiB file cap, #674), that it's about 8 MiB stripped (measured 8,609,124 bytes with trunk 0.21.14 and wasm-bindgen 0.2.129), what a panic still shows, and that release keeps its profile." }
 
 ["CRATE-jstream-ui#build"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -3561,7 +3561,7 @@ stamp = { hash = "b3:3629d078a0c82378", by = "agent:claude@session_016SaCkMFyjjx
 stamp = { hash = "b3:f87a888e55181fde" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/index.html"]
-stamp = { hash = "b3:8547ab2b9342942f" }
+stamp = { hash = "b3:68005f7e328eef0e", by = "agent:claude", note = "Build now says a debug trunk build uses the ui-dev profile through index.html's data-cargo-profile-dev (dev, debug = false, strip = symbols), why (78 MiB over the server's 64 MiB file cap, #674), that it's about 8 MiB stripped (measured 8,609,124 bytes with trunk 0.21.14 and wasm-bindgen 0.2.129), what a panic still shows, and that release keeps its profile." }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -3591,7 +3591,7 @@ stamp = { hash = "b3:ee23c35acad1943b", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:a5bc9e2aa68dc1d5", by = "agent:claude-ui-features", note = "Whole PR against wave/m1-3: rewrote the intro (group.rs added; model.rs lays out), 'Selecting and dragging' (Shift-click add/remove, marquee from canvas or margin, Ctrl+A, double click shows the Inspector, pointer followed over .canvas-view via client coordinates; the canvas tools stop pointerdown and dblclick so neither reaches the canvas), arrow nudges of every selected box, added 'Several selected' (group.rs: dashed box 4px out, knob at 42px, readout 12px below via group_readout_text, scale from the far side keeping aspect unless Ctrl, down to MIN_GROUP_SIZE 20, a corner by the larger change, rotate about the bounds centre with 45-degree Ctrl steps, group move snapping its bounds via snap_bounds unless rotated) and 'Crop' (not built: needs source.sizes). Undoable edits: model::set_geometry is one batch with an item.set_geometry per item; Awaiting counts in-flight commits; mod.rs's show() replaces only a gesture's own items so a nudge in flight stays drawn; a failed commit now drops its own geometries unless a later gesture replaced them (N5), as the new sentence says. transform.rs only made with_box pub(crate); snap.rs gained Bounds::around/meets and snap_bounds. The wave merge (studio mode, #304) touched none of these files." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:a87732dd25dfc280", by = "agent:claude-ui-features", note = "Whole PR against wave/m1-3: the Selection bullet is rewritten for store.rs's Selection.also (primary item plus others, with_items/toggled, reconcile promoting the next item) and sources.rs highlighting every selected row with Shift-click toggling. Canvas files (mod.rs with multi-select, marquee, group gestures, the tools' dblclick stop, per-item preview and dropping a failed commit's geometries; group.rs; model.rs; snap.rs; transform.rs) are described in #canvas, and nothing here names them beyond the Selection bullet. style.css from this PR: only .stage-overlay overflow: visible. Merge of wave/m1-3 (#304): the body adds the Studio mode bullet and six panels with Transitions in the Workspace bullet, and style.css adds the .studio, .preset and .inline-label rules, all through classes, so the Styles/CSP bullet (no inline style, font-src self) still holds." }
+stamp = { hash = "b3:14c66d91852e67b9", by = "agent:claude", note = "The debug bundle size point now says AnyView alone stopped being enough (#674) and that the debug build uses the ui-dev profile (data-cargo-profile-dev), which strips the symbols, so _bg.wasm has no name section. Checked against the Cargo.toml profile and index.html." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:1f6c1a2b931de119", by = "agent:mock-organise-387", note = "re-read against the control README's mock change (folder, label and metadata edits): the UI's native tests against MockEngine send none of them and the section claims nothing about them; holds | merge: re-read after merging wave/m1-3 (#317 E2b privacy screen): it adds privacy.set/privacy.get/privacy.changed to the mock and engine, a Privacy bullet and Privacy screen section to core, and privacy tests in mock.rs and tests.rs; the UI section claims nothing about the mock's privacy or organisation support; holds" }
@@ -4614,7 +4614,7 @@ stamp = { hash = "b3:8cea4845a5663521", by = "agent:claude@session_016SaCkMFyjjx
 stamp = { hash = "b3:dc623b3c08b50bb9", by = "agent:claude-ui-features", note = "This PR: WS-04's note mentions the canvas tools' two stroke icons; status stays partial; style.css adds .stage-overlay overflow: visible so group handles and readout show past the frame, no palette or shared-control change. Merge of wave/m1-3 (#304): style.css adds the studio panel's .studio, .preset and .inline-label rules using the existing --muted, --line, --accent, --bg and --text variables plus program-red #d92d20, with no new shared control or font, so WS-01 to WS-08 statuses hold." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/index.html"]
-stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude-ui-features", note = "style.css: 7 colour variables under color-scheme light dark with a prefers-color-scheme dark block and system-ui font, so WS-01/WS-03 to build and WS-08's bottom-right Dismiss box hold; index.html: only the Trunk css and rust links, no font link, matching WS-02 waiting on bundling Plex." }
+stamp = { hash = "b3:68005f7e328eef0e", by = "agent:claude", note = "Re-read against index.html's change, which only adds data-cargo-profile-dev to the rust link. That's a build setting; the palette, fonts, scrollbar, icon and control rows are unaffected." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:4b2f83164c17de9b", by = "agent:claude-ui-features", note = "This PR: WS-04's note mentions the canvas tools' two stroke icons; status stays partial; style.css adds .stage-overlay overflow: visible so group handles and readout show past the frame, no palette or shared-control change. Merge of wave/m1-3 (#304): style.css adds the studio panel's .studio, .preset and .inline-label rules using the existing --muted, --line, --accent, --bg and --text variables plus program-red #d92d20, with no new shared control or font, so WS-01 to WS-08 statuses hold." }
