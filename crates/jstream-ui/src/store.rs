@@ -117,16 +117,56 @@ impl Collection {
     }
 }
 
-/// What is selected: a scene being edited, and an item in it.
+/// What is selected: a scene being edited, and items in it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Selection {
     /// The scene the sources list and the canvas show.
     pub scene: Option<SceneId>,
-    /// The item the properties form edits. Always an item of `scene`.
+    /// The primary item: the one the properties form edits. Always an item of `scene`.
     pub item: Option<ItemId>,
+    /// The other selected items, which the canvas moves, scales and rotates with the
+    /// primary one. Items of `scene`, without `item`, and empty when `item` is `None`.
+    pub also: Vec<ItemId>,
 }
 
 impl Selection {
+    /// Whether `item_id` is selected, as the primary item or another.
+    pub fn contains(&self, item_id: &ItemId) -> bool {
+        self.item.as_ref() == Some(item_id) || self.also.contains(item_id)
+    }
+
+    /// Every selected item, the primary one first.
+    pub fn items(&self) -> impl Iterator<Item = &ItemId> {
+        self.item.iter().chain(&self.also)
+    }
+
+    /// The selection with `items` selected in the same scene: the first is the primary
+    /// one. Duplicates are dropped.
+    pub fn with_items(&self, items: impl IntoIterator<Item = ItemId>) -> Selection {
+        let mut all: Vec<ItemId> = Vec::new();
+        for id in items {
+            if !all.contains(&id) {
+                all.push(id);
+            }
+        }
+        let mut all = all.into_iter();
+        Selection {
+            scene: self.scene.clone(),
+            item: all.next(),
+            also: all.collect(),
+        }
+    }
+
+    /// The selection with `item_id` added, as the new primary item, or removed if it
+    /// was selected; removing the primary item makes the next one primary.
+    pub fn toggled(&self, item_id: &ItemId) -> Selection {
+        if self.contains(item_id) {
+            self.with_items(self.items().filter(|id| *id != item_id).cloned())
+        } else {
+            self.with_items(std::iter::once(item_id.clone()).chain(self.items().cloned()))
+        }
+    }
+
     /// The selection after the state or the program scene changed: the scene is kept
     /// while it exists, else falls back to the program scene, else to the first listed
     /// scene; the item is kept while it is still in that scene.
@@ -143,11 +183,16 @@ impl Selection {
                     .next()
                     .map(|s| s.scene_id.clone())
             });
-        let item = self.item.clone().filter(|item_id| {
-            let in_scene = collection.item(item_id).map(|(s, _)| &s.scene_id);
-            in_scene.is_some() && in_scene == scene.as_ref()
-        });
-        Selection { scene, item }
+        let in_scene = |item_id: &&ItemId| {
+            let found = collection.item(item_id).map(|(s, _)| &s.scene_id);
+            found.is_some() && found == scene.as_ref()
+        };
+        let kept: Vec<ItemId> = self.items().filter(in_scene).cloned().collect();
+        Selection {
+            scene,
+            ..Selection::default()
+        }
+        .with_items(kept)
     }
 }
 
@@ -359,13 +404,27 @@ impl Studio {
     pub fn select_scene(&self, scene_id: SceneId) {
         self.selection.set(Selection {
             scene: Some(scene_id),
-            item: None,
+            ..Selection::default()
         });
     }
 
-    /// Selects an item of the selected scene, or none.
+    /// Selects one item of the selected scene alone, or none.
     pub fn select_item(&self, item_id: Option<ItemId>) {
-        self.selection.update(|s| s.item = item_id);
+        self.select_items(item_id);
+    }
+
+    /// Selects these items of the selected scene, the first as the primary one.
+    pub fn select_items(&self, items: impl IntoIterator<Item = ItemId>) {
+        let next = self.selection.with_untracked(|s| s.with_items(items));
+        if self.selection.with_untracked(|s| *s != next) {
+            self.selection.set(next);
+        }
+    }
+
+    /// Adds an item to the selection, or removes it if it was selected.
+    pub fn toggle_item(&self, item_id: &ItemId) {
+        let next = self.selection.with_untracked(|s| s.toggled(item_id));
+        self.selection.set(next);
     }
 
     /// A new ID with this prefix, unused in the current collection.
@@ -649,20 +708,50 @@ mod tests {
         let kept = Selection {
             scene: Some(SceneId::new("a")),
             item: Some(ItemId::new("i2")),
+            also: vec![ItemId::new("i1")],
         };
         assert_eq!(kept.reconcile(&c, Some(&b)), kept);
         let gone = Selection {
             scene: Some(SceneId::new("deleted")),
             item: Some(ItemId::new("i2")),
+            also: Vec::new(),
         };
         assert_eq!(
             gone.reconcile(&c, Some(&b)),
             Selection {
-                scene: Some(b),
-                item: None
+                scene: Some(b.clone()),
+                ..Selection::default()
             },
             "an item outside the selected scene is dropped"
         );
+        let moved = Selection {
+            scene: Some(b.clone()),
+            item: Some(ItemId::new("i2")),
+            also: vec![ItemId::new("i3")],
+        };
+        assert_eq!(
+            moved.reconcile(&c, None),
+            Selection {
+                scene: Some(b),
+                item: Some(ItemId::new("i3")),
+                also: Vec::new(),
+            },
+            "the next selected item in the scene becomes the primary one"
+        );
+    }
+
+    #[test]
+    fn items_are_added_and_removed() {
+        let one = Selection::default().with_items([ItemId::new("i1")]);
+        let two = one.toggled(&ItemId::new("i2"));
+        assert_eq!(two.item, Some(ItemId::new("i2")));
+        assert_eq!(two.also, vec![ItemId::new("i1")]);
+        assert!(two.contains(&ItemId::new("i1")) && two.contains(&ItemId::new("i2")));
+        let back = two.toggled(&ItemId::new("i2"));
+        assert_eq!(back, one, "removing the primary item promotes the next");
+        assert_eq!(back.toggled(&ItemId::new("i1")), Selection::default());
+        let dup = Selection::default().with_items(["a", "b", "a"].map(ItemId::new));
+        assert_eq!(dup.items().count(), 2);
     }
 
     #[test]
