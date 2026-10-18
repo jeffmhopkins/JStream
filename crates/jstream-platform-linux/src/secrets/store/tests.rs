@@ -141,6 +141,63 @@ fn without_a_keyring_secrets_go_to_a_private_file() {
     assert!(StreamKeyStore::set(&store, "", &Secret::new("k")).is_err());
 }
 
+/// Clones of one store take turns, so writing from several threads at once loses
+/// nothing; and separate stores on one file never remove each other's temporary file,
+/// so each of their writes succeeds (#634 review N4).
+#[test]
+fn clones_take_turns_and_separate_stores_never_collide() {
+    let scratch = scratch("turns");
+    let dir = scratch.0.join("jstream");
+    let unreachable = Arc::new(Mutex::new(false));
+    let keys = store(&dir, &Memory::default(), &unreachable);
+    let tokens = keys.clone();
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            for i in 0..50 {
+                StreamKeyStore::set(&keys, &format!("out_{i}"), &Secret::new("k")).expect("set");
+            }
+        });
+        s.spawn(|| {
+            for i in 0..50 {
+                OAuthTokenStore::set(&tokens, &format!("out_{i}"), &Secret::new("t"))
+                    .expect("set token");
+            }
+        });
+    });
+    for i in 0..50 {
+        let id = format!("out_{i}");
+        assert!(
+            StreamKeyStore::is_set(&keys, &id).expect("is_set"),
+            "{id}'s key"
+        );
+        assert!(
+            OAuthTokenStore::is_set(&keys, &id).expect("is_set"),
+            "{id}'s token"
+        );
+    }
+
+    let other = store(&dir, &Memory::default(), &unreachable);
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            for i in 0..50 {
+                StreamKeyStore::set(&keys, &format!("a_{i}"), &Secret::new("k")).expect("set");
+            }
+        });
+        s.spawn(|| {
+            for i in 0..50 {
+                StreamKeyStore::set(&other, &format!("b_{i}"), &Secret::new("k"))
+                    .expect("a separate store's write succeeds");
+            }
+        });
+    });
+    let leftovers: Vec<_> = fs::read_dir(&dir)
+        .expect("the folder")
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+        .collect();
+    assert!(leftovers.is_empty(), "no temporary file left behind");
+}
+
 #[test]
 fn a_file_others_can_read_is_refused_and_not_repaired() {
     let scratch = scratch("perms");

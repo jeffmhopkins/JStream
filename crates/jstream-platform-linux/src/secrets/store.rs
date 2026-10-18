@@ -5,7 +5,8 @@ use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use jstream_platform::{OAuthTokenStore, PlatformError, Secret, StreamKeyStore};
@@ -31,16 +32,20 @@ const PROMPT_WAIT: Duration = Duration::from_secs(300);
 /// Every call opens the session bus and a Secret Service session, so a keyring that
 /// starts later is used from the next call on, and the file's secrets move into it then.
 /// A call may block while the keyring's unlock prompt is open, up to five minutes. Calls
-/// in one process take turns; the file is replaced by renaming, so a reader in another
-/// process never sees half of it.
+/// on one store and its clones take turns, so a host makes one and clones it for each
+/// trait it serves (the stream keys and the OAuth tokens). Separate stores on one file
+/// don't take turns: each update replaces the whole file, so the last one wins. The file
+/// is replaced by renaming, so a reader never sees half of it.
 ///
 /// Secrets read come back as [`Secret`]s, zeroed on drop. The D-Bus client zeroes the
 /// messages it encodes and decodes; copies made by the kernel, the keyring and buffers
 /// that grew are not reached, as with the other platforms' stores.
+#[derive(Clone)]
 pub struct LinuxSecrets {
     file: PathBuf,
-    lock: Mutex<()>,
-    connect: Box<Connect>,
+    /// Shared with the clones, so their calls take turns too.
+    lock: Arc<Mutex<()>>,
+    connect: Arc<Connect>,
 }
 
 /// Opens the keyring for one call: `None` when no Secret Service is reachable.
@@ -69,8 +74,8 @@ impl LinuxSecrets {
     ) -> Self {
         Self {
             file: config_dir.join(FILE_NAME),
-            lock: Mutex::new(()),
-            connect: Box::new(connect),
+            lock: Arc::new(Mutex::new(())),
+            connect: Arc::new(connect),
         }
     }
 
@@ -315,10 +320,13 @@ fn save(path: &Path, contents: &Contents) -> Result<(), PlatformError> {
         .mode(0o700)
         .create(dir)
         .map_err(|e| file_error(CALL, dir, &e))?;
-    // A name of this process's own, so two processes writing at once don't remove
-    // each other's temporary file; the last rename wins.
+    // A name of this write's own (the process and a count), so two processes, or two
+    // stores in one, writing at once don't remove each other's temporary file; the
+    // last rename wins.
+    static WRITES: AtomicU64 = AtomicU64::new(0);
+    let write = WRITES.fetch_add(1, Ordering::Relaxed);
     let mut tmp = path.as_os_str().to_owned();
-    tmp.push(format!(".{}.tmp", std::process::id()));
+    tmp.push(format!(".{}.{write}.tmp", std::process::id()));
     let tmp = PathBuf::from(tmp);
     match fs::remove_file(&tmp) {
         Ok(()) => {}

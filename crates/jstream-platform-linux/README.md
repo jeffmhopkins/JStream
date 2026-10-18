@@ -84,8 +84,11 @@ It has:
   prompt fails the call. **Only when no Secret Service is reachable** (no session bus,
   or the bus has no `org.freedesktop.secrets` and can't start one) do secrets go to the
   fallback file, `secrets` in `$XDG_CONFIG_HOME/jstream` (`LinuxSecrets::config_dir`).
-  The file is plaintext, one secret per line, written to a fresh `0600` file and renamed
-  into place, in a folder created `0700` (an existing folder is left as it is). It is
+  The file is plaintext, one secret per line, written to a fresh `0600` file (named for
+  the process and the write) and renamed into place, in a folder created `0700` (an
+  existing folder is left as it is). Calls on one store and its clones take turns, so a
+  host clones one store for both traits; separate stores on one file don't, and the
+  last update wins. It is
   read only when it is a regular file the user owns that nobody else can read or write,
   and refused, never repaired, otherwise. A keyring that refuses, is locked or fails is
   an error, never a reason to use the file. A secret cleared while no keyring is
@@ -194,8 +197,9 @@ platform-independent. The Linux ones (the clock, loading libc through the loader
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes) pass with or without those libraries installed and need no GPU, session
 or daemon. The secret store's names, file format and Secret Service messages are
-platform-independent; its file handling, refusals and moves into the keyring are
-tested on Linux against a keyring in memory. The OpenH264 tests use a fake download and a fake encoder behind the
+platform-independent; its file handling, refusals, moves into the keyring and concurrent
+writes (clones taking turns, separate stores never colliding) are tested on Linux
+against a keyring in memory. The OpenH264 tests use a fake download and a fake encoder behind the
 library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
