@@ -14,8 +14,9 @@
 // `uv_bounds` (u_min, v_min, u_max, v_max) clamps a fringe pixel's texture coordinate to
 // the content, so it never samples a cropped-away texel or one `fill` clips. A 2D item's
 // bounds never clamp. The sample takes the clamped coordinate's own derivatives, which
-// differ from the unclamped one's only at fringe pixels (coverage under a half), where
-// they pick a finer level. `textureSampleGrad` with the unclamped derivatives would keep
+// differ from the unclamped one's only at fringe pixels (coverage under a half) and their
+// quad neighbours along the edge, since derivatives are taken across a 2x2 quad: about one
+// row of pixels along a 3D item's edge, where they pick a finer level. `textureSampleGrad` with the unclamped derivatives would keep
 // the fringe's level too, but lavapipe filters explicit gradients isotropically: scenario
 // C measured 18 with it, as with no anisotropy, against 6.2 this way.
 //
