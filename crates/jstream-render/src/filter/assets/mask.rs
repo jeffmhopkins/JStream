@@ -27,7 +27,7 @@ pub(super) const IMAGE_KIND: &str = "image_mask";
 pub(super) const SCENE_KIND: &str = "scene_mask";
 
 /// Image types a mask asset may be; the runtime decodes them.
-const IMAGE_TYPES: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
+const IMAGE_TYPES: [&str; 5] = ["png", "jpg", "jpeg", "webp", "gif"];
 
 const SHADER: Shader = Shader {
     label: "assets-mask",

@@ -38,6 +38,7 @@ use jstream_render::{
 use jstream_sources::CaptureSpec;
 
 use crate::chain::{Chain, Chains};
+use crate::filter_assets::FilterAssets;
 use crate::lock;
 use crate::runtime::RenderSnapshot;
 use crate::transition::{self, From, Planned, Running, Visual};
@@ -368,6 +369,12 @@ impl Shot {
         self.chains.len()
     }
 
+    /// The video chain of `source_id` in this shot, for tests.
+    #[cfg(test)]
+    pub(crate) fn chain(&self, source_id: &SourceId) -> Option<&Chain> {
+        self.chains.get(source_id)
+    }
+
     /// How many tracks the running transition draws, or `None` without one, for tests.
     #[cfg(test)]
     pub(crate) fn transition_tracks(&self) -> Option<usize> {
@@ -399,9 +406,13 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
         .scenes()
         .first()
         .map(|scene| scene.id().clone());
-    plan_with(graph, first.as_ref(), None, &mut |id| {
-        frames.get(id).map(|f| Look::Frame(f.clone(), None))
-    })
+    plan_with(
+        graph,
+        first.as_ref(),
+        None,
+        &mut |id| frames.get(id).map(|f| Look::Frame(f.clone(), None)),
+        &FilterAssets::default(),
+    )
     .shot
 }
 
@@ -421,7 +432,8 @@ pub(crate) struct Planning {
 /// Copies the program scene `program` (ADR-0030), the scene each `scene` video mix
 /// shows, and the scenes they nest out of `graph`, and schedules them, asking `look`
 /// what each source an item they reach places shows: its frame and when that frame is
-/// next replaced, or what the pipeline captures for it.
+/// next replaced, or what the pipeline captures for it. A video filter that reads an
+/// asset gets it from `assets`, the ones loaded now.
 ///
 /// With a `running` transition (ADR-0029) toward `program` that has not ended at `now`,
 /// the shot draws the transition instead of the program scene: its tracks, planned from
@@ -432,6 +444,7 @@ pub(crate) fn plan_with(
     program: Option<&SceneId>,
     running: Option<(&Running, MediaTime)>,
     look: &mut LookUp<'_>,
+    assets: &FilterAssets,
 ) -> Planning {
     let state = graph.state();
     let program = program.cloned();
@@ -443,6 +456,7 @@ pub(crate) fn plan_with(
     let mut planner = Planner {
         state,
         look,
+        assets,
         wake: None,
     };
     let mut finished = running.is_some();
@@ -537,6 +551,7 @@ pub(crate) fn on_screen(
     running: &Running,
     now: MediaTime,
     look: &mut LookUp<'_>,
+    assets: &FilterAssets,
 ) -> Vec<Visual> {
     let state = graph.state();
     let mut shot = Shot {
@@ -546,6 +561,7 @@ pub(crate) fn on_screen(
     let mut planner = Planner {
         state,
         look,
+        assets,
         wake: None,
     };
     let planned = planner.transition(running, &mut shot);
@@ -633,6 +649,8 @@ pub(crate) type LookUp<'a> = dyn FnMut(&SourceId) -> Option<Look> + 'a;
 struct Planner<'a, 'f> {
     state: &'a State,
     look: &'f mut LookUp<'f>,
+    /// The assets loaded for video filters.
+    assets: &'a FilterAssets,
     /// The earliest time a frame in the shot is replaced.
     wake: Option<MediaTime>,
 }
@@ -828,7 +846,7 @@ impl Planner<'_, '_> {
         if out.chains.contains_key(id) {
             return Some(SourceRef::Filtered(id.clone()));
         }
-        match Chain::of(source, key(&image)) {
+        match Chain::of(source, key(&image), self.assets) {
             Some(chain) => {
                 out.chains.insert(id.clone(), chain);
                 Some(SourceRef::Filtered(id.clone()))
@@ -2276,12 +2294,18 @@ pub(crate) mod tests {
             )
             .expect("edits");
         let second = CaptureSpec::Display(Some("monitor:2".into()));
-        let shot = super::plan_with(&graph, Some(&SceneId::new("main")), None, &mut |id| {
-            Some(super::Look::Capture(match id.as_str() {
-                "second" => second.clone(),
-                _ => CaptureSpec::Display(None),
-            }))
-        })
+        let shot = super::plan_with(
+            &graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(super::Look::Capture(match id.as_str() {
+                    "second" => second.clone(),
+                    _ => CaptureSpec::Display(None),
+                }))
+            },
+            &crate::filter_assets::FilterAssets::default(),
+        )
         .shot;
         assert_eq!(
             shot.captures(),
