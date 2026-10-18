@@ -1948,12 +1948,15 @@ mod tests {
             )
         };
         let rules = format!(
-            "<!-- @doc\nid = \"R\"\nkind = \"normative\"\nstatus = \"active\"\n-->\n{}{}{}{}{}",
+            "<!-- @doc\nid = \"R\"\nkind = \"normative\"\nstatus = \"active\"\n-->\n{}{}{}{}{}{}{}",
             rule("R-X-001", "jstream_a::tests::works"),
             rule("R-X-002", "jstream_a::tests"),
             rule("R-X-003", "jstream_a::works"),
             rule("R-X-004", "jstream_planned::anything"),
             rule("R-X-005", "jstream_typo::works"),
+            // An existing crate is named by its package, not its directory (review N2).
+            rule("R-X-006", "jstream_b_dir::works"),
+            rule("R-X-007", "jstream_b_pkg::works"),
         );
         let arch = "<!-- @doc\nid = \"ARCH\"\nstatus = \"active\"\n-->\n<a id=\"crate-map\"></a>\n## Crates\n<!-- @section\ncovers = [\"crates/**\"]\n-->\n`jstream-a` and `jstream-planned`.\n";
         let mut files = REGISTRIES.to_vec();
@@ -1968,10 +1971,22 @@ mod tests {
                 "crates/jstream-a/src/lib.rs",
                 "//! Docs: docs/ARCHITECTURE.md#crate-map\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn works() {}\n}\n",
             ),
+            (
+                "crates/jstream-b-dir/Cargo.toml",
+                "[package]\nname = \"jstream-b-pkg\"\n",
+            ),
+            (
+                "crates/jstream-b-dir/src/lib.rs",
+                "//! Docs: docs/ARCHITECTURE.md#crate-map\n#[test]\nfn works() {}\n",
+            ),
         ]);
         let f = Fixture::new("test-entries", &files);
         let bad = f.diags("`enforced_by` entry `test:");
-        assert_eq!(bad.len(), 2, "{bad:?}");
+        assert_eq!(bad.len(), 3, "{bad:?}");
+        assert!(
+            bad[2].contains("R-X-006") && bad[2].contains("`jstream_b_dir`"),
+            "{bad:?}"
+        );
         assert!(
             bad[0].contains("R-X-003") && bad[0].contains("names no test"),
             "{bad:?}"
