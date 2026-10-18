@@ -246,6 +246,18 @@
       }
     },
     {
+      "id": "screen",
+      "name": "Screen",
+      "kind": {
+        "type": "builtin",
+        "kind": "display"
+      },
+      "kind_version": 1,
+      "settings": {
+        "target": ""
+      }
+    },
+    {
       "id": "z_base",
       "name": "z_base",
       "kind": {
@@ -392,6 +404,21 @@
     }
   ],
   "sends": [
+    {
+      "source_id": "aux",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "cam",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "cam_copy",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
     {
       "source_id": "desk",
       "bus_id": "master",

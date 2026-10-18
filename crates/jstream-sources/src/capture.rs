@@ -4,6 +4,11 @@
 //! `webcam`, its video-device backend) delivers them, on its own thread, to the engine's
 //! render thread, as CPU frames or as textures shared with the compositor. A capture source only says what to capture
 //! ([`Source::capture`]); the engine starts and reads the capture.
+//!
+//! A `webcam` source has audio too (ADR-0031: a video capture device comes with its
+//! paired audio stream): the input the platform pairs with its device, a webcam's
+//! microphone or a capture card's HDMI audio. The engine records it as it records an
+//! audio input ([`webcam_device`] says which device's pair).
 
 use crate::describe::{kind, param};
 use crate::source::{changed_non_live, setting};
@@ -15,6 +20,26 @@ use std::sync::Arc;
 
 /// The longest `target` setting, in characters. A Windows target ID is under 300.
 const MAX_TARGET: u32 = 1024;
+
+/// The `webcam` kind's ID.
+const WEBCAM: &str = "webcam";
+
+/// The video device a source of `kind_id` with these settings captures, whose paired
+/// audio input is the source's sound: `Some(Some(id))` for the device with that ID,
+/// `Some(None)` for the first device the platform lists, and `None` when `kind_id` is
+/// not `webcam`. Settings are complete, as the graph stores them; a missing or mistyped
+/// `device` reads as its default, the first device.
+pub fn webcam_device(kind_id: &str, settings: &Settings) -> Option<Option<String>> {
+    if kind_id != WEBCAM {
+        return None;
+    }
+    let device = settings
+        .get("device")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .trim();
+    Some((!device.is_empty()).then(|| device.to_owned()))
+}
 
 /// What a capture source shows.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -59,7 +84,7 @@ impl CaptureKind {
     /// The `webcam` kind: a webcam or capture card. An empty `device` captures the
     /// first device the platform lists.
     pub(crate) fn webcam() -> Self {
-        Self::new("webcam", "Webcam", Flavor::Device)
+        Self::new(WEBCAM, "Webcam", Flavor::Device)
     }
 
     fn new(id: &str, name: &str, flavor: Flavor) -> Self {
@@ -91,7 +116,8 @@ impl CaptureKind {
         Self {
             descriptor: KindDescriptor {
                 params: vec![target],
-                ..kind(id, name, true, false)
+                // A webcam's paired audio is its sound; a display or window has none.
+                ..kind(id, name, true, flavor == Flavor::Device)
             },
             flavor,
         }

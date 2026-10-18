@@ -125,8 +125,10 @@ state machine. Contents:
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
   turned off; one for each running source with audio of its own whose audio is on, a
-  `browser` page's; and one for each live source with sound of its own whose audio is
-  on, a `media` file's, fed while the program shows it. Each runs the source's enabled
+  `browser` page's; one for each `webcam` source with audio settings whose audio is on,
+  recording its device's paired audio input (#716); and one for each live source with
+  sound of its own whose audio is on, a `media` file's, fed while the program shows it.
+  Each runs the source's enabled
   audio filters and is listed for the audio routing, which sets its fader, mute and
   sends. While there is no audio-only source, the default microphone and desktop audio
   are recorded too, sent to master at unity (see *Audio sources* in
@@ -284,7 +286,11 @@ state machine. Contents:
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
   process ID, a settings change reopening its input, a `browser` page recorded beside
-  the defaults and its presets opening once the backend arrives, a media file's sound reaching
+  the defaults and its presets opening once the backend arrives, a `webcam` recording
+  its device's paired input beside the defaults (the first device, or by ID), a device
+  with no paired input and one not connected unavailable with their reasons, and its
+  input closed while its audio is off
+  (`a_webcam_records_its_paired_audio_input`), a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, quieted
   by a `gain` filter on its source and loud again once it is removed, closed while its
   audio is off and removed with the source, the program mix reaching the
@@ -933,6 +939,18 @@ source is built. Its input is added in the format the source reports and fed by
 identity) and closed when it is deleted or its audio is turned off. Like an audio
 source's, it opens muted and is listed for the routing. A failed stream is reopened
 like a device's. Such audio doesn't count as an audio source for the defaults below.
+
+A `webcam` source with audio settings is wanted as `Recorded::Paired`, naming its
+`device` (`jstream_sources::webcam_device`; empty is the first device listed). The
+thread resolves it when it opens the input, not under the collection lock: it lists
+the backends' `VideoDevices` once per pass, and only while such an input isn't
+recording or its stream failed, finds the device, and records its paired input
+(`VideoDeviceInfo::audio`) as `AudioInputTarget::Input`, opened, routed and reopened as
+an `audio_input`'s. A device that isn't connected, or that the platform pairs with no
+input (a capture card without audio, a camera built into the computer), is unavailable
+with that reason and tried again on the next pass. A webcam source with no audio
+settings records nothing. Like a page's audio, a webcam's doesn't count as an audio
+source for the defaults below.
 
 While the collection has no audio source, the
 program records the default microphone and desktop audio, as it did before audio
@@ -1853,7 +1871,8 @@ platform's codecs make a decoder (`Codecs::capture_decoder`, Media Foundation's 
 Windows): one decoder per stream, passed to `VideoDevices::open`. At the same size and
 rate an uncompressed format wins. Without a decoder (the default, and Linux and macOS
 for now), only uncompressed formats are chosen, so a device that offers only MJPEG
-doesn't start. Nothing opens its paired microphone. A
+doesn't start. Its paired audio input is recorded by the audio sources' thread (see
+*Audio sources* in Design), not here. A
 capture that doesn't start, or whose stream reports `DeviceLost` (a
 closed window, an unplugged display or webcam), keeps its last frame and is started again 2 s
 later on the media clock. The skips of every stream the pipeline ran are added up into

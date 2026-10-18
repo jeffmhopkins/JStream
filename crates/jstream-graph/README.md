@@ -446,7 +446,10 @@ a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none, and one without
 `video_mixes` or any `video_mix` likewise; a file without `sends`, `buses` or source
 `audio` (as saved before audio existed) keeping its audio sources' master sends at
-0 dB; a file without `master` or any output's `filters` (as saved before their chains
+0 dB, its webcams' with their audio off; a webcam with no audio settings and no send
+(as saved before webcams had audio, #716) loading with its master send and its audio
+off, so an older collection never starts recording a webcam's microphone, and saving
+that back; a file without `master` or any output's `filters` (as saved before their chains
 existed) loading with those chains empty and the sources' filters intact; a removed
 master send's round trip; a profile's round trip; a geometry's flip loading back and a file without one loading unflipped; a virtual camera's round trip;
 transitions' round trip (with the initial `cut` deleted, or kept but changed) and a

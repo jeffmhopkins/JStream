@@ -980,3 +980,82 @@ fn recording_audio_sources_are_routed_and_metered() {
     assert_eq!(metered(&mut events), ["desk"]);
     block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
+
+/// #716: a `webcam` source records its device's paired audio input, alongside the
+/// defaults (a webcam's microphone isn't an audio source for that rule). A device with
+/// no paired input, or one that isn't connected, is unavailable; turning the source's
+/// audio off closes its input.
+#[test]
+fn a_webcam_records_its_paired_audio_input() {
+    use jstream_platform::fake::{FAKE_CAPTURE_CARD, FAKE_MIC, FAKE_WEBCAM};
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let mic = AudioInputTarget::Input(jstream_platform::DeviceId::new(FAKE_MIC));
+
+    // The first device listed (the fake webcam) when `device` is empty, and by its ID.
+    batch(
+        &control,
+        edits(vec![
+            audio_source("cam", "webcam", None),
+            audio_source("named", "webcam", Some(("device", FAKE_WEBCAM))),
+            audio_source("card", "webcam", Some(("device", FAKE_CAPTURE_CARD))),
+            audio_source("gone", "webcam", Some(("device", "unplugged"))),
+        ]),
+    )
+    .expect("webcams");
+    assert!(eventually(|| status(&engine, "cam")
+        == Some(AudioStatus::Recording)
+        && status(&engine, "named") == Some(AudioStatus::Recording)));
+    assert_eq!(
+        status(&engine, "card"),
+        Some(AudioStatus::Unavailable(
+            "Fake capture card has no paired audio input".into()
+        ))
+    );
+    assert_eq!(
+        status(&engine, "gone"),
+        Some(AudioStatus::Unavailable(
+            "the video device unplugged is not connected".into()
+        ))
+    );
+    assert_eq!(
+        inputs(&audio),
+        names(&[
+            AudioInputTarget::DefaultInput,
+            AudioInputTarget::DefaultOutputLoopback,
+            mic.clone(),
+            mic.clone(),
+        ])
+    );
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+
+    // Its audio off, the webcam's input closes; on again, it opens again.
+    let set_audio = |enabled: bool| {
+        batch(
+            &control,
+            Batch::single(Edit::SourceSetAudio {
+                source_id: SourceId::new("named"),
+                enabled: Some(enabled),
+                follow: None,
+                gain_db: None,
+                muted: None,
+            }),
+        )
+        .expect("source.set_audio");
+    };
+    set_audio(false);
+    assert!(eventually(|| status(&engine, "named").is_none()
+        && audio.input_targets().iter().filter(|t| **t == mic).count()
+            == 1));
+    set_audio(true);
+    assert!(eventually(
+        || status(&engine, "named") == Some(AudioStatus::Recording)
+    ));
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
+}

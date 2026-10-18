@@ -34,6 +34,10 @@ mod tests;
 /// loads (R-API-003).
 pub const SCHEMA_VERSION: u32 = 1;
 
+/// The built-in `webcam` kind, which gained audio (its device's paired input) after
+/// collection files existed; see `rebuild_audio`.
+const WEBCAM: &str = "webcam";
+
 /// A migration upgrades a file's JSON from one schema version to the next, in place.
 type Migration = fn(&mut Value) -> Result<(), String>;
 
@@ -1105,19 +1109,43 @@ fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
         let object = format!("source `{}`", source.id);
         let default = audio::default_audio(&source.kind, &graph.kinds);
         let gets_master = default.is_some() && !matches!(source.kind, SourceKind::Scene { .. });
+        // A `webcam` saved before webcams had audio (#716) has no audio settings and no
+        // send. It keeps the master send its creation gives it, but loads with its audio
+        // off, so opening an older collection never starts recording a webcam's
+        // microphone; turning it on sends it to the master.
+        let unheard_webcam = matches!(&source.kind, SourceKind::Builtin { kind } if kind == WEBCAM)
+            && source.audio.is_none()
+            && file
+                .sends
+                .iter()
+                .flatten()
+                .all(|send| send.source_id != source.id);
         // A file without `sends` predates them (or has no audio): every channel source
         // keeps the master send its creation gave it.
-        let keeps_master = file.sends.as_ref().is_none_or(|sends| {
-            sends
-                .iter()
-                .any(|send| send.source_id == source.id && send.bus_id.is_master())
-        });
+        let keeps_master = unheard_webcam
+            || file.sends.as_ref().is_none_or(|sends| {
+                sends
+                    .iter()
+                    .any(|send| send.source_id == source.id && send.bus_id.is_master())
+            });
         if gets_master && !keeps_master {
             edits.push((
                 object.clone(),
                 Edit::SendRemove {
                     source_id: source.id.clone(),
                     bus_id: BusId::master(),
+                },
+            ));
+        }
+        if unheard_webcam && default.is_some() {
+            edits.push((
+                object.clone(),
+                Edit::SourceSetAudio {
+                    source_id: source.id.clone(),
+                    enabled: Some(false),
+                    follow: None,
+                    gain_db: None,
+                    muted: None,
                 },
             ));
         }

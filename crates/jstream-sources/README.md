@@ -322,7 +322,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `device` captures the first device listed. Like `display` and `window`, it only says
   what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
   device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
-  before it had a setting, its sources couldn't start.
+  before it had a setting, its sources couldn't start. It has audio too (#716): the
+  input the platform pairs with the device, a webcam's microphone or a capture card's
+  HDMI audio, which the engine records as an audio input's
+  (`webcam_device(kind, settings)` says whose pair: the `device`, or `None` for the first
+  device listed). So a new webcam gets audio settings that follow `when_shown` and a
+  master send, as ADR-0028 gives a source with video and audio.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
