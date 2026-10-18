@@ -312,9 +312,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source's `Painter` takes the slot's lock and redraws (and so allocates) only when
   another message was featured since, and `frame` hands out the frame drawn last
   without drawing. Every setting but `font` is live.
-- `webcam` is described only, with the settings B4 gave it: its sources can be
-  created and configured, and `create` fails with
-  `SourceError::NotBuilt`.
+- `webcam`: a webcam or capture card, by the `device` setting, the ID the
+  platform's video-device backend lists it by (`VideoDevices::devices`). An empty
+  `device` captures the first device listed. Like `display` and `window`, it only says
+  what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
+  device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
+  before it had a setting, its sources couldn't start.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 

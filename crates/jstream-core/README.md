@@ -115,8 +115,9 @@ state machine. Contents:
   backends' media files. A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
   draws nothing. A `display` or `window` source shows what the output pipeline
-  captures for its `target` on the render thread (see *Live sources* and *Snapshots*
-  in [Design](#design)).
+  captures for its `target` on the render thread, and a `webcam` source what it
+  captures from its `device` (see *Live sources* and *Snapshots* in
+  [Design](#design)).
   Audio-only kinds make no frames and have no live source. The `waveform` and
   `spectrum` sources draw the program mix's audio, a bus's, or another source's, from
   the engine's `AudioScopes`.
@@ -154,8 +155,9 @@ state machine. Contents:
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox of each
-  display and window the program mix or a video mix shows (`runtime/captures.rs`,
-  which starts and stops them on a `jstream-capture` thread), composites each video
+  display, window and webcam the program mix or a video mix shows
+  (`runtime/captures.rs`, which starts and stops them on a `jstream-capture` thread),
+  composites each video
   mix the running outputs show, on its own ticks, from the render snapshot the control
   side publishes (`runtime/render.rs`) and reads the frames back, and the mixer thread
   polls the media clock. The render thread composites on the platform's GPU context
@@ -235,8 +237,11 @@ state machine. Contents:
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), an output starting a capture for each display and
   window on program, sharing one between sources, stopping it when its source leaves
-  and starting it again after a failed start or a lost target
-  (`src/tests/cpu_pipeline/captures.rs`), which capture path an output takes and each
+  and starting it again after a failed start or a lost target, and opening each webcam
+  on program from the fake video devices, shared between sources, closed when it leaves
+  or the output stops, and closed when unplugged with the output staying up
+  (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in and its frames
+  read as RGBA (`runtime/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), and a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
@@ -789,13 +794,14 @@ image, and the old filter, which holds the old image, is retired through the cac
 file that can't be read or decoded is logged and its filter passes its input through
 until the setting changes. Moving the collection file reloads every `collection`
 asset.
-A `display` or `window` source with no stored frame shows what the pipeline captures
-for it on the render thread, and nothing in `video.snapshot`, which has no capture; a
-stored frame wins. The `Shot` lists what the passes of the program, or the tracks of a
-running transition, and of every mix capture (`Shot::captures`, a `jstream-sources`
-`CaptureSpec` each: a display or window by its capture-backend target ID, or the
-primary display), and sources with the same `target` share one capture, whichever
-mixes show them.
+A `display`, `window` or `webcam` source with no stored frame shows what the pipeline
+captures for it on the render thread, and nothing in `video.snapshot`, which has no
+capture; a stored frame wins. The `Shot` lists what the passes of the program, or the
+tracks of a running transition, and of every mix capture (`Shot::captures`, a
+`jstream-sources` `CaptureSpec` each: a display or window by its capture-backend target
+ID, or the primary display; a video device by its ID, or the first one listed), and
+sources with the same `target` or `device` share one capture, whichever mixes show
+them.
 Sharing is by `target` value: a `display` source with an empty `target` and one that
 names the primary display's ID capture the same monitor twice. A window source with no window chosen shows nothing. The capture is part of
 what the shot draws, so a new target publishes a new snapshot.
@@ -1766,8 +1772,14 @@ stopping a capture (OS calls that can block) never run on the render thread. Bot
 through channels it never waits on, and it takes the started streams with `try_recv`
 ([R-RT-002](../../docs/RULES.md#R-RT-002),
 [R-RT-003](../../docs/RULES.md#R-RT-003)). The primary display is looked up when its
-capture starts. A capture that doesn't start, or whose stream reports `DeviceLost` (a
-closed window, an unplugged display), keeps its last frame and is started again 2 s
+capture starts. A webcam or capture card is opened on the backends' `VideoDevices`, on
+the CPU path, in the format `device_format` picks from those it lists: frames that arrive
+uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
+1920x1080 (else the smallest), then the fastest. An empty `device` is the first device
+listed, looked up when it starts. MJPEG needs a decoder the engine doesn't build yet, so
+a device that offers only MJPEG doesn't start. Nothing opens its paired microphone. A
+capture that doesn't start, or whose stream reports `DeviceLost` (a
+closed window, an unplugged display or webcam), keeps its last frame and is started again 2 s
 later on the media clock. The skips of every stream the pipeline ran are added up into
 `capture_frames`. At the end of the render loop the captures are stopped and the
 `jstream-capture` thread joined, before the context is dropped.

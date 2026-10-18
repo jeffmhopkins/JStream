@@ -371,6 +371,14 @@ status = "done"
 prs = [177, 225, 227]
 
 [[item]]
+id = "C4c"
+milestone = "M1b"
+title = "Webcam source (CPU path; MJPEG and paired audio to follow)"
+status = "review"
+prs = [654]
+needs = ["build", "wave", "hardware"]
+
+[[item]]
 id = "C1a"
 milestone = "M1b"
 title = "Sources crate: color, image"
