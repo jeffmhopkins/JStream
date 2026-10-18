@@ -56,7 +56,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `scene.switch`, `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
-  `live.set`, `live.cancel`), with `Action::named_objects` and `Action::bind_problem`,
+  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`), with
+  `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
@@ -114,7 +115,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
   `events.dropped`, `stats.tick`, `meters.tick`, `youtube.status_changed`,
-  `youtube.health_changed`, `live.changed` and `live.ended`.
+  `youtube.health_changed`, `live.changed`, `live.ended` and `plugin.state_changed`.
+- **Plugins** (`plugin.rs`, ADR-0069, which is on `wave/m1-3`): `PluginClass` (`read`,
+  `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
+  one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
+  classes, adding a `hotkey.set`'s bound action and a `live.set`'s edits, or the
+  `PluginDenial` no grant overrides), `PluginGrant` (the classes, hosts and folders a
+  person grants, with `check`, which returns the `forbidden` error, and `problem`),
+  `settings_reach` and `Reach` (the hosts and files a settings map names),
+  `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), and the binary
@@ -141,8 +150,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.36 because of
   the `show_cursor` setting of the `display` and `window` kinds (whether the pointer
   shows in the capture; on by default, which is what those kinds did before; 0.30 to
-  0.35 are the minors of changes that land ahead of it); 0.29 added
-  the master stage's and outputs' filter chains (the `master` and `output` filter
+  0.34 are the minors of changes that land ahead of it); 0.35 added WASM plugins
+  ([Plugins](#design): `plugin.install`, `plugin.grant`, `plugin.enable`,
+  `plugin.state_changed`, the `forbidden` error and the `plugin` entity kind); 0.29
+  added the master stage's and outputs' filter chains (the `master` and `output` filter
   owners, `OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes
   (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and the mixes in
   `state.get` and `output.list`); 0.27 added the `capture.targets` query;
@@ -586,9 +597,10 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)), nor
   can the preview actions (they serve only the sending session), `live.set` and
   `live.cancel` (their gesture belongs to the sending session), `pairing.start` and
-  `device.revoke` (the server answers them for the client that asks), or the
+  `device.revoke` (the server answers them for the client that asks), the
   `youtube.*` actions (YouTube is driven through the UI,
-  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)): each is
+  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
+  `plugin.*` actions (a person installs and grants plugins): each is
   `invalid_argument` on `action.type`. A scene or output the action names must exist,
   else `not_found`.
 - **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
@@ -945,6 +957,8 @@ After `welcome`, the server pushes every event to every client.
   one loses nothing; nothing numbers them.
 - `youtube.status_changed {auth}` and `youtube.health_changed {output_id, broadcast_id,
   stream_id, status, health, issues}` (0.23) are described under [YouTube](#design).
+- `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
+  under [Plugins](#design).
 
 ### YouTube
 
@@ -984,6 +998,63 @@ have an `other` value, so a value YouTube adds later still parses. Text from You
 untrusted and shown as plain text. Chat, the featured message and audience stats come
 later.
 
+### Plugins
+
+WASM automation plugins (0.35, ADR-0069, which is on `wave/m1-3`) call the API through
+a scoped `Control`, which checks every call against the plugin's grant before it reaches
+the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
+
+- **Classes.** A person grants a plugin classes: `read` (the queries; always granted),
+  `edit` (scene, item, source, filter, bus, send, canvas and hotkey edits, `live.set`
+  and `live.cancel`, and `undo`/`redo` on the plugin's own session), `live`
+  (`scene.switch`) and `outputs` (`output.start`, `output.stop`). Everything else is
+  never granted: creating, deleting and retargeting outputs, their encoders and stream
+  keys, video mixes, `video.snapshot` and previews (a capture's pixels could leave
+  through a granted host), `audio.reset_loudness`, `youtube.*`, pairing and devices,
+  and `plugin.*` itself.
+  `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
+  `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
+  command can't reach plugins unreviewed.
+- **Checking a call.** `plugin_classes` collects the class of every command a call
+  carries: each edit of a batch, each edit a `live.set` carries, and for `hotkey.set`
+  the class of the action it binds, since a person's key press runs it: with `edit`
+  alone a plugin can't bind `output.start`. A call needing a class outside the grant,
+  naming a never command, or an empty batch is `forbidden` (`PluginGrant::check`), with
+  the call's first command as `call`.
+- **Reach.** A class never widens network or filesystem reach (ADR-0069 S2): a
+  `browser` source's URL and a media or image source's file need the grant's `hosts` or
+  `folders` beside `edit`. `PluginGrant::check` reads the settings of `source.create`,
+  `source.set_settings`, `filter.add` and `filter.set_settings` (in a batch or a
+  `live.set`) with `settings_reach`, which needs no kind descriptor:
+  - an asset reference under the `absolute` root must be inside a granted folder;
+  - a string that starts as `scheme://` (after trimming ASCII spaces, control
+    characters and Unicode white space from both ends, and dropping tabs and newlines,
+    which covers what both a URL parser and the engine's `str::trim` remove) must be
+    an `http`, `https`, `ws` or `wss` URL whose `scheme://host:port` (default port
+    filled in, host compared without case) is granted. Text with an address later in it, such as a caption that ends with a
+    link, is no URL and reaches nothing.
+  Anything neither rule lets through is `forbidden`: a file under the collection's or the
+  app's folder, another scheme, credentials in the URL, and a path with a `.` or `..`
+  segment. A grant's folders can't have one either. A value the engine would resolve to
+  a host without `://` (a `youtube_chat` video ID) isn't found, and the host's own
+  network and filesystem checks still apply. Both path forms pass `problem`, since the
+  client may not share the engine's OS, so an engine also refuses a folder its OS
+  doesn't read as absolute (`/data` on Windows).
+- **`plugin.install {plugin_id, path, grant}`**, **`plugin.grant {plugin_id, grant}`**
+  and **`plugin.enable {plugin_id}`** are actions for a person: no MCP tool carries
+  them, no plugin is granted them and no hotkey binds them. `PluginGrant` is
+  `{classes, hosts, folders}`, each omitted while empty: hosts as `scheme://host:port`
+  (`http`, `https`, `ws`, `wss`), folders as absolute paths on the engine's machine. A
+  grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`.
+  An unknown plugin is `not_found` with entity `plugin`; an engine that hosts no plugins
+  answers `unsupported`, as the engine and the mock do today.
+- **`plugin.state_changed {plugin_id, state, reason?, remote_name?}`** reports a plugin
+  `enabled` or `disabled`. The engine disables a plugin that runs past a limit or traps
+  (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than
+  its grant (`needs_grant`), and never re-enables one by itself. `remote_name` is the
+  name the plugin's manifest gives itself: the plugin's text, never an instruction
+  ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
+
 ### Errors
 
 `ProtocolError` is a `thiserror` enum ([R-RS-003](../../docs/RULES.md#R-RS-003)). On the
@@ -1003,7 +1074,8 @@ people and agents. Clients match on `code`, never on `message`.
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
-| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.21) | `call` |
+| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35) | `call` |
+| `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to

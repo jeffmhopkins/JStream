@@ -55,7 +55,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `█████████░` 87% | 20 | 1 | 2 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 40% | 4 | 0 | 6 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 40% | 4 | 1 | 5 |
 
 104 of 113 items are merged; 10 of those still wait on a run on Windows hardware.
 
@@ -82,7 +82,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🔨 build | effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build | #359, #368 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 👤 maintainer | #363 landed with wave/m1-2 (#545), #375 with wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
-| WA1 | WASM automation plugins | M3 | 🔨 build |  |  |
+| WA1 | WASM automation plugins | M3 | 🔨 build |  | #642 |
 | MAC1 | macOS platform crate | M3 | 👤 maintainer, then 🔨 build | the maintainer decides whether it stays in M3; then the macOS ADR |  |
 | LNX1 | Linux codec path and platform crate | M3 | 👤 maintainer, then 🔨 build | the maintainer decides platform support; then the Linux codec-path ADR |  |
 
@@ -251,7 +251,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned: #363 landed with wave/m1-2 (#545), #375 with wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
-| WA1 | WASM automation plugins | ⏳ planned |  |
+| WA1 | WASM automation plugins | 🔍 in review | #642 |
 | MAC1 | macOS platform crate | ⏳ planned: the maintainer decides whether it stays in M3; then the macOS ADR |  |
 | LNX1 | Linux codec path and platform crate | ⏳ planned: the maintainer decides platform support; then the Linux codec-path ADR |  |
 

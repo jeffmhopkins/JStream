@@ -17,11 +17,12 @@ use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::hotkey::Chord;
 use crate::id::{
-    BusId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId, OutputId, Rev,
-    SceneId, SourceId, VideoMixId,
+    BusId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId, OutputId,
+    PluginId, Rev, SceneId, SourceId, VideoMixId,
 };
 use crate::mix::VideoMix;
 use crate::output::{OutputKind, RtmpTarget, SecretString};
+use crate::plugin::PluginGrant;
 use crate::preview::PreviewCodec;
 use crate::settings::Settings;
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
@@ -942,6 +943,44 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
+    /// Installs a WASM automation plugin from the package at `path` on the engine's
+    /// machine, with what the person granted it after seeing its manifest (0.35,
+    /// ADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person
+    /// only: no MCP tool carries it, and no plugin is ever granted it. Fails with
+    /// `already_exists` for a plugin ID in use, `invalid_argument` for a grant whose
+    /// `problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and
+    /// `unsupported` from an engine that hosts no plugins.
+    #[serde(rename = "plugin.install")]
+    PluginInstall {
+        /// The ID to install it under.
+        plugin_id: PluginId,
+        /// The plugin's package: its manifest and module.
+        path: String,
+        /// The classes, hosts and folders the person granted it.
+        grant: PluginGrant,
+    },
+    /// Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin
+    /// disabled because an update asks for more (`needs_grant`) stays disabled until a
+    /// grant covers the difference and it is re-enabled. For a person only, like
+    /// `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't
+    /// installed.
+    #[serde(rename = "plugin.grant")]
+    PluginGrant {
+        /// The plugin.
+        plugin_id: PluginId,
+        /// Its new grant.
+        grant: PluginGrant,
+    },
+    /// Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a
+    /// limit or traps, and never re-enables it by itself. Succeeds for one already
+    /// enabled. Fails with `not_found` for a plugin that isn't installed, and
+    /// `action_failed` for one whose update asks for more than its grant. For a person
+    /// only, like `plugin.install`.
+    #[serde(rename = "plugin.enable")]
+    PluginEnable {
+        /// The plugin.
+        plugin_id: PluginId,
+    },
 }
 
 impl Action {
@@ -965,6 +1004,9 @@ impl Action {
             Action::SceneSwitch { .. } => "scene.switch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
+            Action::PluginInstall { .. } => "plugin.install",
+            Action::PluginGrant { .. } => "plugin.grant",
+            Action::PluginEnable { .. } => "plugin.enable",
         }
     }
 
@@ -992,7 +1034,10 @@ impl Action {
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
             | Action::PairingStart
-            | Action::DeviceRevoke { .. } => vec![],
+            | Action::DeviceRevoke { .. }
+            | Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. } => vec![],
         }
     }
 
@@ -1022,6 +1067,13 @@ impl Action {
                 "type",
                 "a pairing or device action can't be bound: the server answers it for the \
                  client that asks",
+            )),
+            Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. } => Some((
+                "type",
+                "a plugin action can't be bound: a person installs, grants and re-enables \
+                 plugins through the UI (ADR-0069)",
             )),
             Action::YoutubeSignIn
             | Action::YoutubeSignOut

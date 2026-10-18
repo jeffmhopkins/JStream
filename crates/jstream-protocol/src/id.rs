@@ -81,6 +81,11 @@ opaque_id!(
     VideoMixId
 );
 opaque_id!(
+    /// An installed WASM automation plugin (ADR-0069), chosen by the person who installs
+    /// it.
+    PluginId
+);
+opaque_id!(
     /// A paired device: one browser or other client admitted with its own device token
     /// (ADR-0044). Assigned by the server when the device pairs.
     DeviceId

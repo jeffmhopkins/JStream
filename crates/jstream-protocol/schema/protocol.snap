@@ -375,6 +375,75 @@ source: crates/jstream-protocol/src/fixtures.rs
             "device_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+          "properties": {
+            "grant": {
+              "$ref": "#/$defs/PluginGrant",
+              "description": "The classes, hosts and folders the person granted it."
+            },
+            "path": {
+              "description": "The plugin's package: its manifest and module.",
+              "type": "string"
+            },
+            "plugin_id": {
+              "$ref": "#/$defs/PluginId",
+              "description": "The ID to install it under."
+            },
+            "type": {
+              "const": "plugin.install",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugin_id",
+            "path",
+            "grant"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin\ndisabled because an update asks for more (`needs_grant`) stays disabled until a\ngrant covers the difference and it is re-enabled. For a person only, like\n`plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't\ninstalled.",
+          "properties": {
+            "grant": {
+              "$ref": "#/$defs/PluginGrant",
+              "description": "Its new grant."
+            },
+            "plugin_id": {
+              "$ref": "#/$defs/PluginId",
+              "description": "The plugin."
+            },
+            "type": {
+              "const": "plugin.grant",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugin_id",
+            "grant"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a\nlimit or traps, and never re-enables it by itself. Succeeds for one already\nenabled. Fails with `not_found` for a plugin that isn't installed, and\n`action_failed` for one whose update asks for more than its grant. For a person\nonly, like `plugin.install`.",
+          "properties": {
+            "plugin_id": {
+              "$ref": "#/$defs/PluginId",
+              "description": "The plugin."
+            },
+            "type": {
+              "const": "plugin.enable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugin_id"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -2854,6 +2923,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "hotkey",
           "description": "A hotkey binding, named by its chord.",
           "type": "string"
+        },
+        {
+          "const": "plugin",
+          "description": "An installed plugin (0.35). Only an error answering a `plugin.*` action names it,\nso a client older than 0.35, which sends none, never reads it.",
+          "type": "string"
         }
       ]
     },
@@ -3214,6 +3288,47 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A plugin was installed, enabled or disabled (0.35, ADR-0069). The engine disables\na plugin that runs past a limit or traps, says why, and never re-enables it by\nitself.",
+          "properties": {
+            "plugin_id": {
+              "$ref": "#/$defs/PluginId",
+              "description": "The plugin."
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PluginDisabledReason"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Why the engine disabled it. Omitted when it is enabled, or when a person\ndisabled it."
+            },
+            "remote_name": {
+              "description": "The name the plugin's manifest gives itself: the plugin's own text, never an\ninstruction (ADR-0059). Omitted when it gives none.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "state": {
+              "$ref": "#/$defs/PluginState",
+              "description": "Whether it runs."
+            },
+            "type": {
+              "const": "plugin.state_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugin_id",
+            "state"
           ],
           "type": "object"
         }
@@ -4463,6 +4578,103 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "geometry",
           "description": "An [`ItemGeometry`]: a box on the canvas.",
+          "type": "string"
+        }
+      ]
+    },
+    "PluginClass": {
+      "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
+      "oneOf": [
+        {
+          "const": "read",
+          "description": "Every query but the never-granted ones, `kind.*` and `delete.plan`. Always\ngranted.",
+          "type": "string"
+        },
+        {
+          "const": "edit",
+          "description": "The scene, item, source, filter, bus, send, hotkey and canvas edits, live\nparameter edits (`live.*`), and undo and redo on the plugin's own session.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "What changes what is on air: `scene.switch`.",
+          "type": "string"
+        },
+        {
+          "const": "outputs",
+          "description": "`output.start` and `output.stop` on outputs that already exist.",
+          "type": "string"
+        }
+      ]
+    },
+    "PluginDisabledReason": {
+      "description": "Why the engine disabled a plugin. The engine never re-enables one by itself.",
+      "oneOf": [
+        {
+          "const": "cpu_limit",
+          "description": "It ran past its wall-time deadline.",
+          "type": "string"
+        },
+        {
+          "const": "memory_limit",
+          "description": "It hit its memory or table cap.",
+          "type": "string"
+        },
+        {
+          "const": "trap",
+          "description": "It trapped on its own fault.",
+          "type": "string"
+        },
+        {
+          "const": "needs_grant",
+          "description": "An update asks for more than its grant: a person must grant the difference.",
+          "type": "string"
+        }
+      ]
+    },
+    "PluginGrant": {
+      "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach:\na call's URLs and files must be within `hosts` and `folders`.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+      "properties": {
+        "classes": {
+          "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/PluginClass"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "folders": {
+          "description": "The folders the person picked for it, as absolute paths on the engine's machine,\nbesides its own private data folder. Omitted for none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "hosts": {
+          "description": "The hosts the plugin may reach, each as `scheme://host:port` (`http`, `https`,\n`ws` or `wss`). Omitted for none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "PluginId": {
+      "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
+      "type": "string"
+    },
+    "PluginState": {
+      "description": "Whether a plugin runs.",
+      "oneOf": [
+        {
+          "const": "enabled",
+          "description": "It is loaded and gets its events.",
+          "type": "string"
+        },
+        {
+          "const": "disabled",
+          "description": "It doesn't run, until a person re-enables it (`plugin.enable`).",
           "type": "string"
         }
       ]
@@ -6408,7 +6620,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The call is valid, but whoever answered it doesn't serve it: `pairing.start`,\n`device.list` and `device.revoke` sent to an engine with no server in front.\nRetrying won't help.",
+          "description": "The call is valid, but whoever answered it doesn't serve it: `pairing.start`,\n`device.list` and `device.revoke` sent to an engine with no server in front, or\na `plugin.*` action sent to an engine that hosts no plugins yet.\nRetrying won't help.",
           "properties": {
             "call": {
               "description": "The call's name (`pairing.start`).",
@@ -6422,6 +6634,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "code",
             "call"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The caller may not make this call (0.35): a plugin's call outside its granted\ncapability classes, a command no plugin is ever granted, or a plugin past its cap\nof commands a second (ADR-0069). Nothing was applied. Retrying won't help until\na person widens the grant, except after the command cap, which clears within a\nsecond.",
+          "properties": {
+            "call": {
+              "description": "The call's name (`output.start`), or for a batch, its first edit's.",
+              "type": "string"
+            },
+            "code": {
+              "const": "forbidden",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why: the class the caller lacks, or that no plugin may make it.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "call",
+            "reason"
           ],
           "type": "object"
         },

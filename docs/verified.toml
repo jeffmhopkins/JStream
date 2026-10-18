@@ -357,7 +357,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:a4d298341deb1517", by = "agent:wave-owner", note = "wave/m1-2's #365 (C3 captures) and #326 (C8b5 browser GPU frames) merged into the main sync: the no-interop device is hardware first with the software fallback (#437) beside C8b5's browser frames on the shared context; render README and gpu.rs match" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:350ba19261d6aa4a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: tools.snap regenerated on the merged base with the master and output owners is 526,691 bytes, so the text now says about 527 KB (was 520 KB on the wave); progressive discovery text unchanged." }
+stamp = { hash = "b3:6c374faefe3f1bd4", by = "agent:plugin-protocol", note = "re-read: youtube and now plugin ops and events are people-only (PEOPLE_ONLY in tools.rs, events.rs drops plugin.*), as the section now says; tools.snap is about 546 KB, updated from 527 KB, as hotkey and live carry the Action schema with the plugin actions" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:340acdb9358d89b0", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
@@ -372,16 +372,16 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:d04e12d02681cd40", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Tool list unions E2's video_mix with the wave's capture, hotkey and live nouns (26 tools, mcp tests); the tools.snap size note updated from 484 KB to about 520 KB, measured on the regenerated snapshot; holds" }
+stamp = { hash = "b3:ec4d028c63092d43", by = "agent:plugin-protocol", note = "re-read: youtube and now plugin ops and events are people-only (PEOPLE_ONLY in tools.rs, events.rs drops plugin.*), as the section now says; tools.snap is about 546 KB, updated from 527 KB, as hotkey and live carry the Action schema with the plugin actions" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:63b24e06414f2e7b", by = "agent:wave-owner", note = "main into wave/m1-2 (#523), now also carrying wave/m1-2's #259 (E2 video mixes, 0.28): tools.snap carries #437's EncoderProfile descriptions, C3's tools and #259's video_mix tool (about 520 KB holds at 521511 bytes); tool_list_snapshot passes | merge: wave/m1-2's #303 (D8, 0.29): tools.snap gains the master and output filter owners (527,279 bytes; #303 updated the section's about 527 KB); tool_list_snapshot passes" }
+stamp = { hash = "b3:e025152a1fd9fb36", by = "agent:plugin-protocol", note = "re-read: plugin ops and events are people-only (PEOPLE_ONLY in tools.rs, events.rs drops plugin.*), as the section says; tools.snap changed only in PluginGrant's description (round 1 B1 rustdoc), still about 546 KB" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/events.rs"]
-stamp = { hash = "b3:d7fe456655d86a78", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: tool list has the wave's device/filter/pairing/preview plus live (23 tools, tests.rs), events bullet keeps the live.changed merge with the wave's youtube drop (events.rs push/supersede), tools.snap is 310,562 bytes so 'about 311 KB'." }
+stamp = { hash = "b3:eaa3271bf3d6e284", by = "agent:plugin-protocol", note = "re-read: youtube and now plugin ops and events are people-only (PEOPLE_ONLY in tools.rs, events.rs drops plugin.*), as the section now says; tools.snap is about 546 KB, updated from 527 KB, as hotkey and live carry the Action schema with the plugin actions" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/jsonrpc.rs"]
 stamp = { hash = "b3:5c306baedd4f5ddc" }
@@ -399,7 +399,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:7ea8551624d71fc6", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Tool list unions E2's video_mix with the wave's capture, hotkey and live nouns (26 tools, mcp tests); the tools.snap size note updated from 484 KB to about 520 KB, measured on the regenerated snapshot; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:b10673c17766c6ef", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: the noun list adds capture beside the wave's device, filter, pairing and preview; tools.snap has capture read-only and the mcp tests expect it. wave/m1-2 merges: tools.snap carries the output tool's DOS-device record path doc (#505, #506), which this section doesn't restate; latest merge (K1 hotkeys, I2 live values): noun list now also has hotkey and live, tools.snap regenerated with 25 tools (the wave's 24 plus capture), mcp tests expect 25; holds" }
+stamp = { hash = "b3:0cb7c82b2543d335", by = "agent:plugin-protocol", note = "re-read: youtube and now plugin ops and events are people-only (PEOPLE_ONLY in tools.rs, events.rs drops plugin.*), as the section now says; tools.snap is about 546 KB, updated from 527 KB, as hotkey and live carry the Action schema with the plugin actions" }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's State and Building-the-zip bullets (dist.rs, .cargo/config.toml, after-review dist job) stand beside #298's sandboxed helper (bootstrap exe renamed plus the DLL, same certificate if signed); now that the helper exists, the zip bullet says it and the CEF runtime are not in the zip yet, which matches dist.rs (it ships no helper); holds" }
@@ -447,7 +447,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:d6ccac4e141c6220", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the filter bullet cites ADR-0026 at protocol 0.22 and ADR-0027 at protocol 0.29, with SourceInfo.filters, OutputInfo.filters and state.get's master, followed by K1's hotkey bullet; matches version.rs at 0.29, the regenerated snapshots and the mock's checks." }
+stamp = { hash = "b3:e1ed89862c3a73a7", by = "agent:plugin-protocol", note = "re-read: the Plugins bullet (0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking the class table and, after round 1 B1, the hosts and files a call's settings name against the grant's hosts and folders, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, lib.rs, mock.rs, the snapshots and the protocol README" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -459,7 +459,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:a4460043fb366c98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Control protocol against the jstream-control Cargo.toml diff (serde_json added as a dev-dependency only). The section describes the wire protocol and transports (WsControl behind feature ws); nothing it states depends on jstream-control's dev-dependencies." }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:aedcfc582d8ed844", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the filter bullet cites ADR-0026 at protocol 0.22 and ADR-0027 at protocol 0.29, with SourceInfo.filters, OutputInfo.filters and state.get's master, followed by K1's hotkey bullet; matches version.rs at 0.29, the regenerated snapshots and the mock's checks." }
+stamp = { hash = "b3:ae1f66f7c64f9968", by = "agent:plugin-protocol", note = "re-read: the new Plugins bullet (protocol 0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking jstream-protocol's class table, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, mock.rs and the protocol README; the rest of the section is untouched" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:a421c4283dce201f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -471,7 +471,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:36ad2b81cb919daf", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Queries bullet lists bus.list (0.19) and capture.targets (0.25 placeholder) beside the wave's bus delete.plan target (0.24); matches query.rs, the protocol README and the mock. Latest wave merge only changes the record-path text in the protocol README, mock.rs and protocol.snap, which this section doesn't restate; holds; latest merge: capture.targets is now protocol 0.27, after 0.25 hotkeys and 0.26 live values, and sits beside the wave's delete.plan hotkey text; matches version.rs and the protocol README" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:f294fef790cbdcaf", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the filter bullet cites ADR-0026 at protocol 0.22 and ADR-0027 at protocol 0.29, with SourceInfo.filters, OutputInfo.filters and state.get's master, followed by K1's hotkey bullet; matches version.rs at 0.29, the regenerated snapshots and the mock's checks." }
+stamp = { hash = "b3:2a47d95a583220aa", by = "agent:plugin-protocol", note = "re-read: the new Plugins bullet (protocol 0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking jstream-protocol's class table, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, mock.rs and the protocol README; the rest of the section is untouched" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
@@ -504,7 +504,7 @@ stamp = { hash = "b3:66dcf5b8fd0036b0", by = "agent:a2656", note = "Re-read agai
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:d37c02905c71fce0", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2's edits (video_mix.create/update/delete, output.set_video_mix), video_mix.list and mixes in state.get/output.list now cite protocol 0.28 (after 0.26 live values, 0.27 capture.targets); sessions keyed by mix and profile; the wave's hotkey and live text kept beside it; matches command.rs, query.rs, output.rs, version.rs and the regenerated protocol snapshots" }
+stamp = { hash = "b3:132d39e884edf917", by = "agent:plugin-protocol", note = "re-read: the new Plugins bullet (protocol 0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking jstream-protocol's class table, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, mock.rs and the protocol README; the rest of the section is untouched" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "protocol README: omitted hardware means avoid, default profile hardware when there is one; protocol.snap doc strings only, default stays avoid; encoder.rs DEFAULT Prefer and #[default] Avoid; fixtures.rs: Stream fixture spells avoid; no wire change; holds" }
@@ -513,10 +513,10 @@ stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "protocol RE
 stamp = { hash = "b3:a5f6168e622ba5f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the protocol section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Live values bullet now names protocol 0.26; the wave's hotkey bullet (0.25), the stream-key binding (#343) and delete.plan hotkeys sit beside it; hotkey.set refuses live actions. Snaps regenerated for 0.26. Holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:90aad6ee5341a814", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2's edits (video_mix.create/update/delete, output.set_video_mix), video_mix.list and mixes in state.get/output.list now cite protocol 0.28 (after 0.26 live values, 0.27 capture.targets); sessions keyed by mix and profile; the wave's hotkey and live text kept beside it; matches command.rs, query.rs, output.rs, version.rs and the regenerated protocol snapshots" }
+stamp = { hash = "b3:e9c17f60ec0afc64", by = "agent:plugin-protocol", note = "re-read: the new Plugins bullet (protocol 0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking jstream-protocol's class table, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, mock.rs and the protocol README; the rest of the section is untouched" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:329529862d5114d7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2 (filters, blend, pairing, youtube, preview, 0.24) into live values: the live-values bullet (live.set/cancel, live.list, ends_gesture, item placements and crops only) matches command.rs/query.rs/event.rs and mock.rs; preview 'only when the mix changes' still holds now live values make a stream due. Protocol version for live values is added at the assigned bump." }
+stamp = { hash = "b3:dbe9582a4e84aefc", by = "agent:plugin-protocol", note = "re-read: the new Plugins bullet (protocol 0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking jstream-protocol's class table, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, mock.rs and the protocol README; the rest of the section is untouched" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/filter.rs"]
 stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read the merged protocol section: filter.* edits on a source, the master or an output with SourceInfo.filters, OutputInfo.filters and state.get master (ADR-0026, protocol 0.22, ADR-0027), matching the regenerated snapshots, filter.rs, output.rs, query.rs and the mock's filter checks." }
@@ -525,7 +525,7 @@ stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGb
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:1caaa95db6930f39", by = "agent:wave-owner", note = "main into wave/m1-2 (#523), now also carrying wave/m1-2's #259 (E2 video mixes, 0.28): protocol README, protocol.snap and fixtures.rs carry #437's encoder wording, C3's 0.27 additions and #259's 0.28 video mixes; the section's video_mix bullets and session sharing by mix and profile hold | merge: wave/m1-2's #303 (D8, 0.29): protocol README, protocol.snap and fixtures.rs carry 0.29's master and output chains beside #437's encoder wording; holds" }
+stamp = { hash = "b3:105c45b4655cb3ab", by = "agent:plugin-protocol", note = "re-read: the new Plugins bullet (protocol 0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking jstream-protocol's class table, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, mock.rs and the protocol README; the rest of the section is untouched" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -537,13 +537,13 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:b56a10d0198f4e5c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, protocol 0.25; deletes remove bindings, removed_hotkeys, undo restores) after wave/m1-2's opacity/blend/filter and audio bullets, and delete.plan's hotkeys. Checked against command.rs, hotkey.rs (Chord, HotkeyBinding), envelope.rs, query.rs, version.rs (minor 25), error.rs (EntityKind::Hotkey), fixtures.rs and parity.rs (the hotkey.set/clear examples and the parity bindings), lib.rs (re-exports Chord/HotkeyBinding), the snapshots, control mock.rs and README, and the protocol README. Server tests.rs: this PR's change is four CallResult::batch assertions and one { rev, .. } pattern; #484's connection-cap tests add no protocol surface (N6). Merges since: Body: this PR's hotkey.set/hotkey.clear bullet (ADR-0024 §5, protocol 0.25; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys are unchanged; the merge adds #491's sentence that output.delete removes the stream key. Checked against command.rs (merged output.delete doc), mock.rs and control README (hotkeys plus #491), protocol README (Hotkeys bullet after key_server), protocol.snap (0.25, regenerated), parity.rs (hotkey bindings plus #500/#505 path cases) and server tests.rs (this PR: four CallResult::batch assertions and one { rev, .. } pattern; the merge: #487's redaction tests)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:5189d490b6033350", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2's edits (video_mix.create/update/delete, output.set_video_mix), video_mix.list and mixes in state.get/output.list now cite protocol 0.28 (after 0.26 live values, 0.27 capture.targets); sessions keyed by mix and profile; the wave's hotkey and live text kept beside it; matches command.rs, query.rs, output.rs, version.rs and the regenerated protocol snapshots" }
+stamp = { hash = "b3:3f978c1308cd6db4", by = "agent:plugin-protocol", note = "re-read: the new Plugins bullet (protocol 0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking jstream-protocol's class table, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, mock.rs and the protocol README; the rest of the section is untouched" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:059ecca49025c876", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: wave/m2's #460 bus references (delete.plan with a bus target, bus.delete blockers) stay at 0.24, matching version.rs, now beside main's 0.20 preview, 0.21 pairing, 0.22 opacity/blend/filter chains and 0.23 YouTube bullets; the merged protocol, control mock and server sources and both snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:3d01d4c325714b31", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the filter bullet cites ADR-0026 at protocol 0.22 and ADR-0027 at protocol 0.29, with SourceInfo.filters, OutputInfo.filters and state.get's master, followed by K1's hotkey bullet; matches version.rs at 0.29, the regenerated snapshots and the mock's checks." }
+stamp = { hash = "b3:852e591e9738f314", by = "agent:plugin-protocol", note = "re-read: the Plugins bullet (0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking the class table and, after round 1 B1, the hosts and files a call's settings name against the grant's hosts and folders, forbidden, unsupported from engine and mock) matches plugin.rs, command.rs, event.rs, error.rs, version.rs, lib.rs, mock.rs, the snapshots and the protocol README" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/live.rs"]
 stamp = { hash = "b3:5465cb1155aa0823", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the protocol section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the Live values bullet now names protocol 0.26; the wave's hotkey bullet (0.25), the stream-key binding (#343) and delete.plan hotkeys sit beside it; hotkey.set refuses live actions. Snaps regenerated for 0.26. Holds." }
@@ -556,6 +556,9 @@ stamp = { hash = "b3:d8b17ff7e46282f1", by = "agent:claude@session_01MjzPr23VZGb
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:34dc94f8cbd6afa7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the filter bullet cites ADR-0026 at protocol 0.22 and ADR-0027 at protocol 0.29, with SourceInfo.filters, OutputInfo.filters and state.get's master, followed by K1's hotkey bullet; matches version.rs at 0.29, the regenerated snapshots and the mock's checks." }
+
+["ARCH#protocol"."file:crates/jstream-protocol/src/plugin.rs"]
+stamp = { hash = "b3:119f2295680a6edd", by = "agent:a2656", note = "re-read against 0.35's plugin wire changes (plugin.* actions, plugin.state_changed, forbidden, the scoped Control's class and reach checks) and the protocol README's Reach bullet, now naming the scheme:// start rule (review N4: settings_reach now reads a string as a URL only when it starts as scheme:// after url_text's clean-up (trimmed, tabs and newlines dropped, as the WHATWG parser does), so a caption ending with a link reaches nothing, while a URL with spaces in its path or a tab in its scheme is still checked (tested); round 3 B2: the trim also drops Unicode white space (U+00A0, U+3000, U+2003, U+0085), the union of what the WHATWG parser and the engine's str::trim remove, so a URL the browser source would load after its trim is checked (tested)) and N5's wording; the section's summary of the protocol holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -1041,7 +1044,7 @@ stamp = { hash = "b3:4f0b3f117068e82b", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:cd070fd8dbcfb8ca", by = "agent:claude", note = "New bullet on fitting capture items matches run.rs fit_captures (CAPTURE_KINDS, one lazy state.get, unknown source and zero canvas left to the engine) and the tests in run/tests.rs; other bullets unaffected by args.rs's help-text line." }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:60d1d7f2937b2bff", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read after merging wave/m1-2 with E2 and K1: control design now says a deleted output comes back with its encoder profile, video mix and filters and its hotkeys; the CLI's grammar, block_on, connector seam and the filter.* JSON arg form are unaffected." }
+stamp = { hash = "b3:e2e0f632b63f000e", by = "agent:plugin-protocol", note = "re-read against the control README's mock change (the mock answers plugin.install, plugin.grant and plugin.enable with unsupported): the CLI sends no plugin call and its --mock text claims nothing about them; holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
@@ -1095,7 +1098,7 @@ stamp = { hash = "b3:7debd34844d88417", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:848a421212c11653", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "run/tests.rs: the expected state.get output now lists both video_mixes (E2) and hotkeys (K1) as empty arrays; the CLI's purpose is unchanged; holds" }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:2d43e6ae492e07ac", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 lists the video_mix.* edits and output.set_video_mix among those needing a JSON argument form, and an output the CLI creates shows the program; re-read after merging the wave's usage changes; holds" }
+stamp = { hash = "b3:e3997e675c93abe0", by = "agent:plugin-protocol", note = "re-read: the exit table's code 20 row now also names forbidden, which only a plugin's call gets; exit.rs's for_protocol maps it to 20 through its catch-all; the rest is unchanged" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:a67991ff279d4775", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: the table keeps the capture targets row next to wave's pair/device rows; args.rs parses both (tests merged); #450's fit text names display and window items, which C3 builds; holds; latest merge: the capture targets row stays beside the wave's new rows; holds" }
@@ -1110,10 +1113,10 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:7debd34844d88417", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: the table keeps the capture targets row next to wave's pair/device rows; args.rs parses both (tests merged); #450's fit text names display and window items, which C3 builds; holds; latest merge: the capture targets row stays beside the wave's new rows; holds" }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:60d1d7f2937b2bff", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read the merged undo bullet: a deleted output comes back with its encoder profile, video mix and filters and the hotkeys its delete removed; the master/output filter checks (audio only, no reference of any kind) match mock/filter.rs; ARCH protocol's dep change is D8's owners at protocol 0.29 beside K1's hotkeys." }
+stamp = { hash = "b3:e2e0f632b63f000e", by = "agent:plugin-protocol", note = "re-read: the mock list gains the plugin actions answered unsupported, as the engine answers them, matching mock.rs; ARCH#protocol's new Plugins bullet agrees" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d6ccac4e141c6220", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read the merged undo bullet: a deleted output comes back with its encoder profile, video mix and filters and the hotkeys its delete removed; the master/output filter checks (audio only, no reference of any kind) match mock/filter.rs; ARCH protocol's dep change is D8's owners at protocol 0.29 beside K1's hotkeys." }
+stamp = { hash = "b3:e1ed89862c3a73a7", by = "agent:plugin-protocol", note = "re-read: the mock list's plugin actions answered unsupported, as the engine answers them, match mock.rs; ARCH#protocol's Plugins bullet, now also naming the reach check, agrees: that check runs in a plugin's scoped Control, never in the mock" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1134,7 +1137,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:36ad2b81cb919daf", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: the mock bullet says capture.targets answers one made-up 1920x1080 primary display with ID MOCK_DISPLAY, matching mock.rs and capture_targets_lists_one_primary_display; latest wave merge: mock.rs's record_path_problem also refuses DOS device names, as the design's path-validation text says it mirrors jstream-graph; holds; latest merge: mock.rs answers live.list beside capture.targets and the mock's live-value gestures are the wave's; the capture.targets bullet still matches" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:f294fef790cbdcaf", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read the merged undo bullet: a deleted output comes back with its encoder profile, video mix and filters and the hotkeys its delete removed; the master/output filter checks (audio only, no reference of any kind) match mock/filter.rs; ARCH protocol's dep change is D8's owners at protocol 0.29 beside K1's hotkeys." }
+stamp = { hash = "b3:2a47d95a583220aa", by = "agent:plugin-protocol", note = "re-read: the mock list gains the plugin actions answered unsupported, as the engine answers them, matching mock.rs; ARCH#protocol's new Plugins bullet agrees" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs refuses bus.delete while a setting holds a bus reference, as the graph does; mock.rs adds a_bus_a_source_draws_cannot_be_deleted. Edited the audio checks bullet to list it. ARCH#protocol's new bus delete.plan/blockers text is consistent: the mock still answers delete.plan with internal and its refusals carry no blockers, as stated here." }
@@ -1167,7 +1170,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:36ad2b81cb919daf", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: lib.rs re-exports MOCK_DISPLAY and mock.rs answers capture.targets (import list unions the wave's BlendMode and Finite32); latest wave merge adds the mock's DOS-device-name record-path check (#505), which the purpose doesn't detail; holds; latest merge: mock.rs's module doc now lists capture.targets with the wave's live-value gestures, import list unions both; holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:f294fef790cbdcaf", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read after merging E2/K1 into D8: mock.rs now holds output_filters and master beside output_mixes, video_mixes and hotkeys, and output.delete's inverse restores the video mix then the filters; mock/filter.rs now says a master or output filter can't hold a reference (bus and asset too, N13). The contents list still holds." }
+stamp = { hash = "b3:2a47d95a583220aa", by = "agent:plugin-protocol", note = "re-read: mock.rs answers plugin.install, plugin.grant and plugin.enable with unsupported beside the pairing calls; the purpose's Mock description still holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs's delete_bus now refuses a bus a source's settings refer to (Reference::Bus), and mock.rs adds the test a_bus_a_source_draws_cannot_be_deleted; the trait, errors, mock, WebSocket client and shared-name contents listed here are unchanged, so the section holds." }
@@ -1188,13 +1191,13 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:e9a479b3a5a826d4", by = "agent:a2656", note = "Re-read Snapshots and the source.delete paragraph against snapshot.rs, live.rs, engine.rs and forget.rs: Shot::captures holds CaptureKey (spec, source, show_cursor; no source and the pointer shown for the primary display filling an output with no scene); one capture per source, so a per-source grant stays apart, at the stated cost of two captures for two sources on one target; a deleted source's grant is forgotten through Capture::forget_source on the jstream-forget thread started with the backends, off the engine lock, and its capture stops with the next snapshot; without the thread grants are kept (logged)" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:60d1d7f2937b2bff", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the master chain and output-tap item now says refused settings keep the old ones until the next routing sync (N14, matching filters.rs and the 'not applied' warn lines in audio.rs), and the tap paragraph says outputs on one video session (mix and profile) share one master-bus audio encode after E2's EncodeKey; deps are control's video-mix/filter undo text, protocol's 0.29 owners and ARCH protocol's 0.29 citation." }
+stamp = { hash = "b3:e2e0f632b63f000e", by = "agent:plugin-protocol", note = "re-read: the new bullet says plugin.install, plugin.grant and plugin.enable fail with unsupported and the differential script sends two, matching engine.rs and tests.rs; the protocol README's Plugins subsection and ARCH#protocol's bullet agree" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
 stamp = { hash = "b3:95efd56dcbe309db", by = "agent:a2656", note = "Re-read Snapshots and the source.delete paragraph against snapshot.rs, live.rs, engine.rs and forget.rs: Shot::captures holds CaptureKey (spec, source, show_cursor; no source and the pointer shown for the primary display filling an output with no scene); one capture per source, so a per-source grant stays apart, at the stated cost of two captures for two sources on one target; a deleted source's grant is forgotten through Capture::forget_source on the jstream-forget thread started with the backends, off the engine lock, and its capture stops with the next snapshot; without the thread grants are kept (logged)" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d6ccac4e141c6220", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the master chain and output-tap item now says refused settings keep the old ones until the next routing sync (N14, matching filters.rs and the 'not applied' warn lines in audio.rs), and the tap paragraph says outputs on one video session (mix and profile) share one master-bus audio encode after E2's EncodeKey; deps are control's video-mix/filter undo text, protocol's 0.29 owners and ARCH protocol's 0.29 citation." }
+stamp = { hash = "b3:e1ed89862c3a73a7", by = "agent:plugin-protocol", note = "re-read: the bullet saying plugin.install, plugin.grant and plugin.enable fail with unsupported, with two of them in the differential script, matches engine.rs and tests.rs; the protocol README's Plugins subsection and ARCH#protocol's bullet, now with the reach check (which runs before a call reaches the engine), agree" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1911,10 +1914,10 @@ stamp = { hash = "b3:a2a2e1a4bcd4bbb9", by = "agent:claude@session_01MjzPr23VZGb
 stamp = { hash = "b3:83be8dfdbe880d35", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read after merging E2/K1: Output carries filters and video_mix, State master and hotkeys; output.delete's inverse re-adds the video mix then the filters (apply.rs); Touched has VideoMix and Filter(FilterOwner, ..); the file saves outputs' filters before video_mix and master after sends, the rebuild doc names outputs with profile, mix and filters then the master's filters; the property test's filter-on-master/output case moved to 47 of 49. Text holds." }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:4532e526fdd0ed3c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Noun table unions video_mix with the wave's hotkey, live and capture tools, and batch carries ends_gesture; matches tools.rs and the regenerated tools.snap" }
+stamp = { hash = "b3:4820847e1df06544", by = "agent:plugin-protocol", note = "re-read: the Tools text says plugin.* ops get no tool, plugin.state_changed is dropped from the events feed and describe_api keeps the whole schema; matches tools.rs (PEOPLE_ONLY), events.rs and its test pushing a PluginStateChanged, and tools.snap; ARCH#mcp's change agrees" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:350ba19261d6aa4a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the dep change is ARCH mcp's size figure moving from about 520 KB to about 527 KB with D8's master and output owners in tools.snap; this section's tool grouping and snapshot-content rules quote no size, so it holds." }
+stamp = { hash = "b3:6c374faefe3f1bd4", by = "agent:plugin-protocol", note = "re-read: the Tools text says plugin.* ops get no tool, plugin.state_changed is dropped from the events feed and describe_api keeps the whole schema; matches tools.rs (PEOPLE_ONLY), events.rs and its test pushing a PluginStateChanged, and tools.snap; ARCH#mcp's change agrees" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1932,7 +1935,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:824842188b289238" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/events.rs"]
-stamp = { hash = "b3:d7fe456655d86a78", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: tool table lists the wave's device/filter/pairing/preview and the live tool (23 tools, tests.rs), batch takes ends_gesture (tools.rs), the events paragraph keeps the live.changed in-place merge and adds the wave's youtube drop in that order, matching events.rs push/supersede; tools.snap regenerated." }
+stamp = { hash = "b3:eaa3271bf3d6e284", by = "agent:plugin-protocol", note = "re-read: the Tools text says plugin.* ops get no tool, plugin.state_changed is dropped from the events feed and describe_api keeps the whole schema; matches tools.rs (PEOPLE_ONLY), events.rs and its test pushing a PluginStateChanged, and tools.snap; ARCH#mcp's change agrees" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/jsonrpc.rs"]
 stamp = { hash = "b3:5c306baedd4f5ddc" }
@@ -1950,10 +1953,10 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:7ea8551624d71fc6", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Noun table unions video_mix with the wave's hotkey, live and capture tools, and batch carries ends_gesture; matches tools.rs and the regenerated tools.snap" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:b10673c17766c6ef", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: tools.snap regenerated with the capture tool beside wave's device/filter/pairing/preview tools; ARCH#mcp lists capture; the noun grouping design holds; latest merge: tools.snap has 25 tools (hotkey, live and capture); grouping by noun holds" }
+stamp = { hash = "b3:0cb7c82b2543d335", by = "agent:plugin-protocol", note = "re-read: the Tools text says plugin.* ops get no tool, plugin.state_changed is dropped from the events feed and describe_api keeps the whole schema; matches tools.rs (PEOPLE_ONLY), events.rs and its test pushing a PluginStateChanged, and tools.snap; ARCH#mcp's change agrees" }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:2eced6e946fd9545", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at fcc584b (#482 annotations, #312): the Tools bullet's annotations and OPEN_WORLD sit beside the live tool, and the Events bullet keeps the in-place live.changed merge and the youtube drop (events.rs push/supersede). The live tool gets its annotations from effect(): live.set/live.cancel are actions, so it is destructive and not open-world, which the extended annotations_follow_what_each_tool_can_do now asserts." }
+stamp = { hash = "b3:50a866d4e18284bc", by = "agent:plugin-protocol", note = "re-read: the opening now excepts installing and granting plugins besides YouTube (ADR-0069 G1); the tools bullet names PEOPLE_ONLY's youtube and plugin, and the events bullet drops youtube.* and plugin.* events, matching tools.rs and events.rs" }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -1962,7 +1965,7 @@ stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 stamp = { hash = "b3:824842188b289238" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/events.rs"]
-stamp = { hash = "b3:d7fe456655d86a78", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read after merging wave/m1-2: added the live.changed merge to the events bullet beside the wave's youtube drop (events.rs push/supersede); server, tools (PEOPLE_ONLY, live tool generated from the schema), jsonrpc, stdio and errors unchanged." }
+stamp = { hash = "b3:eaa3271bf3d6e284", by = "agent:plugin-protocol", note = "re-read: the opening now excepts installing and granting plugins besides YouTube (ADR-0069 G1); the tools bullet names PEOPLE_ONLY's youtube and plugin, and the events bullet drops youtube.* and plugin.* events, matching tools.rs and events.rs" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/jsonrpc.rs"]
 stamp = { hash = "b3:5c306baedd4f5ddc" }
@@ -1980,7 +1983,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:7ea8551624d71fc6", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "tests.rs: tool count 26 (the wave's 25 plus video_mix); purpose holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:b10673c17766c6ef", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: tests.rs now expects 23 tools (wave's 22 plus capture) and tools.rs's read-only list adds capture; tools still come from the protocol schema; holds; latest merge: tests.rs expects 25 tools, the wave's 24 plus capture; holds" }
+stamp = { hash = "b3:0cb7c82b2543d335", by = "agent:plugin-protocol", note = "re-read: the opening now excepts installing and granting plugins besides YouTube (ADR-0069 G1); the tools bullet names PEOPLE_ONLY's youtube and plugin, and the events bullet drops youtube.* and plugin.* events, matching tools.rs and events.rs" }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
@@ -2508,7 +2511,7 @@ stamp = { hash = "b3:66dcf5b8fd0036b0", by = "agent:a2656", note = "Re-read Enve
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:d37c02905c71fce0", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Envelope example at minor 28; scene delete blockers include the video mix plus the hotkey-removal note; Hotkey bindings (0.25) then Video mixes (0.28) blocks; state.get lists video_mixes (pre-0.28 empty) and hotkeys; query.rs/output.rs docs say older than 0.28; regenerated protocol and examples snapshots" }
+stamp = { hash = "b3:132d39e884edf917", by = "agent:plugin-protocol", note = "re-read against 0.35: the new Plugins subsection matches plugin.rs (classes, the never list, the default-never table and its test, the hotkey bound-action class, forbidden from PluginGrant::check, grant shape and problem fields) and command.rs/event.rs (plugin.install/grant/enable docs, not_found entity plugin, unsupported, plugin.state_changed's fields and reasons); the hotkey bullet adds plugin.* to what bind_problem refuses; Events and the error table gain plugin.state_changed, forbidden and the plugin.* unsupported case; protocol.snap and examples.snap carry the new types and fixtures" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "body: omitted hardware means avoid, default profile hardware when there is one; protocol.snap doc-only; encoder.rs DEFAULT Prefer and #[default] Avoid; fixtures.rs explicit avoid; holds" }
@@ -2517,10 +2520,10 @@ stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "body: omitt
 stamp = { hash = "b3:a5f6168e622ba5f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512) and the 0.26 bump: version paragraph now says 0.26 is live values and 0.25 hotkeys; envelope example hello/welcome at minor 26; Live values subsection marked 0.26; 'Not in 0.11 yet' says live geometry arrived in 0.26; hotkey.set's unbindable list adds live.set/live.cancel (their gesture belongs to the sending session), matching bind_problem. Snaps regenerated. Holds." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:90aad6ee5341a814", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Envelope example at minor 28; scene delete blockers include the video mix plus the hotkey-removal note; Hotkey bindings (0.25) then Video mixes (0.28) blocks; state.get lists video_mixes (pre-0.28 empty) and hotkeys; query.rs/output.rs docs say older than 0.28; regenerated protocol and examples snapshots" }
+stamp = { hash = "b3:e9c17f60ec0afc64", by = "agent:plugin-protocol", note = "re-read against 0.35: the new Plugins subsection matches plugin.rs (classes, the never list, the default-never table and its test, the hotkey bound-action class, forbidden from PluginGrant::check, grant shape and problem fields) and command.rs/event.rs (plugin.install/grant/enable docs, not_found entity plugin, unsupported, plugin.state_changed's fields and reasons); the hotkey bullet adds plugin.* to what bind_problem refuses; Events and the error table gain plugin.state_changed, forbidden and the plugin.* unsupported case; protocol.snap and examples.snap carry the new types and fixtures" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:329529862d5114d7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design section after merging wave/m1-2 (bus references 0.24, youtube, pairing, filters, preview) into live values: the Live values section, Batch ends_gesture, live.changed/live.ended and Undo's 'a gesture's step is its committing batch' match command.rs, live.rs, event.rs and the regenerated protocol.snap/examples.snap; preview's 'sent when what the program mix draws changes' now also covers live values. Version numbers for live values come with the assigned bump." }
+stamp = { hash = "b3:dbe9582a4e84aefc", by = "agent:plugin-protocol", note = "re-read against 0.35: the new Plugins subsection matches plugin.rs (classes, the never list, the default-never table and its test, the hotkey bound-action class, forbidden from PluginGrant::check, grant shape and problem fields) and command.rs/event.rs (plugin.install/grant/enable docs, not_found entity plugin, unsupported, plugin.state_changed's fields and reasons); the hotkey bullet adds plugin.* to what bind_problem refuses; Events and the error table gain plugin.state_changed, forbidden and the plugin.* unsupported case; protocol.snap and examples.snap carry the new types and fixtures" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/filter.rs"]
 stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read the master/output chains paragraph and state.get master and output.list filters against filter.rs, output.rs, query.rs and the regenerated protocol.snap and examples.snap (master and output filters added on the wave's base); protocol version unchanged until the wave owner assigns the bump." }
@@ -2529,7 +2532,7 @@ stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGb
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:1caaa95db6930f39", by = "agent:wave-owner", note = "main into wave/m1-2 (#523), now also carrying wave/m1-2's #259 (E2 video mixes, 0.28): PROTOCOL_VERSION 0.28 for video mixes (video_mix.* edits, output.set_video_mix, video_mix.list) with 0.27's capture.targets kept; encoder profiles keep #437's wording (omitted hardware means avoid, the default prefers hardware); protocol.snap carries both; snapshot tests pass | merge: wave/m1-2's #303 (D8, 0.29): PROTOCOL_VERSION 0.29 for master and output filter owners, OutputInfo.filters and state.get's master; encoder profiles keep #437's wording; protocol.snap carries both; snapshot tests pass" }
+stamp = { hash = "b3:105c45b4655cb3ab", by = "agent:plugin-protocol", note = "re-read against 0.35: the new Plugins subsection matches plugin.rs (classes, the never list, the default-never table and its test, the hotkey bound-action class, forbidden from PluginGrant::check, grant shape and problem fields) and command.rs/event.rs (plugin.install/grant/enable docs, not_found entity plugin, unsupported, plugin.state_changed's fields and reasons); the hotkey bullet adds plugin.* to what bind_problem refuses; Events and the error table gain plugin.state_changed, forbidden and the plugin.* unsupported case; protocol.snap and examples.snap carry the new types and fixtures" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2541,13 +2544,13 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:b56a10d0198f4e5c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the edit and action lists add hotkey.set/clear, named_objects and bind_problem; the version history now leads with 0.25 hotkeys before 0.24 bus references; the hotkey block lists every refused action (output.set_key, preview, pairing.start/device.revoke, youtube.*) and the pre-0.25 lines. Checked against hotkey.rs, command.rs (bind_problem arms, source.delete's inverse ending in hotkey.set after filter.add), envelope.rs, query.rs, error.rs, version.rs (minor 25), fixtures.rs (hotkey examples before the blend and filter edits), parity.rs and the regenerated protocol.snap/examples.snap (titled 0.25). Merges since: Body: version history still leads with 0.25 hotkeys over 0.24; the hotkey block lists every refused action; the merge's #491 text on output.delete and key_server and #500/#505's path rules sit beside it. command.rs: the merged output.delete doc (key removed per #491, bindings removed and restored per this PR). protocol.snap: regenerated at 0.25 with #491's and #505's doc text and the hotkey schemas. parity.rs: hotkey bindings plus the wave's new UNC/DOS path cases." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:5189d490b6033350", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Envelope example at minor 28; scene delete blockers include the video mix plus the hotkey-removal note; Hotkey bindings (0.25) then Video mixes (0.28) blocks; state.get lists video_mixes (pre-0.28 empty) and hotkeys; query.rs/output.rs docs say older than 0.28; regenerated protocol and examples snapshots" }
+stamp = { hash = "b3:3f978c1308cd6db4", by = "agent:plugin-protocol", note = "re-read against 0.35: the new Plugins subsection matches plugin.rs (classes, the never list, the default-never table and its test, the hotkey bound-action class, forbidden from PluginGrant::check, grant shape and problem fields) and command.rs/event.rs (plugin.install/grant/enable docs, not_found entity plugin, unsupported, plugin.state_changed's fields and reasons); the hotkey bullet adds plugin.* to what bind_problem refuses; Events and the error table gain plugin.state_changed, forbidden and the plugin.* unsupported case; protocol.snap and examples.snap carry the new types and fixtures" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:059ecca49025c876", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: hello/welcome examples at minor 24 as examples.snap; wave/m2's bus references (bus param type, bus reference, not_found for a missing bus, bus.delete blockers, the bus delete.plan target, MAX_BUSES) sit beside main's 0.22 opacity/blend/filters, 0.21 pairing, 0.23 YouTube and 0.20 binary streams; fixed the Audio paragraph, which still said filters are not in the protocol: filter chains (0.22) belong only to sources, so none feeds a bus from another; the rest matches the merged sources and both snapshots" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:3d01d4c325714b31", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read the 0.29 changes: the owners paragraph now opens 'From 0.29', state.get lists master after hotkeys (missing from a pre-0.29 server parses as empty), output.list names video_mix and filters (0.29), the master/output reference refusal names bus and asset too (N13); query.rs doc says older than 0.29; protocol.snap, examples.snap regenerated at 0.29." }
+stamp = { hash = "b3:852e591e9738f314", by = "agent:plugin-protocol", note = "re-read against 0.35 (round 1 B1 included): the Plugins subsection matches plugin.rs: classes and the never list, the default-never table and its test, the hotkey bound-action and live.set edit classes, forbidden from PluginGrant::check, and the new Reach bullet (check reads source.create/set_settings and filter.add/set_settings settings with settings_reach: absolute assets inside a granted folder, http/https/ws/wss URLs' scheme://host:port granted, everything else forbidden, dot segments refused in paths and grant folders, the youtube_chat ID gap, an engine refusing a folder its OS doesn't read as absolute); command.rs/event.rs docs, the hotkey refusals, Events and the error table hold; protocol.snap carries PluginGrant's new description" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/live.rs"]
 stamp = { hash = "b3:5465cb1155aa0823", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512) and the 0.26 bump: version paragraph now says 0.26 is live values and 0.25 hotkeys; envelope example hello/welcome at minor 26; Live values subsection marked 0.26; 'Not in 0.11 yet' says live geometry arrived in 0.26; hotkey.set's unbindable list adds live.set/live.cancel (their gesture belongs to the sending session), matching bind_problem. Snaps regenerated. Holds." }
@@ -2560,6 +2563,9 @@ stamp = { hash = "b3:d8b17ff7e46282f1", by = "agent:claude@session_01MjzPr23VZGb
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:34dc94f8cbd6afa7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read the 0.29 changes: the owners paragraph now opens 'From 0.29', state.get lists master after hotkeys (missing from a pre-0.29 server parses as empty), output.list names video_mix and filters (0.29), the master/output reference refusal names bus and asset too (N13); query.rs doc says older than 0.29; protocol.snap, examples.snap regenerated at 0.29." }
+
+["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/plugin.rs"]
+stamp = { hash = "b3:119f2295680a6edd", by = "agent:a2656", note = "re-read the Plugins bullet (0.35: plugin.install/grant/enable for a person, plugin.state_changed, the scoped Control checking the class table and, after round 1 B1, the hosts and files a call's settings name against the grant's hosts and folders, forbidden, unsupported from engine and mock) against plugin.rs, command.rs, event.rs, error.rs, version.rs, lib.rs, mock.rs and the snapshots; the Reach bullet now says only a string that starts as scheme:// (after trimming ASCII spaces, controls and Unicode white space, and dropping tabs and newlines) is a URL, that a caption with a later link reaches nothing (review N4: settings_reach now reads a string as a URL only when it starts as scheme:// after url_text's clean-up (trimmed, tabs and newlines dropped, as the WHATWG parser does), so a caption ending with a link reaches nothing, while a URL with spaces in its path or a tab in its scheme is still checked (tested); round 3 B2: the trim also drops Unicode white space (U+00A0, U+3000, U+2003, U+0085), the union of what the WHATWG parser and the engine's str::trim remove, so a URL the browser source would load after its trim is checked (tested)), and review N5's 'Anything neither rule lets through is forbidden' replaces the sentence that didn't parse" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
@@ -2589,7 +2595,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:d37c02905c71fce0", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2's edits, VideoMix types and video_mix.list listed with K1's hotkey.set/clear; PROTOCOL_VERSION 0.28 for video mixes after 0.27 capture.targets, 0.26 live values, 0.25 hotkeys; parity fixture has two mixes and two hotkeys; matches version.rs, command.rs, fixtures.rs and snapshots" }
+stamp = { hash = "b3:132d39e884edf917", by = "agent:plugin-protocol", note = "re-read against 0.35: Contents list the plugin.* actions and plugin.state_changed, and a Plugins bullet naming plugin.rs's PluginClass, PLUGIN_SCOPES, plugin_scope, plugin_classes, PluginDenial, PluginGrant (check, problem), plugin_may_bind, PluginState and PluginDisabledReason; id.rs's PluginId, error.rs's Forbidden and the plugin entity kind, version.rs's minor 35, the version paragraph naming 0.35's additions, lib.rs's exports and every_command_has_a_plugin_scope, and fixtures.rs's check and fixtures all match" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "encoder.rs: DEFAULT prefers hardware, omitted field avoid; fixtures.rs: explicit avoid in the Stream fixture; the purpose names no default; holds" }
@@ -2598,10 +2604,10 @@ stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "encoder.rs:
 stamp = { hash = "b3:a5f6168e622ba5f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): contents list the Action variants with live.set/live.cancel and the wave's named_objects/bind_problem (merged line edited), plus Chord/HotkeyBinding; live.rs bullet unchanged; version.rs is now 0.26. Holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:90aad6ee5341a814", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2's edits, VideoMix types and video_mix.list listed with K1's hotkey.set/clear; PROTOCOL_VERSION 0.28 for video mixes after 0.27 capture.targets, 0.26 live values, 0.25 hotkeys; parity fixture has two mixes and two hotkeys; matches version.rs, command.rs, fixtures.rs and snapshots" }
+stamp = { hash = "b3:e9c17f60ec0afc64", by = "agent:plugin-protocol", note = "re-read against 0.35: Contents list the plugin.* actions and plugin.state_changed, and a Plugins bullet naming plugin.rs's PluginClass, PLUGIN_SCOPES, plugin_scope, plugin_classes, PluginDenial, PluginGrant (check, problem), plugin_may_bind, PluginState and PluginDisabledReason; id.rs's PluginId, error.rs's Forbidden and the plugin entity kind, version.rs's minor 35, the version paragraph naming 0.35's additions, lib.rs's exports and every_command_has_a_plugin_scope, and fixtures.rs's check and fixtures all match" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:329529862d5114d7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole purpose section after merging wave/m1-2: the contents list carries both the wave's filters, youtube, pairing, preview and bus references and live values (live.rs, live.set/live.cancel in Action, Batch.ends_gesture, live.list, live.changed/live.ended, GestureId); PROTOCOL_VERSION paragraph stays at 0.24 until the wave owner assigns live values' minor." }
+stamp = { hash = "b3:dbe9582a4e84aefc", by = "agent:plugin-protocol", note = "re-read against 0.35: Contents list the plugin.* actions and plugin.state_changed, and a Plugins bullet naming plugin.rs's PluginClass, PLUGIN_SCOPES, plugin_scope, plugin_classes, PluginDenial, PluginGrant (check, problem), plugin_may_bind, PluginState and PluginDisabledReason; id.rs's PluginId, error.rs's Forbidden and the plugin entity kind, version.rs's minor 35, the version paragraph naming 0.35's additions, lib.rs's exports and every_command_has_a_plugin_scope, and fixtures.rs's check and fixtures all match" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/filter.rs"]
 stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: FilterOwner now source, master and output, OutputInfo.filters and MasterInfo in query.rs, and the parity fixture's master and recording-output gain filters plus the vcam audio filter and master reference rejections; the wave's preview exports and asset paths kept from its side." }
@@ -2610,7 +2616,7 @@ stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGb
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:1caaa95db6930f39", by = "agent:wave-owner", note = "main into wave/m1-2 (#523), now also carrying wave/m1-2's #259 (E2 video mixes, 0.28): fixtures.rs keeps main's explicit hardware avoid in the Stream fixture beside C3's capture targets and #259's two video mixes; the purpose names no default; holds | merge: wave/m1-2's #303 (D8, 0.29): fixtures.rs gains a gain filter on the master chain and on the recording output's, beside main's explicit hardware avoid" }
+stamp = { hash = "b3:105c45b4655cb3ab", by = "agent:plugin-protocol", note = "re-read against 0.35: Contents list the plugin.* actions and plugin.state_changed, and a Plugins bullet naming plugin.rs's PluginClass, PLUGIN_SCOPES, plugin_scope, plugin_classes, PluginDenial, PluginGrant (check, problem), plugin_may_bind, PluginState and PluginDisabledReason; id.rs's PluginId, error.rs's Forbidden and the plugin entity kind, version.rs's minor 35, the version paragraph naming 0.35's additions, lib.rs's exports and every_command_has_a_plugin_scope, and fixtures.rs's check and fixtures all match" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2622,13 +2628,13 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:b56a10d0198f4e5c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result (CallResult::batch beside wave/m1-2's CallResult::action), delete.plan's and state.get's hotkeys, EntityKind::Hotkey beside Device, and PROTOCOL_VERSION 0.25 (provisional until the wave owner assigns the number). command.rs: named_objects returns nothing for the youtube, preview, pairing and device actions; bind_problem refuses them. Still the wire types shared by engine and clients. Merges since: Body: this PR's Hotkeys bullet (Chord, HotkeyBinding) now follows #491's OutputKind::key_server sentence, resolved by keeping both. command.rs: this PR's hotkey.set/clear, named_objects, bind_problem and the hotkey inverses; output.delete's doc now joins #491's 'the stream key is removed, so the inverse can't restore it' with this PR's 'bindings naming the output are removed; the inverse ends with hotkey.set for each', matching apply.rs (output.create, output.set_encoder if it had a profile). parity.rs: this PR's hotkey parity bindings beside #500/#505's recording path cases. Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:5189d490b6033350", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2's edits, VideoMix types and video_mix.list listed with K1's hotkey.set/clear; PROTOCOL_VERSION 0.28 for video mixes after 0.27 capture.targets, 0.26 live values, 0.25 hotkeys; parity fixture has two mixes and two hotkeys; matches version.rs, command.rs, fixtures.rs and snapshots" }
+stamp = { hash = "b3:3f978c1308cd6db4", by = "agent:plugin-protocol", note = "re-read against 0.35: Contents list the plugin.* actions and plugin.state_changed, and a Plugins bullet naming plugin.rs's PluginClass, PLUGIN_SCOPES, plugin_scope, plugin_classes, PluginDenial, PluginGrant (check, problem), plugin_may_bind, PluginState and PluginDisabledReason; id.rs's PluginId, error.rs's Forbidden and the plugin entity kind, version.rs's minor 35, the version paragraph naming 0.35's additions, lib.rs's exports and every_command_has_a_plugin_scope, and fixtures.rs's check and fixtures all match" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:059ecca49025c876", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list carries main's ActionResult, opacity/blend and filter.* edits, preview and pairing actions, YouTube types, events and queries, and wave/m2's MAX_BUSES and bus DeleteTarget; the version history reads 0.24 (wave/m2's bus references: ParamType::Bus, Reference::Bus, the bus delete.plan target, bus.delete blockers) above main's 0.23 YouTube, 0.22 filters, 0.21 pairing and 0.20 preview, matching version.rs and the since-0.24 doc comments; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:3d01d4c325714b31", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: PROTOCOL_VERSION is now 0.29 for the master and output filter owners, OutputInfo.filters and state.get's master, with 0.28 for E2's video mixes; lib.rs exports MasterInfo beside E2's capture-target types; the parity fixture and fixtures.rs carry both video_mix and filters on outputs and both master and hotkeys in state." }
+stamp = { hash = "b3:852e591e9738f314", by = "agent:plugin-protocol", note = "re-read against 0.35 (round 1 B1 included): Contents list the plugin.* actions and plugin.state_changed, and a Plugins bullet naming plugin.rs's PluginClass, PLUGIN_SCOPES, plugin_scope, plugin_classes (bound hotkey action and live.set edits), PluginDenial, PluginGrant (check, problem), settings_reach and Reach (now exported from lib.rs), plugin_may_bind, PluginState and PluginDisabledReason; id.rs's PluginId, error.rs's Forbidden and the plugin entity kind, version.rs's minor 35, the version paragraph, every_command_has_a_plugin_scope and fixtures.rs's check and fixtures all match" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/live.rs"]
 stamp = { hash = "b3:5465cb1155aa0823", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): contents list the Action variants with live.set/live.cancel and the wave's named_objects/bind_problem (merged line edited), plus Chord/HotkeyBinding; live.rs bullet unchanged; version.rs is now 0.26. Holds." }
@@ -2641,6 +2647,9 @@ stamp = { hash = "b3:d8b17ff7e46282f1", by = "agent:claude@session_01MjzPr23VZGb
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:34dc94f8cbd6afa7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: PROTOCOL_VERSION is now 0.29 for the master and output filter owners, OutputInfo.filters and state.get's master, with 0.28 for E2's video mixes; lib.rs exports MasterInfo beside E2's capture-target types; the parity fixture and fixtures.rs carry both video_mix and filters on outputs and both master and hotkeys in state." }
+
+["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/plugin.rs"]
+stamp = { hash = "b3:119f2295680a6edd", by = "agent:a2656", note = "re-read against 0.35 (round 1 B1 included): Contents list the plugin.* actions and plugin.state_changed, and a Plugins bullet naming plugin.rs's PluginClass, PLUGIN_SCOPES, plugin_scope, plugin_classes (bound hotkey action and live.set edits), PluginDenial, PluginGrant (check, problem), settings_reach and Reach (exported from lib.rs), plugin_may_bind, PluginState and PluginDisabledReason; id.rs's PluginId, error.rs's Forbidden and the plugin entity kind, version.rs's minor 35, the version paragraph, every_command_has_a_plugin_scope and fixtures.rs's check and fixtures all match; review N4: settings_reach now reads a string as a URL only when it starts as scheme:// after url_text's clean-up (trimmed, tabs and newlines dropped, as the WHATWG parser does), so a caption ending with a link reaches nothing, while a URL with spaces in its path or a tab in its scheme is still checked (tested); round 3 B2: the trim also drops Unicode white space (U+00A0, U+3000, U+2003, U+0085), the union of what the WHATWG parser and the engine's str::trim remove, so a URL the browser source would load after its trim is checked (tested); nothing this section lists changed" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
@@ -3222,10 +3231,10 @@ stamp = { hash = "b3:a4d298341deb1517", by = "agent:wave-owner", note = "wave/m1
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against control#design and ARCH#protocol after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the TCP cap, in-flight bound, failed-credential log limit and key echo test are the wave's; this PR's gesture-expiry sentence (a closed connection drops its session and its open gestures) still holds with the per-connection sessions. Holds." }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:60d1d7f2937b2bff", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: deps changed by control's merged undo text (video mix, filters, hotkeys) and ARCH protocol's 0.29 citation for ADR-0027; admission, routing and sessions here are untouched." }
+stamp = { hash = "b3:e2e0f632b63f000e", by = "agent:plugin-protocol", note = "re-read against ARCH#protocol's Plugins bullet: the server forwards the plugin.* actions to the engine like other actions and answers none of them itself; the section claims nothing about them; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d6ccac4e141c6220", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: deps changed by control's merged undo text (video mix, filters, hotkeys) and ARCH protocol's 0.29 citation for ADR-0027; admission, routing and sessions here are untouched." }
+stamp = { hash = "b3:e1ed89862c3a73a7", by = "agent:plugin-protocol", note = "re-read against ARCH#protocol's Plugins bullet (now also the reach check): the server forwards the plugin.* actions to the engine like other actions and runs no plugin checks itself; the section claims nothing about them; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -3507,7 +3516,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:212a6c104c20a442", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the whole design after merging wave/m1-2: fixed the mixer's fader bullet, which said live values aren't in the protocol; they are, but live.set takes only item placements and crops (live.rs is_live_adjustable), so faders still send one edit on release. Everything else (connecting, events, properties, outputs, pairing, mixer) is unchanged by live values." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:60d1d7f2937b2bff", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: outputs.rs's only change is the two test literals gaining filters beside video_mix, and control design's change is the undo text; the panel design is unchanged." }
+stamp = { hash = "b3:e2e0f632b63f000e", by = "agent:plugin-protocol", note = "re-read against the control README's mock change (plugin actions answer unsupported): the UI has no plugin panel yet and sends no plugin call; its unsupported text is about pairing only; holds" }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -4095,7 +4104,7 @@ stamp = { hash = "b3:7c0a5283f684f83d", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:e65cfd20a6ffa5eb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "dep ARCH#protocol gained hotkey.set/clear and new result fields, all minor additions under R-API-001 (0.25); dep ARCH#persistence gained the optional hotkeys field with no schema_version bump, consistent with R-API-003 since no bump means no migration is owed. Rules unchanged. Merges since: dep ARCH#protocol: this PR's hotkey.set/clear and new result fields are minor additions at 0.25 under R-API-001; the merge's #491 output.delete key removal is the wave's. Rules unchanged." }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d6ccac4e141c6220", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: ARCH protocol's change is additive, the master and output filter owners at protocol 0.29 (one minor past E2's 0.28), consistent with R-API-001." }
+stamp = { hash = "b3:e1ed89862c3a73a7", by = "agent:plugin-protocol", note = "re-read against ARCH#protocol's Plugins bullet: 0.35's additions (three actions, an event, an error code, an entity kind) are additions, so a minor bump, as R-API-001 says; the reach check adds no wire change; holds" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:efd084f9966f6d2d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: R-DEP-007 now cites ADR-0056, which keeps the SHA-pinning rule (item 1) and Dependabot keeping pins current (item 2); other R-DEP rules untouched." }
@@ -4131,7 +4140,7 @@ stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:2d43e6ae492e07ac", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale only via cli#usage; the smoke steps (snapshot, start/stop an output on the program) still hold with video mixes and hotkeys merged" }
+stamp = { hash = "b3:e3997e675c93abe0", by = "agent:plugin-protocol", note = "re-read against the CLI usage change (forbidden named under exit 20): the smoke checks use no plugin calls and cite no exit code it changes; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (ADR citation only); holds" }
@@ -4143,7 +4152,7 @@ stamp = { hash = "b3:a560da0e5768f43e" }
 stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:2d43e6ae492e07ac", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale only via cli#usage (video mix edits need JSON form); the go-live steps use no video mix and still hold" }
+stamp = { hash = "b3:e3997e675c93abe0", by = "agent:plugin-protocol", note = "re-read against the CLI usage change (forbidden named under exit 20): the steps use no plugin calls and cite no exit code it changes; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:22c67cadf15af928", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (ADR citation only); holds" }
