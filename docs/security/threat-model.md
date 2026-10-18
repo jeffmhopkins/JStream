@@ -227,10 +227,13 @@ non-finite samples turned to silence.
   coming back are not validated (nothing reads them yet); plugin-reported names reach
   the UI and agents; the host can reset the mixer's miss counters.
 - WASM (#348): ADR-0069 (accepted on `wave/m1-3`, #584) decided the limits. The host
-  builds its CPU and memory ones: fuel, the 100 ms and 1 s deadlines, and 64 MiB. Not
-  built yet: the capability classes checked against the protocol's table and grants
-  made only by people, the 1,000-event queue, the cap of 50 commands a second with its
-  `forbidden` error, and disabling a plugin that fails. Until grants exist a plugin is
+  builds its CPU and memory limits (the 100 ms and 1 s deadlines, 64 MiB and 10,000
+  table elements), and adds a fuel budget of its own. Not built yet: the capability
+  classes checked against the protocol's table and grants made only by people, the
+  1,000-event queue, the cap of 50 commands a second with its `forbidden` error,
+  disabling a plugin that fails, and the untrusted-output handling (U1: plugin text about the
+  plugin in `remote_*` fields, and MCP instructions saying state text can come from a
+  plugin). Until grants exist a plugin is
   granted nothing; a host that granted output commands would let a plugin retarget an
   output (it can't take the old key along: #343 removes it on a new server).
 - WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
@@ -325,7 +328,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |
 | #347 | Browser | No permission policy; no stance on loopback and LAN requests | Medium |
-| #348 | WASM | ADR-0069's capability classes, grants, event queue and command rate are decided but not built (the CPU and memory limits are) | Medium |
+| #348 | WASM | ADR-0069's capability classes, grants, event queue, command rate and untrusted-output handling are decided but not built (the CPU and memory limits are) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | `rtmp://` cleartext, crash-report redaction, redaction test scope | Low |
