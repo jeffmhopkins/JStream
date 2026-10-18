@@ -22,8 +22,8 @@ use jstream_platform::media::{
 };
 use jstream_platform::nv12::bgra_to_nv12;
 use jstream_platform::{
-    Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, PlatformError,
-    VideoSurface,
+    Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
+    CursorCapture, PlatformError, VideoSurface,
 };
 use objc2::rc::Retained;
 use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
@@ -64,8 +64,9 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 /// Display and window capture through ScreenCaptureKit (ADR-0063 §3).
 ///
 /// It delivers `VideoSurface::Cpu` NV12 frames in BT.709 limited range, converted from
-/// ScreenCaptureKit's sRGB BGRA, with the cursor drawn in. `pts` is each frame's
-/// presentation time on the [`MachClock`](crate::MachClock) time line. A window's frames
+/// ScreenCaptureKit's sRGB BGRA, with the cursor drawn in unless
+/// [`CursorCapture::Hidden`] leaves it out. `pts` is each frame's presentation time on
+/// the [`MachClock`](crate::MachClock) time line. A window's frames
 /// keep the size it had when the capture started: a resized window is scaled to fit,
 /// keeping its aspect ratio.
 ///
@@ -159,6 +160,17 @@ impl Capture for ScreenCaptureKitCapture {
     }
 
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.start_with(target, &CaptureOptions::default())
+    }
+
+    /// As [`start`](Capture::start). This backend doesn't send the pointer apart from the
+    /// frames yet, so [`CursorCapture::Metadata`] draws it in; [`CursorCapture::Hidden`]
+    /// turns the configuration's `showsCursor` off.
+    fn start_with(
+        &self,
+        target: &CaptureTarget,
+        options: &CaptureOptions,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
         let wanted = resolve(target)?;
         self.access()?;
         // Off-screen windows too, so a window on another Space can be captured.
@@ -186,7 +198,11 @@ impl Capture for ScreenCaptureKitCapture {
                 (window_filter(&window), format!("window {id}"))
             }
         };
-        Ok(Box::new(SckStream::start(&filter, what)?))
+        Ok(Box::new(SckStream::start(
+            &filter,
+            what,
+            shows_cursor(options.cursor),
+        )?))
     }
 }
 
@@ -360,8 +376,15 @@ fn completed(
     wait(&rx, what, timeout)
 }
 
-/// The stream's settings for content of `size` pixels.
-fn configuration(size: FrameSize) -> Retained<SCStreamConfiguration> {
+/// Whether the stream draws the pointer for `cursor`: only [`CursorCapture::Hidden`]
+/// leaves it out.
+fn shows_cursor(cursor: CursorCapture) -> bool {
+    cursor != CursorCapture::Hidden
+}
+
+/// The stream's settings for content of `size` pixels, with the pointer drawn in when
+/// `cursor` is set.
+fn configuration(size: FrameSize, cursor: bool) -> Retained<SCStreamConfiguration> {
     // SAFETY: a fresh configuration, set up before any stream uses it. Each setter takes
     // a plain value, and `kCGColorSpaceSRGB` is a Core Graphics constant, set when the
     // framework loads and never written.
@@ -371,7 +394,7 @@ fn configuration(size: FrameSize) -> Retained<SCStreamConfiguration> {
         config.setHeight(size.height() as usize);
         config.setPixelFormat(CV_BGRA);
         config.setColorSpaceName(kCGColorSpaceSRGB);
-        config.setShowsCursor(true);
+        config.setShowsCursor(cursor);
         config.setScalesToFit(true);
         config.setPreservesAspectRatio(true);
         config
@@ -651,12 +674,12 @@ impl std::fmt::Debug for SckStream {
 }
 
 impl SckStream {
-    fn start(filter: &SCContentFilter, what: String) -> Result<Self, PlatformError> {
+    fn start(filter: &SCContentFilter, what: String, cursor: bool) -> Result<Self, PlatformError> {
         let size = filter_size(filter).ok_or_else(|| PlatformError::DeviceLost {
             what: what.clone(),
             reason: "it has no area to capture".into(),
         })?;
-        let config = configuration(size);
+        let config = configuration(size, cursor);
         let shared = Arc::new(Shared {
             mailbox: Mailbox::new(),
             captured: AtomicU64::new(0),
@@ -741,6 +764,16 @@ impl Drop for SckStream {
 #[cfg(test)]
 mod tests {
     use super::ScreenCaptureKitCapture;
+
+    /// Only `Hidden` turns `showsCursor` off; this backend doesn't send the pointer
+    /// apart yet, so `Metadata` draws it in.
+    #[test]
+    fn only_a_hidden_cursor_is_left_out() {
+        use jstream_platform::CursorCapture;
+        assert!(super::shows_cursor(CursorCapture::Drawn));
+        assert!(super::shows_cursor(CursorCapture::Metadata));
+        assert!(!super::shows_cursor(CursorCapture::Hidden));
+    }
 
     #[test]
     fn the_backend_opens_without_asking_for_anything() {
