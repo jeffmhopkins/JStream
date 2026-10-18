@@ -66,6 +66,7 @@ jstream-audio = { path = "crates/jstream-audio" }
 jstream-browser = { path = "crates/jstream-browser" }
 jstream-control = { path = "crates/jstream-control" }
 jstream-core = { path = "crates/jstream-core" }
+jstream-crash = { path = "crates/jstream-crash" }
 jstream-effects = { path = "crates/jstream-effects" }
 jstream-encode = { path = "crates/jstream-encode" }
 jstream-graph = { path = "crates/jstream-graph" }
