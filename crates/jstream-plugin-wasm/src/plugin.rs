@@ -4,6 +4,7 @@ use crate::abi;
 use crate::block_on::block_on;
 use crate::capability::Capabilities;
 use crate::error::Error;
+use crate::events::EventSender;
 use crate::limits::{self, Limits};
 use crate::rate::CallRate;
 use jstream_control::protocol::Call;
@@ -130,6 +131,8 @@ pub struct Plugin {
     store: Store<HostState>,
     instance: Instance,
     fuel: u64,
+    /// The engine events waiting for the plugin.
+    events: EventSender,
     /// Keeps the epoch advancing while the plugin lives, even after its host is dropped.
     _ticker: Arc<Ticker>,
 }
@@ -192,6 +195,7 @@ impl Plugin {
             store,
             instance,
             fuel: limits.fuel(),
+            events: EventSender::default(),
             _ticker: host.ticker.clone(),
         })
     }
@@ -216,6 +220,27 @@ impl Plugin {
         state.result.clear();
         func.call(&mut self.store, ())
             .map_err(|e| Error::from_run(e, Error::Trap))
+    }
+
+    /// Where the engine queues events for this plugin, from any thread. The queue holds at
+    /// most [`MAX_QUEUED_EVENTS`](crate::MAX_QUEUED_EVENTS) (ADR-0069): an event that
+    /// finds it full drops the queued events, and the plugin is next handed one
+    /// `events.dropped` notice with their count.
+    pub fn events(&self) -> EventSender {
+        self.events.clone()
+    }
+
+    /// Hands the plugin its next queued event: invokes `entry` (type `() -> ()`) with the
+    /// protocol `Event` as JSON for its input, as [`Self::invoke`] does. `Ok(false)` when
+    /// no event waits. The event is taken off the queue even when the invocation fails.
+    pub fn deliver_event(&mut self, entry: &str) -> Result<bool, Error> {
+        let Some(event) = self.events.next() else {
+            return Ok(false);
+        };
+        // An `Event` is plain data with string keys, so this doesn't fail in practice.
+        let input = serde_json::to_vec(&event).map_err(|e| Error::Engine(e.into()))?;
+        self.invoke(entry, &input)?;
+        Ok(true)
     }
 
     /// The fuel the last invocation left unused.

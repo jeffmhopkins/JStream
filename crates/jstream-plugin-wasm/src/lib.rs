@@ -13,6 +13,7 @@ pub mod abi;
 mod block_on;
 mod capability;
 mod error;
+mod events;
 mod limits;
 #[cfg(test)]
 mod no_ambient_capabilities;
@@ -21,6 +22,7 @@ mod rate;
 
 pub use capability::{Capabilities, command_names};
 pub use error::Error;
+pub use events::{EventSender, MAX_QUEUED_EVENTS};
 pub use limits::Limits;
 pub use plugin::{EPOCH_TICK, Plugin, PluginConfig, PluginHost};
 
