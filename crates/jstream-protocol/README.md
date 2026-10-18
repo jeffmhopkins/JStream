@@ -134,7 +134,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `PlacementForm` and the shared placement formula
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). `project` places the
   box, rotation about its centre, with the 3D fields in the formula and defaulting to
-  neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`.
+  neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`, and
+  `drawn_polygon` and `unplace` are ADR-0050's 3D polygon and inverse map
+  ([Item geometry](#design)).
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
@@ -1081,6 +1083,25 @@ function in this crate so the compositor and the UI share one implementation.
   A negative scale is not refused. Geometry has no flip field, so projecting that box
   matches the outline and not the reflected corner order. `legacy_quad` is the
   reflected quad.
+- `drawn_polygon` and `unplace` (`geometry/drawn.rs`,
+  [ADR-0050](../../docs/adr/0050-3d-transforms-rendering.md) decisions 1 to 3) are what
+  a compositor draws in 3D, and its inverse. `drawn_polygon` clips `content`'s rectangle
+  to the box, then by the near plane `w ≥ NEAR_W` (1/256: nothing magnified more than 256
+  times), both in the local frame where texture coordinates are linear. It returns three
+  to five `DrawnVertex`es, each with its canvas point (`place` of its local point), local
+  point, texture coordinate and `w = (p − z) / p` (1 without perspective), so the GPU
+  can interpolate texture coordinates perspective-correctly. It returns nothing when the
+  content misses the box, the whole item is past the near plane, it is seen edge-on, or
+  it covers under 0.01 px².
+  Edge-on is decided by the plane's facing (the z of its unit normal under a millionth:
+  through the viewer with perspective, side-on without), whatever the item's size, and
+  `unplace` makes the same test, so the two agree.
+  With neutral 3D it is the 2D quad, its texture coordinates clipped to the box.
+  `unplace` maps a canvas point back to the local point it shows: a 2×2 solve, in
+  `f64`, with nothing returned edge-on or past the near plane. It doesn't check the box,
+  so a hit test compares the point with it. Both allocate nothing, for the render
+  thread. They are pure functions with no wire form, and nothing calls them yet: the
+  compositor's 3D draw and lifting the rejection below are the next X1 parts.
 
 **On the wire (0.11).** ADR-0022 names these additions as 0.4, which had already
 shipped with `events.dropped`, so they ship as 0.11, an additive minor under

@@ -431,7 +431,8 @@ mod tests {
         now: Instant,
     }
 
-    /// How long, on the wall clock, a test waits for the fake host's thread.
+    /// How long, on the wall clock, a test waits for the fake host's thread: to get
+    /// ready, or to answer a state request.
     const READY_WAIT: Duration = Duration::from_secs(20);
 
     impl Rig {
@@ -449,11 +450,10 @@ mod tests {
             self.sup.tick(self.now)
         }
 
-        /// Ticks until the host is ready, returning everything seen. It waits on the
-        /// wall clock, not a count of ticks: the fake host is a thread, and a loaded CI
-        /// runner can leave it unscheduled for seconds. Each tick still moves the
-        /// supervisor's clock by only 1 ms, so even the whole wait stays well inside the
-        /// default 10 s `start_timeout`.
+        /// Ticks until the host is ready, returning everything seen. The bound is wall
+        /// time, not a tick count: under a loaded test run the fake host's thread can take
+        /// seconds to answer. At 1 ms of supervisor time per tick of at least 5 ms, 20 s
+        /// stays well inside the default `start_timeout`.
         fn until_ready(&mut self) -> Vec<HostEvent> {
             let mut seen = Vec::new();
             let deadline = Instant::now() + READY_WAIT;
