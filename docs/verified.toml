@@ -126,7 +126,7 @@ stamp = { hash = "b3:24cef673281620f5" }
 stamp = { hash = "b3:717f84850b5a595c", by = "agent:youtube-sign-in", note = "Re-read jstream-youtube and jstream-sources rows: summaries now cite ADR-0058; nothing else changed" }
 
 ["ARCH#data-model"."body"]
-stamp = { hash = "b3:63c9fd00b3486243", by = "agent:claude-x1", note = "Data model now says any 3D geometry is accepted from protocol 0.34, and 3D geometry is gone from the not-yet list; matches graph apply.rs check_geometry and the model invariant doc." }
+stamp = { hash = "b3:796e6ff7360e4338", by = "agent:claude-x1", note = "This PR (#629): the Data model says any 3D geometry is accepted from protocol 0.34, and 3D geometry is gone from the not-yet list; matches graph apply.rs check_geometry and the model invariant doc. | merge: #643's head aa5baaa in dbab5bf, which carries #611's sync with wave/m3-3 at b5efb97 (#680: wave/m3-2 and main). Conflicts: README's and UI-FEATURES' generated tables (regenerated), X1's progress entry (kept this PR's status, list and needs, with the wave's wording), and the ledger (kept this branch's entries). The body also gains #581's ADR-0068 wording: SceneItem.effects[] is reserved for per-placement effects, which are in v1, and stays empty until they are built. That sits beside this PR's 3D sentence; holds." }
 
 ["ARCH#data-model"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -1911,7 +1911,7 @@ stamp = { hash = "b3:9f95f4d2d15eb904", by = "agent:claude@session_017gppowEjn8Z
 stamp = { hash = "b3:984f333744172f87" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:63c9fd00b3486243", by = "agent:claude-x1", note = "Data model change is only that 3D geometry is accepted from 0.34; nothing about encoders, so this holds." }
+stamp = { hash = "b3:796e6ff7360e4338", by = "agent:claude-x1", note = "This PR (#629): ARCH's data model now accepts any 3D from 0.34; nothing about encoders. | merge: #643's head aa5baaa in dbab5bf, which carries #611's sync with wave/m3-3 at b5efb97 (#680: wave/m3-2 and main). Conflicts: README's and UI-FEATURES' generated tables (regenerated), X1's progress entry (kept this PR's status, list and needs, with the wave's wording), and the ledger (kept this branch's entries). The data model's ADR-0068 effects wording is about scene items, not encoders; holds." }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:100d1063c61d4a12", by = "agent:wave-owner", note = "main into wave/m1-2 (#523), now also carrying wave/m1-2's #259 (E2 video mixes, 0.28): re-read against ARCH#threading: main's CLAP plugin-host paragraph (host process, launcher and HostSupervisor built; filters not run; quarter-block sleep) beside #244's jstream-live thread, and #259's render row compositing each video mix due on a base tick and the collector taking a dropped mix's frame buffers; the registry text now says core keys sessions by video mix and profile (#259), which matches core's runtime; encoder threads unchanged" }
@@ -1953,7 +1953,7 @@ stamp = { hash = "b3:68a1f74c8f2c5807", by = "agent:claude-x1", note = "This PR 
 stamp = { hash = "b3:95dbeb7275d807fb" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:63c9fd00b3486243", by = "agent:claude-x1", note = "Geometry check sentence now says positive size and perspective and finite corners, any 3D accepted from 0.34; matches apply.rs check_geometry (neutral check removed) and the new a_3d_geometry_is_accepted_and_read_back test." }
+stamp = { hash = "b3:796e6ff7360e4338", by = "agent:claude-x1", note = "This PR (#629): the geometry check sentence says positive size and perspective and finite corners, any 3D accepted from 0.34; matches apply.rs check_geometry (neutral check removed) and a_3d_geometry_is_accepted_and_read_back. | merge: #643's head aa5baaa in dbab5bf, which carries #611's sync with wave/m3-3 at b5efb97 (#680: wave/m3-2 and main). Conflicts: README's and UI-FEATURES' generated tables (regenerated), X1's progress entry (kept this PR's status, list and needs, with the wave's wording), and the ledger (kept this branch's entries). ARCH data model's ADR-0068 effects wording (effects[] reserved, empty until built) matches graph, which keeps effects empty; holds." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
 stamp = { hash = "b3:676d85c5a4410a23", by = "agent:claude-x1", note = "Geometry check sentence now says positive size and perspective and finite corners, any 3D accepted from 0.34; matches apply.rs check_geometry (neutral check removed) and the new a_3d_geometry_is_accepted_and_read_back test." }
@@ -4785,7 +4785,7 @@ stamp = { hash = "b3:e0fff104df6bbece", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:b24a15b358dcb55b", by = "agent:claude-ui-features", note = "panels/scenes.rs: rows with a Program badge and a hover Program button, up/down reorder buttons, double-click rename, delete and the New scene name field (SC-02, SC-04, SC-05 partial; SC-10 cut button); folders, labels and keyframes are B11 #323 and K1 as noted." }
 
 ["UI-FEATURES#summary"."body"]
-stamp = { hash = "b3:9037a2f043439c4e", by = "agent:claude-x1", note = "Inspector row recounted after IN-05: 10 rows, 0/0/7/3/0; totals 130, 3, 24, 60, 42, 1." }
+stamp = { hash = "b3:2b0be0c446cf6951", by = "agent:claude-x1", note = "This PR (#629): IN-05 (3D) notes item.set_geometry takes any 3D from 0.34; its status is unchanged. | merge: #643's head aa5baaa in dbab5bf, which carries #611's sync with wave/m3-3 at b5efb97 (#680: wave/m3-2 and main). Conflicts: README's and UI-FEATURES' generated tables (regenerated), X1's progress entry (kept this PR's status, list and needs, with the wave's wording), and the ledger (kept this branch's entries). The generated summary now counts the wave's CV-03 move from locked to partly built (U4p, #302): Canvas 18 rows, 1/7/7/3/0; Inspector 10 rows, 0/0/7/3/0; totals 130, 3, 25, 59, 42, 1, which docs generate wrote from the area tables; holds." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
 stamp = { hash = "b3:59d07e4f3f8af884", by = "agent:wave-owner", note = "Canvas row recounted after CV-03 moved 🔒→🟡 (18: 1 ✅, 7 🟡, 7 ⬜, 3 🔒), and the totals now read 25 🟡 and 42 🔒. The other area rows are unchanged." }
