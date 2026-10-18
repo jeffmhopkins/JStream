@@ -79,7 +79,9 @@ It has:
   different ones; packets before that are dropped. Each packet is decoded synchronously,
   and the output callback, which catches any panic, copies each frame into a **CPU
   frame** in the configured format. Frames come out in presentation order, and `poll`
-  never blocks. A packet of another codec is refused, and so is use after `finish`.
+  never blocks. A packet of another codec is refused, and so is use after `finish`. A
+  `finish` that fails still releases the frames already decoded, so a second `finish`
+  hands them out.
 - **`split_access_unit`**: an Annex B packet as its parameter sets (VPS, SPS, then PPS,
   as Core Media takes them) and a sample of 4-byte length-prefixed NAL units, without
   access unit delimiters (**`annexb_units`** finds the units, and **`sets_complete`**
