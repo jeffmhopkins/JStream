@@ -59,7 +59,14 @@ It has:
   message. The new restore token `Start` returns replaces the spent one, in memory and,
   with `PortalCapture::with_token_dir`, in a file only the user can read: written 0600
   to a fresh file and renamed into place, and read only from a regular file the user
-  owns that no one else can read or write. So the next start skips the picker. A
+  owns that no one else can read or write. So the next start skips the picker. The
+  tokens are kept per grant: `start` keeps one per kind of pick, and `start_with` one per
+  source and kind, so two window sources each reopen their own window and a new source
+  gets the picker rather than the last pick. A source's file is
+  `screencast-<kind>-source-<hex of its ID>.token`, so any ID stays a plain name in the
+  folder (an ID over 96 bytes keeps its token in memory only), and `forget_source`
+  removes both of its files when the source is deleted; a start of that source still
+  waiting on the picker then doesn't store the token it is granted. A
   thread keeps the portal's connection open for the session's
   life and reports the portal closing it (sharing stopped, grant revoked) as
   `DeviceLost`. `on_context`, on a context `LinuxGpu` opened with DMA-BUF import, gives
@@ -225,8 +232,9 @@ It has:
 Not here yet, in roughly the order they follow:
 - the cursor as stream metadata, composited by the source, once the source has a
   "show cursor" setting (it is drawn into the frames for now);
-- restore tokens kept per source rather than per kind of pick, once the engine names
-  the source when it starts a capture;
+- the engine starting each portal source's capture with `start_with` and
+  `CaptureOptions::for_source`, and calling `forget_source` when the source is deleted,
+  once captures follow sources on this wave (it captures the primary display for now);
 - PipeWire audio streams (ADR-0060 §4), including desktop and application audio, and
   choosing between PipeWire and ALSA where both are present;
 - V4L2 webcams;
