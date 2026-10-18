@@ -2277,7 +2277,7 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:4d61e0ed41a75201", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey); the WindowsVcam ADR-0066 citation still holds" }
+stamp = { hash = "b3:9d0bf281823755f8", by = "agent:claude", note = "#540 (#356): the new security.rs reads a mapping's owner and DACL as SDDL and refuses one the sink wouldn't have set; vcam/shared.rs and vcam/sink.rs make start InvalidState for an existing control mapping that fails it; lib.rs adds the module. The README paragraph on the control mapping says this. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 here, which the section's text still matches" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:54d72e265b128a7b", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey); the WindowsVcam ADR-0066 citation still holds" }
@@ -2385,7 +2385,7 @@ stamp = { hash = "b3:a962082ddbf74417" }
 stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
-stamp = { hash = "b3:7de4e10afa70b73d", by = "agent:vcam-optin-561", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds | merge: re-read: merging wave/m1-3 kept this branch's lib.rs Docs line (threat-model sections) on top of the wave's lib.rs, which adds the plugin_block and plugin_hosts exports the section already describes" }
+stamp = { hash = "b3:046b67b09a581f60", by = "agent:claude", note = "#540 (#356): the new security.rs reads a mapping's owner and DACL as SDDL and refuses one the sink wouldn't have set; vcam/shared.rs and vcam/sink.rs make start InvalidState for an existing control mapping that fails it; lib.rs adds the module. The README paragraph on the control mapping says this. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 here, which the section's text still matches" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/n_edition.rs"]
 stamp = { hash = "b3:ede57dd335c2eec0" }
@@ -2396,6 +2396,9 @@ stamp = { hash = "b3:7f14b3bb7eb52944", by = "agent:claude", note = "Adds the Pl
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/plugin_hosts.rs"]
 stamp = { hash = "b3:51ed695e06830a27", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
+["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/security.rs"]
+stamp = { hash = "b3:a1bef25f0a2483a1", by = "agent:claude", note = "#540 (#356): the new security.rs reads a mapping's owner and DACL as SDDL and refuses one the sink wouldn't have set; vcam/shared.rs and vcam/sink.rs make start InvalidState for an existing control mapping that fails it; lib.rs adds the module. The README paragraph on the control mapping says this. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 here, which the section's text still matches" }
+
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/format.rs"]
 stamp = { hash = "b3:04540a625ddb78d5" }
 
@@ -2403,10 +2406,10 @@ stamp = { hash = "b3:04540a625ddb78d5" }
 stamp = { hash = "b3:57ee2cd8b8984db0", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/shared.rs"]
-stamp = { hash = "b3:518cf8d8efd63e59", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
+stamp = { hash = "b3:3ca0e169f953f32d", by = "agent:claude", note = "#540 (#356): the new security.rs reads a mapping's owner and DACL as SDDL and refuses one the sink wouldn't have set; vcam/shared.rs and vcam/sink.rs make start InvalidState for an existing control mapping that fails it; lib.rs adds the module. The README paragraph on the control mapping says this. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 here, which the section's text still matches" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/sink.rs"]
-stamp = { hash = "b3:2fcb7bb950608efc" }
+stamp = { hash = "b3:236e602c403fbac8", by = "agent:claude", note = "#540 (#356): the new security.rs reads a mapping's owner and DACL as SDDL and refuses one the sink wouldn't have set; vcam/shared.rs and vcam/sink.rs make start InvalidState for an existing control mapping that fails it; lib.rs adds the module. The README paragraph on the control mapping says this. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 here, which the section's text still matches" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam_register.rs"]
 stamp = { hash = "b3:6306e460290304f4" }
@@ -3810,7 +3813,7 @@ stamp = { hash = "b3:741967485a750fec" }
 stamp = { hash = "b3:52b22e31260a816a" }
 
 ["CRATE-jstream-vcam-windows#purpose"."body"]
-stamp = { hash = "b3:8e75e9c73785df6d", by = "agent:claude", note = "Trust bullet now states the #204 console-only rule while several sessions are active (check_session_choice), the WTSEnumerateSessionsW read, and the 5 s RECHECK that drops a block failing trust; Frames probe order and the rest unchanged | merge: wave/m1-3 accepted ADR-0066 (#556) and moved this crate's ADR-0020 links to ADR-0066; the Trust bullet's console-session rule, the only-active-session case and the 5 s RECHECK still match trust.rs, session.rs and frames.rs" }
+stamp = { hash = "b3:dd12e4c78e9ba9c3", by = "agent:claude", note = "#540 (#356): win/frames.rs and win/shared.rs open each ring texture and the fence by name as an NT handle (OpenSharedHandleByName), check its owner with GetSecurityInfo, then open the D3D11 object from that handle, so the object checked is the one used; the README sentence says so. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 in this crate | merge: wave/m1-3 brought #541 (#204): trust now takes the console session (check_session_choice) and a block in use is rechecked every RECHECK; merged with this branch, trust also returns the session's user for trust_object's texture and fence owner check, and the README's Trust bullet and the #356 sentence both still match frames.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:crates/jstream-vcam-proto/README.md#purpose"]
 stamp = { hash = "b3:b6a3f609729e0f1f" }
@@ -3852,7 +3855,7 @@ stamp = { hash = "b3:9c3a291d17eb2496" }
 stamp = { hash = "b3:d9ce3ae1ef818d95" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/frames.rs"]
-stamp = { hash = "b3:b5886b3395debf3b", by = "agent:claude", note = "Trust bullet now states the #204 console-only rule while several sessions are active (check_session_choice), the WTSEnumerateSessionsW read, and the 5 s RECHECK that drops a block failing trust; Frames probe order and the rest unchanged | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's console-session rule, the only-active-session case and the 5 s RECHECK still match trust.rs, session.rs and frames.rs" }
+stamp = { hash = "b3:a6c7eb53df7a75c8", by = "agent:claude", note = "#540 (#356): win/frames.rs and win/shared.rs open each ring texture and the fence by name as an NT handle (OpenSharedHandleByName), check its owner with GetSecurityInfo, then open the D3D11 object from that handle, so the object checked is the one used; the README sentence says so. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 in this crate | merge: wave/m1-3 brought #541 (#204): trust now takes the console session (check_session_choice) and a block in use is rechecked every RECHECK; merged with this branch, trust also returns the session's user for trust_object's texture and fence owner check, and the README's Trust bullet and the #356 sentence both still match frames.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/log.rs"]
 stamp = { hash = "b3:4442f4b5cabff0d9" }
@@ -3867,7 +3870,7 @@ stamp = { hash = "b3:c28895e1e4c38b31" }
 stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "Trust bullet now states the #204 console-only rule while several sessions are active (check_session_choice), the WTSEnumerateSessionsW read, and the 5 s RECHECK that drops a block failing trust; Frames probe order and the rest unchanged | merge: wave/m1-3's sync changed nothing in jstream-vcam-windows; the Trust bullet's console-session rule, the only-active-session case and the 5 s RECHECK still match trust.rs, session.rs and frames.rs" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/shared.rs"]
-stamp = { hash = "b3:5ae80ee249a7723b" }
+stamp = { hash = "b3:e7d9c0932f9a6565", by = "agent:claude", note = "#540 (#356): win/frames.rs and win/shared.rs open each ring texture and the fence by name as an NT handle (OpenSharedHandleByName), check its owner with GetSecurityInfo, then open the D3D11 object from that handle, so the object checked is the one used; the README sentence says so. The wave/m1-3 merge only moved the ADR-0020 links to ADR-0066 in this crate" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/source.rs"]
 stamp = { hash = "b3:63e42e67393d20f4" }
@@ -4398,16 +4401,16 @@ stamp = { hash = "b3:3b79687f434f2902", by = "agent:threat-model-covers", note =
 stamp = { hash = "b3:114ff08a719998f7", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "merge: merged wave/m1-3 at 95482db7 (#539 gave this section covers): this PR's session.rs change only rewrites privacy.changed request IDs and replays privacy.changed on subscribe, behind the same gate and limits; no new request path, token use or logging, so the controls hold" }
 
 ["THREAT-MODEL#vcam"."body"]
-stamp = { hash = "b3:e390a9d88a40ceef", by = "agent:vcam-242", note = "Maintainer accepted ADR-0066: the paragraph is now 'Accepted, not yet on main (#242)' quoting his decision, ADR-0066 marked accepted, depends_on moved from superseded ADR-0020 to ADR-0066. #242 stays in Gaps until #561 lands, since the page counts only merged controls; today's behaviour (HKLM InprocServer32 naming the DLL beside the exe, swappable without a prompt) still matches register.rs and vcam_register.rs" }
+stamp = { hash = "b3:750cccf69e3f9435", by = "agent:claude", note = "#540's Controls (in flight) paragraph matches vcam/shared.rs and sink.rs (an existing control mapping is refused unless its owner and DACL are ones the producer sets) and win/frames.rs (the DLL checks the owner of a session block's textures and fence). The wave/m1-3 merge added the #242 Accepted paragraph (ADR-0066's %ProgramFiles% copy, #561); the merged Gaps line keeps both: the user-writable DLL until #561 lands, and the pre-existing mapping DACL (#356) with its fix in flight here" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:vcam-242", note = "Maintainer accepted ADR-0066: the paragraph is now 'Accepted, not yet on main (#242)' quoting his decision, ADR-0066 marked accepted, depends_on moved from superseded ADR-0020 to ADR-0066. #242 stays in Gaps until #561 lands, since the page counts only merged controls; today's behaviour (HKLM InprocServer32 naming the DLL beside the exe, swappable without a prompt) still matches register.rs and vcam_register.rs" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-platform-windows/src/vcam/shared.rs"]
-stamp = { hash = "b3:518cf8d8efd63e59", by = "agent:vcam-optin-561", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open. | merge: re-read: the wave's only shared.rs change widens Handle and SecurityAttributes to pub(crate) for PluginBlock; the controls and gaps (#242, #356) still hold" }
+stamp = { hash = "b3:3ca0e169f953f32d", by = "agent:claude", note = "#540's Controls (in flight) paragraph matches vcam/shared.rs and sink.rs (an existing control mapping is refused unless its owner and DACL are ones the producer sets) and win/frames.rs (the DLL checks the owner of a session block's textures and fence). The wave/m1-3 merge added the #242 Accepted paragraph (ADR-0066's %ProgramFiles% copy, #561); the merged Gaps line keeps both: the user-writable DLL until #561 lands, and the pre-existing mapping DACL (#356) with its fix in flight here" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-platform-windows/src/vcam/sink.rs"]
-stamp = { hash = "b3:2fcb7bb950608efc", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
+stamp = { hash = "b3:236e602c403fbac8", by = "agent:claude", note = "#540's Controls (in flight) paragraph matches vcam/shared.rs and sink.rs (an existing control mapping is refused unless its owner and DACL are ones the producer sets) and win/frames.rs (the DLL checks the owner of a session block's textures and fence). The wave/m1-3 merge added the #242 Accepted paragraph (ADR-0066's %ProgramFiles% copy, #561); the merged Gaps line keeps both: the user-writable DLL until #561 lands, and the pre-existing mapping DACL (#356) with its fix in flight here" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-vcam-proto/src/names.rs"]
 stamp = { hash = "b3:5506fd7891457520", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
@@ -4416,7 +4419,7 @@ stamp = { hash = "b3:5506fd7891457520", by = "agent:threat-model-covers", note =
 stamp = { hash = "b3:aef044a0d551961c", by = "agent:claude", note = "merge: wave/m1-3 added the #242 Accepted paragraph (ADR-0066's Program Files copy, #561) and the gaps line naming #561; this branch's trust.rs, session.rs and frames.rs changes (#204: only the console session's block when several sessions are active) narrow which session block the DLL uses, and the controls on main, the owner check and the accepted risks still hold" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-vcam-windows/src/win/frames.rs"]
-stamp = { hash = "b3:b5886b3395debf3b", by = "agent:claude", note = "merge: wave/m1-3 added the #242 Accepted paragraph (ADR-0066's Program Files copy, #561) and the gaps line naming #561; this branch's trust.rs, session.rs and frames.rs changes (#204: only the console session's block when several sessions are active) narrow which session block the DLL uses, and the controls on main, the owner check and the accepted risks still hold" }
+stamp = { hash = "b3:a6c7eb53df7a75c8", by = "agent:claude", note = "#540's Controls (in flight) paragraph matches vcam/shared.rs and sink.rs (an existing control mapping is refused unless its owner and DACL are ones the producer sets) and win/frames.rs (the DLL checks the owner of a session block's textures and fence). The wave/m1-3 merge added the #242 Accepted paragraph (ADR-0066's %ProgramFiles% copy, #561); the merged Gaps line keeps both: the user-writable DLL until #561 lands, and the pre-existing mapping DACL (#356) with its fix in flight here | merge: wave/m1-3 brought #541's console-session rule into frames.rs's trust; this branch's owner check of a session block's textures and fence is unchanged by it, and the in-flight controls and gaps text still hold" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-vcam-windows/src/win/session.rs"]
 stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave/m1-3 added the #242 Accepted paragraph (ADR-0066's Program Files copy, #561) and the gaps line naming #561; this branch's trust.rs, session.rs and frames.rs changes (#204: only the console session's block when several sessions are active) narrow which session block the DLL uses, and the controls on main, the owner check and the accepted risks still hold" }

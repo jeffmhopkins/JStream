@@ -364,6 +364,11 @@ it, and checks every texture's format.
 needs full access; `Global\` blocks, which only an administrator or service can create,
 are trusted.
 
+**Controls (in flight, #540):** the producer refuses a control mapping that already
+existed unless its owner is the user, SYSTEM or Administrators and its DACL lets no one
+but them and LOCAL SERVICE in; the DLL checks the owner of a session block's textures and fence as it does the
+block's.
+
 **Accepted, not yet on main (#242):** today the registered media source DLL is the one in
 the app's own folder, which the user can usually write to. Any program running as that
 user can replace it without an administrator prompt, and its code then runs in Frame
@@ -378,7 +383,8 @@ is #561. Once it lands, the copy is as trustworthy as the portable folder was wh
 user approved the prompt.
 
 **Gaps:** a user-writable registered DLL runs in Frame Server until #561 lands (#242); a
-control mapping created before the producer's keeps its own DACL (#356).
+control mapping created before the producer's keeps its own DACL (#356, fix in flight in
+#540).
 
 <a id="gaps"></a>
 ## Known gaps
