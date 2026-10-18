@@ -4559,6 +4559,15 @@ stamp = { hash = "b3:1a6aeaec37c5f24f", by = "agent:claude@session_01TssS8PhoWXH
 ["RUNBOOK-WAVES#which-wave"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
+["RUNBOOK-WINDOWS-HW-PASS#script"."body"]
+stamp = { hash = "b3:2a6f8f601d4598b2", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
+
+["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.bat"]
+stamp = { hash = "b3:9e3a9ddf79167120", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
+
+["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.ps1"]
+stamp = { hash = "b3:673721577b4819f5", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
+
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:4fabbaa71adf77ab", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
