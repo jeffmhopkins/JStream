@@ -868,7 +868,8 @@ mod tests {
         let player = start(clip, 4, true);
         wait(&player, "the queue to fill", |s| s.queue.len() == 4);
         player.seek(1_000_000);
-        wait(&player, "a frame after the seek", |s| !s.queue.is_empty());
+        // Two frames: the decode thread may have queued only the first when it is seen.
+        wait(&player, "two frames after the seek", |s| s.queue.len() >= 2);
         let state = player.state();
         assert!(!state.ended, "it plays on");
         assert_eq!(
