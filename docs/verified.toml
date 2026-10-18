@@ -4449,7 +4449,7 @@ stamp = { hash = "b3:eafcbe72ac465f3c" }
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["ROADMAP#m1"."body"]
-stamp = { hash = "b3:99a729ad27c6a901", by = "agent:adr-item-effects-v1", note = "M1b 'Filters and effects': per-placement effects are now in v1 (ADR-0068, recording the maintainer's #529 decision; design ADR-0065), built after the video chain runtime, with the model's reserved slot. Rest of M1 re-read, unchanged." }
+stamp = { hash = "b3:de7e82687555cfb4", by = "agent:wave-owner", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there | merge: main into wave/m3-2 after the cut: main's #581 (ADR-0068) rewrites the M1b filters bullet to say per-placement item effects (ADR-0065) are in v1 and built after the video chain runtime; the merge keeps that next to the wave's ADR-0061 citations and its macOS (ADR-0063) and Linux (ADR-0060, ADR-0061) bullets, which main's text doesn't touch; re-read the whole section, holds" }
 
 ["ROADMAP#m1"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
