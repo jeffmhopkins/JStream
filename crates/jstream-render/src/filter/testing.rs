@@ -304,6 +304,78 @@ mod tests {
         assert!(kept(&delay).is_empty(), "held frames aren't scratch layers");
     }
 
+    /// #369: a draw keeps its uniform buffers and bind group between calls. New settings
+    /// rewrite the buffers in place and draw the new look; another input texture makes a
+    /// new bind group but no new buffers. A multi-pass kind's second call makes nothing.
+    #[test]
+    fn a_draw_keeps_its_buffers_and_bind_group_between_calls() {
+        use crate::filter::pass::Made;
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const DARK: [u8; 4] = [64, 64, 64, 255];
+        const G: [u8; 4] = [0, 255, 0, 255];
+        let made = |filter: &VideoFilter| filter.scratch().made();
+        let at = |buffers, bind_groups| Made {
+            buffers,
+            bind_groups,
+        };
+        let mut correction = super::filter("color_correction", serde_json::json!({}));
+        let input = image(&opened, 2, &[DARK, DARK]);
+        let first = super::run(&mut opened, &mut correction, &input, 0.0);
+        near(&first, 0, 0, DARK, 1);
+        assert_eq!(
+            made(&correction),
+            at(2, 1),
+            "one draw: two buffers, one bind group"
+        );
+        let again = super::run(&mut opened, &mut correction, &input, 0.5);
+        assert_eq!(again, first, "the same draw from the kept slot");
+        assert_eq!(
+            made(&correction),
+            at(2, 1),
+            "nothing made for the same input"
+        );
+
+        correction.set_settings(&super::settings(
+            "color_correction",
+            serde_json::json!({"brightness": 0.25}),
+        ));
+        let brighter = super::run(&mut opened, &mut correction, &input, 0.0);
+        let lit = brighter.pixel(0, 0).expect("in the snapshot");
+        assert!(lit[0] > DARK[0] + 20, "new settings draw: {lit:?}");
+        assert_eq!(
+            made(&correction),
+            at(2, 1),
+            "new settings rewrite the buffers"
+        );
+
+        let other = image(&opened, 2, &[G, G]);
+        let green = super::run(&mut opened, &mut correction, &other, 0.0);
+        let mut fresh = super::filter("color_correction", serde_json::json!({"brightness": 0.25}));
+        let expected = super::run(&mut opened, &mut fresh, &other, 0.0);
+        assert_eq!(
+            green, expected,
+            "the kept slot draws the other input as a new one does"
+        );
+        assert_eq!(
+            made(&correction),
+            at(2, 2),
+            "another input: a new bind group only"
+        );
+
+        let mut outline = super::filter("outline", serde_json::json!({"width": 2.0}));
+        let _ = super::run(&mut opened, &mut outline, &input, 0.0);
+        let after_first = made(&outline);
+        assert!(after_first.buffers > 2, "outline draws more than once");
+        let _ = super::run(&mut opened, &mut outline, &input, 0.0);
+        assert_eq!(
+            made(&outline),
+            after_first,
+            "a steady multi-pass call makes nothing"
+        );
+    }
+
     /// Every kind is a unique `video_filter` with valid defaults and a pass that its
     /// defaults build.
     #[test]

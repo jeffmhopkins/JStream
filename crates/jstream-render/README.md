@@ -256,6 +256,7 @@ compositor's own, not a shared encode target, so nothing transitions it.
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
 | A multi-pass filter's scratch layers | Its `VideoFilter`: reused by the next call at the same size; replaced for a new size, and dropped when a call asks for fewer ([Filters](#filters)) |
+| A filter draw's uniform buffers and bind group | Its `VideoFilter`: rewritten by the next call's same draw; the bind group made again when that draw reads other textures (it keeps the last ones alive until then), the buffers for another compositor or parameter size, and dropped when a call draws fewer times ([Filters](#filters)) |
 | `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
 
 **`ResourceCache`.** A frame runs `begin_frame`, `upload`, `import` or `layer` for each
@@ -419,8 +420,12 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
   aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
-- Each draw creates its two small uniform buffers, two views and a bind group, and each
-  `apply_filter` its output layer (`apply_filter_into` reuses the caller's). A
+- Each `apply_filter` makes its output layer (`apply_filter_into` reuses the caller's).
+  A filter's draws keep their two small uniform buffers and bind group in the same pool
+  (#369): a call's `n`th draw reuses the call before's `n`th, rewriting its buffers with
+  `queue.write_buffer` before the submit, and makes a bind group (with its two views)
+  only when it reads another input or auxiliary texture than last call. Its buffers are
+  made again for another compositor or when the parameter block changes size. A
   multi-pass filter's `Ctx::scratch` layers (up to three, each at most the filter's
   output size, about 16.6 MB at 1080p) come from a pool its `VideoFilter` keeps (V0): a
   call's `n`th scratch layer is the call before's `n`th when the size is the same, so a
