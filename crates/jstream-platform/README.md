@@ -151,7 +151,9 @@ Contents:
   `VideoFrame`, `rgb_to_nv12_image` into an `Nv12Image`, NV12 laid out in one mapped
   buffer), and `even_size` crops an odd source. `yuv` turns a video capture device's
   raw frame bytes, rows `stride` bytes apart with the chroma planes after the luma, into
-  engine frames: `copy_planar` copies NV12 and I420, and `yuy2_to_nv12` converts packed
+  engine frames: `copy_planar` copies NV12 and I420, `copy_planes` copies them from one
+  buffer per plane, each with its own stride (V4L2's `NV12M` and `YUV420M`), and
+  `yuy2_to_nv12` converts packed
   4:2:2, each chroma sample averaging the two rows of its block. A short buffer is an
   `Os` error naming the caller's OS call. Windows' capture and H.264 CPU path, its Media
   Foundation webcams, and Linux's PipeWire capture, VA-API upload and V4L2 webcams use
