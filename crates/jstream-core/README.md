@@ -289,8 +289,9 @@ state machine. Contents:
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
   rotation (`audit.rs`), the user-only files (`private_file.rs`: a new file never
   replaces one, appending to an existing one, a directory refused, mode `0600` on Unix,
-  and on Windows a DACL that passes `check_private_file`), a stale temporary file a
-  crashed save left replaced (`collection.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
+  and on Windows a DACL that passes `check_private_file`), replacing the stale temporary
+  file a crashed save left (`collection.rs`), and the audit entries of undo and redo
+  (`undo_and_redo_are_audited`), the
   preview streams (`src/tests/preview.rs`: no subscription without a binary channel,
   JPEG without an encoder following the mix's changes and the canvas size, H.264 from
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
