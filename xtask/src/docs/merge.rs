@@ -143,8 +143,8 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     if out.status.success() {
         // A fast-forward, or nothing to merge, leaves no merge to commit.
         if merging()? {
-            report.adopted = adopt_matching(root, &upstream)?;
-            git_ok(root, &["commit", "-q", "--no-edit"])?;
+            report.adopted = adopt_matching(root, &upstream).context(MERGE_OPEN)?;
+            git_ok(root, &["commit", "-q", "--no-edit"]).context(MERGE_OPEN)?;
         }
         report.committed = true;
         report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
@@ -213,10 +213,10 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     // Once the ledger has no conflict left, whether or not another file keeps the merge
     // open, it takes main's stamps on inputs main verified at the same content.
     if !report.refused.iter().any(|(p, _)| p == ledger::PATH) {
-        report.adopted = adopt_matching(root, &upstream)?;
+        report.adopted = adopt_matching(root, &upstream).context(MERGE_OPEN)?;
     }
     if report.refused.is_empty() {
-        git_ok(root, &["commit", "-q", "--no-edit"])?;
+        git_ok(root, &["commit", "-q", "--no-edit"]).context(MERGE_OPEN)?;
         report.committed = true;
         report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
         report.inputs = stale_report(root).context(AFTER_COMMIT)?;
@@ -411,6 +411,12 @@ pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::L
 const AFTER_COMMIT: &str = "the merge is committed, but the steps after it failed; fix what \
      the error names, then run `cargo xtask docs check` and verify each stale section with \
      `--note`";
+
+/// The context of an error before the merge is committed, with `MERGE_HEAD` still set
+/// (#704 N1).
+const MERGE_OPEN: &str = "the merge is still in progress and not committed: fix what the \
+     error names and run `git commit --no-edit`, or `git merge --abort` and run `docs \
+     merge-main` again";
 
 /// Each stale section after a merge commit with its stale inputs, each with this branch's
 /// earlier note and the merged commits that changed it (none listed when the branch has no
