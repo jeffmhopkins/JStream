@@ -64,3 +64,6 @@ web-sys = { workspace = true, optional = true, features = [
 
 [dev-dependencies]
 jstream-protocol = { workspace = true, features = ["fixtures"] }
+# The mock's tests build `serde_json` values directly; as a normal dependency it is optional
+# and only the `ws` feature turns it on.
+serde_json.workspace = true
