@@ -23,8 +23,9 @@ mod backend {
 
     use jstream_platform::media::Codec;
     use jstream_platform::{
-        AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, GpuContext, PlatformError,
-        VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
+        AudioEncoder, AudioEncoderConfig, CaptureDecoder, CaptureEncoding, CodecInfo, CodecRole,
+        Codecs, GpuContext, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+        VideoEncoderConfig,
     };
     use windows::Win32::Media::MediaFoundation::{
         MFAudioFormat_AAC, MFAudioFormat_PCM, MFMediaType_Audio, MFMediaType_Video,
@@ -124,6 +125,22 @@ mod backend {
             Err(PlatformError::Unsupported {
                 what: format!("{:?} video decoding (not implemented yet)", config.codec),
             })
+        }
+
+        /// MJPEG through Media Foundation's MJPEG decoder ([`MfMjpegDecoder`]), into
+        /// NV12 CPU frames.
+        ///
+        /// [`MfMjpegDecoder`]: crate::MfMjpegDecoder
+        fn capture_decoder(
+            &self,
+            encoding: CaptureEncoding,
+        ) -> Result<Box<dyn CaptureDecoder>, PlatformError> {
+            match encoding {
+                CaptureEncoding::Mjpeg => Ok(Box::new(crate::MfMjpegDecoder::new()?)),
+                other => Err(PlatformError::Unsupported {
+                    what: format!("decoding {other:?} capture frames"),
+                }),
+            }
         }
 
         /// The backend on a context `WindowsGpu` opened. Its video encoders take that

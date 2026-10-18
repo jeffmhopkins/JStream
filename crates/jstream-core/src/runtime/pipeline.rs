@@ -1605,6 +1605,7 @@ pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
             cpu: Arc::clone(&parts.capture),
             gpu,
             devices: Arc::clone(&parts.video_devices),
+            codecs: Arc::clone(&parts.codecs),
         },
         context,
     })
