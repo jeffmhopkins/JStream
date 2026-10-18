@@ -28,9 +28,12 @@ into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageS
 location, a size, a frame-rate cap and the custom CSS) and returns a `BrowserPage`:
 its latest frame as a `GpuFrame`, its audio, a way to replace its custom CSS while it
 runs, and how many of its requests were refused (`denied_requests`). `use_device` gives
-the backend a GPU device to copy the pages' paints onto. Today that is one the host
-opens on the media adapter, since the engine doesn't hand out its own device yet;
-without one a page renders and plays but delivers no frames. Dropping the
+the backend a GPU device to copy the pages' paints onto. The host gives it one it opens
+on the media adapter, for paints before any program stage; while the program stage
+runs, the engine lends it the stage's own context in its place, so the compositor
+samples the pages there, and takes it back (leaving none) when the stage stops
+([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). Without
+a device a page renders and plays but delivers no frames. Dropping the
 page closes it.
 
 **Built everywhere:**
@@ -132,8 +135,8 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
 **The hardware check.** `examples/page_check.rs` (features `cef` and `helper`) lays the
 helper out in the build's folder as it ships (CEF's `bootstrap.exe` copied as
 `jstream-browser-helper.exe` beside the helper's DLL), then opens the built-in test page
-(or `--url`) through the CEF backend on the engine's own device and QPC clock, as the
-daemon will once the engine hands out its device, and reports the frames and audio that
+(or `--url`) through the CEF backend on a device of the media adapter and the QPC clock,
+as the daemon's pages do before a program stage lends its own context, and reports the frames and audio that
 arrive, a custom-CSS change the page reacts to, the requests refused (the built-in page
 loads one image from outside its folder), and the shutdown time. It runs on Windows only.
 
@@ -153,11 +156,12 @@ shipping the `cef` feature.
   helper's frames take a second copy and a pipe round trip, which haven't been measured.
 - **Hosts.** The desktop app and the daemon each create a backend with their `cef`
   feature, on a device of the media adapter they open
-  ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)), not the
-  engine's own, which the engine doesn't hand out yet.
-- **Compositing.** The program mix doesn't draw a page's `GpuFrame` yet; a `browser`
-  source draws a transparent frame of its size until the render import of GPU frames
-  lands.
+  ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)); the engine
+  replaces it with the program stage's context while the stage runs, and the host's
+  device is not given back when it stops.
+- **Compositing.** The program mix draws a page's `GpuFrame`, imported premultiplied
+  on the stage's context, but only the fake backend's textures have been through it:
+  a real CEF texture on Windows hardware is #336.
 - **Settings and interaction.** "Shut down when not visible", "refresh when shown" and
   `source.interact` need the source-visibility hook and a protocol action. No page gets
   control-API access, and the per-source opt-in doesn't exist.
