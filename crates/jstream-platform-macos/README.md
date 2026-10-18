@@ -86,6 +86,20 @@ It has:
   says whether the sets make a format description). **`Reorder`** holds decoded frames
   until no later packet can present earlier: up to the newest packet's `dts`, and all of
   them at the end.
+- **`AvMediaDecoders`** (`MediaDecoders`) plays local media files through AVFoundation,
+  for the cross-platform media-file source in `jstream-sources`: an `AVURLAsset` whose
+  first video and audio tracks (loaded with `loadTracksWithMediaType`, waited on) an
+  `AVAssetReader` demuxes and decodes. So it plays what AVFoundation does: MP4, MOV and
+  M4V, and H.264, HEVC and ProRes video, among others, but not MKV or WebM. Video is read
+  as BGRA or NV12 (**`av_reader_settings`**); RGBA, which the source asks for, is read as
+  BGRA and its red and blue swapped (**`bgra_to_rgba`**). The first frame is read when
+  the file opens, for the size of every frame. Audio is read as interleaved `f32` at the
+  track's own rate, mono, or mixed down to stereo by AVFoundation for anything wider
+  (**`audio_layout`**). Seeking starts a new reader from the seek target to the end. A
+  missing file is `NotFound`, a container or codec AVFoundation doesn't play is
+  `Unsupported` (**`av_error_is_unsupported`**), and so is a hardware preference other
+  than `Prefer`, since AVFoundation picks the decoder itself. A file of sound alone,
+  opened without audio, has nothing to play and is `Unsupported` too.
 - **`AacFramer`**: the AAC encoder's input and packet timing, as on Linux and Windows.
   The converter pulls the queued input through its input proc (which catches any panic)
   one raw access unit at a time, with no ADTS. The last unit is padded with silence. Each
@@ -185,9 +199,8 @@ Not here yet, in roughly the order they follow:
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
 - AVFoundation webcams;
-- GPU frames (IOSurface pixel buffers imported into Metal) from the VideoToolbox decoder,
-  once the Metal spike lands;
-- the media-file source.
+- GPU frames (IOSurface pixel buffers imported into Metal) from the VideoToolbox decoder
+  and the media-file reader, once the Metal spike lands.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until its own
 ADR.
@@ -197,11 +210,13 @@ layouts and statuses, permission steps, the keychain item names and the error ma
 platform independent. The macOS ones (the clock, reading the release, encoding with
 VideoToolbox, which falls back to Apple's software encoder on a Mac without a hardware
 one, decoding what the VideoToolbox encoder produced, from the start and from a later
-keyframe, encoding AAC with AudioToolbox, opening the capture backend, round trips through
+keyframe, playing a system sound as an audio-only media file and refusing a missing or
+unreadable one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
 the login keychain with uniquely named items, deleted afterwards, listing audio
 devices and their input formats, refusing an unknown output, and reading the Microphone
 status without prompting) need no permission, so they run in the `macos` CI job. The
 `hw-tests` feature is for tests that need the Screen Recording, Camera, Microphone or
 system audio recording permission (listing and capturing a display, the
 missing-permission error, and recording the default input), speakers (playing a tone on
-the default output), or the hardware encoders, which run by hand on a Mac.
+the default output), or the hardware encoders, which run by hand on a Mac. So do the
+media-file tests that need a video file, which play the one `JSTREAM_TEST_MEDIA` names.

@@ -11,7 +11,8 @@
 //! Core Audio devices, input recording (behind the Microphone permission) and output
 //! playback through the HAL (`CoreAudioIo`), and the VideoToolbox H.264 and HEVC decoder
 //! on CPU frames, its packets split by `split_access_unit` and its frames put in
-//! presentation order by `Reorder`. Desktop and application audio report `Unsupported`
+//! presentation order by `Reorder`, and local media files through AVFoundation's asset
+//! reader (`AvMediaDecoders`). Desktop and application audio report `Unsupported`
 //! until their follow-up lands. Layer 2, and one of the crates allowed `unsafe` (R-UNSAFE-001): every
 //! system call is wrapped here behind safe APIs.
 //!
@@ -27,12 +28,15 @@ mod annexb;
 mod audio;
 #[cfg(target_os = "macos")]
 mod audiotoolbox;
+#[cfg(target_os = "macos")]
+mod avreader;
 mod capture;
 mod clock;
 mod codec;
 mod decode;
 mod fourcc;
 mod keychain;
+mod media_file;
 mod version;
 #[cfg(target_os = "macos")]
 mod videotoolbox;
@@ -44,6 +48,8 @@ pub use annexb::{annexb_access_unit, cm_time_parts, copy_rows, media_time_from_c
 #[cfg(target_os = "macos")]
 pub use audio::CoreAudioIo;
 pub use audio::{check_input, feature_for_input};
+#[cfg(target_os = "macos")]
+pub use avreader::AvMediaDecoders;
 #[cfg(target_os = "macos")]
 pub use capture::ScreenCaptureKitCapture;
 #[cfg(target_os = "macos")]
@@ -63,4 +69,7 @@ pub use fourcc::{
 pub use keychain::KeychainItem;
 #[cfg(target_os = "macos")]
 pub use keychain::MacosKeychain;
+pub use media_file::{
+    AvReaderSettings, audio_layout, av_error_is_unsupported, av_reader_settings, bgra_to_rgba,
+};
 pub use version::{Arch, Feature, MacosVersion, SupportTier, check_floor, support_tier};

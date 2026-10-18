@@ -112,7 +112,7 @@ mach2 = { version = "0.6", default-features = false }
 # version (`NSProcessInfo`), and the arrays, errors and strings ScreenCaptureKit hands back.
 # The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
 # only `std` and the classes the macOS crate calls.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSEnumerator", "NSError", "NSProcessInfo", "NSString", "NSURL", "NSValue"] }
 # Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
 # crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
 # and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
@@ -122,7 +122,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 # 0.3 line, as `objc2-foundation`; plain C APIs, so no `objc2` feature and no build
 # script. Only the headers the macOS crate calls.
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFData", "CFDictionary", "CFNumber", "CFString"] }
-objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "objc2-core-video"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "CMTimeRange", "objc2-core-audio-types", "objc2-core-video"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
 objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTDecompressionProperties", "VTDecompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
 # AudioToolbox and Core Audio's base types through the objc2 framework crates (ADR-0063 §7,
@@ -137,11 +137,13 @@ objc2-core-audio-types = { version = "0.3", default-features = false, features =
 # their listeners, and the IOProc that records a device. The 0.3 line, as above, already
 # in the tree; plain C APIs (no `objc2`, blocks or dispatch features) and no build script.
 objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2-core-audio-types"] }
-# AVFoundation through the objc2 framework crates (ADR-0063 §4, §11, §12), for the
+# AVFoundation through the objc2 framework crates (ADR-0063 §4, §6, §11, §12), for the
 # Microphone permission: `AVCaptureDevice`'s authorization status and request for the
-# audio media type. The 0.3 line, as above; no build script. Only those headers, and
-# `block2` for the request's completion handler.
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+# audio media type; and for the media-file source: `AVURLAsset`, its tracks, and the
+# `AVAssetReader` that demuxes and decodes them. The 0.3 line, as above; no build script.
+# Only those headers, `block2` for the completion handlers, and the Core Media types the
+# reader hands over.
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVAsset", "AVAssetReader", "AVAssetReaderOutput", "AVAssetTrack", "AVCaptureDevice", "AVError", "AVMediaFormat", "block2", "objc2-core-media"] }
 # ScreenCaptureKit through the objc2 framework crates (ADR-0063 §3, §12), for display and
 # window capture: `SCShareableContent` lists targets, `SCStream` captures them, and
 # `SCError` has the codes for a refused permission or a stopped stream. The 0.3 line, as

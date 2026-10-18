@@ -19,6 +19,9 @@ mod permission;
 #[cfg(target_os = "macos")]
 mod stream;
 
+#[cfg(target_os = "macos")]
+pub(crate) use layout::rate_hz;
+
 use jstream_platform::{AudioInputTarget, PlatformError};
 
 use crate::{Feature, MacosVersion};
