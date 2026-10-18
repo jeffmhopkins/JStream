@@ -1,0 +1,30 @@
+[package]
+name = "jstream-plugin-host"
+version = "0.0.0"
+description = "The out-of-process CLAP plugin host: runs one CLAP audio effect for one JStream filter, over a shared-memory block."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 6
+summary = "`jstream-plugin-host`, the out-of-process CLAP host (ADR-0035): links plugin-clap (the only crate that may) and plugin-proto, and the Windows platform crate for its shared block"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jstream-plugin-clap.workspace = true
+jstream-plugin-proto.workspace = true
+
+# The shared block's named mapping and the real-time thread's MMCSS registration.
+[target.'cfg(windows)'.dependencies]
+jstream-platform-windows.workspace = true
+
+[dev-dependencies]
+# R-RT-001's check for the real-time loop.
+assert_no_alloc.workspace = true
+# The CLAP plugin built into the wrapper, which the session tests host.
+jstream-plugin-clap = { workspace = true, features = ["test-plugin"] }
