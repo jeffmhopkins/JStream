@@ -8,6 +8,7 @@
 //! to block the next start. Once it has started, the `.part` file is kept whatever
 //! happens, as `Recorder` documents, and a stop renames it to the destination.
 
+use std::borrow::Cow;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,6 +16,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 use jstream_media::{Codec, FrameSize, MediaTime, Packet};
+use jstream_mux::MuxError;
 use jstream_mux::aac::{AOT_AAC_LC, AudioSpecificConfig};
 use jstream_mux::flv::{self, ExVideoConfig, FlvConfig, FlvTag, FlvTagger, MetadataStyle};
 use jstream_mux::fmp4::{self, Fmp4Config};
@@ -33,9 +35,9 @@ pub(crate) enum Destination {
 
 /// What the stream carries, which both containers describe in their headers.
 pub(crate) struct StreamInfo {
-    /// The video codec. H.264 goes in legacy FLV tags and MP4 with the parameter sets
-    /// below; HEVC and AV1 go in enhanced RTMP tags, whose decoder configuration the
-    /// tagger takes from the first keyframe, and can't be recorded yet.
+    /// The video codec. H.264 goes in legacy FLV tags and MP4; HEVC and AV1 go in
+    /// enhanced RTMP tags, and can't be recorded yet. Either way the muxer takes the
+    /// decoder configuration from the parameter sets in the first keyframe.
     pub(crate) codec: Codec,
     pub(crate) size: FrameSize,
     pub(crate) origin: MediaTime,
@@ -43,17 +45,9 @@ pub(crate) struct StreamInfo {
     pub(crate) video_kbps: u32,
     pub(crate) audio_kbps: u32,
     pub(crate) sample_rate: u32,
-    /// The H.264 parameter sets, for encoders that don't send them in-band.
-    pub(crate) sps: &'static [u8],
-    pub(crate) pps: &'static [u8],
 }
 
 impl StreamInfo {
-    fn avc(&self) -> Result<AvcDecoderConfig, String> {
-        AvcDecoderConfig::new(vec![self.sps.to_vec()], vec![self.pps.to_vec()])
-            .map_err(|err| format!("AVC decoder config: {err}"))
-    }
-
     fn aac(&self) -> Result<AudioSpecificConfig, String> {
         AudioSpecificConfig::new(AOT_AAC_LC, self.sample_rate, 2)
             .map_err(|err| format!("AAC config: {err}"))
@@ -79,17 +73,15 @@ impl Sink {
     ) -> Result<Self, String> {
         match destination {
             Destination::Publish(publish) => {
-                let avc = match info.codec {
-                    Codec::H264 => Some(info.avc()?),
-                    _ => None,
-                };
                 let config = FlvConfig {
                     video: Some(flv::VideoTrack {
                         width: info.size.width(),
                         height: info.size.height(),
                         frame_rate: Some(info.frame_rate),
                         bitrate_kbps: Some(info.video_kbps),
-                        avc,
+                        // From the first keyframe, so the sequence header is the
+                        // encoder's own (#746).
+                        avc: None,
                     }),
                     audio: Some(flv::AudioTrack {
                         config: info.aac()?,
@@ -137,7 +129,8 @@ impl Sink {
                     video: Some(fmp4::VideoTrack {
                         width: u16::try_from(info.size.width()).map_err(|_| too_big())?,
                         height: u16::try_from(info.size.height()).map_err(|_| too_big())?,
-                        avc: Some(info.avc()?),
+                        // From the first keyframe: the init segment waits for it (#746).
+                        avc: None,
                     }),
                     audio: Some(fmp4::AudioTrack {
                         config: info.aac()?,
@@ -189,6 +182,7 @@ impl Sink {
             output_drops.fetch_add(1, Ordering::Relaxed);
             tracing::warn!(error = %err, "dropping a packet the muxer rejected");
         };
+        let packet = &with_parameter_sets(packet);
         match self {
             Self::Flv { tagger, publish } => match tagger.push(packet) {
                 Ok(tags) => publish_tags(publish, &tags),
@@ -254,6 +248,37 @@ impl Sink {
             Self::Record(sink) => sink.finish(),
         }
     }
+}
+
+/// Stand-in H.264 parameter sets (Baseline 3.0, no frame size) for a keyframe that
+/// carries none in-band. Only the fake encoder sends such keyframes; every real one
+/// sends its SPS and PPS with each keyframe, and those go in the decoder configuration.
+const STAND_IN_SPS: [u8; 5] = [0x67, 0x42, 0xC0, 0x1E, 0xDA];
+const STAND_IN_PPS: [u8; 4] = [0x68, 0xCE, 0x3C, 0x80];
+
+/// `packet`, or for an H.264 keyframe with no SPS or PPS in-band, a copy with the
+/// stand-in sets in front, so the muxers always find a decoder configuration in the
+/// first keyframe.
+fn with_parameter_sets(packet: &Packet) -> Cow<'_, Packet> {
+    if packet.codec() != Codec::H264
+        || !packet.is_keyframe()
+        || !matches!(
+            AvcDecoderConfig::from_annexb(packet.data()),
+            Err(MuxError::MissingParameterSets { .. })
+        )
+    {
+        return Cow::Borrowed(packet);
+    }
+    let mut data = Vec::with_capacity(packet.data().len() + 16);
+    for set in [&STAND_IN_SPS[..], &STAND_IN_PPS[..]] {
+        data.extend_from_slice(&[0, 0, 0, 1]);
+        data.extend_from_slice(set);
+    }
+    data.extend_from_slice(packet.data());
+    // Built from a packet that was valid, so this can't fail; if it did, the muxer
+    // would reject the packet as it is.
+    Packet::new(packet.codec(), true, packet.pts(), packet.dts(), data)
+        .map_or(Cow::Borrowed(packet), Cow::Owned)
 }
 
 fn publish_tags(publish: &mut Box<dyn LivePublish>, tags: &[FlvTag]) -> Result<(), String> {
@@ -330,7 +355,11 @@ mod tests {
     use jstream_media::{Codec, FrameSize, MediaTime, Packet, Timebase};
     use jstream_mux::flv::TagType;
 
-    use super::{Destination, Sink, StreamInfo};
+    use std::fs;
+
+    use jstream_mux::h264::AvcDecoderConfig;
+
+    use super::{Destination, STAND_IN_PPS, STAND_IN_SPS, Sink, StreamInfo};
     use crate::runtime::RecordingPublish;
 
     fn info(codec: Codec) -> StreamInfo {
@@ -342,8 +371,6 @@ mod tests {
             video_kbps: 3000,
             audio_kbps: 160,
             sample_rate: 48_000,
-            sps: &[0x67, 0x42, 0xC0, 0x1E, 0xDA],
-            pps: &[0x68, 0xCE, 0x3C, 0x80],
         }
     }
 
@@ -415,6 +442,104 @@ mod tests {
                 assert_eq!(&tag.body[1..5], fourcc, "{codec:?}");
             }
         }
+    }
+
+    /// A High-profile SPS (1280x720) and its PPS, as `jstream-mux`'s tests use.
+    const SPS: [u8; 25] = [
+        0x67, 0x64, 0x00, 0x1F, 0xAC, 0xD9, 0x40, 0x50, 0x05, 0xBB, 0x01, 0x10, 0x00, 0x00, 0x03,
+        0x00, 0x10, 0x00, 0x00, 0x03, 0x03, 0xC0, 0xF1, 0x83, 0x19,
+    ];
+    const PPS: [u8; 6] = [0x68, 0xEB, 0xE3, 0xCB, 0x22, 0xC0];
+
+    /// An H.264 IDR access unit, with the SPS and PPS in-band as a real encoder sends
+    /// them, or bare as the fake encoder does.
+    fn h264_keyframe(in_band: bool) -> Packet {
+        let mut au = Vec::new();
+        let sets = [&SPS[..], &PPS[..]];
+        for nalu in sets
+            .iter()
+            .filter(|_| in_band)
+            .chain([&&[0x65, 0x88, 0x84][..]])
+        {
+            au.extend_from_slice(&[0, 0, 0, 1]);
+            au.extend_from_slice(nalu);
+        }
+        let pts = MediaTime::zero(Timebase::MPEG_90K);
+        Packet::new(Codec::H264, true, pts, pts, au).expect("packet")
+    }
+
+    /// The AVC sequence header the FLV sink publishes for `keyframe`: the
+    /// `AVCDecoderConfigurationRecord` after the 5-byte video tag header.
+    fn flv_avc_record(keyframe: &Packet) -> Vec<u8> {
+        let publish = RecordingPublish::new();
+        let mut sink = Sink::open(
+            Destination::Publish(Box::new(publish.clone())),
+            &info(Codec::H264),
+            Arc::new(AtomicBool::new(true)),
+        )
+        .expect("open");
+        sink.start().expect("start");
+        let drops = AtomicU64::new(0);
+        sink.forward(keyframe, &drops).expect("forward");
+        assert_eq!(drops.into_inner(), 0, "the muxer took the keyframe");
+        let video: Vec<_> = publish
+            .tags()
+            .into_iter()
+            .filter(|t| t.tag_type == TagType::Video)
+            .collect();
+        assert_eq!(video.len(), 2, "the sequence header, then the frame");
+        assert_eq!(video[0].body[..2], [0x17, 0], "an AVC sequence header");
+        video[0].body[5..].to_vec()
+    }
+
+    /// The `avcC` box's payload in an MP4 file.
+    fn avcc_payload(file: &[u8]) -> &[u8] {
+        let at = file
+            .windows(4)
+            .position(|w| w == b"avcC")
+            .expect("an avcC box");
+        let size = u32::from_be_bytes(file[at - 4..at].try_into().unwrap()) as usize;
+        &file[at + 4..at - 4 + size]
+    }
+
+    /// #746: the decoder configuration a real encoder's stream goes out with is the
+    /// one in its first keyframe, in the RTMP sequence header and in the recording's
+    /// `avcC`, not a stand-in Baseline 3.0 set that Windows and YouTube reject.
+    #[test]
+    fn h264_decoder_configuration_comes_from_the_first_keyframe() {
+        let own = AvcDecoderConfig::new(vec![SPS.to_vec()], vec![PPS.to_vec()])
+            .expect("config")
+            .to_bytes();
+        assert_eq!(flv_avc_record(&h264_keyframe(true)), own, "RTMP");
+
+        let dir = std::env::temp_dir().join(format!("jstream-sink-avcc-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("show.mp4");
+        let _ = fs::remove_file(&path);
+        let mut sink = Sink::open(
+            Destination::Record(path.clone()),
+            &info(Codec::H264),
+            Arc::new(AtomicBool::new(true)),
+        )
+        .expect("open");
+        let drops = AtomicU64::new(0);
+        sink.forward(&h264_keyframe(true), &drops).expect("forward");
+        sink.finish();
+        let file = fs::read(&path).expect("recording");
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(drops.into_inner(), 0);
+        assert_eq!(avcc_payload(&file), own, "MP4");
+    }
+
+    /// The fake encoder's keyframes carry no parameter sets, so the stand-in ones fill
+    /// in for them.
+    #[test]
+    fn a_keyframe_without_parameter_sets_gets_the_stand_in_ones() {
+        let stand_in =
+            AvcDecoderConfig::new(vec![STAND_IN_SPS.to_vec()], vec![STAND_IN_PPS.to_vec()])
+                .expect("config")
+                .to_bytes();
+        assert_eq!(flv_avc_record(&h264_keyframe(false)), stand_in);
     }
 
     /// MP4 recording is H.264 only for now, so another codec fails the start with a
