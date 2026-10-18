@@ -622,8 +622,9 @@ whose checks were all skipped.
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
 the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
-A PR into a `wave/*` branch skips only `test`, `doc`, `deny`, `wasm` and the after-review jobs;
-every other check runs. The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
+A PR into a `wave/*` branch skips only `doc`, `deny`, `wasm` and the after-review jobs;
+every other check runs, the Linux `test` included ([ADR-0070](adr/0070-wave-prs-run-linux-tests.md)).
+The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|
