@@ -172,7 +172,7 @@ pub enum RateControl {
 #[non_exhaustive]
 pub enum HardwarePreference {
     /// Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses
-    /// (ADR-0031: hardware first).
+    /// (ADR-0061: hardware first).
     Prefer,
     /// Hardware only: `output.start` fails when there is none.
     Require,

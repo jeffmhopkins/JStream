@@ -271,7 +271,7 @@ jobs:
           RESULT: ${{ job.status }}
         run: bash .github/after-review-status.sh
 
-  # Not required until M3 (R-GIT-003).
+  # Required from M3 (R-GIT-003, ADR-0063 §14).
   macos:
     runs-on: macos-latest
     continue-on-error: true
@@ -290,6 +290,8 @@ jobs:
         run: bash .github/after-review-status.sh
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # The macOS platform crate on its own target, lints first (ADR-0063 §14).
+      - run: cargo clippy -p jstream-platform-macos --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
       - name: Report the result to the PR
         if: always() && github.event_name == 'workflow_dispatch'

@@ -56,7 +56,7 @@ but needed one before the browser source is built).
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0020-portable-windows-distribution.md"]
+depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0020-portable-windows-distribution.md"]
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -64,7 +64,7 @@ depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0020
   `jstream-core`, `jstream-server`, `jstream-mcp`, `jstream-cli`, `video.snapshot`.
 - **M1b Scenes and mixing:**
   - Scene graph and source kinds
-    ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): display, window,
+    ([ADR-0061](docs/adr/0061-source-types-and-decoding-scope-v2.md)): display, window,
     video capture device (webcam or capture card, incl. MJPEG decode, with its audio),
     image (PNG, JPEG, WebP, animated GIF), color, text, audio input, desktop audio,
     application audio, and **browser** ([ADR-0021](docs/adr/0021-browser-source.md);
@@ -122,7 +122,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   per-item delay, easing, glide and appear and disappear effects.
 - The program master chain, per-output chains with their cost shown, and the privacy
   screen ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
-- Source kinds ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): **media
+- Source kinds ([ADR-0061](docs/adr/0061-source-types-and-decoding-scope-v2.md)): **media
   file** (video or audio, looping; OS demux and decode, A/V sync on the media clock),
   **audio waveform** and **audio spectrum**.
 - Built with the UI that uses them ([ADR-0024](docs/adr/0024-scene-structure.md)):
@@ -154,10 +154,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   #102): a maintainer-tier ADR superseding ADR-0037's `state` clause adds a stable
   `too_large` error for requests over a soft limit, read below a higher hard frame
   limit, so an oversized batch fails cleanly.
-- macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
-  A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
-- Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
-  which needs root, so it gets its own ADR too).
+- macOS: the platform crate per [ADR-0063](docs/adr/0063-macos-platform-support.md)
+  (ScreenCaptureKit capture, Core Audio with process taps, VideoToolbox and AudioToolbox,
+  the Keychain), on macOS 14 and later, Apple Silicon supported and Intel best effort.
+  Signing and notarisation, and the virtual camera as a CMIO camera extension, come later,
+  the camera in its own ADR. A Syphon receiver, the macOS follow-up to Spout2, is its own
+  item when wanted.
+- Linux: the platform crate per [ADR-0060](docs/adr/0060-linux-platform-support.md)
+  (portal and PipeWire capture, VA-API encode). Per
+  [ADR-0061](docs/adr/0061-source-types-and-decoding-scope-v2.md), software H.264 is Cisco's
+  OpenH264 binary, downloaded on the user's request, and AAC is an AAC-LC encoder in Rust,
+  built once its own patent-check ADR is accepted. The virtual camera via v4l2loopback
+  needs root, so it gets its own ADR.
 
 <a id="endgame"></a>
 ## Endgame: what done means

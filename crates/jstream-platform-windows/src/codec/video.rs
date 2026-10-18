@@ -12,7 +12,7 @@
 //! engine falls back to the CPU path without one (step 6).
 //!
 //! Hardware encoders are tried first and the OS software encoder after them, as
-//! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0031).
+//! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0061).
 //! Windows ships a software encoder for H.264 only, so HEVC and AV1 need a GPU encoder
 //! (or an installed software MFT) and report `Unsupported` without one.
 //! Hardware MFTs are usually asynchronous: they ask for input and announce output
@@ -24,9 +24,8 @@ use jstream_platform::media::{
     Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame,
     VideoFrameInfo,
 };
+use jstream_platform::nv12::{RgbOrder, rgb_to_nv12};
 use jstream_platform::{PlatformError, RateControl, VideoEncoderConfig};
-
-use crate::capture::convert::{RgbOrder, rgb_to_nv12};
 
 /// A video codec Media Foundation encodes, with the profile it is opened in: H.264
 /// High, HEVC Main and AV1 Main, all 8-bit 4:2:0 from NV12.
