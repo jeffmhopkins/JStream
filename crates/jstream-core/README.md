@@ -800,6 +800,21 @@ image, and the old filter, which holds the old image, is retired through the cac
 file that can't be read or decoded is logged and its filter passes its input through
 until the setting changes. Moving the collection file reloads every `collection`
 asset.
+
+A `scene_mask` reads its `scene` as drawn this frame. Planning collects that scene
+like a nested one, and `Shot` holds the order a frame runs its chains in
+(`schedule_chains`): each chain after the passes of the scenes it reads, and each such
+pass after the chains of the sources it places and the scenes it nests, so a chain
+that masks with a scene of filtered sources sees them filtered this frame. The scene is
+drawn at depth 1, as a nested scene, into its own layer (`GpuKey::reference`, at the
+canvas size), and those passes run once per frame with the chains, before any mix
+draws; `claim_layers` keeps their layers too. The filter holds a clone of the layer and
+is made again only when the layer is remade, the old one retired through the cache. A
+scene pass that fails (its layer can't be made, or the draw fails) fails the frame, as
+a failed nested pass does, and the chains after it don't run that tick. The graph
+refuses a cycle through a filter's scene reference (ADR-0026). Were one there, the
+chain that closes it would find no layer on its first frame and draw nothing, logged
+once, and would read the frame before after that.
 A `display`, `window` or `webcam` source with no stored frame shows what the pipeline
 captures for it on the render thread, and nothing in `video.snapshot`, which has no
 capture; a stored frame wins. The `Shot` lists what the passes of the program, or the
@@ -1726,8 +1741,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
 - Blend modes other than `normal` in the compositor.
-- The rest of the video chain runtime (V0): the referenced scene `scene_mask` reads
-  (it passes its input through until then), effect-pack kinds in a chain (bypassed),
+- The rest of the video chain runtime (V0): effect-pack kinds in a chain (bypassed),
   placing a bounds-growing filter's output at the original content box, and pooling a
   multi-pass filter's scratch layers.
 - Activity gains that fade with a transition (audio follows a switch at once, so
