@@ -13,7 +13,9 @@
 //! ([`annexb_access_unit`]) and sends it down a channel that [`VtEncoder::poll`] drains
 //! without blocking. At most [`MAX_IN_FLIGHT`] frames are queued at once; beyond that
 //! [`can_accept`](VideoEncoder::can_accept) says no and the engine drops the frame
-//! (R-RT-004).
+//! (R-RT-004). The session's maximum frame delay is one less, so the encoder has emitted
+//! a frame before the call that submits the next one returns: an encoder that held more
+//! (the default is no limit) would wait for input that `can_accept` never lets in.
 //!
 //! GPU frames (IOSurface encode targets) follow once the Metal interop spike lands
 //! (ADR-0063 §8).
@@ -51,8 +53,8 @@ use objc2_video_toolbox::{
     VTSessionSetProperty, kVTCompressionPropertyKey_AllowFrameReordering,
     kVTCompressionPropertyKey_AverageBitRate, kVTCompressionPropertyKey_ConstantBitRate,
     kVTCompressionPropertyKey_DataRateLimits, kVTCompressionPropertyKey_ExpectedFrameRate,
-    kVTCompressionPropertyKey_MaxKeyFrameInterval, kVTCompressionPropertyKey_ProfileLevel,
-    kVTCompressionPropertyKey_RealTime,
+    kVTCompressionPropertyKey_MaxFrameDelayCount, kVTCompressionPropertyKey_MaxKeyFrameInterval,
+    kVTCompressionPropertyKey_ProfileLevel, kVTCompressionPropertyKey_RealTime,
     kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder,
     kVTEncodeFrameOptionKey_ForceKeyFrame, kVTProfileLevel_H264_High_AutoLevel,
     kVTProfileLevel_HEVC_Main_AutoLevel, kVTProfileLevel_HEVC_Main10_AutoLevel,
@@ -69,6 +71,10 @@ use crate::fourcc::os_status;
 /// Frames submitted and not yet returned by the output callback, at most. Enough to keep
 /// a hardware encoder busy without frame reordering; more only adds latency.
 pub(crate) const MAX_IN_FLIGHT: usize = 4;
+
+/// The session's `MaxFrameDelayCount`: frames the encoder may hold before it must emit
+/// one. Below [`MAX_IN_FLIGHT`], so a full queue always drains.
+const MAX_FRAME_DELAY: usize = MAX_IN_FLIGHT - 1;
 
 /// `kVTPropertyNotSupportedErr`: the encoder doesn't have this property.
 const VT_PROPERTY_NOT_SUPPORTED: i32 = -12900;
@@ -511,17 +517,19 @@ fn data_rate_limit(bps: u64) -> CFRetained<CFArray<CFNumber>> {
     CFArray::from_retained_objects(&[bytes, seconds])
 }
 
-/// Sets the session's rate control, real time, reordering, profile and keyframe interval.
+/// Sets the session's rate control, real time, reordering, frame delay, profile and
+/// keyframe interval.
 fn configure(
     session: &VTCompressionSession,
     config: &VideoEncoderConfig,
     settings: &VtEncoderSettings,
 ) -> Result<(), PlatformError> {
     // SAFETY: VideoToolbox constants, set before any code runs and never written.
-    let (real_time, reordering, profile_key, interval, rate, cbr, average, limits) = unsafe {
+    let (real_time, reordering, delay, profile_key, interval, rate, cbr, average, limits) = unsafe {
         (
             kVTCompressionPropertyKey_RealTime,
             kVTCompressionPropertyKey_AllowFrameReordering,
+            kVTCompressionPropertyKey_MaxFrameDelayCount,
             kVTCompressionPropertyKey_ProfileLevel,
             kVTCompressionPropertyKey_MaxKeyFrameInterval,
             kVTCompressionPropertyKey_ExpectedFrameRate,
@@ -550,6 +558,14 @@ fn configure(
         CFBoolean::new(false),
         "no frame reordering",
     )?;
+    let max_delay = number_i64(i64::try_from(MAX_FRAME_DELAY).unwrap_or(0));
+    let value: &CFType = &max_delay;
+    // SAFETY: as in `set_property`: a CFNumber of frames.
+    let status = unsafe { VTSessionSetProperty(session, delay, Some(value)) };
+    // An encoder without the property keeps its own delay; #627 tracks checking that.
+    if status != VT_PROPERTY_NOT_SUPPORTED {
+        check(status, "VTSessionSetProperty", "the maximum frame delay")?;
+    }
     set_property(session, profile_key, profile, "the profile")?;
     let keyframes = number_i64(i64::from(settings.max_keyframe_interval.max(1)));
     set_property(session, interval, &keyframes, "the keyframe interval")?;
@@ -1007,8 +1023,14 @@ mod tests {
     ) -> Vec<Packet> {
         let mut out = Vec::new();
         for n in 0..frames {
+            // A full queue must drain by itself: fail, rather than hang, if it doesn't.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
             while !encoder.can_accept() {
                 encoder.poll(&mut out).expect("poll");
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the encoder still holds every queued frame before frame {n}"
+                );
                 std::thread::yield_now();
             }
             if keyframe_at == Some(n) {
