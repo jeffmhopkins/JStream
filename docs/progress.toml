@@ -889,8 +889,8 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510, 572, 606]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; ALSA audio input and output (#572); DMA-BUF capture frames imported into Vulkan (#606); the rest of the codec path to build"
+prs = [481, 490, 509, 510, 572, 598, 606]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); the rest of the codec path to build"
 needs = ["wave", "build"]
 
 [[item]]
