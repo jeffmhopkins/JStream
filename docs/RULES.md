@@ -205,16 +205,19 @@ applies_to = ["crates/**"]
 -->
 Only crates whose metadata declares `unsafe_allowed = true` may contain `unsafe`:
 `jstream-platform-windows`, `jstream-platform-macos`, `jstream-platform-linux`,
-`jstream-vcam-windows`, `jstream-browser` (ADR-0046), `jstream-browser-helper` (ADR-0048,
-for its `RunWinMain` export) and `*-sys`. All other crates have `#![forbid(unsafe_code)]`,
-and lint-deps checks that it's present.
+`jstream-vcam-windows`, `jstream-plugin-clap`, `jstream-browser` (ADR-0046),
+`jstream-browser-helper` (ADR-0048, for its `RunWinMain` export) and `*-sys`. All other
+crates have `#![forbid(unsafe_code)]`, and lint-deps checks that it's present. Only
+`jstream-plugin-host` may depend on `jstream-plugin-clap`, directly or through other
+crates, so no other process loads a CLAP plugin
+([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); lint-deps checks that too.
 
 <a id="R-UNSAFE-002"></a>
 ### R-UNSAFE-002: Every unsafe block is justified
 <!-- @rule
 status = "active"
 enforced_by = ["lint:clippy::undocumented_unsafe_blocks"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 
@@ -223,7 +226,7 @@ Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 FFI wrappers expose safe APIs. Raw handles don't leak past a crate's public API.
 COM / Objective-C / C resources are wrapped in RAII types.
@@ -233,7 +236,7 @@ COM / Objective-C / C resources are wrapped in RAII types.
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Prefer maintained bindings (`windows`, `objc2-*`, `pipewire`) over hand-written `extern` blocks.
 
@@ -242,7 +245,7 @@ Prefer maintained bindings (`windows`, `objc2-*`, `pipewire`) over hand-written 
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
+applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**", "crates/jstream-plugin-clap/**"]
 -->
 Every function called from foreign code (COM methods, WGC/WASAPI/MF callbacks, Core Audio
 procs) wraps its body in `catch_unwind`. A caught panic becomes an error the engine
@@ -258,8 +261,8 @@ depends_on = ["docs/ARCHITECTURE.md#threading"]
 ### R-RT-001: Audio thread does not allocate, lock, block or log
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "review"]
-applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**"]
+enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "test:jstream_plugin_host::rt::a_pass_does_not_allocate", "review"]
+applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**", "apps/jstream-plugin-host/src/rt.rs"]
 -->
 In steady state, the audio callback and mixer do not allocate, take locks, block, make
 syscalls other than the device API, or log. Debug builds and tests install
@@ -321,7 +324,7 @@ running unless the error is fatal and reported.
 <a id="dependencies"></a>
 ## Dependencies
 <!-- @section
-depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0072-linux-media-file-decoding.md"]
 -->
 
 <a id="R-DEP-001"></a>
@@ -334,7 +337,9 @@ applies_to = ["Cargo.toml", "deny.toml"]
 Dependencies may only use the licenses on the `deny.toml` allow list: permissive
 licenses plus MPL-2.0 (file-level copyleft). No GPL, LGPL or AGPL. The one exception is the
 prebuilt CEF runtime for browser sources, which contains LGPL-2.1 FFmpeg and ships with
-its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)).
+its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)). A system library
+loaded at run time and never shipped, such as R-DEP-002's FFmpeg exception, is not a
+dependency here.
 
 <a id="R-DEP-002"></a>
 ### R-DEP-002: No FFmpeg, GStreamer or bundled C codec libraries
@@ -343,16 +348,24 @@ status = "active"
 enforced_by = ["deny:bans", "ci:lint-deps"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
-Per [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md). Known binding crates are banned in
+Per [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md) and
+[ADR-0072](adr/0072-linux-media-file-decoding.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
-allowed only through that allowlist. The media exceptions are two. The prebuilt CEF
+allowed only through that allowlist. The media exceptions are three. The prebuilt CEF
 runtime's internal media stack decodes in-page audio and video only; no JStream crate calls
 its codecs ([ADR-0021](adr/0021-browser-source.md)). On Linux, Cisco's prebuilt OpenH264
 binary is a software H.264 encoder that JStream downloads from Cisco on the user's request
 and loads at run time; JStream never ships or builds it, so the `openh264` crates stay
-banned ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). Pure-Rust image and
-font crates are not banned codec libraries, and neither is JStream's own AAC-LC encoder.
+banned ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). On Linux, the
+media-file source may decode through the system's FFmpeg libraries (`libavformat`,
+`libavcodec`, `libavutil`, `libswresample`) as a fallback, for a file that VA-API and the
+pure-Rust crates can't read. They are loaded at run time through hand-written
+declarations. JStream never ships, builds or links them, so the FFmpeg binding crates stay
+banned, and nothing encodes through FFmpeg. The fallback lands only once ADR-0072's GPL
+legal view and its decoder patent check are both done
+([ADR-0072](adr/0072-linux-media-file-decoding.md)). Pure-Rust image and font crates are
+not banned codec libraries, and neither is JStream's own AAC-LC encoder.
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions
@@ -534,8 +547,10 @@ status = "active"
 enforced_by = ["test:jstream_core::secrets_are_redacted", "review"]
 applies_to = ["crates/**"]
 -->
-Stream keys and OAuth tokens live only in the OS credential store. They never appear in
-collection files, logs, events, snapshots or MCP responses (they are redacted as `"***"`).
+Stream keys and OAuth tokens live only in the OS credential store. The one exception:
+on Linux, where no Secret Service is reachable, they live in a `0600` file in the config
+folder ([ADR-0071](adr/0071-linux-secret-store.md)). They never appear in collection
+files, logs, events, snapshots or MCP responses (they are redacted as `"***"`).
 
 <a id="R-SEC-002"></a>
 ### R-SEC-002: Every listener authenticates and checks Origin
@@ -611,12 +626,17 @@ applies_to = [".github/workflows/**"]
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
 On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
+A skipped job reports a `skipped` check, which a required check accepts, but a skipped matrix
+job reports under its bare name (`clippy`, `test`), so the required `clippy (…)` and `test (…)`
+contexts never report on a draft head. That is what keeps auto-merge from firing on a draft
+whose checks were all skipped.
 `ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist` and `macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
 the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
-A PR into a `wave/*` branch skips only `test`, `doc`, `deny`, `wasm` and the after-review jobs;
-every other check runs. The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
+A PR into a `wave/*` branch skips only `doc`, `deny`, `wasm` and the after-review jobs;
+every other check runs, the Linux `test` included ([ADR-0070](adr/0070-wave-prs-run-linux-tests.md)).
+The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|
@@ -636,6 +656,7 @@ every other check runs. The wave's PR into `main` runs every check ([ADR-0055](a
 | `macos` | clippy on `jstream-platform-macos`, then build and unit tests on macOS | yes, from M3 ([ADR-0063](adr/0063-macos-platform-support.md)) | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
+| `fuzz` | nightly scheduled run of every fuzz target for a few minutes; a crashing input opens or updates an issue for its target ([Fuzz targets › In CI](../fuzz/README.md#ci)) | n/a | now |
 
 <a id="R-GIT-004"></a>
 ### R-GIT-004: One logical change per PR
