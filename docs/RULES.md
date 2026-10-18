@@ -324,7 +324,7 @@ running unless the error is fatal and reported.
 <a id="dependencies"></a>
 ## Dependencies
 <!-- @section
-depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md"]
+depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0072-linux-media-file-decoding.md"]
 -->
 
 <a id="R-DEP-001"></a>
@@ -337,7 +337,9 @@ applies_to = ["Cargo.toml", "deny.toml"]
 Dependencies may only use the licenses on the `deny.toml` allow list: permissive
 licenses plus MPL-2.0 (file-level copyleft). No GPL, LGPL or AGPL. The one exception is the
 prebuilt CEF runtime for browser sources, which contains LGPL-2.1 FFmpeg and ships with
-its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)).
+its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)). A system library
+loaded at run time and never shipped, such as R-DEP-002's FFmpeg exception, is not a
+dependency here.
 
 <a id="R-DEP-002"></a>
 ### R-DEP-002: No FFmpeg, GStreamer or bundled C codec libraries
@@ -346,16 +348,24 @@ status = "active"
 enforced_by = ["deny:bans", "ci:lint-deps"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
-Per [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md). Known binding crates are banned in
+Per [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md) and
+[ADR-0072](adr/0072-linux-media-file-decoding.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
-allowed only through that allowlist. The media exceptions are two. The prebuilt CEF
+allowed only through that allowlist. The media exceptions are three. The prebuilt CEF
 runtime's internal media stack decodes in-page audio and video only; no JStream crate calls
 its codecs ([ADR-0021](adr/0021-browser-source.md)). On Linux, Cisco's prebuilt OpenH264
 binary is a software H.264 encoder that JStream downloads from Cisco on the user's request
 and loads at run time; JStream never ships or builds it, so the `openh264` crates stay
-banned ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). Pure-Rust image and
-font crates are not banned codec libraries, and neither is JStream's own AAC-LC encoder.
+banned ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). On Linux, the
+media-file source may decode through the system's FFmpeg libraries (`libavformat`,
+`libavcodec`, `libavutil`, `libswresample`) as a fallback, for a file that VA-API and the
+pure-Rust crates can't read. They are loaded at run time through hand-written
+declarations. JStream never ships, builds or links them, so the FFmpeg binding crates stay
+banned, and nothing encodes through FFmpeg. The fallback lands only once ADR-0072's GPL
+legal view and its decoder patent check are both done
+([ADR-0072](adr/0072-linux-media-file-decoding.md)). Pure-Rust image and font crates are
+not banned codec libraries, and neither is JStream's own AAC-LC encoder.
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions
