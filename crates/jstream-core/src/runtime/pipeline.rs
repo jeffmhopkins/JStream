@@ -55,7 +55,8 @@ use jstream_media::{
 };
 use jstream_platform::{
     AudioEncoderConfig, AudioIo, Backends, Capture, Codecs, GpuContext, GpuInterop,
-    HardwarePreference, MediaClock, RateControl, VcamFormat, VideoEncoderConfig, VideoSurface,
+    HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices, VideoEncoderConfig,
+    VideoSurface,
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
@@ -1054,6 +1055,7 @@ fn join(name: &str, handle: Option<JoinHandle<()>>) {
 pub(crate) struct Parts {
     clock: Arc<dyn MediaClock>,
     capture: Arc<dyn Capture>,
+    video_devices: Arc<dyn VideoDevices>,
     audio: Arc<dyn AudioIo>,
     codecs: Arc<dyn Codecs>,
     gpu: Arc<dyn GpuInterop>,
@@ -1082,6 +1084,7 @@ pub(crate) fn parts_from(
         canvas,
         clock: Arc::clone(&backends.clock),
         capture: Arc::clone(&backends.capture),
+        video_devices: Arc::clone(&backends.video_devices),
         audio: Arc::clone(&backends.audio),
         codecs: Arc::clone(&backends.codecs),
         gpu: Arc::clone(&backends.gpu),
@@ -1646,6 +1649,7 @@ pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
         backends: captures::Backends {
             cpu: Arc::clone(&parts.capture),
             gpu,
+            devices: Arc::clone(&parts.video_devices),
         },
         context,
     })

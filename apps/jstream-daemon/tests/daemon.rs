@@ -597,6 +597,16 @@ fn logs_go_to_the_data_directory_by_default() {
 fn an_unusable_token_file_exits_1() {
     let dir = scratch("unusable");
     let token_file = dir.join("token");
+    // User-only, so the daemon reaches the emptiness check: a file other users may read
+    // is refused first (on Windows the scratch folder's inherited entries may grant
+    // `BUILTIN\Users` read, as CI's runner does).
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let mut file = jstream_platform_windows::create_private_file(&token_file).expect("created");
+        file.write_all(b"\n").expect("written");
+    }
+    #[cfg(not(windows))]
     std::fs::write(&token_file, "\n").expect("written");
     #[cfg(unix)]
     {

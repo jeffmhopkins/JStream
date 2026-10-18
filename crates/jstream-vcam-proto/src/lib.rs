@@ -35,7 +35,7 @@ pub use control::{
 };
 pub use names::{
     CONTROL_NAME, SESSION_PROBE_MAX, Scope, control_open_names, fence_base, sddl_objects,
-    texture_base,
+    sddl_user_only, texture_base,
 };
 
 /// `JSVC` in little-endian byte order, so a zeroed or foreign mapping is never mistaken for
