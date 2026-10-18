@@ -373,9 +373,9 @@ prs = [177, 225, 227]
 [[item]]
 id = "C4c"
 milestone = "M1b"
-title = "Webcam source (CPU path; MJPEG and paired audio to follow)"
+title = "Webcam source (CPU path, MJPEG on Windows; paired audio to follow)"
 status = "review"
-prs = [654]
+prs = [654, 658]
 needs = ["build", "wave", "hardware"]
 
 [[item]]
@@ -470,8 +470,8 @@ id = "V0"
 milestone = "M1b"
 title = "Video filter chain runtime"
 status = "review"
-prs = [595, 607]
-note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets; then scene_mask's scene, effect-pack kinds, the bounds inset and scratch pooling"
+prs = [595, 607, 626]
+note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene; then effect-pack kinds, the bounds inset and scratch pooling"
 needs = ["build"]
 
 [[item]]
