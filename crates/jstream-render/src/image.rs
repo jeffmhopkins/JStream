@@ -10,6 +10,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
+use jstream_media::VideoFrameInfo;
 use jstream_platform::{FrameSync, GpuFrame};
 
 use crate::color::srgb_channel_to_linear;
@@ -83,9 +84,12 @@ pub struct Image {
     /// or an import given a new frame. A mip chain is rebuilt when this moved since its
     /// last build (ADR-0050 decision 5), so once per change, however many calls draw it.
     changes: AtomicU64,
-    /// The hold of the last frame an import was given, so the same frame given again is
-    /// not a change. `Weak`, so the allocation it compares by can't be reused.
-    last_frame: Option<Weak<dyn FrameSync>>,
+    /// The last frame an import was given, by its hold and its info, so the same frame
+    /// given again is not a change. A platform may hand out one hold for every frame it
+    /// writes into a texture (the Windows capture ring keeps one per slot), so the hold
+    /// alone can't tell frames apart; the info carries the presentation time. `Weak`, so
+    /// the allocation it compares by can't be reused while it is held here.
+    last_frame: Option<(Weak<dyn FrameSync>, VideoFrameInfo)>,
     /// Mip chains, one per crop the image was placed in 3D with, most recently used
     /// first, at most [`MAX_CHAINS`].
     mips: Mutex<Vec<Arc<Mips>>>,
@@ -159,24 +163,26 @@ impl Image {
         self.sync.as_ref()
     }
 
-    /// Replaces the hold staged on each frame that draws the image. The cache keeps an
-    /// import across frames and attaches each frame's hold only while that frame uses it.
-    ///
-    /// A frame other than the last one given is a change ([`Self::changed`]): the
-    /// platform wrote the texture again. The same frame given again (a source repeating
-    /// its last frame) is not.
-    pub(crate) fn set_sync(&mut self, sync: Option<Arc<dyn FrameSync>>) {
-        if let Some(sync) = &sync {
-            let same = self
-                .last_frame
-                .as_ref()
-                .is_some_and(|last| Weak::ptr_eq(last, &Arc::downgrade(sync)));
-            if !same {
-                self.changed();
-                self.last_frame = Some(Arc::downgrade(sync));
-            }
+    /// Drops the hold staged on each frame that draws the image: the cache attaches a
+    /// frame's hold only while that frame uses the import ([`Self::set_frame`]).
+    pub(crate) fn clear_sync(&mut self) {
+        self.sync = None;
+    }
+
+    /// Attaches `frame`'s hold, staged on each frame that draws the image, and counts a
+    /// change ([`Self::changed`]) unless it is the frame last given: the same hold with
+    /// the same info, as [`GpuFrame`]'s equality has it. A source repeating its last
+    /// frame is not a change; a new frame in the same texture under the same hold is.
+    pub(crate) fn set_frame(&mut self, frame: &GpuFrame) {
+        let sync = frame.sync();
+        let same = self.last_frame.as_ref().is_some_and(|(hold, info)| {
+            std::ptr::addr_eq(hold.as_ptr(), Arc::as_ptr(sync)) && info == frame.info()
+        });
+        if !same {
+            self.changed();
+            self.last_frame = Some((Arc::downgrade(sync), *frame.info()));
         }
-        self.sync = sync;
+        self.sync = Some(Arc::clone(sync));
     }
 
     /// Whether this is an import ([`import`]) read with `alpha`.
@@ -481,7 +487,7 @@ fn finish(
         height,
         alpha,
         owner: maker.owner.clone(),
-        last_frame: sync.as_ref().map(Arc::downgrade),
+        last_frame: None,
         sync,
         target: None,
         changes: AtomicU64::new(0),

@@ -653,6 +653,25 @@ fn an_import_rebuilds_its_mips_only_for_a_new_frame() {
         std::sync::Arc::new(super::CountSync(std::sync::Arc::default())),
     );
     assert_eq!(show(compositor, &again), (1, 2), "a new frame rebuilds");
+    // A new frame in the same texture under the same hold, as the Windows capture ring
+    // hands out one hold per slot (#687 round 1 B2): only its time tells it apart.
+    let mut info = *again.info();
+    info.pts = jstream_media::MediaTime::new(info.pts.ticks() + 1, info.pts.timebase());
+    let same_hold = jstream_platform::GpuFrame::new(
+        again.texture().clone(),
+        info,
+        std::sync::Arc::clone(again.sync()),
+    );
+    assert_eq!(
+        show(compositor, &same_hold),
+        (1, 3),
+        "a new frame under the same hold rebuilds"
+    );
+    assert_eq!(
+        show(compositor, &same_hold.clone()),
+        (1, 3),
+        "and that frame again does not"
+    );
 }
 
 /// Two items of one source with different crops each get a chain of their crop.

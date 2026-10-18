@@ -176,8 +176,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
 2. **Mips** (ADR-0050 decision 5). Before the composite pass, each source a visible 3D
    item draws gets its mip chain rebuilt if its image changed: an `Rgba16Float` texture
    with every level down to 1×1, premultiplied linear. A chain is of the item's crop,
-   not the whole source: level 0 copies the cropped texels one for one (a `Region` of
-   whole source texels, which `vs_region` maps the pass onto), converting an import as
+   not the whole source: level 0 copies the cropped texels one for one (a `Region`, the
+   crop's whole texels carried as integers from the item's crop, never recovered from
+   its texture coordinates; `vs_region` maps the pass onto it), converting an import as
    the composite shader would. So no coarser level averages a texel past the crop into
    the item, and clamping to the chain's edge keeps the anisotropic footprint inside the
    crop too (#641). The item's UVs and UV bounds are mapped into the chain's. An image
@@ -185,13 +186,13 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    level is one pass that samples the level above at its own texel centres, so the
    linear filter averages 2×2 texels. A chain is rebuilt when its image's change count
    moved since its last build: `rewrite_rgba8` bumps an upload's, `render_into` a
-   layer's, and the cache giving an import a new frame (a hold other than the last one)
-   an import's. So a source drawn in 3D by several items or calls (two mixes, a nested
+   layer's, and the cache giving an import a new frame (one whose hold or info, its
+   presentation time included, differs from the last one's, since a platform may reuse
+   a hold for every frame it writes into a texture) an import's. So a source drawn in 3D by several items or calls (two mixes, a nested
    scene) is rebuilt once per change. An image imported directly, outside the cache,
    keeps the chain of its first 3D draw. A 3D item samples its chain, which is always
-   premultiplied linear (mode 0),
-   with trilinear filtering and `anisotropy_clamp` 16; wgpu clamps that to 1 on an
-   adapter without anisotropic filtering. A source with no 3D placement gets no chain.
+   premultiplied linear (mode 0), with trilinear filtering and `anisotropy_clamp` 16;
+   wgpu clamps that to 1 on an adapter without anisotropic filtering. A source with no 3D placement gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
@@ -281,7 +282,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, dropped with it |
-| Mip chains (one per crop, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D with that crop; dropped with it, or when four newer crops pushed it out |
+| Mip chains (one per crop, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D with that crop; dropped with it, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -653,7 +654,10 @@ tests check:
 - that an upload's chain is rebuilt after `rewrite_rgba8`;
 - that a layer's is built once for two items and two calls, and rebuilt once after
   `render_into` changes it;
-- that an import's is rebuilt for a new frame from the cache but not for the same one;
+- that an import's is rebuilt for a new frame from the cache, one under the same hold
+  with a later time included, but not for the same frame again;
+- that a 3D item's region is its crop's texels exactly at 1920×1080, where a crop edge
+  doesn't survive a round trip through its `f32` texture coordinate;
 - that two crops of one source get a chain each;
 - that a cropped floor minified onto coarse levels shows nothing of a red border just
   past its crop (red 160 with the chain built from the whole source).

@@ -1,12 +1,13 @@
 // The mip chain of a source placed in 3D (ADR-0050 decision 5), premultiplied linear in
 // `Rgba16Float` like an upload.
 //
-// Level 0 is the chain's region of the source (the item's crop) texel for texel: the pass
-// is the region's size and `vs_region` maps it onto the region, so each fragment samples a
-// source texel centre exactly and nothing past the crop is read. `fs_straight` and `fs_srgb` convert an import to
-// premultiplied linear on the way, as the composite shader's modes 1 and 2 do. Each
-// further level samples the one above at its own texel centre, which falls between four
-// texels, so the linear filter averages them (`fs_premultiplied`).
+// Level 0 is the chain's region of the source (the item's crop) texel for texel: the
+// pass is the region's size and `vs_region` maps it onto the region, so each fragment
+// samples a source texel centre exactly and nothing past the crop is read. `fs_straight`
+// and `fs_srgb` convert an import to premultiplied linear on the way, as the composite
+// shader's modes 1 and 2 do. Each further level samples the one above at its own texel
+// centre, which falls between four texels, so the linear filter averages them
+// (`fs_premultiplied`).
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,

@@ -32,24 +32,13 @@ pub(crate) struct Region {
 }
 
 impl Region {
-    /// The texels of a `source_width` × `source_height` source that the texture
-    /// coordinates `[u0, v0, u1, v1]` span, widened to whole texels and at least one.
-    pub(crate) fn of(source_width: u32, source_height: u32, uv: [f32; 4]) -> Self {
-        let span = |a: f32, b: f32, size: u32| {
-            let size_f = size as f32;
-            let (lo, hi) = (a.min(b), a.max(b));
-            // In 0..size, so the casts can't overflow or go negative.
-            let start = (lo * size_f).floor().clamp(0.0, size_f - 1.0) as u32;
-            let end = (hi * size_f).ceil().clamp(0.0, size_f) as u32;
-            (start, end.max(start + 1) - start)
-        };
-        let (x, width) = span(uv[0], uv[2], source_width);
-        let (y, height) = span(uv[1], uv[3], source_height);
+    /// The whole of a `source_width` × `source_height` source.
+    pub(crate) fn whole(source_width: u32, source_height: u32) -> Self {
         Self {
-            x,
-            y,
-            width,
-            height,
+            x: 0,
+            y: 0,
+            width: source_width.max(1),
+            height: source_height.max(1),
         }
     }
 
@@ -361,29 +350,7 @@ impl Mips {
 
 #[cfg(test)]
 mod tests {
-    use super::{Region, level_count};
-
-    #[test]
-    fn a_region_is_the_crops_whole_texels() {
-        let region = |uv| Region::of(64, 32, uv);
-        let at = |x, y, width, height| Region {
-            x,
-            y,
-            width,
-            height,
-        };
-        assert_eq!(region([0.0, 0.0, 1.0, 1.0]), at(0, 0, 64, 32));
-        // 17 px off the left and top, 12 off the right and bottom.
-        assert_eq!(
-            region([17.0 / 64.0, 17.0 / 32.0, 52.0 / 64.0, 20.0 / 32.0]),
-            at(17, 17, 35, 3)
-        );
-        // A fraction widens to the texels it touches; a flipped span is the same span.
-        assert_eq!(region([0.51, 0.0, 0.25, 0.5]), at(16, 0, 17, 16));
-        // Never empty, and never past the source.
-        assert_eq!(region([0.5, 0.5, 0.5, 0.5]), at(32, 16, 1, 1));
-        assert_eq!(region([1.0, 1.0, 1.0, 1.0]), at(63, 31, 1, 1));
-    }
+    use super::level_count;
 
     #[test]
     fn a_chain_goes_down_to_one_texel() {
