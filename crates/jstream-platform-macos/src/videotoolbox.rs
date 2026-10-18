@@ -717,13 +717,12 @@ impl VtEncoder {
         let delay_limited = configure(&session.0, config, &settings)?;
         let hardware = uses_hardware(&session.0);
         let kind = if hardware { "hardware" } else { "software" };
-        if !delay_limited {
-            tracing::info!(
-                encoder = kind,
-                codec = name,
-                "VideoToolbox encoder has no maximum frame delay; a full queue is drained by completing the oldest frame"
-            );
-        }
+        // The name reports the fallback, so it shows wherever the encoder is listed.
+        let kind = if delay_limited {
+            kind.to_owned()
+        } else {
+            format!("{kind}, oldest frame completed when full")
+        };
         Ok(Self {
             session,
             context,

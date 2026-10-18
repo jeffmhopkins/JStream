@@ -70,7 +70,8 @@ It has:
   `can_accept` keeps out; VideoToolbox's default is no limit. An encoder without the
   property (Apple's software H.264 encoder) keeps its own and may hold all four, so there
   `encode`, once four are queued, completes frames up to the oldest one's `pts`
-  (`VTCompressionSessionCompleteFrames`), and opening logs that it does. Either way,
+  (`VTCompressionSessionCompleteFrames`), and its `CodecInfo` name says so (`software,
+  oldest frame completed when full`). Either way,
   `encode` may wait for the oldest to be emitted. It also lists and opens
   the **AudioToolbox AAC-LC encoder** for a configuration `aac_settings` accepts: an
   `AudioConverter` from interleaved `f32` PCM (planar input is interleaved first) at

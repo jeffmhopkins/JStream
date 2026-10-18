@@ -3052,7 +3052,6 @@ dependencies = [
  "objc2-screen-capture-kit",
  "objc2-security",
  "objc2-video-toolbox",
- "tracing",
 ]
 
 [[package]]
