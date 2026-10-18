@@ -175,17 +175,55 @@ It has:
   (`proc_pidpath`, and `proc_pidinfo`'s short BSD info, which the kernel gives for other
   users' processes such as system daemons too), falling back to the kernel's short name,
   the bundle ID, then the PID; one that exits while being read is left out. Before 14.2 it is
-  `MissingComponent` naming the update. Desktop and
-  application audio are refused before 14.2 (`check_input`) and report `Unsupported`
-  for now.
+  `MissingComponent` naming the update. **Desktop and application audio** are
+  `MissingComponent` before 14.2 too (`check_input`); from 14.2 they record a Core
+  Audio process tap (`CATapDescription`, `AudioHardwareCreateProcessTap`), always a
+  stereo mixdown, through a private aggregate device the stream makes and destroys. The
+  aggregate is clocked by the tapped output, or by the default output, and records the
+  tap as its last two input channels with the same IOProc and watcher as an input. It
+  is left out of the device list. `DefaultOutputLoopback` taps every process except
+  JStream's own, on any output, so JStream's monitoring isn't recorded back;
+  `OutputLoopback` taps what every process except JStream plays on that device's first
+  output stream; `ProcessLoopback` taps the one process, which must be one `processes`
+  lists (else `NotFound`). Its child processes aren't included, unlike Windows' process
+  loopback of a process tree. The stream ends with `DeviceLost` when the aggregate
+  stops working, the output it is clocked by goes (the tapped one, or for desktop and
+  application audio the default output when the tap opened, even if the aggregate
+  lives on), or the tapped process exits. No Microphone
+  permission is checked: a tap needs the system audio recording permission, which has
+  no public API to read. macOS asks when a tap first runs, and without the grant the
+  tap records silence. JStream accepts that, with no guessing from the samples and no
+  reading of the private TCC database, and logs a hint naming System Settings ›
+  Privacy & Security › Screen & System Audio Recording when a tap opens.
+  `input_format` for a tap makes one for a moment to read its format.
+- **`AvFoundationVideoDevices`** (`VideoDevices`, ADR-0063 §10) checks the floor when
+  created. **`devices`** lists the built-in, Continuity and external (USB) cameras an
+  `AVCaptureDeviceDiscoverySession` finds, under their `uniqueID`s. A camera's `audio`
+  is the one audio capture device with the same `modelID`, whose `uniqueID` is its Core
+  Audio UID, so `CoreAudioIo` opens it. A USB webcam's camera and microphone share a
+  model; a Mac's built-in ones don't, so they stay unpaired, as does a model two audio
+  devices share. **`formats`** lists, in the camera's order, one entry per format and
+  frame-rate range at that range's highest rate, each `Raw(Nv12)`: AVFoundation
+  converts every native format, and decodes MJPEG itself, to the NV12 the backend asks
+  for. A camera's YUY2 and MJPEG formats of the same size and rate are therefore one
+  entry, and no format needs a `CaptureDecoder`. **`open`** checks the Camera permission
+  the way `open_input` checks the Microphone one: it asks once, then returns a
+  `PlatformError::Os` naming System Settings › Privacy & Security › Camera. Listing
+  needs no permission. It then runs an `AVCaptureSession` with the camera's input, its
+  active format and frame duration set to the chosen ones, and an
+  `AVCaptureVideoDataOutput` that asks for NV12 in video range and drops late frames.
+  Each frame is copied out on the output's serial queue into the capture mailbox,
+  reusing a frame the reader skipped. Its `pts` is the sample's presentation time on
+  `MachClock`, and its colour is BT.601 below 720 lines and BT.709 from there, in
+  limited range, as on Windows. A watcher thread checks every 500 ms that the camera is
+  still connected and the session still running, and otherwise the stream reports
+  `DeviceLost`.
 
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
   proves the synchronisation;
-- process taps for desktop and application audio;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
-- AVFoundation webcams;
 - video decode and the media-file source.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until its own
@@ -198,8 +236,11 @@ VideoToolbox, which falls back to Apple's software encoder on a Mac without a ha
 one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
 the login keychain with uniquely named items, deleted afterwards, listing audio
 devices and their input formats, refusing an unknown output, reading the Microphone
-status without prompting, and listing processes) need no permission, so they run in the `macos` CI job. The
-`hw-tests` feature is for tests that need the Screen Recording, Camera, Microphone or
-system audio recording permission (listing and capturing a display, the
-missing-permission error, and recording the default input), speakers (playing a tone on
-the default output), or the hardware encoders, which run by hand on a Mac.
+status without prompting, listing processes, refusing to tap an unknown output or
+process, and listing cameras and their formats) need no permission, so they run in the `macos` CI job. The `hw-tests` feature
+is for tests that need the Screen Recording, Camera, Microphone or system audio
+recording permission (listing and capturing a display, the missing-permission error,
+recording the default input, and recording desktop audio, the default output and the
+test's own process playing a tone through taps, and capturing NV12 frames from the
+first camera), speakers (playing a tone on the default output), or the hardware
+encoders, which run by hand on a Mac.
