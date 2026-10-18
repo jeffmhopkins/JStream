@@ -57,8 +57,10 @@ Contents ([Design](#design) explains the choices):
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
-  (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
-  they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  (`sources.rs`), the Inspector (`inspector.rs`: the selected item's box, crop,
+  blending and settings, or the selected scene's objects, uses and transitions), the
+  properties form inside it (`properties.rs`), the number field the panels share
+  (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (creating, editing and deleting streams, recordings and the virtual camera, their
   stream keys, start and stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
@@ -121,7 +123,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   holds no handle of its own, so Disconnecting drops the last one, which closes the
   socket.
 - **Selection.** `Selection` is the scene being edited (shown by the sources list) and
-  the items selected in it: a primary item (edited by the properties form) and any
+  the items selected in it: a primary item (shown in the Inspector) and any
   others the canvas selected with it. A new session reads the program scene
   before the state, so it starts on the scene on program. It is fixed up after every
   change: a
@@ -142,6 +144,29 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shows what else it takes, and sends the plan's edits expecting the plan's revision,
   so a change in between makes the engine refuse it rather than delete more than the
   user saw. Removing an item from its scene is a plain `item.remove`.
+- **The Inspector** ([UI features › inspector](../../docs/UI-FEATURES.md#inspector))
+  shows the primary selected item, or with none the selected scene, under a header with
+  its name, kind, "+N" for the other selected items and a favourite star
+  (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
+  is placed in another scene too. Its sections fold: Parameters (X and Y of the
+  unrotated box's top-left corner, W, H and Rotation, sent as `item.set_geometry`; the
+  W/H link, on by default, keeps the aspect ratio when either side changes), Crop
+  (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
+  draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
+  Properties, the source's settings form. A scene shows its object count, the scenes
+  that use it as a source, and its Transition in and out (`scene.set_transitions`, with
+  the presets read by `state.get` whenever the collection changes). The panel is built
+  once per selected item or scene and each field follows the collection, so an edit
+  doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
+  shows in them once it is dropped.
+- **Number fields** (`NumberField`, spec-panels.md G10) have − and + steppers and a
+  unit. Typed text is sent on Enter or blur, Escape puts the value back, and `−`
+  (U+2212) and `,` are read as a minus and a decimal point; ArrowUp and ArrowDown step
+  (Shift a tenth for steps under 1, Ctrl, Meta or Alt ten times). A drag across an
+  unfocused field steps once per 3 px (Shift a tenth, Ctrl four times, per move so a
+  modifier never makes the value jump) and is sent once on release, so it is one edit
+  and one undo step. Values are kept to the field's range and rounded, and negatives
+  are written with `−`.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
   (and slider when bounded), select, colour, text, asset (root and path) or reference
@@ -165,7 +190,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the six the UI has: Scenes,
-  Scene objects (`Sources`), the Inspector (`Properties`, with `Pairing` under it), the
+  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
   Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. The panels' own `h2` headings are hidden, since
   the tab is the title. Narrow windows stack the zones, without splitters.

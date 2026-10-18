@@ -9,7 +9,7 @@
 use crate::canvas::Canvas;
 use crate::dock::{Dock, PanelId, Target, Zone};
 use crate::pairing::Pairing;
-use crate::panels::{Mixer, Outputs, Properties, Scenes, Sources, StudioMode};
+use crate::panels::{Inspector, Mixer, Outputs, Scenes, Sources, StudioMode};
 use leptos::html;
 use leptos::prelude::*;
 use std::time::Duration;
@@ -50,7 +50,7 @@ fn panel_view(panel: PanelId) -> AnyView {
     match panel {
         PanelId::Scenes => view! { <Scenes /> }.into_any(),
         PanelId::Objects => view! { <Sources /> }.into_any(),
-        PanelId::Inspector => view! { <Properties /><Pairing /> }.into_any(),
+        PanelId::Inspector => view! { <Inspector /><Pairing /> }.into_any(),
         PanelId::Mixer => view! { <Mixer /> }.into_any(),
         PanelId::Outputs => view! { <Outputs /> }.into_any(),
         PanelId::Transitions => view! { <StudioMode /> }.into_any(),
