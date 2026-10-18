@@ -35,8 +35,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   creates the file with a new random token, and names the device file beside it
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, which with the `cef`
-  feature also opens browser sources, [Design](#design)), installs the signal
+  file and the placeholder outputs; on Windows and Linux a live one, which on Windows
+  with the `cef` feature also opens browser sources, [Design](#design)), installs the signal
   handlers that stop it, then binds the server with MCP on and, with `--ui-dir`, the
   web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
@@ -68,8 +68,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   scene and creates an RTMP output to a local
   loopback sink and a recording, the WebSocket client sets the key and starts the
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
-  received and the recorded MP4. The binary has no backends off Windows, so it runs
-  in process; `tests/delay_load.rs`,
+  received and the recorded MP4. The binary has no backends on macOS, and on Linux
+  the CI runner has no portal or GPU, so it runs in process; `tests/delay_load.rs`,
   Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
   `tests/info_plist.rs`, which checks on every OS that `Info.plist` has each usage
@@ -104,7 +104,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
-| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
+| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows and Linux it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
@@ -163,12 +163,21 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. Without `--collection` the
   engine's state is lost.
-- **Going live (Windows).** `output.create` with an RTMP(S) server URL, then
-  `output.set_key` (stored in Windows Credential Manager), then `output.start`
-  connects and streams. A start fails with `action_failed` and a reason that says what
-  to fix when the output has no target (a `--output` placeholder), no stream key, or
-  the key can't be read. Elsewhere, `output.start` only steps the placeholder state
-  machine and `output.set_key` fails: there is no key store.
+- **Going live (Windows, Linux).** `output.create` with an RTMP(S) server URL, then
+  `output.set_key` (stored in Windows Credential Manager, or on Linux in the desktop's
+  keyring through the Secret Service), then `output.start` connects and streams. A
+  start fails with `action_failed` and a reason that says what to fix when the output
+  has no target (a `--output` placeholder), no stream key, or the key can't be read.
+  On macOS, `output.start` only steps the placeholder state machine and
+  `output.set_key` fails: there is no key store.
+- **Linux keys without a keyring.** Where no Secret Service is reachable (no session
+  bus, as over SSH or in a container, or no keyring installed), keys go to
+  `~/.config/jstream/secrets` (`$XDG_CONFIG_HOME/jstream`), a `0600` file that is
+  **not encrypted** ([ADR-0071](../../docs/adr/0071-linux-secret-store.md)). While it
+  holds a key, the daemon logs a warning at startup that names it. Start a keyring in
+  the session (`gnome-keyring-daemon`, KWallet) and the next start, or the next key
+  call, moves the keys into it and deletes the file. A locked keyring shows its unlock
+  prompt; a dismissed prompt fails the call and never falls back to the file.
 - **Media Foundation (Windows).** On a Windows without Media Foundation (an N or KN
   edition without the Media Feature Pack, or Windows Server without its "Server Media
   Foundation" feature), the daemon logs the problem, prints `error: Media Foundation
@@ -208,7 +217,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows, Linux), there is no config folder for the Linux key store (neither `XDG_CONFIG_HOME` nor `HOME` is set), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -234,7 +243,19 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `WindowsCredentials` as its
   stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
-  starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
+  starts.
+- **Live on Linux** (`serve.rs`). Under `cfg(target_os = "linux")` the engine gets the
+  `jstream-platform-linux` backends (`linux_backends`): `MonotonicClock`,
+  `PortalCapture` for the session from the environment, with restore tokens in the
+  data directory's `portal` folder, `VaapiCodecs` (VA-API, else Cisco's OpenH264 once
+  downloaded), `LinuxGpu`, and no virtual camera. `PipeWireAudio` when libpipewire
+  loads, else `Unavailable` with the load error (a warning is logged). Webcams and media
+  files aren't built on Linux, so those are `Unavailable` too, and their sources fail
+  with that reason. The session's kind and support tier are logged at startup. Its
+  stream key store is `LinuxSecrets` (`linux_keys`) on the config directory: a thread
+  started at startup calls `fallback_warning` and logs the warning while the fallback
+  file holds a secret, off the startup path because a keyring may show an unlock
+  prompt. On macOS there are no backends yet, so outputs stay the placeholder state
   machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **The publish opener.** On each `output.start` it reads the output's server URL with
   `Engine::output_kind` and its key from the store, then calls `connect_rtmp`, so each
@@ -408,6 +429,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
   (the backends, the key store and the Media Foundation check),
+  `jstream-platform-linux` on Linux only (the backends and the key store),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,

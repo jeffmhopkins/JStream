@@ -39,6 +39,7 @@ mod secrets;
 mod session;
 #[cfg(any(target_os = "linux", test))]
 mod spa;
+mod unavailable;
 mod vaapi;
 
 #[cfg(feature = "aac-encoder")]
@@ -66,6 +67,7 @@ pub use portal::{CursorModes, PersistMode, PortalPick, SourceTypes, handle_token
 #[cfg(target_os = "linux")]
 pub use secrets::LinuxSecrets;
 pub use session::{Session, SessionKind, SupportTier};
+pub use unavailable::Unavailable;
 #[cfg(target_os = "linux")]
 pub use vaapi::probe_encoders;
 pub use vaapi::{H264Profile, VaEncoder, VaEntrypoint};

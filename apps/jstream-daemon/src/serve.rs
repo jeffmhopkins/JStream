@@ -1,7 +1,7 @@
 //! The engine behind the server: one `Engine`, one `InProcessControl` session per
 //! WebSocket connection and per MCP session, and the signals that stop it. On Windows
-//! the engine is live: it runs the media pipeline on the OS backends and publishes
-//! over RTMP(S).
+//! and Linux the engine is live: it runs the media pipeline on the OS backends and
+//! publishes over RTMP(S).
 
 use crate::args::Options;
 use anyhow::Context;
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 #[cfg(any(all(windows, feature = "cef"), test))]
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 use {
     jstream_core::{LivePublish, OpenPublish, PublishError},
     jstream_platform::{Backends, Secret, StreamKeyStore},
@@ -24,7 +24,7 @@ use {
 
 /// How the publish opener connects to an RTMP(S) server URL with a stream key:
 /// `connect_rtmp` in the daemon, a recording target in tests.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 pub type Connect =
     Arc<dyn Fn(&str, &Secret) -> Result<Box<dyn LivePublish>, PublishError> + Send + Sync>;
 
@@ -32,14 +32,17 @@ pub type Connect =
 /// one that is not saved), the placeholder outputs, and `audit` recording every batch,
 /// undo, redo and action.
 ///
-/// On Windows it is live (see `live`, which is Windows and test only): the OS backends (WGC capture, WASAPI audio, Media
+/// On Windows it is live (see `live`): the OS backends (WGC capture, WASAPI audio, Media
 /// Foundation codecs and webcams, the QPC clock), stream keys in Credential Manager, and a publish
-/// opener that connects RTMP(S) on each `output.start`. Elsewhere there are no
-/// backends yet, so output actions only step the placeholder state machine.
+/// opener that connects RTMP(S) on each `output.start`. On Linux it is live on the
+/// Linux backends (`linux_backends`) with stream keys in the Secret Service, else the
+/// ADR-0071 fallback file (`linux_keys`). Elsewhere there are no backends yet, so output
+/// actions only step the placeholder state machine.
 ///
 /// # Errors
-/// When the collection file can't be read, loaded or created, and on Windows, when a
-/// backend can't be created (the QPC clock).
+/// When the collection file can't be read, loaded or created; on Windows, when a
+/// backend can't be created (the QPC clock); on Linux, when the media clock can't be
+/// opened or there is no config folder for the secret store.
 pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Arc<Engine>> {
     let mut engine = Engine::new().with_audit(audit);
     if let Some(path) = &options.collection {
@@ -71,9 +74,79 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
         let _ = cef_browser(Engine::clone(&engine), gpu.as_ref(), clock, options);
         engine
     };
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    let engine = live(engine, linux_backends()?, linux_keys()?, rtmp());
+    #[cfg(not(any(windows, target_os = "linux")))]
     let engine = Arc::new(engine);
     Ok(engine)
+}
+
+/// The Linux backends (ADR-0060). Creating them opens no device. Capture goes through
+/// the ScreenCast portal, its restore tokens kept in the data folder's `portal` folder
+/// so a grant survives restarts; encoding through VA-API, else Cisco's OpenH264 once
+/// downloaded; GPU frames on the Vulkan device `LinuxGpu` opens. Webcams and media files
+/// aren't built on Linux yet, and audio needs libpipewire: those backends are
+/// `Unavailable`, so their sources fail with the reason and the rest of the engine runs.
+#[cfg(target_os = "linux")]
+fn linux_backends() -> anyhow::Result<Backends> {
+    use jstream_platform::AudioIo;
+    use jstream_platform_linux::{
+        LinuxGpu, MonotonicClock, PipeWireAudio, PortalCapture, Session, Unavailable, VaapiCodecs,
+    };
+    let session = Session::from_env();
+    tracing::info!(kind = ?session.kind, tier = ?session.tier(), "Linux session");
+    let capture = match jstream_platform::paths::data_dir() {
+        Some(dir) => PortalCapture::with_token_dir(session, dir.join("portal")),
+        None => PortalCapture::new(session),
+    };
+    let audio: Arc<dyn AudioIo> = match PipeWireAudio::new() {
+        Ok(audio) => Arc::new(audio),
+        Err(error) => {
+            tracing::warn!(%error, "PipeWire didn't load, so audio is off");
+            Arc::new(Unavailable::new(error))
+        }
+    };
+    Ok(Backends {
+        clock: Arc::new(
+            MonotonicClock::new().context("could not open the CLOCK_MONOTONIC media clock")?,
+        ),
+        capture: Arc::new(capture),
+        video_devices: Arc::new(Unavailable::not_built("webcams")),
+        audio,
+        codecs: Arc::new(VaapiCodecs::new()),
+        gpu: Arc::new(LinuxGpu::new()),
+        media: Arc::new(Unavailable::not_built("media files")),
+        vcam: None,
+    })
+}
+
+/// The Linux secret store (ADR-0071): the Secret Service, else the `secrets` file in
+/// the config folder. A thread checks it once at startup and logs ADR-0071's warning
+/// while that file holds a secret; where a keyring is reachable, the check moves the
+/// file's secrets into it. It runs off the startup path because the keyring may show
+/// an unlock prompt.
+///
+/// # Errors
+/// When neither `XDG_CONFIG_HOME` nor `HOME` names a folder.
+#[cfg(target_os = "linux")]
+fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
+    use jstream_platform_linux::LinuxSecrets;
+    let dir = LinuxSecrets::config_dir().context(
+        "no config folder for the stream-key store's fallback file: set HOME or XDG_CONFIG_HOME",
+    )?;
+    let keys = Arc::new(LinuxSecrets::new(dir));
+    let check = Arc::clone(&keys);
+    let spawned = std::thread::Builder::new()
+        .name("secret-store-check".into())
+        .spawn(move || match check.fallback_warning() {
+            Ok(Some(warning)) => tracing::warn!("{warning}"),
+            Ok(None) => {}
+            Err(error) => tracing::warn!(%error, "could not check the stream-key store"),
+        });
+    if let Err(error) = spawned {
+        tracing::warn!(%error, "could not check the stream-key store");
+    }
+    Ok(keys)
 }
 
 /// The Windows backends. Creating them opens no device: each opens what it needs when
@@ -160,7 +233,7 @@ pub fn browse(
 }
 
 /// Connects with `connect_rtmp`, whose errors never carry the key (R-SEC-001).
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn rtmp() -> Connect {
     Arc::new(|url, key| {
         let publish: Box<dyn LivePublish> =
@@ -176,7 +249,7 @@ fn rtmp() -> Connect {
 /// cycle would keep the engine, and its running pipeline, alive after the server and
 /// every session let go of it. So the engine is returned in an `Arc` and the opener
 /// gets only a `Weak` to it, set once the engine is built.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 pub fn live(
     engine: Engine,
     backends: Backends,
@@ -200,7 +273,7 @@ pub fn live(
 /// `connect`. A start fails with a reason that says what to fix when the output is not
 /// in the collection (a `--output` placeholder has no target), has no stream key, or
 /// the store can't be read. No reason carries the key (R-SEC-001).
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 fn opener(
     engine: Arc<OnceLock<Weak<Engine>>>,
     keys: Arc<dyn StreamKeyStore>,

@@ -197,6 +197,9 @@ It has:
   default. ADR-0062's re-check switches the encoder off in a release by taking that
   feature out of the defaults. Without it, `jstream-aac` leaves the build, the list has
   no AAC encoder, and opening one reports `Unsupported`.
+- **`Unavailable`** fills a `Backends` slot Linux has no backend for yet (webcams and
+  media files, or audio when libpipewire doesn't load): every call fails with the
+  reason it was given, so a host such as the daemon still runs the rest of the engine.
 
 Not here yet, in roughly the order they follow:
 - the cursor as stream metadata, composited by the source, once the source has a

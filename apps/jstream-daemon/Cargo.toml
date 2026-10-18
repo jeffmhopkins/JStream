@@ -56,6 +56,12 @@ tracing-subscriber.workspace = true
 [target.'cfg(windows)'.dependencies]
 jstream-platform-windows.workspace = true
 
+# The live engine on Linux: the portal and PipeWire capture, VA-API and OpenH264
+# encoding, the Vulkan GPU interop, CLOCK_MONOTONIC, and the Secret Service key store
+# with its ADR-0071 fallback file.
+[target.'cfg(target_os = "linux")'.dependencies]
+jstream-platform-linux.workspace = true
+
 [dev-dependencies]
 # The tests drive the daemon through the WebSocket client, as the CLI does.
 futures-util.workspace = true
