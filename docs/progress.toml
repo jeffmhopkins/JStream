@@ -837,8 +837,8 @@ id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
-prs = [359, 368]
-note = "effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build"
+prs = [359, 368, 611]
+note = "effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), in review into wave/m3-3; the compositor draw and lifting the rejection to build"
 needs = ["build"]
 
 [[item]]
@@ -871,7 +871,7 @@ id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "review"
-prs = [486]
+prs = [486, 623]
 note = "#486 merged into wave/m3-2; lands with that wave"
 needs = ["wave"]
 
@@ -889,8 +889,8 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510, 598, 610]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; portal restore tokens per source (#598); the pointer as PipeWire cursor metadata or left out, platform only (#610); the source's show_cursor setting (protocol 0.36) follows (#682), with the OS drawing the pointer when it's on and leaving it out when it's off; the engine doesn't draw the pointer; the rest of the codec path to build"
+prs = [481, 490, 509, 510, 572, 598, 610]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; ALSA audio input and output (#572); portal restore tokens per source (#598); the pointer as PipeWire cursor metadata or left out, platform only (#610); the source's show_cursor setting (protocol 0.36) follows (#682), with the OS drawing the pointer when it's on and leaving it out when it's off; the engine doesn't draw the pointer; the rest of the codec path to build"
 needs = ["wave", "build"]
 
 [[item]]
