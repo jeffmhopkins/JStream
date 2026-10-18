@@ -1,6 +1,6 @@
 //! Reading Core Audio HAL properties (ADR-0063 §4): the device list, the default
-//! devices, a device's UID, name, channels and nominal rate, and its input streams'
-//! virtual formats.
+//! devices, a device's UID, name, channels and nominal rate, its input streams' virtual
+//! formats, and the process objects.
 //!
 //! Every read is `AudioObjectGetPropertyData` on a property address with the main
 //! element, into a value or buffer this module owns, so the `unsafe` stays here.
@@ -18,15 +18,16 @@ use objc2_core_audio::{
     kAudioDevicePropertyPreferredChannelsForStereo, kAudioDevicePropertyStreamConfiguration,
     kAudioDevicePropertyStreams, kAudioHardwarePropertyDefaultInputDevice,
     kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDevices,
-    kAudioHardwarePropertyProcessObjectList, kAudioObjectPropertyElementMain,
-    kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyScopeInput,
-    kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject, kAudioObjectUnknown,
-    kAudioProcessPropertyBundleID, kAudioProcessPropertyPID, kAudioStreamPropertyVirtualFormat,
+    kAudioHardwarePropertyProcessObjectList, kAudioHardwarePropertyTranslatePIDToProcessObject,
+    kAudioObjectPropertyElementMain, kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal,
+    kAudioObjectPropertyScopeInput, kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject,
+    kAudioObjectUnknown, kAudioProcessPropertyBundleID, kAudioProcessPropertyPID,
+    kAudioStreamPropertyVirtualFormat,
 };
 use objc2_core_audio_types::{AudioBuffer, AudioBufferList, AudioStreamBasicDescription};
 use objc2_core_foundation::{CFRetained, CFString};
 
-use super::layout::{StreamPlan, is_native_f32, plan_stream, rate_hz};
+use super::layout::{StreamPlan, is_native_f32, is_own_tap, plan_stream, rate_hz, tap_pair};
 use crate::fourcc::os_status;
 
 /// The system object, which owns the device list and the defaults.
@@ -98,15 +99,38 @@ unsafe fn read_raw(
     out: NonNull<c_void>,
     capacity: u32,
 ) -> Result<u32, PlatformError> {
+    // SAFETY: the caller's contract; no qualifier.
+    unsafe { read_qualified(object, addr, None, out, capacity) }
+}
+
+/// [`read_raw`] with a qualifier: a process ID, for the properties that take one.
+///
+/// # Safety
+/// As for [`read_raw`].
+unsafe fn read_qualified(
+    object: AudioObjectID,
+    addr: &AudioObjectPropertyAddress,
+    qualifier: Option<&i32>,
+    out: NonNull<c_void>,
+    capacity: u32,
+) -> Result<u32, PlatformError> {
     let mut size = capacity;
+    let (qualifier_size, qualifier) = match qualifier {
+        Some(q) => (
+            u32::try_from(size_of::<i32>()).unwrap_or(u32::MAX),
+            std::ptr::from_ref(q).cast::<c_void>(),
+        ),
+        None => (0, ptr::null()),
+    };
     // SAFETY: the caller guarantees `out` holds `capacity` bytes; `size` tells the HAL so,
-    // and the HAL writes at most that many and returns how many it wrote.
+    // and the HAL writes at most that many and returns how many it wrote. The qualifier,
+    // if any, is a live `i32` of the size passed.
     let status = unsafe {
         AudioObjectGetPropertyData(
             object,
             NonNull::from(addr),
-            0,
-            ptr::null(),
+            qualifier_size,
+            qualifier,
             NonNull::from(&mut size),
             out,
         )
@@ -238,6 +262,28 @@ pub(super) fn process_bundle_id(process: AudioObjectID) -> Option<String> {
     .filter(|s| !s.is_empty())
 }
 
+/// The process object of the process with ID `pid`, if Core Audio knows it as a client.
+pub(super) fn process_object(pid: i32) -> Result<Option<AudioObjectID>, PlatformError> {
+    let mut object = kAudioObjectUnknown;
+    let capacity = u32::try_from(size_of::<AudioObjectID>()).unwrap_or(u32::MAX);
+    let addr = address(
+        kAudioHardwarePropertyTranslatePIDToProcessObject,
+        kAudioObjectPropertyScopeGlobal,
+    );
+    // SAFETY: `object` is a live, aligned `AudioObjectID` of `capacity` bytes, and any value
+    // the HAL writes into it is valid.
+    unsafe {
+        read_qualified(
+            SYSTEM,
+            &addr,
+            Some(&pid),
+            NonNull::from(&mut object).cast(),
+            capacity,
+        )
+    }?;
+    Ok((object != kAudioObjectUnknown).then_some(object))
+}
+
 /// The devices present now.
 fn device_ids() -> Result<Vec<AudioObjectID>, PlatformError> {
     read_list(
@@ -355,6 +401,9 @@ fn entries(
     defaults: [Option<AudioObjectID>; 2],
 ) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
     let id = uid(device)?;
+    if is_own_tap(&id) {
+        return Ok(Vec::new());
+    }
     let name = read_string(
         device,
         &address(kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal),
@@ -402,7 +451,7 @@ pub(super) fn find(
     device_ids()?
         .into_iter()
         .find(|&d| {
-            uid(d).is_ok_and(|u| u == id.as_str())
+            uid(d).is_ok_and(|u| u == id.as_str() && !is_own_tap(&u))
                 && buffer_channels(d, direction).is_ok_and(|b| b.iter().any(|&c| c > 0))
         })
         .ok_or_else(|| PlatformError::NotFound {
@@ -420,6 +469,34 @@ pub(super) fn find(
 pub(super) fn plan(
     device: AudioObjectID,
     direction: AudioDirection,
+) -> Result<StreamPlan, PlatformError> {
+    plan_with(device, direction, |device, side, _| {
+        read_value(
+            device,
+            &address(kAudioDevicePropertyPreferredChannelsForStereo, side),
+            [0u32; 2],
+        )
+        .ok()
+    })
+}
+
+/// How to record a tap's aggregate device: as [`plan`], on the last two input channels,
+/// which are the tap's ([`tap_pair`]).
+///
+/// # Errors
+/// As for [`plan`].
+pub(super) fn plan_tap(device: AudioObjectID) -> Result<StreamPlan, PlatformError> {
+    plan_with(device, AudioDirection::Input, |_, _, buffers| {
+        tap_pair(buffers)
+    })
+}
+
+/// [`plan`], with `pair` choosing the stereo pair from the device, its scope and its
+/// buffers' channel counts.
+fn plan_with(
+    device: AudioObjectID,
+    direction: AudioDirection,
+    pair: impl FnOnce(AudioObjectID, AudioObjectPropertyScope, &[u32]) -> Option<[u32; 2]>,
 ) -> Result<StreamPlan, PlatformError> {
     let side = scope(direction);
     let nominal = read_value(
@@ -470,11 +547,6 @@ pub(super) fn plan(
         }
     }
     let buffers = buffer_channels(device, direction)?;
-    let pair = read_value(
-        device,
-        &address(kAudioDevicePropertyPreferredChannelsForStereo, side),
-        [0u32; 2],
-    )
-    .ok();
+    let pair = pair(device, side, &buffers);
     plan_stream(rate, &buffers, pair)
 }
