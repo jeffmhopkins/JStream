@@ -281,7 +281,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   - `MacosKeychain` as its stream key store, behind `crash::Redacting` through
     `live_redacting` as on Windows, and the same publish opener.
 
-  Capture and Core Audio refuse a release below the floor when created, which fails
+  Capture, webcams and Core Audio refuse a release below the floor when created, which fails
   startup. Creating them asks for no permission: that happens when a pipeline first
   uses them.
 - **Elsewhere** (Linux) there are no backends yet, so outputs stay the placeholder
@@ -494,7 +494,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
   (the backends, the key store and the Media Foundation check), `jstream-platform-macos`
-  on macOS only (the backends built so far, the stand-ins and the Keychain key store),
+  on macOS only (the backends built so far, the GPU-interop stand-in and the Keychain key store),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
   OAuth client file), `anyhow`, `tracing` (the startup line) and `blake3` (the crash
