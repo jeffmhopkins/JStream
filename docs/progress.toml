@@ -827,10 +827,10 @@ prs = [323]
 id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
-status = "planned"
-prs = [319]
-note = "hotkeys #319 merged into wave/m1-2; organisation metadata draft #323"
-needs = ["wave", "build"]
+status = "review"
+prs = [319, 323, 715]
+note = "hotkeys #319 and organisation metadata #323 merged into waves; keyframe scenes #715 (protocol 0.39) open on wave/m1-3; a group's children and the UI follow (#702)"
+needs = ["build", "wave"]
 
 [[item]]
 id = "K2"

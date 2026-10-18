@@ -19,6 +19,7 @@ mod geometry;
 mod history;
 mod hotkey;
 mod id;
+mod keyframe;
 mod kind;
 mod live;
 mod mix;
@@ -64,6 +65,7 @@ pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey,
     ItemId, LabelId, OutputId, RequestId, Rev, SceneId, SourceId, TransitionPresetId, VideoMixId,
 };
+pub use keyframe::{DroppedOverride, ItemOverride, OverrideField};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,

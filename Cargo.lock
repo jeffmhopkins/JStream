@@ -2751,6 +2751,7 @@ dependencies = [
 name = "jstream-graph"
 version = "0.0.0"
 dependencies = [
+ "jstream-anim",
  "jstream-protocol",
  "proptest",
  "serde",

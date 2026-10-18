@@ -25,6 +25,7 @@ use crate::{
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
 use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
+use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
     Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
     TransitionPresetInfo, TransitionStarted, TransitionsInfo,
@@ -486,7 +487,56 @@ pub(crate) fn edits() -> Vec<Edit> {
         blend,
     }));
     edits.extend(filter_edits());
+    edits.extend(keyframe_edits());
     edits
+}
+
+/// A keyframe scene's edits (protocol 0.39): creating one, writing an override through
+/// a placement edit's `scene_id`, and clearing it.
+fn keyframe_edits() -> Vec<Edit> {
+    let mut edits = vec![
+        Edit::SceneCreateVariant {
+            scene_id: SceneId::new("scn_1_wide"),
+            variant_of: SceneId::new("scn_1"),
+            name: "Main, wide".into(),
+        },
+        Edit::ItemSetOpacity {
+            item_id: ItemId::new("itm_2"),
+            scene_id: Some(SceneId::new("scn_1_wide")),
+            opacity: Finite32::new(0.5).expect("finite"),
+        },
+        Edit::ItemClearOverride {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_2"),
+            field: OverrideField::Opacity,
+        },
+    ];
+    // Every field, as "reset keyframe" clears them.
+    edits.extend(
+        [
+            OverrideField::Geometry,
+            OverrideField::Crop,
+            OverrideField::Visible,
+        ]
+        .map(|field| Edit::ItemClearOverride {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_2"),
+            field,
+        }),
+    );
+    edits
+}
+
+/// What the keyframe scene `scn_1_wide` overrides.
+fn item_overrides() -> Vec<ItemOverride> {
+    vec![ItemOverride {
+        transform: None,
+        item_id: ItemId::new("itm_2"),
+        geometry: Some(corner_box()),
+        crop: None,
+        visible: Some(false),
+        opacity: Some(Finite32::new(0.5).expect("finite")),
+    }]
 }
 
 /// The filter edits (ADR-0026), on both chains of a source, and on the master stage's
@@ -1311,6 +1361,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             sources: source_infos(),
             scenes: vec![
                 SceneInfo {
+                    overrides: Vec::new(),
+                    variant_of: None,
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
                     role: SceneRole::Scene,
@@ -1321,6 +1373,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     meta: scene_meta(),
                 },
                 SceneInfo {
+                    overrides: item_overrides(),
+                    variant_of: Some(SceneId::new("scn_1")),
+                    scene_id: SceneId::new("scn_1_wide"),
+                    name: "Main, wide".into(),
+                    role: SceneRole::Scene,
+                    transition_in: None,
+                    transition_out: None,
+                    items: vec![],
+                    folder: None,
+                    meta: Default::default(),
+                },
+                SceneInfo {
+                    overrides: Vec::new(),
+                    variant_of: None,
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),
                     role: SceneRole::Group,
@@ -1828,6 +1894,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         ServerMessage::Response(Response {
             id: RequestId::new("r0"),
             result: CallResult::Batch {
+                dropped_overrides: Vec::new(),
                 rev: Rev(13),
                 removed_hotkeys: vec![],
             },
@@ -1835,6 +1902,13 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         ServerMessage::Response(Response {
             id: RequestId::new("r1"),
             result: CallResult::Batch {
+                dropped_overrides: item_overrides()
+                    .into_iter()
+                    .map(|dropped| DroppedOverride {
+                        scene_id: SceneId::new("scn_1_wide"),
+                        dropped,
+                    })
+                    .collect(),
                 rev: Rev(14),
                 removed_hotkeys: hotkey_bindings(),
             },

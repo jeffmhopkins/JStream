@@ -150,7 +150,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   A `scene.switch` bound here names no transition preset (MCP and the WebSocket API
   can bind one), and the `hotkeys:` table lists a bound preset after the scene.
   Applying a batch prints `removed hotkey <chord>` for each binding its deletes
-  removed. Several edits on one line go as **one atomic batch**: one new
+  removed, and `dropped the overrides of item <item-id> in scene <scene-id>` for each
+  keyframe override it dropped. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),

@@ -380,6 +380,27 @@ impl Shot {
     pub(crate) fn transition_tracks(&self) -> Option<usize> {
         self.transition.as_ref().map(|t| t.tracks.len())
     }
+
+    /// The running transition's tracks in drawing order, or `None` without one, for
+    /// tests.
+    #[cfg(test)]
+    pub(crate) fn tracks(&self) -> Option<Vec<Track>> {
+        self.transition
+            .as_ref()
+            .map(|t| t.tracks.iter().map(|(_, track)| *track).collect())
+    }
+
+    /// What scene `id` places, bottom first: each item with its placement and opacity,
+    /// or `None` when the shot doesn't draw the scene, for tests.
+    #[cfg(test)]
+    pub(crate) fn placed(&self, id: &SceneId) -> Option<Vec<(ItemId, Placement, f32)>> {
+        self.scenes.get(id).map(|placed| {
+            placed
+                .iter()
+                .map(|p| (p.item.clone(), p.placement, p.opacity))
+                .collect()
+        })
+    }
 }
 
 /// Two shots are equal when they draw the same thing: the passes and keys follow from
@@ -669,7 +690,7 @@ impl Planner<'_, '_> {
                 .collect(),
         };
         let to = self.visuals(&running.to, flatten, out);
-        transition::plan(&from, &to, &running.run)
+        transition::plan(&from, &to, &running.run, running.by_item)
     }
 
     /// Whether `image` can be drawn now, putting its frame or scene in `out`.
@@ -721,7 +742,8 @@ impl Planner<'_, '_> {
             return;
         }
         let canvas = state.canvas();
-        for item in scene.items() {
+        for item in state.shown_items(scene) {
+            let item = item.as_ref();
             if !item.visible() {
                 continue;
             }
@@ -770,6 +792,7 @@ impl Planner<'_, '_> {
             };
             visuals.push(Visual {
                 image,
+                item_id: item.id().clone(),
                 source_id: item.source_id().clone(),
                 at: Endpoint {
                     geometry,
@@ -790,7 +813,9 @@ impl Planner<'_, '_> {
         let state = self.state;
         let mut placed = Vec::new();
         if let Some(scene) = state.scene(id) {
-            for item in scene.items() {
+            // A keyframe scene draws its parent's items at their effective values.
+            for item in state.shown_items(scene) {
+                let item = item.as_ref();
                 if !item.visible() {
                     continue;
                 }

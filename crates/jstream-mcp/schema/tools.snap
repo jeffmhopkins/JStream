@@ -723,6 +723,62 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Creates a keyframe scene (a variant) of `variant_of` (ADR-0024 §2, ADR-0049): a\nscene with no items of its own that shows its parent's items, each at its parent's\nvalues until the variant overrides a field. Placement edits with `scene_id` set to\nthe variant write its overrides; `item.clear_override` removes them. `variant_of`\nmust name an existing scene that is not itself a variant (a keyframe of a keyframe\nis made on the parent), else `invalid_argument`; a missing one is `not_found`.\nThe variant has the role `scene`, no folder (it sits under its parent) and no\ntransition overrides; its own `scene.set_transitions` and `scene.set_meta` apply.\nInverse: `scene.delete`.",
+                "properties": {
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The new scene's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "scene.create_variant",
+                    "type": "string"
+                  },
+                  "variant_of": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene it is a keyframe of."
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "variant_of",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes one field of a keyframe scene's override of an item (ADR-0049 §2), so\nthat field follows the parent again. \"Reset keyframe\" is a batch of these.\n`scene_id` must name a keyframe scene and `item_id` an item of its parent, else\n`invalid_argument` (`not_found` for a missing one). Clearing a field the variant\ndoesn't override is allowed and changes nothing. Inverse: the placement edit that\nwrites the old value with `scene_id` set, or nothing when the field was absent.",
+                "properties": {
+                  "field": {
+                    "$ref": "#/$defs/OverrideField",
+                    "description": "The field to clear."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The parent's item."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "item.clear_override",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "field"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
                 "properties": {
                   "name": {
@@ -769,7 +825,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top, then\n`hotkey.set` for each removed binding.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nA scene with keyframe scenes is refused the same way, the variants listed as its\nblockers; delete them first. Inverse: `scene.create` with its role (omitted for\n`scene`), or `scene.create_variant` for a keyframe scene, then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top (a\nkeyframe scene's overrides instead, as placement edits with its `scene_id`), then\n`hotkey.set` for each removed binding.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -859,7 +915,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and\n`item.set_transition` if its transition settings were not the default.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -877,7 +933,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
                 "properties": {
                   "index": {
                     "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -990,7 +1046,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`, and so is `item.set_transform` naming a keyframe scene:\nan override's geometry is a geometry."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -3008,6 +3064,31 @@ source: crates/jstream-mcp/src/tests.rs
                   "type"
                 ],
                 "type": "object"
+              }
+            ]
+          },
+          "OverrideField": {
+            "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+            "oneOf": [
+              {
+                "const": "geometry",
+                "description": "The item's geometry (`item.set_geometry`, or `item.set_transform` while it lasts).",
+                "type": "string"
+              },
+              {
+                "const": "crop",
+                "description": "Its crop (`item.set_crop`).",
+                "type": "string"
+              },
+              {
+                "const": "visible",
+                "description": "Whether it is drawn (`item.set_visible`).",
+                "type": "string"
+              },
+              {
+                "const": "opacity",
+                "description": "Its opacity (`item.set_opacity`).",
+                "type": "string"
               }
             ]
           },
@@ -5521,6 +5602,62 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Creates a keyframe scene (a variant) of `variant_of` (ADR-0024 §2, ADR-0049): a\nscene with no items of its own that shows its parent's items, each at its parent's\nvalues until the variant overrides a field. Placement edits with `scene_id` set to\nthe variant write its overrides; `item.clear_override` removes them. `variant_of`\nmust name an existing scene that is not itself a variant (a keyframe of a keyframe\nis made on the parent), else `invalid_argument`; a missing one is `not_found`.\nThe variant has the role `scene`, no folder (it sits under its parent) and no\ntransition overrides; its own `scene.set_transitions` and `scene.set_meta` apply.\nInverse: `scene.delete`.",
+                "properties": {
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The new scene's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "scene.create_variant",
+                    "type": "string"
+                  },
+                  "variant_of": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene it is a keyframe of."
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "variant_of",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes one field of a keyframe scene's override of an item (ADR-0049 §2), so\nthat field follows the parent again. \"Reset keyframe\" is a batch of these.\n`scene_id` must name a keyframe scene and `item_id` an item of its parent, else\n`invalid_argument` (`not_found` for a missing one). Clearing a field the variant\ndoesn't override is allowed and changes nothing. Inverse: the placement edit that\nwrites the old value with `scene_id` set, or nothing when the field was absent.",
+                "properties": {
+                  "field": {
+                    "$ref": "#/$defs/OverrideField",
+                    "description": "The field to clear."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The parent's item."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "item.clear_override",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "field"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
                 "properties": {
                   "name": {
@@ -5567,7 +5704,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top, then\n`hotkey.set` for each removed binding.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nA scene with keyframe scenes is refused the same way, the variants listed as its\nblockers; delete them first. Inverse: `scene.create` with its role (omitted for\n`scene`), or `scene.create_variant` for a keyframe scene, then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top (a\nkeyframe scene's overrides instead, as placement edits with its `scene_id`), then\n`hotkey.set` for each removed binding.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -5657,7 +5794,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and\n`item.set_transition` if its transition settings were not the default.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -5675,7 +5812,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
                 "properties": {
                   "index": {
                     "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -5788,7 +5925,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`, and so is `item.set_transform` naming a keyframe scene:\nan override's geometry is a geometry."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -7809,6 +7946,31 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "OverrideField": {
+            "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+            "oneOf": [
+              {
+                "const": "geometry",
+                "description": "The item's geometry (`item.set_geometry`, or `item.set_transform` while it lasts).",
+                "type": "string"
+              },
+              {
+                "const": "crop",
+                "description": "Its crop (`item.set_crop`).",
+                "type": "string"
+              },
+              {
+                "const": "visible",
+                "description": "Whether it is drawn (`item.set_visible`).",
+                "type": "string"
+              },
+              {
+                "const": "opacity",
+                "description": "Its opacity (`item.set_opacity`).",
+                "type": "string"
+              }
+            ]
+          },
           "PreviewCodec": {
             "description": "How a preview stream's pictures are encoded.",
             "oneOf": [
@@ -8231,7 +8393,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BlendMode": {
@@ -8516,6 +8678,31 @@ source: crates/jstream-mcp/src/tests.rs
             },
             "type": "object"
           },
+          "OverrideField": {
+            "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+            "oneOf": [
+              {
+                "const": "geometry",
+                "description": "The item's geometry (`item.set_geometry`, or `item.set_transform` while it lasts).",
+                "type": "string"
+              },
+              {
+                "const": "crop",
+                "description": "Its crop (`item.set_crop`).",
+                "type": "string"
+              },
+              {
+                "const": "visible",
+                "description": "Whether it is drawn (`item.set_visible`).",
+                "type": "string"
+              },
+              {
+                "const": "opacity",
+                "description": "Its opacity (`item.set_opacity`).",
+                "type": "string"
+              }
+            ]
+          },
           "Rev": {
             "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
             "format": "uint64",
@@ -8625,6 +8812,34 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `item` operation, tagged by `type`.",
             "oneOf": [
               {
+                "description": "Removes one field of a keyframe scene's override of an item (ADR-0049 §2), so\nthat field follows the parent again. \"Reset keyframe\" is a batch of these.\n`scene_id` must name a keyframe scene and `item_id` an item of its parent, else\n`invalid_argument` (`not_found` for a missing one). Clearing a field the variant\ndoesn't override is allowed and changes nothing. Inverse: the placement edit that\nwrites the old value with `scene_id` set, or nothing when the field was absent.",
+                "properties": {
+                  "field": {
+                    "$ref": "#/$defs/OverrideField",
+                    "description": "The field to clear."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The parent's item."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "item.clear_override",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "field"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`. That identity draws the source at its own\npixel size from the canvas's top-left, so a `display`, `window` or `webcam` larger\nthan the canvas shows only its corner: for those, send a `geometry` covering the\ncanvas (`center` at half the canvas size, `size` the canvas size, `fit_mode`\n`fit`), as `jstream-cli` does.",
                 "properties": {
                   "blend": {
@@ -8697,7 +8912,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and\n`item.set_transition` if its transition settings were not the default.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -8715,7 +8930,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
                 "properties": {
                   "index": {
                     "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -8828,7 +9043,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`, and so is `item.set_transform` naming a keyframe scene:\nan override's geometry is a geometry."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -9947,6 +10162,62 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Creates a keyframe scene (a variant) of `variant_of` (ADR-0024 §2, ADR-0049): a\nscene with no items of its own that shows its parent's items, each at its parent's\nvalues until the variant overrides a field. Placement edits with `scene_id` set to\nthe variant write its overrides; `item.clear_override` removes them. `variant_of`\nmust name an existing scene that is not itself a variant (a keyframe of a keyframe\nis made on the parent), else `invalid_argument`; a missing one is `not_found`.\nThe variant has the role `scene`, no folder (it sits under its parent) and no\ntransition overrides; its own `scene.set_transitions` and `scene.set_meta` apply.\nInverse: `scene.delete`.",
+                "properties": {
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The new scene's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "scene.create_variant",
+                    "type": "string"
+                  },
+                  "variant_of": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene it is a keyframe of."
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "variant_of",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes one field of a keyframe scene's override of an item (ADR-0049 §2), so\nthat field follows the parent again. \"Reset keyframe\" is a batch of these.\n`scene_id` must name a keyframe scene and `item_id` an item of its parent, else\n`invalid_argument` (`not_found` for a missing one). Clearing a field the variant\ndoesn't override is allowed and changes nothing. Inverse: the placement edit that\nwrites the old value with `scene_id` set, or nothing when the field was absent.",
+                "properties": {
+                  "field": {
+                    "$ref": "#/$defs/OverrideField",
+                    "description": "The field to clear."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The parent's item."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "item.clear_override",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "field"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
                 "properties": {
                   "name": {
@@ -9993,7 +10264,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top, then\n`hotkey.set` for each removed binding.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nA scene with keyframe scenes is refused the same way, the variants listed as its\nblockers; delete them first. Inverse: `scene.create` with its role (omitted for\n`scene`), or `scene.create_variant` for a keyframe scene, then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top (a\nkeyframe scene's overrides instead, as placement edits with its `scene_id`), then\n`hotkey.set` for each removed binding.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -10083,7 +10354,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and\n`item.set_transition` if its transition settings were not the default.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -10101,7 +10372,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
                 "properties": {
                   "index": {
                     "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -10214,7 +10485,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`, and so is `item.set_transform` naming a keyframe scene:\nan override's geometry is a geometry."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -12231,6 +12502,31 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "OverrideField": {
+            "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+            "oneOf": [
+              {
+                "const": "geometry",
+                "description": "The item's geometry (`item.set_geometry`, or `item.set_transform` while it lasts).",
+                "type": "string"
+              },
+              {
+                "const": "crop",
+                "description": "Its crop (`item.set_crop`).",
+                "type": "string"
+              },
+              {
+                "const": "visible",
+                "description": "Whether it is drawn (`item.set_visible`).",
+                "type": "string"
+              },
+              {
+                "const": "opacity",
+                "description": "Its opacity (`item.set_opacity`).",
+                "type": "string"
+              }
+            ]
+          },
           "PreviewCodec": {
             "description": "How a preview stream's pictures are encoded.",
             "oneOf": [
@@ -13265,7 +13561,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "FolderId": {
@@ -13368,6 +13664,34 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Creates a keyframe scene (a variant) of `variant_of` (ADR-0024 §2, ADR-0049): a\nscene with no items of its own that shows its parent's items, each at its parent's\nvalues until the variant overrides a field. Placement edits with `scene_id` set to\nthe variant write its overrides; `item.clear_override` removes them. `variant_of`\nmust name an existing scene that is not itself a variant (a keyframe of a keyframe\nis made on the parent), else `invalid_argument`; a missing one is `not_found`.\nThe variant has the role `scene`, no folder (it sits under its parent) and no\ntransition overrides; its own `scene.set_transitions` and `scene.set_meta` apply.\nInverse: `scene.delete`.",
+                "properties": {
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The new scene's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "scene.create_variant",
+                    "type": "string"
+                  },
+                  "variant_of": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene it is a keyframe of."
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "variant_of",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
                 "properties": {
                   "name": {
@@ -13414,7 +13738,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top, then\n`hotkey.set` for each removed binding.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nA scene with keyframe scenes is refused the same way, the variants listed as its\nblockers; delete them first. Inverse: `scene.create` with its role (omitted for\n`scene`), or `scene.create_variant` for a keyframe scene, then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top (a\nkeyframe scene's overrides instead, as placement edits with its `scene_id`), then\n`hotkey.set` for each removed binding.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",

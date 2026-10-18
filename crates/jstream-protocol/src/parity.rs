@@ -502,6 +502,8 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 sources: sources(),
                 scenes: vec![
                     SceneInfo {
+                        overrides: Vec::new(),
+                        variant_of: None,
                         scene_id: scene("b"),
                         name: "B".into(),
                         role: SceneRole::Group,
@@ -512,6 +514,8 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         meta: Default::default(),
                     },
                     SceneInfo {
+                        overrides: Vec::new(),
+                        variant_of: None,
                         scene_id: scene("a"),
                         name: "A".into(),
                         role: SceneRole::Scene,

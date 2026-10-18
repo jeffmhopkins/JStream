@@ -468,6 +468,8 @@ mod tests {
                 meta: Default::default(),
             }],
             scenes: vec![SceneInfo {
+                overrides: Vec::new(),
+                variant_of: None,
                 scene_id: "main".into(),
                 name: "Main".into(),
                 role: SceneRole::Scene,

@@ -379,8 +379,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Scenes have
   a `role` (`scene` or `group`, set by `scene.create` or `scene.set_role`), and `item.move` moves an item
   to another scene keeping its id, under the same cycle check. The placement edits take
-  an optional `scene_id`, accepted only when it names the item's own scene until
-  variants exist (protocol 0.12). Items refer to sources; they never copy them, and
+  an optional `scene_id` (protocol 0.12): the item's own scene, or one of its keyframe
+  scenes (protocol 0.39). Keyframe scenes (`scene.create_variant`) are built with their
+  per-item overrides of the parent's own items, `item.clear_override`, the overrides
+  `item.remove` and `item.move` drop (reported in the batch result and restored by
+  undo), their parent's delete blocked by them and its `delete.plan` deleting them
+  first, and the switch within a family paired by item (ADR-0049 §3). Items refer to sources; they never copy them, and
   `item.set_source` retargets one, keeping its id, placement and stacking position.
   A source copied by `source.duplicate` records its original in `duplicated_from`, a
   plain link that reads as absent once the original is deleted. Scene and source
@@ -437,8 +441,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   its input through), blend modes
   other than `normal`,
   bus monitors, per-placement effects, 3D
-  geometry, variants and overrides (so no edit drops
-  any yet), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  geometry, a keyframe scene's overrides of a group's children (so `scene.set_role` and
+  removing or retargeting a group's item drop none yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -616,8 +620,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
   id, `scene.set_role` (or, from protocol 0.17, `scene.create`'s optional `role`) marks a scene as a group, and placement edits take an optional
   `scene_id` so they can write a keyframe scene's override
-  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Until keyframe scenes are
-  built, `scene_id` may name only the item's own scene.
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Since 0.39,
+  `scene.create_variant` makes a keyframe scene, `item.clear_override` removes one
+  field of its override, `state.get` reports `variant_of` and `overrides`, and a batch
+  result lists the overrides it dropped (`dropped_overrides`, ADR-0040 §1).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -1092,8 +1098,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 - **Collections:** JSON with a `schema_version` field and forward migrations in
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
-  settings, folders, labels and organisation metadata) is omitted when empty or at its
-  default (for presets, a new collection's one `cut`), so a file without it is still
+  settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
+  `overrides`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

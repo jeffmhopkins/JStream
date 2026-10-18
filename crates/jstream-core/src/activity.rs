@@ -71,7 +71,11 @@ fn reachable<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
         let Some(scene) = state.scene(&scene_id) else {
             continue;
         };
-        for item in scene.items().iter().filter(|item| item.visible()) {
+        for item in state
+            .shown_items(scene)
+            .into_iter()
+            .filter(|item| item.visible())
+        {
             let Some(source) = state.source(item.source_id()) else {
                 continue;
             };

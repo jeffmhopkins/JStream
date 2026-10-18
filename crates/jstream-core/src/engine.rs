@@ -2290,7 +2290,9 @@ impl State {
     /// Applies `batch` atomically through `Graph::apply_with_running`, which checks
     /// `expected_rev` (before rejecting an empty batch), applies every edit or none, and
     /// bumps `rev` by exactly one. The batch becomes one step of the client's undo
-    /// history, holding the inverse the graph returned, and clears what it could redo.
+    /// history, holding the inverse the graph returned, and clears what it could redo; a
+    /// batch that changed nothing, with an empty inverse, is no step. The result reports
+    /// the keyframe overrides the batch dropped (ADR-0040 §1).
     ///
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
@@ -2335,6 +2337,7 @@ impl State {
         let result = CallResult::Batch {
             rev: applied.rev,
             removed_hotkeys: applied.removed_hotkeys,
+            dropped_overrides: applied.dropped_overrides,
         };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
@@ -2643,6 +2646,8 @@ impl State {
         let now = self.live.now();
         let running = match (run, from_scene) {
             (Some(run), Some(from_scene)) => {
+                let state = self.graph.state();
+                let by_item = state.family_of(&from_scene) == state.family_of(&scene_id);
                 let from = match self.studio.running() {
                     Some(running) => {
                         let Self {
@@ -2672,6 +2677,7 @@ impl State {
                     to: scene_id.clone(),
                     start: now,
                     run,
+                    by_item,
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
