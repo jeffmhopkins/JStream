@@ -21,7 +21,7 @@ The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
 over `jstream-server`'s authenticated WebSocket API on `127.0.0.1`, the same one a
 browser or the CLI uses, so the UI has one code path
 ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). It ships as `jstream.exe` in the
-portable folder ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)).
+portable folder ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)).
 Layer 6, an app that links core and server
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 
@@ -95,7 +95,7 @@ folder, and its log `logs\cef.log`.
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
   sits beside the exe, a `data` folder beside the exe instead, so the app can run from
-  a USB stick ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). Both
+  a USB stick ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). Both
   hosts find it through `jstream-platform`'s `paths` module
   ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **The collection** is `collection.json` in the data folder, created empty the first
@@ -123,7 +123,7 @@ folder, and its log `logs\cef.log`.
 ## Design
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/media_foundation.rs", "apps/jstream-desktop/tests/delay_load.rs", "apps/jstream-desktop/tauri.conf.json"]
-depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
+depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -189,7 +189,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-
   GTK or WebKitGTK. Tauri's other platforms still appear in `cargo metadata`, so
   `deny.toml` and the lint-deps allowlist list their duplicates and native crates,
   each marked as never built for Windows where that holds. `tauri.conf.json` names the
-  app and its icon; the bundler is off (the portable folder is ADR-0020's), and so are
+  app and its icon; the bundler is off (the portable folder is ADR-0066's), and so are
   Tauri's CSP injection and global API. `tauri-build` writes ACL schemas to `gen/`,
   which is not committed.
 - **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend

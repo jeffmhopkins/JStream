@@ -72,6 +72,6 @@ test('an item is hidden, placed again and removed', async ({ page, daemon }) => 
 test('selecting an item opens its properties', async ({ page, daemon }) => {
   await connect(page, daemon);
   await items(page).first().locator('.row-main').click();
-  const inspector = page.locator('.inspector');
+  const inspector = page.locator('.panel-inspector');
   await expect(inspector.locator('.source-title')).toHaveText('Backdrop');
 });

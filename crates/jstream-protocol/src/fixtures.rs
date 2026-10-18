@@ -33,6 +33,7 @@ use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
+use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
@@ -117,6 +118,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             geometry: ItemGeometry {
                 fit_mode: FitMode::Fill,
                 rotation_deg: Finite32::new(12.5).expect("finite"),
+                flip_h: true,
                 ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
             },
         },
@@ -369,6 +371,65 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::VideoMixDelete {
             mix_id: VideoMixId::new("mix_old"),
         },
+        Edit::FolderCreate {
+            folder_id: FolderId::new("fld_shows"),
+            name: "Shows".into(),
+            parent: None,
+        },
+        Edit::FolderCreate {
+            folder_id: FolderId::new("fld_intro"),
+            name: "Intros".into(),
+            parent: Some(FolderId::new("fld_shows")),
+        },
+        Edit::FolderRename {
+            folder_id: FolderId::new("fld_intro"),
+            name: "Openers".into(),
+        },
+        Edit::FolderSetParent {
+            folder_id: FolderId::new("fld_intro"),
+            parent: None,
+        },
+        Edit::FolderReorder {
+            folder_id: FolderId::new("fld_intro"),
+            index: 0,
+        },
+        Edit::FolderDelete {
+            folder_id: FolderId::new("fld_old"),
+        },
+        Edit::SceneSetFolder {
+            scene_id: SceneId::new("scn_1"),
+            folder_id: Some(FolderId::new("fld_shows")),
+        },
+        Edit::SceneSetMeta {
+            scene_id: SceneId::new("scn_1"),
+            meta: scene_meta(),
+        },
+        Edit::LabelCreate {
+            label_id: LabelId::new("lbl_sponsor"),
+            name: "Sponsor".into(),
+            color: "#ff8800".into(),
+            icon: Some("megaphone".into()),
+        },
+        Edit::LabelUpdate {
+            label_id: LabelId::new("lbl_sponsor"),
+            name: "Sponsors".into(),
+            color: "#ffaa00".into(),
+            icon: None,
+        },
+        Edit::LabelReorder {
+            label_id: LabelId::new("lbl_sponsor"),
+            index: 0,
+        },
+        Edit::LabelDelete {
+            label_id: LabelId::new("lbl_old"),
+        },
+        Edit::SourceSetMeta {
+            source_id: SourceId::new("src_cam"),
+            meta: SourceMeta {
+                labels: vec![LabelId::new("lbl_sponsor")],
+                favourite: true,
+            },
+        },
         Edit::SourceSetAudio {
             source_id: SourceId::new("src_mic"),
             enabled: Some(true),
@@ -596,6 +657,16 @@ fn send_infos() -> Vec<SendInfo> {
     ]
 }
 
+/// A scene's metadata with every field away from its default.
+fn scene_meta() -> SceneMeta {
+    SceneMeta {
+        icon: Some("star".into()),
+        color: Some("#1e1e2e".into()),
+        favourite: true,
+        show_in_multiview: false,
+    }
+}
+
 /// The bindings the fixtures report: a scene switch and an output start.
 fn hotkey_bindings() -> Vec<HotkeyBinding> {
     vec![
@@ -768,6 +839,7 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
         },
+        Action::PrivacySet { on: true },
     ]
 }
 
@@ -810,6 +882,7 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::OutputList,
         Query::StudioGet,
+        Query::PrivacyGet,
         Query::EncoderList,
         Query::VideoMixList,
         Query::CaptureTargets,
@@ -847,6 +920,16 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::DeletePlan {
             target: DeleteTarget::Source {
                 source_id: SourceId::new("src_cam"),
+            },
+        },
+        Query::DeletePlan {
+            target: DeleteTarget::Folder {
+                folder_id: FolderId::new("fld_shows"),
+            },
+        },
+        Query::DeletePlan {
+            target: DeleteTarget::Label {
+                label_id: LabelId::new("lbl_sponsor"),
             },
         },
         Query::DeletePlan {
@@ -1028,6 +1111,7 @@ fn source_infos() -> Vec<SourceInfo> {
             settings: color_settings(),
             duplicated_from: None,
             filters: Default::default(),
+            meta: Default::default(),
             audio: None,
         },
         SourceInfo {
@@ -1039,6 +1123,10 @@ fn source_infos() -> Vec<SourceInfo> {
             settings: Settings::new(),
             duplicated_from: None,
             filters: Default::default(),
+            meta: SourceMeta {
+                labels: vec![LabelId::new("lbl_sponsor")],
+                favourite: true,
+            },
             audio: None,
         },
         SourceInfo {
@@ -1058,6 +1146,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 }],
                 audio: vec![],
             },
+            meta: Default::default(),
             audio: Some(SourceAudio {
                 enabled: false,
                 ..SourceAudio::new(AudioFollow::WhenShown)
@@ -1072,6 +1161,7 @@ fn source_infos() -> Vec<SourceInfo> {
             settings: Settings::new(),
             duplicated_from: None,
             filters: Default::default(),
+            meta: Default::default(),
             audio: Some(SourceAudio::new(AudioFollow::WhenShown)),
         },
         SourceInfo {
@@ -1088,6 +1178,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 ..SourceAudio::new(AudioFollow::Always)
             }),
             filters: Default::default(),
+            meta: Default::default(),
         },
     ]
 }
@@ -1110,6 +1201,7 @@ fn item_infos() -> Vec<ItemInfo> {
             transform: corner_box().transform_view().expect("finite"),
             geometry: Some(ItemGeometry {
                 fit_mode: FitMode::Stretch,
+                flip_v: true,
                 ..corner_box()
             }),
             crop: Crop::NONE,
@@ -1174,6 +1266,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 name: "Main".into(),
                 role: SceneRole::Scene,
                 item_count: 2,
+                folder: None,
+                meta: Default::default(),
             }],
         },
         QueryResult::OutputStatus {
@@ -1184,6 +1278,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 profile_id: None,
                 shared_with: vec![OutputId::new("out_tw")],
                 hardware: false,
+                dedicated: false,
+            }),
+            encoder_sessions: 2,
+            hardware_sessions: 1,
+        },
+        QueryResult::OutputStatus {
+            output_id: OutputId::new("out_rec"),
+            state: OutputState::Active,
+            key_set: false,
+            encoder: Some(EncoderSessionInfo {
+                profile_id: None,
+                shared_with: vec![],
+                hardware: true,
+                dedicated: true,
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
@@ -1209,6 +1317,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: Some(TransitionPresetId::new("tr_move")),
                     transition_out: None,
                     items: item_infos(),
+                    folder: Some(FolderId::new("fld_shows")),
+                    meta: scene_meta(),
                 },
                 SceneInfo {
                     scene_id: SceneId::new("scn_intro"),
@@ -1217,15 +1327,35 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: None,
                     transition_out: Some(TransitionPresetId::new("cut")),
                     items: vec![],
+                    folder: None,
+                    meta: Default::default(),
                 },
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
-            transitions: transitions_info(),
+            transitions: Box::new(transitions_info()),
             video_mixes: mix_infos(),
+            folders: vec![
+                FolderInfo {
+                    folder_id: FolderId::new("fld_shows"),
+                    name: "Shows".into(),
+                    parent: None,
+                },
+                FolderInfo {
+                    folder_id: FolderId::new("fld_intro"),
+                    name: "Intros".into(),
+                    parent: Some(FolderId::new("fld_shows")),
+                },
+            ],
+            labels: vec![LabelInfo {
+                label_id: LabelId::new("lbl_sponsor"),
+                name: "Sponsor".into(),
+                color: "#ff8800".into(),
+                icon: Some("megaphone".into()),
+            }],
             buses: bus_infos(),
             sends: send_infos(),
-            master: MasterInfo {
+            master: Box::new(MasterInfo {
                 filters: FilterChains {
                     video: vec![],
                     audio: vec![FilterInfo {
@@ -1235,7 +1365,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         settings: limiter(),
                     }],
                 },
-            },
+            }),
             hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
@@ -1285,6 +1415,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             program_scene: None,
             preview_scene: None,
         },
+        QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
@@ -1445,6 +1576,11 @@ pub(crate) fn events() -> Vec<Event> {
         transition: None,
         client_id: ClientId::new("cli_8"),
         request_id: None,
+    });
+    events.push(Event::PrivacyChanged {
+        on: true,
+        client_id: ClientId::new("cli_7"),
+        request_id: Some(RequestId::new("r3")),
     });
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::StatsTick {

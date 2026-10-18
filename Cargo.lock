@@ -2923,6 +2923,7 @@ dependencies = [
  "jstream-protocol",
  "leptos",
  "serde_json",
+ "web-sys",
 ]
 
 [[package]]

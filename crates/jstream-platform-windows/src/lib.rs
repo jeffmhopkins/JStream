@@ -14,7 +14,7 @@
 //! The backends exist only on Windows. On other platforms the crate builds empty except
 //! for its platform-independent helpers, which are tested everywhere.
 //!
-//! Docs: crates/jstream-platform-windows/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0014-media-clock.md
+//! Docs: crates/jstream-platform-windows/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0014-media-clock.md, docs/security/threat-model.md#vcam
 
 mod audio;
 mod capture;
@@ -33,6 +33,9 @@ mod n_edition;
 mod plugin_block;
 #[cfg(windows)]
 mod plugin_hosts;
+// Its owner and DACL rule is tested on every platform.
+#[cfg(any(windows, test))]
+mod security;
 mod vcam;
 // Its path comparison is tested on every platform.
 #[cfg(any(windows, test))]

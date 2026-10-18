@@ -29,7 +29,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 | Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager today, no store on macOS or Linux yet |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
 | Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
-| Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie (**in flight**, #288) |
+| Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
 | The program and preview video | What the user chose not to broadcast yet (the preview scene) | Engine memory, the virtual camera's shared textures, `video.snapshot` |
 | Local files | Asset paths and recording paths reach the file system | Wherever the user (or a token holder) points them |
 | The machine itself | Native plugins, decoders and a browser engine run inside or beside the engine | — |
@@ -83,6 +83,15 @@ Every arrow into the engine crosses one of five boundaries:
 <a id="server"></a>
 ## Control server
 <!-- @section
+covers = [
+  "crates/jstream-server/src/lib.rs",
+  "crates/jstream-server/src/gate.rs",
+  "crates/jstream-server/src/config.rs",
+  "crates/jstream-server/src/listener.rs",
+  "crates/jstream-server/src/session.rs",
+  "apps/jstream-daemon/src/token.rs",
+  "apps/jstream-daemon/src/args.rs",
+]
 depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
 -->
 
@@ -97,9 +106,9 @@ a stolen token, local denial of service.
   must be that host or a configured extra, so a foreign page's WebSocket upgrade is
   refused; then the token, as a bearer token, a Basic password or a WebSocket
   subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)). The token may also be a paired
-  device's, accepted only on loopback until there is TLS, and `POST /api/v1/pair` is
-  the one request answered without one, only while a pairing code is open (see
-  [Pairing](#pairing)).
+  device's, accepted only on loopback or a TLS listener, and there is no TLS listener
+  yet. `POST /api/v1/pair` is the one request answered without one, only while a
+  pairing code is open (see [Pairing](#pairing)).
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
@@ -123,27 +132,35 @@ clients.
 <a id="pairing"></a>
 ## Pairing and remote browsers
 <!-- @section
+covers = [
+  "crates/jstream-server/src/devices.rs",
+  "crates/jstream-server/src/admitted.rs",
+  "crates/jstream-server/src/pair.rs",
+  "crates/jstream-server/src/pair_page.rs",
+  "crates/jstream-server/src/gate.rs",
+]
 depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
 -->
 
-**Built:** codes and device tokens ([`jstream-server`](../../crates/jstream-server/README.md#design)).
-`pairing.start` and device tokens work only while the server listens on loopback, since
-there is no TLS yet, so a paired device is a local client with its own revocable token.
-**In flight:** the browser pairing page and cookie (#288). Until it merges, no browser
-can pair, although [R-SEC-002](../RULES.md#R-SEC-002) and SECURITY.md already describe
-that exception.
+**Built:** codes, device tokens, and the browser pairing page and device cookie (#288),
+in [`jstream-server`](../../crates/jstream-server/README.md#design). `pairing.start`
+answers and device tokens are accepted only while the server listens on loopback or on a
+TLS listener. The server has no TLS listener yet, so a paired device is a local client
+with its own revocable token, and the pairing page, which only a TLS listener serves, is
+not reachable: no browser can pair today, although [R-SEC-002](../RULES.md#R-SEC-002)
+and SECURITY.md already describe that exception.
 
 **Threats:** guessing a pairing code, a leaked device token, a cookie used cross-site,
 a device that should no longer have access.
 
 **Controls** ([ADR-0044](../adr/0044-pairing-remote-browsers.md),
-[ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md); the cookie's arrive
-with #288): one open code at a time, 40 bits, two minutes, void after five wrong
-attempts; 256-bit device tokens kept as digests, revocable, dropped after 30 days
-unused; the browser's copy only as a
-`__Host-` cookie that is `Secure`, `HttpOnly` and `SameSite=Strict`, on a TLS listener,
-with `Sec-Fetch-Site` checked. A paired browser holds only its device token, and the
-cookie never carries the control token.
+[ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md)): one open code at a
+time, 40 bits, two minutes, void after five wrong attempts, kept only as a digest;
+256-bit device tokens kept as digests, revocable, dropped after 30 days unused; the
+browser's copy only as a `__Host-` cookie that is `Secure`, `HttpOnly` and
+`SameSite=Strict`, set and read only on a TLS listener, refused when a request carries
+it twice or without `Sec-Fetch-Site: same-origin` or `none`. A paired browser holds only
+its device token, and the cookie is never compared with the control token.
 
 **Accepted:** a device token has the control token's full power ("no tiers").
 
@@ -152,25 +169,44 @@ cookie never carries the control token.
 <a id="browser"></a>
 ## Browser source
 <!-- @section
-depends_on = ["docs/adr/0021-browser-source.md"]
+covers = [
+  "crates/jstream-browser/src/request.rs",
+  "crates/jstream-browser/src/helper/mod.rs",
+  "crates/jstream-browser/src/helper/handlers.rs",
+  "crates/jstream-browser/src/permission.rs",
+]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md"]
 -->
 
-**In flight** (#283, #289, #290, #291, #298 and ADR-0048 on that branch). Main has only
-the decision ([ADR-0021](../adr/0021-browser-source.md)) and spike S4, which runs
-unsandboxed and is never shipped.
+**Built** (C8, on Windows), as [ADR-0021](../adr/0021-browser-source.md) and
+[ADR-0048](../adr/0048-sandboxed-browser-helper.md) decide. Its first run on Windows
+hardware is still to come (#341).
 
 **Threats:** a page exploiting the renderer to reach the engine, which holds the stream
 keys; a page reading local files; a page driving the control API; a page using the
 camera or microphone; a page probing the LAN.
 
-**Controls (in flight):** pages run in a separate helper process with CEF's sandbox on;
-profiles are in memory, with no cache or cookies on disk; a request policy allows only
-web schemes, `data:`, `blob:` and `about:` pages, and `file:` only below a local page's
-own folder; popups are not shown. The control server already refuses a page's
-WebSocket upgrade, since its `Origin` is foreign or `null`.
+**Controls:** pages run in a separate helper process with CEF's sandbox on; profiles are
+in memory, with no cache or cookies on disk; every request a page makes, navigations
+included, passes a request policy that allows only `http`, `https`, `ws`, `wss`,
+`data:`, `blob:`, `about:blank` and `about:srcdoc`, and `file:` only in a local page's
+own folder or below it, compared by name and again after resolving links; popups are not
+shown. The control server refuses a page's WebSocket upgrade, since its `Origin` is
+foreign or `null`.
 
-**Gaps:** no explicit policy for permission requests (camera, microphone, location) and
-no stance on requests to loopback and LAN addresses (#347). ADR-0021's per-source
+**Controls (in flight, #549):** a page from a public origin is also refused loopback,
+private, link-local and local-name targets, redirects to them included, unless its
+source sets `local_network`.
+
+**Gaps:** permission requests are refused: the helper's permission handler cancels every
+camera, microphone and screen request and denies every permission prompt
+(`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
+a focused page's clipboard writes, never reaches that handler; the helper never focuses a
+page or sends it input (#347).
+The local-network refusal reads only the URL's host: a public name that resolves to a
+local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes until Chromium's
+Private Network Access checks are on, and so does any request the helper's request
+handler doesn't see, such as a service worker's (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
 <a id="files"></a>
@@ -214,8 +250,8 @@ depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-proc
 
 | Kind | Trust | On main | Boundary |
 |---|---|---|---|
-| CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`) and the mixer's side; the host process is not built (#281 in flight) | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
-| WASM automation plugins | Untrusted | Nothing (W1) | wasmtime, no filesystem or network unless declared and granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
+| CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`) and the mixer's side; the host process (`jstream-plugin-host`) and its launcher; running a filter from the graph is not wired yet | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
+| WASM automation plugins | Untrusted | Nothing (WA1) | wasmtime, no filesystem or network unless declared and granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
 | WGSL effect packs | Untrusted GPU code | Nothing (X1); only built-in shaders | naga validation ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)) |
 
 What the engine reads back from a CLAP host is already checked: the block's magic,
@@ -226,17 +262,18 @@ non-finite samples turned to silence.
 - CLAP (#351): the shared section's name and DACL are not specified; parameter values
   coming back are not validated (nothing reads them yet); plugin-reported names reach
   the UI and agents; the host can reset the mixer's miss counters.
-- WASM (#348): no CPU or memory limits are decided, and nothing limits which `Control`
-  calls a plugin may make, so a sandboxed plugin could still retarget an output (it
-  can't take the old key along: #343 removes it on a new server).
-  R-SEC-003 names an enforcing test in a crate that doesn't exist yet.
+- WASM (#348): [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)
+  decides the limits: per-call epoch deadlines, a 64 MiB memory cap, capability classes
+  on a scoped `Control` (hotkey bindings included), and installs and grants by people
+  only. None of it is built yet (WA1), and R-SEC-003 names an enforcing test in a crate
+  that doesn't exist yet.
 - WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
   device loss isn't handled.
 
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -247,14 +284,21 @@ injection), and so using its full access against the user.
 MCP off. Tool arguments and results are not logged; the audit log records who changed
 what, without arguments. Stream keys are never in a result, and a retarget to another
 host removes the output's key rather than sending it there (#343).
+Third-party text is marked as data ([ADR-0059](../adr/0059-mcp-annotations-and-remote-text.md)):
+the server instructions and the `output` tool's description say that fields named
+`remote_*`, and the whole `action_failed` reason of a start a streaming server refused,
+are data and never instructions. That rejection text, today the only third-party text
+an agent reads, has the key replaced, is cut to 512 characters and has control
+characters replaced. Every tool carries MCP annotations (`readOnlyHint`,
+`destructiveHint`, `openWorldHint`), so a client can ask the user before an agent
+retargets an output, sets its key, goes live or deletes something (#346).
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through
 `video.snapshot`, and any file the user can read through an image source. A key an
-agent sets with `output.set_key` is in the agent's own transcript.
-
-**Gaps:** results don't mark third-party text, and an RTMP server's error text reaches
-the agent unbounded (#346).
+agent sets with `output.set_key` is in the agent's own transcript. Annotations are per
+tool, and tools are grouped by noun, so a client that asks before `output.set_target`
+also asks before `output.list`; and whether a client asks at all is up to the client.
 
 <a id="secrets"></a>
 ## Secrets and the network
@@ -279,7 +323,11 @@ intercepted connection.
   (#343). While that start is opening, `output.set_key` is refused, so a key sent for
   the new server isn't read with the old one either.
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
+- The daemon's and the desktop app's crash reports replace the control token, and every
+  stream key and refresh token their credential stores hold or load, with `***`.
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
+  Further tests check the server's WebSocket and MCP layers, the daemon's RTMP opener and
+  its crash reports.
 
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
 the URL, as the target documentation warns.
@@ -292,7 +340,15 @@ or the OAuth access token, which pass through neither (#353).
 <a id="vcam"></a>
 ## Virtual camera
 <!-- @section
-depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+covers = [
+  "crates/jstream-vcam-proto/src/names.rs",
+  "crates/jstream-platform-windows/src/vcam/shared.rs",
+  "crates/jstream-platform-windows/src/vcam/sink.rs",
+  "crates/jstream-vcam-windows/src/trust.rs",
+  "crates/jstream-vcam-windows/src/win/session.rs",
+  "crates/jstream-vcam-windows/src/win/frames.rs",
+]
+depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
 -->
 
 **Threats:** another session's user reading the camera feed or injecting frames; a
@@ -308,8 +364,27 @@ it, and checks every texture's format.
 needs full access; `Global\` blocks, which only an administrator or service can create,
 are trusted.
 
-**Gaps:** a user-writable registered DLL runs in Frame Server (#242); a control mapping
-created before the producer's keeps its own DACL (#356).
+**Controls (in flight, #540):** the producer refuses a control mapping that already
+existed unless its owner is the user, SYSTEM or Administrators and its DACL lets no one
+but them and LOCAL SERVICE in; the DLL checks the owner of a session block's textures and fence as it does the
+block's.
+
+**Accepted, not yet on main (#242):** today the registered media source DLL is the one in
+the app's own folder, which the user can usually write to. Any program running as that
+user can replace it without an administrator prompt, and its code then runs in Frame
+Server's `svchost` (LOCAL SERVICE, session 0) the next time the camera loads. A hash
+check can't fix this, because Windows loads the DLL, not JStream, and a stub loader in
+the same folder could be replaced the same way. The maintainer chose the fix: "If you
+have to register it, name it optional, and then yeah, I think the program files makes
+sense". [ADR-0066](../adr/0066-portable-windows-distribution-v2.md) (accepted) makes
+registering optional. In the same UAC prompt, it copies the DLL to `%ProgramFiles%`
+with a DACL only administrators can write through, and registers that copy. The code
+is #561. Once it lands, the copy is as trustworthy as the portable folder was when the
+user approved the prompt.
+
+**Gaps:** a user-writable registered DLL runs in Frame Server until #561 lands (#242); a
+control mapping created before the producer's keeps its own DACL (#356, fix in flight in
+#540).
 
 <a id="gaps"></a>
 ## Known gaps
@@ -322,15 +397,14 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 |---|---|---|---|
 | #344 | Server, pairing | Windows token, devices and log files only inherit their folder's ACL | Medium |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
-| #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |
-| #347 | Browser | No permission policy; no stance on loopback and LAN requests | Medium |
-| #348 | WASM | No CPU, memory or API-scope limits decided | Medium |
+| #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
+| #348 | WASM | CPU, memory and API-scope limits decided ([ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) but not built (WA1) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
-| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium |
+| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium; fix accepted ([ADR-0066](../adr/0066-portable-windows-distribution-v2.md)), code in #561 |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |
 
 <a id="upkeep"></a>

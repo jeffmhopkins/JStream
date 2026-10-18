@@ -7,7 +7,7 @@ use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 use super::drop_shadow::Under;
 use crate::error::RenderError;
 use crate::filter::params::{Read, color, filter, float};
-use crate::filter::{Ctx, Pass};
+use crate::filter::{ContentBox, Ctx, Pass};
 use crate::image::Image;
 
 pub(super) const KIND: &str = "glow";
@@ -61,6 +61,10 @@ impl Pass for Glow {
         self.0.insets().grow(width, height)
     }
 
+    fn content_box(&self, width: u32, height: u32) -> ContentBox {
+        self.0.insets().content(width, height)
+    }
+
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
@@ -85,8 +89,16 @@ mod tests {
         let input = solid(&opened.compositor, 8, 8, [0, 0, 255, 255]);
         let mut glow = filter("glow", json!({"color": "#ffff00", "radius": 6.0}));
         assert_eq!(glow.output_size(8, 8), (20, 20));
+        let content = glow.content_box(8, 8);
+        assert_eq!(
+            (content.x, content.y, content.width, content.height),
+            (6, 6, 8, 8)
+        );
         let out = run(&mut opened, &mut glow, &input, 0.0);
         near(&out, 10, 10, [0, 0, 255, 255], 0);
+        // The box's corners are the input's.
+        near(&out, 6, 6, [0, 0, 255, 255], 0);
+        near(&out, 13, 13, [0, 0, 255, 255], 0);
         let a = |x, y| out.pixel(x, y).expect("inside")[3];
         // Even on all four sides.
         assert!(a(4, 10).abs_diff(a(15, 10)) <= 2 && a(10, 4).abs_diff(a(10, 15)) <= 2);
