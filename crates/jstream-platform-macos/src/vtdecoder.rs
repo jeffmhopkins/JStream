@@ -735,22 +735,28 @@ impl VideoDecoder for VtDecoder {
     fn finish(&mut self, out: &mut Vec<VideoSurface>) -> Result<(), PlatformError> {
         if !self.finished {
             self.finished = true;
-            if let Some(open) = &self.open {
-                // SAFETY: the session is live; it emits any frames it still holds, then
-                // the wait makes sure their callbacks have run.
-                let status = unsafe {
-                    let status = open.session.0.finish_delayed_frames();
-                    let _ = open.session.0.wait_for_asynchronous_frames();
-                    status
-                };
-                check(
-                    status,
-                    "VTDecompressionSessionFinishDelayedFrames",
-                    "draining the decoder",
-                )?;
-            }
-            self.drain()?;
+            let flushed = match &self.open {
+                Some(open) => {
+                    // SAFETY: the session is live; it emits any frames it still holds,
+                    // then the wait makes sure their callbacks have run.
+                    let status = unsafe {
+                        let status = open.session.0.finish_delayed_frames();
+                        let _ = open.session.0.wait_for_asynchronous_frames();
+                        status
+                    };
+                    check(
+                        status,
+                        "VTDecompressionSessionFinishDelayedFrames",
+                        "draining the decoder",
+                    )
+                }
+                None => Ok(()),
+            };
+            let drained = self.drain();
+            // Whatever failed, the frames already decoded are released, so a `finish`
+            // after the error still hands them out.
             self.reorder.release(None, &mut self.pending);
+            flushed.and(drained)?;
         }
         self.poll(out)
     }
