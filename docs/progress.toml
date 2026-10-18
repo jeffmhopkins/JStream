@@ -551,8 +551,9 @@ prs = [213, 297]
 id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
-status = "done"
-prs = [235]
+status = "hardware"
+prs = [235, 565]
+note = "Windows run (#563)"
 
 [[item]]
 id = "G3d"
@@ -747,8 +748,8 @@ needs = ["build"]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "planned"
-note = "draft #304, on T1"
+status = "review"
+prs = [304]
 needs = ["build"]
 
 [[item]]

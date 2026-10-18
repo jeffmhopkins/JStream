@@ -49,13 +49,13 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 94% | 33 | 2 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `███████░░░` 68% | 17 | 5 | 3 |
+| [M2: UI](ROADMAP.md#m2) | `███████░░░` 68% | 17 | 6 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 2 | 5 |
 
-97 of 115 items are merged; 7 of those still wait on a run on Windows hardware.
+97 of 115 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 25 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 3</summary>
+<summary><b>What's left</b>: 26 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 8, 👤 maintainer 2, ❔ not set 3</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -69,10 +69,11 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
 | I2 | Live values | M1b | 🌊 its wave lands | #244 merged into wave/m1-2 | #244 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
+| G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
 | U4p | Live preview on canvas | M2 | 🔨 build | draft #302 |  |
 | T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
-| T1u | Studio-mode UI | M2 | 🔨 build | draft #304, on T1 |  |
+| T1u | Studio-mode UI | M2 | 🔨 build |  | #304 |
 | E2 | Video mixes | M2 | 🌊 its wave lands | #259 merged into wave/m1-2 | #259 |
 | E2b | Privacy screen and encoder sharing key | M2 | ❔ not set |  | #317 |
 | D8p | Audio chain protocol fields | M2 | 🌊 its wave lands | #303 merged into wave/m1-2 | #303 |
@@ -186,7 +187,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | G2 | vcam media source DLL | 🧪 merged, Windows run pending: pacing rerun | #174, #195, #200, #229 |
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
 | G3b | VirtualCam output kind | ✅ merged | #213, #297 |
-| G3c | --register-vcam | ✅ merged | #235 |
+| G3c | --register-vcam | 🧪 merged, Windows run pending: Windows run (#563) | #235, #565 |
 | G3d | Virtual camera in the UI and the desktop app | 🧪 merged, Windows run pending: Windows run (#390) | #316 |
 | P1 | Portable Windows zip | ✅ merged | #271 |
 
@@ -229,7 +230,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | Q4 | Performance benchmarks | ✅ merged | #361 |
 | Q5 | Threat model | ✅ merged | #358 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
-| T1u | Studio-mode UI | ⏳ planned: draft #304, on T1 |  |
+| T1u | Studio-mode UI | 🔍 in review | #304 |
 | E2 | Video mixes | 🔍 in review: #259 merged into wave/m1-2 | #259 |
 | E2b | Privacy screen and encoder sharing key | 🔍 in review | #317 |
 | D8 | Master and output audio chains | ✅ merged | #249 |

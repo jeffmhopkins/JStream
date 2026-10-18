@@ -140,6 +140,10 @@ impl Counters {
 #[derive(Debug)]
 pub(crate) struct Shared {
     pub(crate) info: StreamInfo,
+    /// The codec the encoder moved to after it opened, when it fell back to another
+    /// implementation (a hardware video encoder refusing its first frame, #443). Set
+    /// once, by the encode thread, so reading it never waits on that thread.
+    pub(crate) fallback: OnceLock<CodecInfo>,
     pub(crate) counters: Counters,
     /// `finish` was called: drain, then end.
     finishing: AtomicBool,
@@ -157,6 +161,7 @@ impl Shared {
     fn new(info: StreamInfo) -> Arc<Self> {
         Arc::new(Self {
             info,
+            fallback: OnceLock::new(),
             counters: Counters::default(),
             finishing: AtomicBool::new(false),
             aborting: AtomicBool::new(false),
@@ -213,6 +218,12 @@ pub(crate) trait Driver: Send + 'static {
     /// error. Audio packets are all keyframes, so the default does nothing.
     fn request_keyframe(&mut self) -> bool {
         false
+    }
+
+    /// The encoder's codec, when it changed since the last call: an encoder that fell
+    /// back to another implementation after it opened. The default never changes.
+    fn codec_changed(&mut self) -> Option<CodecInfo> {
+        None
     }
 
     fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError>;
@@ -316,6 +327,13 @@ impl<D: Driver> Core<D> {
 
     pub(crate) fn info(&self) -> &StreamInfo {
         &self.shared.info
+    }
+
+    pub(crate) fn codec(&self) -> &CodecInfo {
+        self.shared
+            .fallback
+            .get()
+            .unwrap_or(&self.shared.info.codec)
     }
 
     pub(crate) fn stats(&self) -> SessionStats {
@@ -507,7 +525,12 @@ fn encode_one<D: Driver>(
     {
         c.keyframes_requested.fetch_add(1, Ordering::Relaxed);
     }
-    match driver.encode(input, after_drop, c) {
+    let result = driver.encode(input, after_drop, c);
+    // Only the first change is kept: a platform encoder falls back at most once.
+    if let Some(codec) = driver.codec_changed() {
+        let _ = shared.fallback.set(codec);
+    }
+    match result {
         Ok(()) => {
             c.encoded.fetch_add(1, Ordering::Relaxed);
             Ok(())
