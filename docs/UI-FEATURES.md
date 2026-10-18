@@ -55,9 +55,9 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
-| [Header bar](#header) | 9 | 4 | 2 | 0 | 3 | 0 |
+| [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 1 | 6 | 7 | 4 | 0 |
+| [Canvas](#canvas) | 18 | 7 | 2 | 5 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
@@ -67,10 +67,10 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
-| [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
+| [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **17** | **25** | **48** | **39** | **1** |
+| **Total** | **130** | **26** | **23** | **47** | **33** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -106,11 +106,11 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. |
-| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | 🟡 | Built for the five panels the UI has; the rest join as they are built. |
+| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | 🟡 | Built for the six panels the UI has; the rest join as they are built. |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
-| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | 🔒 | T1 (#260) and T1u (#304). |
+| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ⬜ | UI only: the engine has no studio-mode switch, so the Transitions panel (#304) always shows preview and program; the button would hide them. |
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
@@ -122,10 +122,10 @@ covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crat
 -->
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
-The dock is built (`dock.rs`, `workspace.rs`) with the five panels the UI has: Scenes,
-Scene objects, Inspector (with the pairing panel under the properties), Audio mixer and
-Outputs. The other prototype panels join the dock, its View menu and its layouts as
-their rows are built.
+The dock is built (`dock.rs`, `workspace.rs`) with the six panels the UI has: Scenes,
+Scene objects, Inspector (with the pairing panel under the properties), Audio mixer,
+Outputs and Transitions (studio mode and the presets). The other prototype panels join
+the dock, its View menu and its layouts as their rows are built.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -136,7 +136,7 @@ their rows are built.
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. |
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has; Filters, Transform, Transitions, chat, stats and agent join them as they are built. |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has; Filters, Transform, chat, stats and agent join them as they are built. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
 
@@ -151,24 +151,24 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | 🟡 | The frame and area colours are built; today the stage is up to 960px wide, with the scene name in a toolbar above. |
-| CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ⬜ | Today it always shows the program scene, with a selection of its own. |
+| CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | ✅ | The frame is the largest 16:9 box inside 28/28/20px margins; the caption is mono 11px. |
+| CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ✅ | Laid out from the shared collection and `Selection`, so a box click selects its row and opens its properties. |
 | CV-03 | Live picture | The scene's real picture under the item boxes. | 🔒 | U4p (#302) adds the program preview; other scenes need previews for any target (D36). |
-| CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Handles, knob and selection exist in a different style; no pill, no hover outline. |
-| CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | 🟡 | Built, with Alt instead of Ctrl. |
-| CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | 🟡 | Built with other modifiers: corners keep aspect, Shift frees it; edges always stretch. |
-| CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | 🟡 | Built with Shift for 15° steps. |
+| CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Outline, handles, knob and stem, pill and hover outline are built; " · cropped" waits on crop (CV-08). Until the picture is drawn (CV-03), every box gets a faint outline and its name. |
+| CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | ✅ | A rotated item doesn't snap, as in the prototype. |
+| CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | ✅ | A corner follows the axis that snapped, else the larger change; an edge scales the other axis about the centre. |
+| CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | ✅ | Off the 90° snap, the angle rounds to 0.1°. |
 | CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | ⬜ | `item.set_crop` exists. |
 | CV-09 | Multi-select | Shift-click adds or removes; Ctrl+A selects all; the group gets a dashed box with its own handles to scale and rotate. | ⬜ | |
 | CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ⬜ | |
-| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Snap is a checkbox in a toolbar above; no Move or Crop tools. |
+| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Move/resize and Snapping are built; Crop lands with CV-08. |
 | CV-12 | Nudge | Arrows move 1px, Shift 10px. | ✅ | |
 | CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ⬜ | |
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ⬜ | |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend and no 3D yet (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | 🔒 | Keyframe scenes in the protocol are K1. |
 | CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | 🔒 | E2b (#317). |
-| CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ⬜ | |
+| CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ✅ | The slow pointer follows the real one's movement, so pressing Shift mid-drag doesn't jump. |
 
 <a id="menus"></a>
 ## Context menus
@@ -351,16 +351,17 @@ doesn't show; that stays ([Beyond](#beyond)).
 
 Spec: [panels › transitions](../design/ui-prototype/spec-panels.md#transitions-panel),
 [workspace › transitions](../design/ui-prototype/spec-workspace.md#scenes-keyframes-transitions).
-All of it waits on T1 (#260), whose UI is T1u (#304).
+The engine side is T1 (#260); T1u (#304) builds the Transitions panel: the studio bar,
+with the presets and each scene's overrides in a section under it.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🔒 | T1. |
-| TR-02 | Preset fields | Duration; Move: stagger, items in one scene only (Fade, Scale, Slide); easing (Ease in-out, Ease out, Linear, Spring). | 🔒 | T1. |
-| TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🔒 | T1. |
-| TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | 🔒 | T1 ([ADR-0029](adr/0029-transitions.md)). |
+| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🟡 | A list of presets under the studio bar, each with its name, a line such as "Fade, 300 ms, ease in and out" (a cut shows only its kind) and a "Default" badge on the default, then an "Add a preset" form. It is not the spec's picker. |
+| TR-02 | Preset fields | Duration; Move: stagger, items in one scene only (Fade, Scale, Slide); easing (Ease in-out, Ease out, Linear, Spring). | ✅ | The kind's own fields come from `kind.describe`. |
+| TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🟡 | Make default and Delete are built (Delete is off for the default); no override counts yet. |
+| TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | ✅ | The engine resolves it ([ADR-0029](adr/0029-transitions.md)); the studio bar names the preset it will use and why. |
 | TR-05 | Move transition | Pairs items by source, interpolates placement, retargets mid-transition; unmatched items fade, scale or slide. | 🔒 | Engine side of T1. |
-| TR-06 | Studio mode | Preview and program, Transition and Cut. | 🔒 | T1u (#304). |
+| TR-06 | Studio mode | Preview and program, Transition and Cut. | ✅ | With "Swap" putting the old program scene on preview. |
 
 <a id="live-panels"></a>
 ## Stream stats, live chat and agent activity
@@ -390,8 +391,8 @@ handlers; the real UI makes them work.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc and arrows built. |
-| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Built with other meanings (Shift frees aspect and steps 15°, Alt skips snapping); they change with CV-05 to CV-07. |
+| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc and arrows built; C and V land with crop (CV-08), Ctrl+A with multi-select (CV-09). |
+| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Shift half speed and all of Ctrl built; Shift adding to the selection lands with CV-09, Alt crop with CV-08. |
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ⬜ | |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |

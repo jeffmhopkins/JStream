@@ -12,9 +12,11 @@
 //! format must match the contract ([`Control::format_matches`]), the scope and session it
 //! names must be the namespace the block was found in, and after the shared objects are
 //! open the block must still be live and name the same producer. Before any of that, a
-//! block found in a session's namespace is used only if the session is active and the
-//! block's owner is that session's user, SYSTEM or Administrators ([`trust`](crate::trust),
-//! #180), so another logged-on user's engine can't feed this camera.
+//! block found in a session's namespace is used only if the session is the console's (or
+//! the only active one), the session is active, and the block's owner is that session's
+//! user, SYSTEM or Administrators ([`trust`](crate::trust), #180, #204), so another
+//! logged-on user's engine can't feed this camera. A block in use is checked again every
+//! [`RECHECK`].
 
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -49,10 +51,13 @@ use super::log::{host_flags, log, session_id};
 use super::session;
 use super::shared::{Mapping, OwnedHandle, qpc, qpc_freq};
 use crate::pixels::{bgra_to_nv12, copy_bgra, nv12_size, test_pattern};
-use crate::trust::{check_session_block, session_of};
+use crate::trust::{check_session_block, check_session_choice, session_of};
 
 /// How long to wait between attempts to find the block or open the shared objects.
 const RETRY: Duration = Duration::from_secs(1);
+/// How often a block in use is put through [`trust`] again (#204), so one whose session
+/// stops being trusted (disconnected, or the console's user came back) stops feeding.
+const RECHECK: Duration = Duration::from_secs(5);
 /// A block whose producer has been silent this long is dropped and searched for again.
 const STALE_LINK: Duration = Duration::from_secs(5);
 /// How often "no control block" is logged while there is none.
@@ -89,6 +94,8 @@ pub(crate) struct FrameSource {
     served: u64,
     link: Option<Link>,
     link_last_live: Instant,
+    /// When the link last passed [`trust`]; it is checked again every [`RECHECK`].
+    link_checked: Instant,
     next_link_try: Instant,
     last_no_link_log: Option<Instant>,
     gpu: Option<Gpu>,
@@ -109,6 +116,7 @@ impl FrameSource {
             served: 0,
             link: None,
             link_last_live: now,
+            link_checked: now,
             next_link_try: now + RETRY,
             last_no_link_log: None,
             gpu: None,
@@ -229,10 +237,23 @@ impl FrameSource {
             self.next_link_try = now + RETRY;
             self.link = self.open_link();
             self.link_last_live = now;
+            self.link_checked = now;
         }
         let Some(link) = &self.link else {
             return Ok(Shared::Absent);
         };
+        if now.duration_since(self.link_checked) >= RECHECK {
+            self.link_checked = now;
+            if let Err(why) = trust(&link.mapping, &link.name, console_session()) {
+                log(format_args!(
+                    "frames: {} refused on re-check, {why}; dropping the control block",
+                    link.name
+                ));
+                self.link = None;
+                self.gpu = None;
+                return Ok(Shared::Absent);
+            }
+        }
         let c = link.mapping.control();
         if !c.is_live() {
             // A stopped producer's objects are dropped at once: one that restarts in the
@@ -277,15 +298,14 @@ impl FrameSource {
 
     /// Finds and attaches to a producer's control block, recording this consumer in it.
     fn open_link(&mut self) -> Option<Link> {
-        // SAFETY: plain call; returns 0xFFFFFFFF when no session is attached.
-        let console = unsafe { WTSGetActiveConsoleSessionId() };
-        let names = control_open_names((console != u32::MAX).then_some(console));
+        let console = console_session();
+        let names = control_open_names(console);
         let mut failures = Vec::new();
         for name in names {
             match Mapping::open(&name) {
                 Ok(mapping) => {
                     // Checked before anything is written into the block.
-                    if let Err(why) = trust(&mapping, &name) {
+                    if let Err(why) = trust(&mapping, &name, console) {
                         failures.push(format!("{name}: refused, {why}"));
                         continue;
                     }
@@ -321,13 +341,23 @@ impl FrameSource {
     }
 }
 
+/// The session attached to the console, if any.
+fn console_session() -> Option<u32> {
+    // SAFETY: plain call; returns 0xFFFFFFFF when no session is attached.
+    let console = unsafe { WTSGetActiveConsoleSessionId() };
+    (console != u32::MAX).then_some(console)
+}
+
 /// Whether the block opened as `name` may be used: `Global\` blocks always (only
 /// administrators and services can create them), a `Session\<id>\` block only under
-/// [`check_session_block`]. `Err` says why not, for the log.
-fn trust(mapping: &Mapping, name: &str) -> std::result::Result<(), String> {
+/// [`check_session_choice`], given the `console` session, and [`check_session_block`].
+/// `Err` says why not, for the log.
+fn trust(mapping: &Mapping, name: &str, console: Option<u32>) -> std::result::Result<(), String> {
     let Some(id) = session_of(name) else {
         return Ok(());
     };
+    check_session_choice(id, console, session::active_sessions().as_deref())
+        .map_err(|d| d.as_str().to_owned())?;
     let owner = mapping
         .owner_sid()
         .map_err(|e| format!("its owner is unreadable ({:#010x})", e.code().0))?;
