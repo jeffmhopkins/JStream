@@ -8,7 +8,15 @@
 //! image. Until both a reference setting and an image are present, a kind passes its
 //! input through unchanged.
 
+#[expect(
+    dead_code,
+    reason = "the chain runtime loads LUT assets in V0 part 2 (#607), which makes the LUT API public"
+)]
 mod cube;
+#[expect(
+    dead_code,
+    reason = "the chain runtime loads LUT assets in V0 part 2 (#607), which makes the LUT API public"
+)]
 mod lut;
 mod mask;
 
