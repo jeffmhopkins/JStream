@@ -81,7 +81,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | D8p | Audio chain protocol fields | M2 | 🌊 its wave lands | #303 merged into wave/m1-2 | #303 |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
 | B11 | Folders and labels | M2 | ❔ not set |  | #323 |
-| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build, then 🌊 its wave lands | hotkeys #319 and organisation metadata #323 merged into waves; keyframe scenes #715 (protocol 0.39) open on wave/m1-3; a group's children and the UI follow (#702) | #319, #323, #715 |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build, then 🌊 its wave lands | hotkeys #319 and organisation metadata #323 merged into waves; keyframe scenes #720 (protocol 0.39) open on wave/m1-3; a group's children and the UI follow (#702) | #319, #323, #720 |
 | F6 | HEVC and AV1 encode | M3 | ❔ not set |  | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🌊 its wave lands, then 🔨 build | effect packs #368 land with wave/m1-2; full 3D transforms to build | #359, #368 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🌊 its wave lands, then 👤 maintainer | #363 merged into wave/m1-2, #375 into wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
@@ -242,7 +242,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
 | B11 | Folders and labels | 🔍 in review | #323 |
-| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | 🔍 in review: hotkeys #319 and organisation metadata #323 merged into waves; keyframe scenes #715 (protocol 0.39) open on wave/m1-3; a group's children and the UI follow (#702) | #319, #323, #715 |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | 🔍 in review: hotkeys #319 and organisation metadata #323 merged into waves; keyframe scenes #720 (protocol 0.39) open on wave/m1-3; a group's children and the UI follow (#702) | #319, #323, #720 |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 
 </details>
