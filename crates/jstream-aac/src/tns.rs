@@ -7,7 +7,7 @@
 //!
 //! A window is tried only when its input's high-passed envelope is uneven in time
 //! ([`uneven`]): on a steady signal TNS has nothing to shape. Then the lines from about
-//! 1.4 kHz up to the standard's `TNS_MAX_BANDS` limit are analysed, each weighted by its
+//! 1.4 kHz up to the standard's `TNS_MAX_BANDS` limit are analysed, each divided by its
 //! band's RMS so loud bands don't rule the prediction: their autocorrelation, smoothed
 //! by a Gaussian lag window (Y. Tohkura, F. Itakura and S. Hashimoto, "Spectral smoothing
 //! technique in PARCOR speech analysis-synthesis", IEEE Trans. ASSP 26(6), 1978), gives
@@ -16,6 +16,11 @@
 //! dequantizes them (`sin` of the index over its arcsine step, at 4-bit resolution), and
 //! the spectrum is filtered with the dequantized ones, so the decoder's all-pole filter
 //! inverts it exactly. One filter per window, upward in frequency.
+//!
+//! That band normalisation is part of Herre and Johnston's open-loop analysis, not a
+//! separate technique with its own source. It scales only the samples the
+//! autocorrelation is computed from, which changes the filter chosen, while the filtered
+//! spectrum, the bitstream and the decoder's synthesis stay unweighted.
 //!
 //! The envelope test takes the block energies of the input's first difference, as the
 //! attack detector does after Edler (1989). The decoder's filter amplifies the residual's
@@ -339,7 +344,7 @@ impl Analyser {
         *noise_gain = [1.0; 8];
         for w in (0..frame.windows).filter(|&w| gate[w]) {
             let base = w * frame.lines;
-            // Each line weighted by its band's RMS, so loud bands don't rule the
+            // Each line divided by its band's RMS, so loud bands don't rule the
             // prediction.
             let mut weight = [0.0f32; 49];
             for (g, edge) in weight[bottom..top]
