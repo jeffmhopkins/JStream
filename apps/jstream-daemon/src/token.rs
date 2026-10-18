@@ -268,9 +268,9 @@ mod tests {
     fn a_file_other_users_can_read_is_refused_on_windows() {
         let dir = scratch("dacl");
         let path = dir.join("token");
-        let (_, provenance) = load_or_create(&path).expect("created");
+        let (_, provenance) = load_or_create(&path, &Secrets::new()).expect("created");
         assert_eq!(provenance, Provenance::Created);
-        let (_, provenance) = load_or_create(&path).expect("its own DACL passes");
+        let (_, provenance) = load_or_create(&path, &Secrets::new()).expect("its own DACL passes");
         assert_eq!(provenance, Provenance::Existing);
 
         // Everyone (S-1-1-0) may read it now.
@@ -280,7 +280,7 @@ mod tests {
             .output()
             .expect("icacls runs");
         assert!(granted.status.success(), "{granted:?}");
-        let error = load_or_create(&path).expect_err("everyone can read it");
+        let error = load_or_create(&path, &Secrets::new()).expect_err("everyone can read it");
         assert!(
             error.to_string().contains("accessible to other users"),
             "{error}"
