@@ -79,5 +79,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0065](0065-scene-chains-and-item-effects.md) | Scene filter chains and item effects | accepted | agent |  |
 | [ADR-0068](0068-item-effects-in-v1.md) | Item effects are in v1 | accepted | maintainer |  |
 | [ADR-0070](0070-wave-prs-run-linux-tests.md) | PRs into a wave run the Linux tests | accepted | agent |  |
+| [ADR-0071](0071-linux-secret-store.md) | Linux secret store: the Secret Service, else a 0600 file | accepted | maintainer |  |
 | [ADR-0072](0072-linux-media-file-decoding.md) | Linux media-file decoding: VA-API and pure Rust first, the system's FFmpeg for the gaps | accepted | maintainer |  |
 <!-- @generated end adr-index -->
