@@ -926,6 +926,8 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
+                        folder: None,
+                        meta: Default::default(),
                     })
                     .collect(),
             },
@@ -970,6 +972,8 @@ impl State {
                         items: self.collection.item_infos(scene),
                         transition_in: None,
                         transition_out: None,
+                        folder: None,
+                        meta: Default::default(),
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
@@ -977,16 +981,18 @@ impl State {
                 video_mixes: self.collection.video_mix_infos(),
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
-                master: jstream_protocol::MasterInfo {
+                master: Box::new(jstream_protocol::MasterInfo {
                     filters: self.collection.master.clone(),
-                },
+                }),
                 hotkeys: self
                     .collection
                     .hotkeys
                     .iter()
                     .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
                     .collect(),
-                transitions: TransitionsInfo::default(),
+                transitions: Box::new(TransitionsInfo::default()),
+                folders: Vec::new(),
+                labels: Vec::new(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
@@ -2011,6 +2017,7 @@ impl Collection {
                     .filter(|original| self.sources.contains_key(original)),
                 filters: source.filters.clone(),
                 audio: source.audio,
+                meta: Default::default(),
             })
             .collect()
     }
@@ -3038,6 +3045,8 @@ mod tests {
                 sends,
                 hotkeys,
                 transitions,
+                folders: Vec::new(),
+                labels: Vec::new(),
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -3247,7 +3256,9 @@ mod tests {
                 sends: vec![],
                 master: Default::default(),
                 hotkeys: vec![],
-                transitions: TransitionsInfo::default(),
+                transitions: Box::new(TransitionsInfo::default()),
+                folders: Vec::new(),
+                labels: Vec::new(),
             }
         );
         drain(&mut events);

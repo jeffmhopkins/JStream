@@ -125,7 +125,23 @@ impl Compositor {
         self.import_as(texture, sync, Alpha::PremultipliedSrgb)
     }
 
-    /// [`Self::import`] or [`Self::import_premultiplied`], by `alpha`.
+    /// Samples `texture`, as [`Self::import`] does, reading every texel's alpha as 1:
+    /// for a captured frame, whose alpha means nothing (a display or window capture can
+    /// deliver alpha below 1 under some drivers or HDR modes), so it draws as the CPU
+    /// capture path does, which ignores alpha (#451).
+    ///
+    /// # Errors
+    /// As for [`Self::import`].
+    pub fn import_opaque(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+    ) -> Result<Image, RenderError> {
+        self.import_as(texture, sync, Alpha::Opaque)
+    }
+
+    /// [`Self::import`], [`Self::import_premultiplied`] or [`Self::import_opaque`], by
+    /// `alpha`.
     pub(crate) fn import_as(
         &self,
         texture: wgpu::Texture,
@@ -795,11 +811,7 @@ fn push_quad(
     alpha: Alpha,
 ) {
     // The shader's `mode`: how it turns a filtered sample into premultiplied linear.
-    let mode = match alpha {
-        Alpha::Premultiplied => 0.0,
-        Alpha::Straight => 1.0,
-        Alpha::PremultipliedSrgb => 2.0,
-    };
+    let mode = alpha.shader_mode();
     let corner = |i: usize| {
         let [x, y] = quad.corners[i];
         let [u, v] = quad.uvs[i];

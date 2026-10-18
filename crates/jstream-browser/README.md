@@ -31,7 +31,9 @@ runs, and how many of its requests were refused (`denied_requests`). `use_device
 the backend a GPU device to copy the pages' paints onto. The host gives it one it opens
 on the media adapter, for paints before any program stage; while the program stage
 runs, the engine lends it the stage's own context in its place, so the compositor
-samples the pages there, and takes it back (leaving none) when the stage stops
+samples the pages there, and takes it back (leaving none) when the stage stops, or
+when the stage leaves the GPU path mid-run, after which the pages deliver no frames for
+the rest of that stage
 ([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). Without
 a device a page renders and plays but delivers no frames. Dropping the
 page closes it.
@@ -116,7 +118,12 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
   every page, and the loop quits once they have closed, or after ten seconds.
 - Every page is a windowless browser with shared textures on, painting at its spec's
   frame rate with a transparent background. Command-line switches let pages play sound
-  without a click and turn off first-run and error dialogs. Pop-ups are blocked. The
+  without a click and turn off first-run and error dialogs. Pop-ups are blocked. Every
+  permission a page asks for (camera, microphone, screen capture, geolocation,
+  notifications, clipboard, MIDI and the rest) is refused by the page's permission
+  handler rather than left to CEF's default: a media request is cancelled and a
+  permission prompt answered `DENY`. The answer comes from `permission.rs`, whose test
+  pins it for every permission bit (#347). The
   custom CSS is applied when the main frame finishes loading and again on each change.
   Every request a page makes, navigations included, goes through its `RequestPolicy`
   in `OnBeforeResourceLoad` and is cancelled when refused; the engine logs the first
@@ -157,8 +164,9 @@ shipping the `cef` feature.
 - **Hosts.** The desktop app and the daemon each create a backend with their `cef`
   feature, on a device of the media adapter they open
   ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)); the engine
-  replaces it with the program stage's context while the stage runs, and the host's
-  device is not given back when it stops.
+  replaces it with the program stage's context while the stage runs on the GPU path,
+  and the host's device is not given back when the stage stops or leaves the GPU path
+  mid-run.
 - **Compositing.** The program mix draws a page's `GpuFrame`, imported premultiplied
   on the stage's context, but only the fake backend's textures have been through it:
   a real CEF texture on Windows hardware is #336.

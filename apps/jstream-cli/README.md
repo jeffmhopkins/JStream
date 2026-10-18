@@ -122,7 +122,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   item is a legacy one at 1:1. Place either with `item.set_geometry <item-id>
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
-  are always sent neutral, since the engine refuses anything else until it draws 3D.
+  are always sent neutral, since the engine refuses anything else until it draws 3D,
+  and it sends no flip (`flip_h` and `flip_v` false): the command has no flip argument
+  yet.
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
@@ -133,7 +135,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   the item's own scene, which omitting it already means. Protocol 0.19's audio edits
   (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
   in the CLI either, and neither are the transition edits (`transition.*`,
-  `scene.set_transitions`, `item.set_transition`).
+  `scene.set_transitions`, `item.set_transition`) or the folder, label and metadata
+  edits (`folder.*`, `label.*`, `scene.set_folder`, `scene.set_meta`,
+  `source.set_meta`).
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine accepts only `normal` until it draws the
@@ -198,7 +202,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
   (<name>):` by its role, then the outputs, then a `hotkeys:` table (`CHORD`,
   `ACTION`) when any are bound; only `--json` shows the sources' audio, the buses, the
-  sends and the transition presets. `output status` prints
+  sends, the transition presets, the folders and labels, and each scene's and source's
+  organisation metadata. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.

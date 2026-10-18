@@ -1,5 +1,5 @@
-//! `delete.plan`: the batch that deletes a scene, source or bus together with everything
-//! that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+//! `delete.plan`: the batch that deletes a scene, source, bus, folder or label together
+//! with everything that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
 //!
 //! Rejection stays the only delete: `scene.delete`, `source.delete` and `bus.delete`
 //! refuse while anything refers to their target. The plan spells out the removal as ordinary edits,
@@ -34,6 +34,11 @@ impl Graph {
     /// - the delete of the target.
     ///
     /// It also lists, ordered by chord, the hotkey bindings those deletes remove.
+    ///
+    /// A folder's plan moves the scenes and folders in it up to its parent
+    /// (`scene.set_folder`, then `folder.set_parent`), then deletes it. A label's plan
+    /// takes it off each source carrying it (`source.set_meta`), then deletes it. No
+    /// action names a folder or label, so neither removes a hotkey binding.
     pub fn delete_plan(&self, target: &DeleteTarget) -> Result<QueryResult, ProtocolError> {
         let state = &self.state;
         let (target, last) = match target {
@@ -58,6 +63,20 @@ impl Graph {
                         source_id: source_id.clone(),
                     },
                 )
+            }
+            DeleteTarget::Folder { folder_id } => {
+                return Ok(QueryResult::DeletePlan {
+                    rev: self.rev,
+                    edits: crate::organise::folder_plan(state, folder_id)?,
+                    hotkeys: Vec::new(),
+                });
+            }
+            DeleteTarget::Label { label_id } => {
+                return Ok(QueryResult::DeletePlan {
+                    rev: self.rev,
+                    edits: crate::organise::label_plan(state, label_id)?,
+                    hotkeys: Vec::new(),
+                });
             }
             DeleteTarget::Bus { bus_id } => {
                 if state.bus(bus_id).is_none() {
