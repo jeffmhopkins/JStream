@@ -90,6 +90,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   full-resolution YCbCr) while it decodes, bounded only by the side
   limit. `Context` also carries the `AudioScopes` the `waveform` and `spectrum`
   sources find their audio in; with none they draw silence.
+- `decode_still(bytes, path, limits)`: an image file's first frame as a `StillImage`
+  (straight sRGB RGBA8), decoded as the `image` kind decodes, within the same `Limits`,
+  with the same errors. `jstream-core` reads the images video filters use with it (an
+  `image_mask`'s mask, an `apply_lut` table stored as tiles), which never animate.
 - `AudioScope`: the latest audio of one mix, as mono (the mean of left and right), in
   a lock-free ring of 16384 samples (341 ms at 48 kHz) stored as atomics. One thread
   pushes interleaved stereo blocks; any number read the latest window of up to 2048

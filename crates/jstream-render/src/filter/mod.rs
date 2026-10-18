@@ -18,6 +18,7 @@ mod pass;
 #[cfg(test)]
 pub(crate) mod testing;
 
+pub use assets::{Lut, LutError, lut_image};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
 pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Shader};

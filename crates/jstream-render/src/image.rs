@@ -193,10 +193,6 @@ pub(crate) fn upload(
 /// Uploads `texels` (RGBA, row-major, `width * height` of them) as `Rgba16Float` exactly
 /// as given, each channel clamped to `0..=1`, and samples them as premultiplied. For data
 /// that is not colour, such as a colour lookup table (`filter::assets`).
-#[expect(
-    dead_code,
-    reason = "the chain runtime loads LUT assets in V0 part 2 (#607), which makes the LUT API public"
-)]
 pub(crate) fn upload_unit_f16(
     maker: &Maker<'_>,
     width: u32,
