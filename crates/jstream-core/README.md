@@ -454,8 +454,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **Queries** that read the collection, and the kind queries, go to `Graph::query`,
   `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
   kinds the engine gave it (`kinds.rs`), and the CLAP filter kinds a scan added. `output.status` reads the outputs' runtime state
-  (`not_found` for an unknown one) and fills `key_set` from the key store after the
-  collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
+  (`not_found` for an unknown one), `cleartext` from its kind
+  (`OutputKind::sends_key_in_cleartext`), and fills `key_set` from the key store after
+  the collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
