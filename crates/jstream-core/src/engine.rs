@@ -2775,6 +2775,17 @@ impl State {
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
         self.gestures.check_set(client_id, gesture_id, &values)?;
+        // Live values are drawn per item, so one meant for a keyframe scene's override
+        // would move the parent's item wherever it shows (#702 builds them).
+        let state = self.graph.state();
+        if let Some(at) = values.iter().position(|value| {
+            live_scene(value).is_some_and(|scene| state.family_of(scene) != scene)
+        }) {
+            return Err(ProtocolError::invalid_argument(
+                format!("values.{at}.scene_id"),
+                "live values on a keyframe scene are not supported yet (#702); send the value in a batch",
+            ));
+        }
         self.graph
             .clone()
             .apply(&values, None)
@@ -3072,5 +3083,15 @@ fn served_by_the_server(call: &str) -> ProtocolError {
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),
+    }
+}
+
+/// The scene a live-adjustable setter names, if it names one.
+fn live_scene(value: &Edit) -> Option<&SceneId> {
+    match value {
+        Edit::ItemSetTransform { scene_id, .. }
+        | Edit::ItemSetGeometry { scene_id, .. }
+        | Edit::ItemSetCrop { scene_id, .. } => scene_id.as_ref(),
+        _ => None,
     }
 }

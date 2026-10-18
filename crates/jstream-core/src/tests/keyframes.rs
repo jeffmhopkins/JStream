@@ -272,3 +272,42 @@ fn a_batch_reports_the_overrides_it_drops_and_undo_restores_them() {
     block_on(control.call(undo)).expect("undo");
     assert!(overrides(&control).is_empty());
 }
+
+/// A live value addressed to a keyframe scene is refused (`values.<n>.scene_id`): live
+/// values are drawn per item, so it would move the parent's item wherever it shows
+/// (#720 review B2; #702 builds them). Nothing is applied, and a value naming the
+/// parent's own scene is still taken.
+#[test]
+fn a_live_value_on_a_keyframe_scene_is_refused() {
+    let engine = family();
+    let control = connected(&engine);
+    let live_set = |values: Vec<Edit>| {
+        let action = Action::LiveSet {
+            gesture_id: jstream_protocol::GestureId::new("drag"),
+            values,
+        };
+        block_on(control.call(Call::Action { action }))
+    };
+    let error = live_set(vec![
+        geometry("a1", None, 150.0),
+        geometry("a1", Some("k"), 900.0),
+    ])
+    .expect_err("refused");
+    match error.protocol() {
+        Some(jstream_protocol::ProtocolError::InvalidArgument { field, .. }) => {
+            assert_eq!(field, "values.1.scene_id");
+        }
+        other => panic!("not invalid_argument: {other:?}"),
+    }
+    let call = Call::Query {
+        query: Query::LiveList,
+    };
+    let CallResult::Query {
+        result: QueryResult::LiveList { gestures },
+    } = block_on(control.call(call)).expect("live.list").result
+    else {
+        panic!("not live.list");
+    };
+    assert!(gestures.is_empty(), "nothing opened: {gestures:?}");
+    live_set(vec![geometry("a1", Some("a"), 150.0)]).expect("the parent's own scene");
+}

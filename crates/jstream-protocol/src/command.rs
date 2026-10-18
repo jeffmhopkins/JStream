@@ -236,8 +236,7 @@ pub enum Edit {
         /// keyframe scene of the item's scene writes that scene's override of this
         /// field (since 0.39), whose inverse is `item.clear_override` if the field was
         /// not overridden and this edit with the old value if it was. Any other scene is
-        /// `invalid_argument`, and so is `item.set_transform` naming a keyframe scene:
-        /// an override's geometry is a geometry.
+        /// `invalid_argument`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
         /// Whether the item is drawn. Items are visible when added.

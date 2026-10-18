@@ -1046,7 +1046,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`, and so is `item.set_transform` naming a keyframe scene:\nan override's geometry is a geometry."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -5925,7 +5925,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`, and so is `item.set_transform` naming a keyframe scene:\nan override's geometry is a geometry."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -9043,7 +9043,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`, and so is `item.set_transform` naming a keyframe scene:\nan override's geometry is a geometry."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -10485,7 +10485,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`, and so is `item.set_transform` naming a keyframe scene:\nan override's geometry is a geometry."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
                   },
                   "type": {
                     "const": "item.set_visible",
