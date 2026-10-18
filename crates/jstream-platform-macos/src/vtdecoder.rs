@@ -3,7 +3,9 @@
 //! order.
 //!
 //! The decoder is opened with [`vt_decoder_settings`] (hardware by default, Apple's
-//! software decoder for `HardwarePreference::Avoid`), but its session waits for the first
+//! software decoder for `HardwarePreference::Avoid`). `HardwarePreference::Require` is
+//! checked then, with `VTIsHardwareDecodeSupported` ([`vt_decoder_hardware`]), so a Mac
+//! without a hardware decoder for the codec refuses it at once. Its session waits for the first
 //! packet with a complete set of parameter sets: a format description is made from them,
 //! and a new session whenever a keyframe brings different ones (a resolution change).
 //! Packets before that are dropped, as a decoder joining mid-stream drops them.
@@ -51,14 +53,16 @@ use objc2_core_video::{
 };
 use objc2_video_toolbox::{
     VTDecodeFrameFlags, VTDecodeInfoFlags, VTDecompressionOutputCallbackRecord,
-    VTDecompressionSession, VTSessionCopyProperty,
+    VTDecompressionSession, VTIsHardwareDecodeSupported, VTSessionCopyProperty,
     kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder,
     kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder,
     kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder,
 };
 
 use crate::annexb::{cm_time_parts, copy_rows, media_time_from_cm};
-use crate::codec::{VtDecoderSettings, vt_decoder_settings};
+use crate::codec::{
+    VtDecoderSettings, vt_decoder_hardware, vt_decoder_name, vt_decoder_settings, vt_no_decoder,
+};
 use crate::decode::{Reorder, sets_complete, split_access_unit};
 use crate::fourcc::{os_status, pixel_format_from_cv};
 
@@ -86,6 +90,13 @@ fn codec_name(codec: Codec) -> &'static str {
         Codec::Hevc => "HEVC",
         _ => "H.264",
     }
+}
+
+/// `VTIsHardwareDecodeSupported`: whether this Mac has a hardware decoder for a Core
+/// Media codec type. True does not promise one is free at every moment.
+pub(crate) fn hardware_decode_supported(codec_type: u32) -> bool {
+    // SAFETY: a plain query taking a FourCC by value, with no pointers or state.
+    unsafe { VTIsHardwareDecodeSupported(codec_type) }
 }
 
 /// What the output callback hands to the decoder.
@@ -526,12 +537,12 @@ impl VtDecoder {
     /// [`PlatformError::Unsupported`] for a configuration VideoToolbox can't take.
     pub(crate) fn open(config: &VideoDecoderConfig) -> Result<Self, PlatformError> {
         let settings = vt_decoder_settings(config)?;
+        let hardware = vt_decoder_hardware(
+            &settings,
+            config.codec,
+            hardware_decode_supported(settings.codec_type),
+        )?;
         let (sender, receiver) = mpsc::channel();
-        let kind = if settings.enable_hardware {
-            "hardware"
-        } else {
-            "software"
-        };
         Ok(Self {
             open: None,
             context: Box::new(CallbackContext {
@@ -542,10 +553,10 @@ impl VtDecoder {
             settings,
             config: *config,
             info: CodecInfo {
-                name: format!("VideoToolbox {} decoder ({kind})", codec_name(config.codec)),
+                name: vt_decoder_name(config.codec, hardware),
                 codec: config.codec,
                 role: CodecRole::VideoDecoder,
-                hardware: settings.enable_hardware,
+                hardware,
             },
             reorder: Reorder::default(),
             pending: Vec::new(),
@@ -584,11 +595,14 @@ impl VtDecoder {
                 NonNull::from(&mut raw),
             )
         };
-        let name = codec_name(codec);
-        if status != NO_ERR && self.settings.require_hardware {
+        // `open` checked that the Mac has a hardware decoder for the codec, so under
+        // Require a missing decoder here is none for this stream; any other status is the
+        // call failing, a bad parameter set say, and is reported as that.
+        if self.settings.require_hardware && vt_no_decoder(status) {
             return Err(PlatformError::Unsupported {
                 what: format!(
-                    "a hardware {name} decoder for this stream on this Mac ({})",
+                    "a {} for this stream on this Mac ({})",
+                    vt_decoder_name(codec, true),
                     os_status("VTDecompressionSessionCreate", status, "opening")
                 ),
             });
@@ -606,8 +620,7 @@ impl VtDecoder {
         // SAFETY: a Create function returned it, so this takes over its +1 reference.
         let session = Session(unsafe { CFRetained::from_raw(raw) });
         let hardware = uses_hardware(&session.0);
-        let kind = if hardware { "hardware" } else { "software" };
-        self.info.name = format!("VideoToolbox {name} decoder ({kind})");
+        self.info.name = vt_decoder_name(codec, hardware);
         self.info.hardware = hardware;
         self.open = Some(Open {
             session,
@@ -769,8 +782,8 @@ mod tests {
         VideoFrameInfo,
     };
     use jstream_platform::{
-        Codecs, HardwarePreference, PlatformError, RateControl, VideoDecoder, VideoDecoderConfig,
-        VideoEncoderConfig, VideoSurface,
+        CodecRole, Codecs, HardwarePreference, PlatformError, RateControl, VideoDecoder,
+        VideoDecoderConfig, VideoEncoderConfig, VideoSurface,
     };
 
     use crate::{VideoToolboxCodecs, timebase};
@@ -885,6 +898,33 @@ mod tests {
         let mut d = decoder(Codec::H264, PixelFormat::Nv12);
         let frames = decode_all(d.as_mut(), &packets[1..]);
         check_frames(&frames, &packets[at..], PixelFormat::Nv12);
+    }
+
+    #[test]
+    fn decoders_are_listed_and_match_what_opens() {
+        let codecs = VideoToolboxCodecs::new();
+        let list = codecs.list().expect("list");
+        for codec in [Codec::H264, Codec::Hevc] {
+            let listed: Vec<_> = list
+                .iter()
+                .filter(|info| info.role == CodecRole::VideoDecoder && info.codec == codec)
+                .collect();
+            assert!(
+                listed.iter().any(|info| !info.hardware),
+                "{codec:?}: Apple's software decoder is listed"
+            );
+            let hardware = listed.iter().any(|info| info.hardware);
+            let require = codecs.video_decoder(&VideoDecoderConfig {
+                codec,
+                output_format: PixelFormat::Nv12,
+                hardware: HardwarePreference::Require,
+            });
+            match require {
+                Ok(d) => assert!(hardware && d.info().hardware, "{codec:?}"),
+                Err(PlatformError::Unsupported { .. }) => assert!(!hardware, "{codec:?}"),
+                Err(other) => panic!("{codec:?}: {other}"),
+            }
+        }
     }
 
     #[test]
