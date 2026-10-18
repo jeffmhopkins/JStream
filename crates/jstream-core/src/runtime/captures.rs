@@ -1,5 +1,7 @@
 //! The output pipeline's captures: one per thing the render snapshot captures
-//! ([`Shot::captures`]), started and stopped as the program mix changes.
+//! ([`Shot::captures`]), started and stopped as the program mix changes. That is one per
+//! source ([`CaptureKey`]), started with the source's [`CaptureOptions`], so two sources
+//! showing the same target run two captures of it.
 //!
 //! The render thread reads each capture's mailbox every tick and keeps its latest frame,
 //! a texture on the compositor's device or CPU RGBA8. Starting and stopping a capture
