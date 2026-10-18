@@ -41,7 +41,9 @@ pub struct AudioProcess {
     /// The ID of the process that started it, if the OS reports one. It may have
     /// exited, and its ID may have been reused since.
     pub parent_pid: Option<u32>,
-    /// The executable's file name, such as `obs64.exe`, without its folder.
+    /// The executable's file name, such as `obs64.exe`, without its folder. A backend
+    /// that can't read it falls back to another name: on macOS the kernel's short name,
+    /// then the bundle ID, then the PID.
     pub exe: String,
 }
 
@@ -85,10 +87,14 @@ pub trait AudioIo: Send + Sync {
     /// [`PlatformError::Os`] when the OS refuses to enumerate them.
     fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError>;
 
-    /// The processes running now, any of which process loopback can record.
+    /// The processes running now, any of which process loopback can record. Windows
+    /// lists every process; macOS lists only the processes Core Audio knows as audio
+    /// clients, since only those can be tapped.
     ///
     /// # Errors
-    /// [`PlatformError::Os`] when the OS refuses to list them.
+    /// [`PlatformError::Os`] when the OS refuses to list them;
+    /// [`PlatformError::MissingComponent`] where the OS is too old for process loopback
+    /// (macOS before 14.2).
     fn processes(&self) -> Result<Vec<AudioProcess>, PlatformError>;
 
     /// The format [`open_input`](AudioIo::open_input) would deliver `target` in if it

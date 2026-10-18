@@ -61,7 +61,14 @@ Contents:
   `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
   `Capture::on_context` returns the backend on a `GpuContext`'s device, whose captures
   deliver `Gpu` frames, or `None` (the default) when it has no GPU path; the engine
-  then keeps CPU frames.
+  then keeps CPU frames. `Capture::start_with` starts a capture with `CaptureOptions`
+  (the default is `start`'s). `CaptureOptions::for_source` names the source a capture
+  is for, so a backend that keeps a grant per source (the ScreenCast portal's restore
+  token, [ADR-0060](../../docs/adr/0060-linux-platform-support.md) §3) keeps each
+  source's apart, and `Capture::forget_source` drops it when the source is deleted, once
+  its captures have stopped (best effort: a grant file that can't be removed stays). By
+  default `start_with` ignores its options and calls `start`, and `forget_source` does
+  nothing.
 - **Video capture devices** (webcams and capture cards,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
@@ -72,7 +79,8 @@ Contents:
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
   a frame it rejects is dropped and the stream goes on.
-- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes
+- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
+  process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
   format an input target would open in (`input_format`, so the engine can build the
   handler for it before opening), and opens input (microphone, output loopback,

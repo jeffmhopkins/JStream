@@ -16,6 +16,8 @@ mod hal;
 mod layout;
 #[cfg(any(target_os = "macos", test))]
 mod permission;
+#[cfg(any(target_os = "macos", test))]
+mod process;
 #[cfg(target_os = "macos")]
 mod stream;
 
@@ -159,7 +161,7 @@ mod backend {
 
         fn processes(&self) -> Result<Vec<AudioProcess>, PlatformError> {
             Feature::ProcessTaps.check(self.version)?;
-            Err(not_built("listing applications playing audio"))
+            super::process::list()
         }
 
         fn input_format(&self, target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {
@@ -292,6 +294,22 @@ mod macos_tests {
             audio.input_format(&target),
             Err(PlatformError::NotFound { .. })
         ));
+    }
+
+    #[test]
+    fn lists_processes_from_14_2() {
+        let audio = CoreAudioIo::new().expect("backend");
+        match audio.processes() {
+            Ok(processes) => {
+                for process in processes {
+                    assert!(process.pid > 0);
+                    assert!(!process.exe.is_empty(), "pid {}", process.pid);
+                    assert_ne!(process.parent_pid, Some(0));
+                }
+            }
+            Err(PlatformError::MissingComponent { .. }) => {}
+            Err(e) => panic!("listing processes: {e}"),
+        }
     }
 
     #[test]
