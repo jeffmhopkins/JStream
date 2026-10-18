@@ -904,7 +904,7 @@ descriptors whose passes `apply_filter` draws from any image (an upload, a layer
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
 runtime that runs a source's video chain before placement is not built yet. Still
-outside this crate: P010, 3D, loading effect packs (`jstream-effects`; this crate draws
+outside this crate: P010, loading effect packs (`jstream-effects`; this crate draws
 them through the filter harness), and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a

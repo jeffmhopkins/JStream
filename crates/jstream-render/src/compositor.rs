@@ -14,10 +14,10 @@ use crate::mips::{MipPipelines, Mips};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
 
-/// Bytes from one vertex to the next: 22 `f32`s (position, UV, opacity, alpha mode, `w`,
-/// and the item's five edge lines of three each), tightly packed. wgpu only needs the
-/// stride and attribute offsets to be multiples of 4.
-const VERTEX_STRIDE: u64 = 88;
+/// Bytes from one vertex to the next: 26 `f32`s (position, UV, opacity, alpha mode, `w`,
+/// the item's five edge lines of three each, and its UV bounds), tightly packed. wgpu
+/// only needs the stride and attribute offsets to be multiples of 4.
+const VERTEX_STRIDE: u64 = 104;
 /// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
 const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 
@@ -838,6 +838,9 @@ fn push_shape(
             for value in shape.edges.as_flattened() {
                 push_f32(buf, *value);
             }
+            for value in shape.uv_bounds {
+                push_f32(buf, value);
+            }
             count += 1;
         }
     }
@@ -955,6 +958,7 @@ fn composite_pipeline(
         7 => Float32x3,
         8 => Float32x3,
         9 => Float32x3,
+        10 => Float32x4,
     ];
     let buffers = [Some(wgpu::VertexBufferLayout {
         array_stride: VERTEX_STRIDE,

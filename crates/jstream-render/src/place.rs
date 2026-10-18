@@ -17,6 +17,9 @@ pub(crate) const MAX_VERTICES: usize = 5;
 /// these.
 pub(crate) const NO_EDGE: [f32; 3] = [0.0, 0.0, 1.0e9];
 
+/// Texture-coordinate bounds that never clamp: a 2D item has no pushed-out fringe.
+pub(crate) const NO_UV_BOUNDS: [f32; 4] = [-1.0e9, -1.0e9, 1.0e9, 1.0e9];
+
 /// How far, in canvas pixels, a 3D item's polygon is pushed out so the pixels its edges
 /// partly cover are drawn (ADR-0050 decision 6).
 const PUSH_OUT: f32 = 1.0;
@@ -41,6 +44,10 @@ pub(crate) struct Shape {
     vertices: [Vertex; MAX_VERTICES],
     len: usize,
     pub edges: [[f32; 3]; MAX_VERTICES],
+    /// `[u_min, v_min, u_max, v_max]` of the polygon before the push: the shader clamps
+    /// to it, so a fringe pixel samples the content's edge, not the crop or what `fill`
+    /// clips away. [`NO_UV_BOUNDS`] for a 2D item.
+    pub uv_bounds: [f32; 4],
 }
 
 impl Shape {
@@ -64,6 +71,7 @@ impl Shape {
             vertices,
             len: 4,
             edges: [NO_EDGE; MAX_VERTICES],
+            uv_bounds: NO_UV_BOUNDS,
         }
     }
 }
@@ -174,6 +182,18 @@ fn drawn(geometry: ItemGeometry, content: &ContentRect) -> Result<Option<Shape>,
     let corners = polygon.vertices();
     let len = corners.len();
     let edges = edge_lines(corners);
+    let mut uv_bounds = [
+        f32::INFINITY,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        f32::NEG_INFINITY,
+    ];
+    for corner in corners {
+        uv_bounds[0] = uv_bounds[0].min(corner.uv[0]);
+        uv_bounds[1] = uv_bounds[1].min(corner.uv[1]);
+        uv_bounds[2] = uv_bounds[2].max(corner.uv[0]);
+        uv_bounds[3] = uv_bounds[3].max(corner.uv[1]);
+    }
     let mut vertices = [UNUSED; MAX_VERTICES];
     for (i, corner) in corners.iter().enumerate() {
         let target = push_out(edges[(i + len - 1) % len], edges[i], corner);
@@ -189,6 +209,7 @@ fn drawn(geometry: ItemGeometry, content: &ContentRect) -> Result<Option<Shape>,
         vertices,
         len,
         edges,
+        uv_bounds,
     }))
 }
 
@@ -275,7 +296,7 @@ mod tests {
 
     use jstream_protocol::{Finite32, FitMode, ItemGeometry, Size, Vec2};
 
-    use super::{NO_EDGE, Shape, placement_error, shape};
+    use super::{NO_EDGE, NO_UV_BOUNDS, Shape, placement_error, shape};
     use crate::error::RenderError;
     use crate::scene::{Crop, LegacyTransform, Placement};
 
@@ -544,6 +565,7 @@ mod tests {
             .expect("draws");
         assert!(q.vertices().iter().all(|v| v.w == 1.0));
         assert_eq!(q.edges, [NO_EDGE; 5]);
+        assert_eq!(q.uv_bounds, NO_UV_BOUNDS);
     }
 
     #[test]
@@ -567,6 +589,8 @@ mod tests {
             let corners = polygon.vertices();
             let len = corners.len();
             assert_eq!(q.vertices().len(), len);
+            // Stretched and uncropped, the content is the whole source.
+            assert_eq!(q.uv_bounds, [0.0, 0.0, 1.0, 1.0]);
             assert_eq!(q.edges[len..], [NO_EDGE; 5][len..]);
             let centre = [geometry.center.x.get(), geometry.center.y.get()];
             for (i, (pushed, corner)) in q.vertices().iter().zip(corners).enumerate() {

@@ -189,10 +189,14 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
    is its quad (two triangles), a 3D item three to five vertices (up to three
    triangles). The vertex buffer holds clip-space positions, UVs, opacity, the image's
-   alpha mode, ADR-0050's `w`, and the item's five edge lines (22 `f32`s, 88 bytes).
+   alpha mode, ADR-0050's `w`, the item's five edge lines and its UV bounds (26
+   `f32`s, 104 bytes).
    The vertex shader writes `(pos · w, 0, w)`, so the GPU interpolates UVs
    perspective-correctly; a 2D item has `w = 1`, the plain affine path. The fragment
-   shader samples (a 3D item from its source's mip chain, step 2); for a straight import it multiplies RGB by the sampled
+   shader clamps its UV to the item's bounds (a 3D item's content before the one-pixel
+   push, so a fringe pixel never samples past the crop or what `fill` clips; a 2D item's
+   bounds never clamp) and samples at the clamped UV (a 3D item from its
+   source's mip chain, step 2); for a straight import it multiplies RGB by the sampled
    alpha, and for a premultiplied import it divides RGB by alpha (zero where alpha is
    0), decodes sRGB and multiplies by alpha; then it multiplies all four channels by
    opacity and by its edge coverage, `clamp(d + 0.5, 0, 1)` for the distance `d` in
@@ -207,7 +211,7 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    alpha is stored as-is. The output usage is `RENDER_ATTACHMENT | COPY_SRC |
    TEXTURE_BINDING`, so a snapshot or a later consumer can use it.
 
-   **`render_image`** (a nested scene) stops after pass 2. It composites into a new
+   **`render_image`** (a nested scene) stops after step 3. It composites into a new
    `Rgba16Float` texture (`RENDER_ATTACHMENT | TEXTURE_BINDING`) of the canvas size
    and returns it as an `Image` read as premultiplied, the same as an upload. So
    placing it filters exactly at partly transparent edges, and nothing is quantised
@@ -629,8 +633,9 @@ p99 error per channel in sRGB 8-bit steps. On lavapipe:
 |---|---|---|---|---|
 | A, an item turned 50° with perspective | interior | 3 | 1.1 | 67 drawn affinely (`w = 1`) |
 | B, tilted toward the viewer, a corner behind it | all | 2 | 0.24 | 78 affinely |
-| C, a floor tilted 75°, minified | interior | 8 | 6.1 | 18 with trilinear mips alone, 29 with one level |
-| D, a small rotated and turned item | edge | 6 | 3.1 | 53 with a hard edge, 13 affinely |
+| C, a floor tilted 75°, minified | interior | 8 | 6.2 | 18 with trilinear mips alone, 29 with one level |
+| D, a small rotated and turned item | edge | 6 | 3.2 | 53 with a hard edge, 13 affinely |
+| D cropped, a smaller D cropped just past a texel ring | edge | 8 | 6.6 | 8.2 without the UV clamp |
 | E, two items turned through each other | all | 2 | 0.53 | 15 affinely |
 
 The p99 limit is 40 throughout. C's pattern is much finer than the spike's (one-texel
