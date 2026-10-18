@@ -10,6 +10,7 @@
 
 use anyhow::Context;
 use jstream_core::{AuditSink, Engine};
+use jstream_crash::Secrets;
 use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::fmt::Write as _;
 use std::path::Path;
@@ -21,6 +22,7 @@ use tokio::task::JoinHandle;
 #[cfg(windows)]
 use {
     jstream_core::{LivePublish, OpenPublish, PublishError},
+    jstream_crash::Redacting,
     jstream_platform::{Backends, Secret, StreamKeyStore},
     jstream_protocol::{OutputId, OutputKind, RtmpTarget},
     std::sync::{OnceLock, Weak},
@@ -44,14 +46,14 @@ impl Host {
     /// # Errors
     /// When the runtime can't start, the OS has no randomness for the token, or the
     /// server can't bind.
-    pub fn start(engine: Arc<Engine>, origin: &str) -> anyhow::Result<Host> {
+    pub fn start(engine: Arc<Engine>, origin: &str, secrets: &Secrets) -> anyhow::Result<Host> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .thread_name("jstream-host")
             .build()
             .context("could not start the async runtime")?;
         let token = new_token()?;
-        crate::crash::register_secret(&token);
+        secrets.register(&token);
         let mut config = ServerConfig::new(Token::new(token.clone())?);
         config.extra_origins = vec![origin.to_owned()];
         // The engine serves only this webview, so it pairs no device (ADR-0047).
@@ -142,6 +144,7 @@ pub fn engine(
     data: &Path,
     audit: Arc<dyn AuditSink>,
     vcam: bool,
+    secrets: &Secrets,
 ) -> anyhow::Result<Arc<Engine>> {
     let engine = Engine::new()
         .with_audit(audit)
@@ -157,11 +160,11 @@ pub fn engine(
             let _ = data;
             None
         };
-        live(engine, backends, browser)
+        live(engine, backends, browser, secrets)
     };
     #[cfg(not(windows))]
     let engine = {
-        let _ = (data, vcam);
+        let _ = (data, vcam, secrets);
         Arc::new(engine)
     };
     Ok(engine)
@@ -254,7 +257,7 @@ fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
 }
 
 /// Makes `engine` live on `backends`, with keys in Credential Manager (behind
-/// [`Redacting`](crate::crash::Redacting)), a publish
+/// [`Redacting`], registering each with `secrets`), a publish
 /// opener that connects RTMP(S) and, when there is one, `browser` for browser sources.
 /// The opener holds the engine weakly, so the engine still drops when the server lets
 /// go of it. The same wiring as the daemon's `live::live`
@@ -264,12 +267,14 @@ fn live(
     engine: Engine,
     backends: Backends,
     browser: Option<Arc<dyn jstream_sources::BrowserBackend>>,
+    secrets: &Secrets,
 ) -> Arc<Engine> {
     // Behind `Redacting`, so each key is registered with the crash reports' redaction
     // as it is stored or read (#353).
-    let keys: Arc<dyn StreamKeyStore> = Arc::new(crate::crash::Redacting(Arc::new(
-        jstream_platform_windows::WindowsCredentials,
-    )));
+    let keys: Arc<dyn StreamKeyStore> = Arc::new(Redacting::new(
+        secrets.clone(),
+        Arc::new(jstream_platform_windows::WindowsCredentials),
+    ));
     let handle = Arc::new(OnceLock::new());
     let engine = engine
         .with_key_store(Arc::clone(&keys))
@@ -330,6 +335,7 @@ mod tests {
     use jstream_control::protocol::{Hello, PROTOCOL_VERSION};
     use jstream_control::{Control, WsConfig, WsControl};
     use jstream_core::AuditMemory;
+    use jstream_crash::Secrets;
     use std::io::{Read, Write};
     use std::net::TcpStream;
     use std::sync::Arc;
@@ -381,14 +387,16 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&collection);
+        let secrets = Secrets::new();
         let engine = engine(
             &collection,
             &std::env::temp_dir(),
             Arc::new(AuditMemory::new()),
             true,
+            &secrets,
         )
         .unwrap_or_else(|e| panic!("an engine: {e:#}"));
-        let host = Host::start(engine, "http://jstream.localhost")
+        let host = Host::start(engine, "http://jstream.localhost", &secrets)
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert!(
             host.ws_url().starts_with("ws://127.0.0.1:"),
@@ -397,7 +405,7 @@ mod tests {
         );
         assert!(host.ws_url().ends_with("/api/v1/ws"));
         assert!(
-            crate::crash::is_registered(host.token()),
+            secrets.is_registered(host.token()),
             "the token is redacted from crash reports (#353)"
         );
         let origin = host.ws_origin();
@@ -467,9 +475,11 @@ mod tests {
             &std::env::temp_dir(),
             Arc::new(AuditMemory::new()),
             false,
+            &Secrets::new(),
         )
         .unwrap_or_else(|e| panic!("an engine: {e:#}"));
-        let host = Host::start(engine, ORIGIN).unwrap_or_else(|e| panic!("a host: {e:#}"));
+        let host = Host::start(engine, ORIGIN, &Secrets::new())
+            .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
         assert_eq!(upgrade_status(&host, "http://evil.example"), "HTTP/1.1 403");
         host.stop();
