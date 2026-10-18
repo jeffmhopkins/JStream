@@ -428,9 +428,11 @@ pub enum Reach {
 /// settings of media, image and other kinds, need the matching grant beside `edit`):
 /// - every asset reference (`{"type":"asset",…}`) is a [`Reach::File`] under the
 ///   `absolute` root, and [`Reach::Unchecked`] under `collection` or `app`;
-/// - every string value with a `://` is a [`Reach::Host`] when it parses as an `http`,
-///   `https`, `ws` or `wss` URL with a host and no credentials, and [`Reach::Unchecked`]
-///   otherwise.
+/// - every string value that starts as an absolute URL does, `scheme://` after
+///   [`url_text`]'s clean-up, is a [`Reach::Host`] when it parses as an `http`, `https`,
+///   `ws` or `wss` URL with a host and no credentials, and [`Reach::Unchecked`] otherwise.
+///   Text with a `://` later in it ("Follow me at https://…") is no URL a parser would
+///   load, so it reaches nothing.
 ///
 /// Values nested in arrays and objects count too. A value without `://` that the engine
 /// would still resolve to a host (a `youtube_chat` video ID) is not found here.
@@ -455,7 +457,11 @@ fn value_reach(value: &serde_json::Value, found: &mut Vec<Reach>) {
         return;
     }
     match value {
-        Value::String(text) if text.contains("://") => found.push(url_reach(text)),
+        Value::String(text) => {
+            if let Some(url) = url_text(text) {
+                found.push(url_reach(&url));
+            }
+        }
         Value::Array(items) => items.iter().for_each(|item| value_reach(item, found)),
         Value::Object(map) => {
             if map.get("type").and_then(Value::as_str) == Some("asset") {
@@ -467,6 +473,24 @@ fn value_reach(value: &serde_json::Value, found: &mut Vec<Reach>) {
         }
         _ => {}
     }
+}
+
+/// `text` as a URL parser reads it, when it starts with `scheme://`: leading and trailing
+/// spaces and control characters dropped, and tabs and newlines removed anywhere (the
+/// WHATWG URL parser does both), with a scheme of an ASCII letter then letters, digits,
+/// `+`, `-` or `.`. `None` for text that doesn't start so, which no parser takes for an
+/// absolute URL.
+fn url_text(text: &str) -> Option<String> {
+    let cleaned: String = text
+        .trim_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect();
+    let (scheme, _) = cleaned.split_once("://")?;
+    let mut chars = scheme.chars();
+    let starts = chars.next().is_some_and(|c| c.is_ascii_alphabetic());
+    let rest = chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    (starts && rest).then_some(cleaned)
 }
 
 /// The `scheme://host:port` a URL reaches, filling in the scheme's default port.
@@ -810,6 +834,40 @@ mod tests {
                 Reach::Host("wss://[::1]:9000".into()),
             ]
         );
+    }
+
+    /// Text with an address in it is no URL; what a parser would still take for one,
+    /// after trimming and dropping tabs and newlines, is checked (#642 review N4).
+    #[test]
+    fn only_text_that_starts_as_a_url_reaches_a_host() {
+        let reach = |text: &str| {
+            let settings: Settings =
+                serde_json::from_value(json!({ "v": text })).expect("a settings map");
+            settings_reach(&settings)
+        };
+        assert_eq!(reach("Follow me at https://example.tv/me"), vec![]);
+        assert_eq!(reach("now playing: song (http://x.example)"), vec![]);
+        assert_eq!(
+            reach("  HTTPS://Example.tv/me  "),
+            vec![Reach::Host("https://example.tv:443".into())]
+        );
+        assert_eq!(
+            reach("ht\ttps://evil.example/"),
+            vec![Reach::Host("https://evil.example:443".into())],
+            "a tab inside the scheme is dropped, as the parser drops it"
+        );
+        assert_eq!(
+            reach("https://evil.example/a page with spaces"),
+            vec![Reach::Host("https://evil.example:443".into())]
+        );
+        assert!(matches!(
+            reach("file:///etc/passwd").as_slice(),
+            [Reach::Unchecked(_)]
+        ));
+        assert!(matches!(
+            reach("git+ssh://host/repo").as_slice(),
+            [Reach::Unchecked(_)]
+        ));
     }
 
     #[test]
