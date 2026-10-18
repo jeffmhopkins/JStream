@@ -8,9 +8,11 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
+use jstream_platform::mailbox::Mailbox;
 use jstream_platform::media::{
     ColorInfo, FrameSize, MediaTime, PixelFormat, VideoFrame, VideoFrameInfo,
 };
+use jstream_platform::nv12::{bgra_to_nv12, even_size};
 use jstream_platform::{
     Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
     CursorCapture, GpuContext, PlatformError, VideoSurface,
@@ -44,9 +46,7 @@ use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemIntero
 use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 use windows::core::{IInspectable, Interface, Ref};
 
-use super::convert::{bgra_to_nv12, even_size};
 use super::id::{monitor_id, parse_monitor, parse_window, window_id};
-use super::mailbox::Mailbox;
 use super::targets;
 use crate::clock::timebase;
 use crate::com::{MtaUsage, OsResult};

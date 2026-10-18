@@ -229,10 +229,12 @@ state machine. Contents:
   pointer as each source's `show_cursor` says, stopping it when its source leaves
   and starting it again after a failed start or a lost target
   (`src/tests/cpu_pipeline/captures.rs`), which capture path an output takes and each
-  fallback, an output compositing GPU capture frames, and a browser page painting on
+  fallback, an output compositing GPU capture frames, a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
-  the stage stops, on a software device that stands in for the platform's
-  (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
+  the stage stops, and an output whose encoder takes GPU frames getting NV12 encode
+  targets with no readback, on a software device that stands in for the platform's
+  (`src/tests/gpu_capture.rs`; the last skips without `TEXTURE_FORMAT_NV12`), a
+  page's GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
   display and a window that each start a WGC capture (`src/tests/windows_gpu.rs`,
@@ -321,8 +323,8 @@ state machine. Contents:
   by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
-Not here yet: live audio values (faders), the audio and outputs snapshots, a GPU encode target, and
-the platform's Windows devices. See
+Not here yet: live audio values (faders), the audio and outputs snapshots, and the
+platform's Windows devices. See
 [Design › Not yet](#design).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
@@ -390,7 +392,7 @@ Live API client behind the YouTube commands and `youtube` outputs), `serde_json`
 values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
 settings, and the CLAP kinds' parameter defaults), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
-[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
+[ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
 source scopes)
@@ -936,6 +938,7 @@ What each stage contributes:
 | Render loop | ticks skipped to catch up with the media clock, published by the render thread | `render_ticks` |
 | Mixer input | overrun and late frames, each input while it records | `audio_frames` |
 | Mix bus | frames skipped when the mixer falls behind the clock | `audio_frames` |
+| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, one per such session, published by the render thread | `encode_frames` |
 | Video encode session | input drops (`dropped_queue_full` + `dropped_encoder_busy`) | `encode_frames` |
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
@@ -1298,11 +1301,12 @@ emits `stopping` and `stopped` as from `active`.
 The render thread reads the capture mailbox of each capture the render snapshot places
 (see [Runtime](#runtime)), composites the program mix of the render snapshot (see
 *Snapshots*) at 30 frames per second, repeats a capture's last frame when its mailbox
-is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. Without the platform's GPU context it opens its
-compositor on a hardware adapter when the machine has one, and on the software adapter
-otherwise (`OpenOptions::hardware`): on WARP a 720p program ran at about 10 fps
-(#433). It draws at the canvas size the collection has when the
+is empty, and hands each mix's composite to the encoder sessions it feeds in the kind
+each takes: converted to NV12 in one of the platform's encode targets for a session on
+the GPU path, read back as RGBA8 for the others (see [Runtime](#runtime)). Without the
+platform's GPU context it opens its compositor on a hardware adapter when the machine
+has one, and on the software adapter otherwise (`OpenOptions::hardware`): on WARP a
+720p program ran at about 10 fps (#433). It draws at the canvas size the collection has when the
 program stage opens, rounded down to even sizes for NV12 (`output_size`), so every
 output encodes at the canvas, not the display (#433); a canvas change while outputs
 run takes effect when the stage next opens. Each capture keeps its own size, and the
@@ -1351,9 +1355,11 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 
 The render thread reuses each capture's buffer, its composite and readback buffers, and
 its GPU textures through the cache. Each tick allocates, for every mix it draws, one
-frame-sized buffer per encoder session fed from that mix, the frame the session takes
-ownership of (`VideoInput::push` cannot hand buffers back), and the item list `compose`
-fills for that mix; then once per tick the cache key of each capture that names a
+frame-sized buffer per encoder session on the CPU path fed from that mix, the frame the
+session takes ownership of (`VideoInput::push` cannot hand buffers back), and the item
+list `compose` fills for that mix; a session on the GPU path gets a handle to an encode
+target, and the NV12 pass binds each target once. Then once per tick it allocates the
+cache key of each capture that names a
 display or window (a copy of its `target`), the frame-fence callback, the premultiplied
 copy of a CPU capture that changed, and on the GPU path an import (a bind group) the
 first time each of the platform's capture textures is shown. A virtual camera's tap
@@ -1574,11 +1580,12 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 - Video filter kinds, and blend modes other than `normal`, in the compositor.
 - Activity gains that fade with a transition (T1: only cuts exist, so every weight
   is 0 or 1), and meters for every bus's true peak and loudness.
-- The audio and outputs snapshots, the mixer's parameter channel and its part in the
-  live-value handover, and a GPU encode target. `output.start` is a cut of
+- The audio and outputs snapshots, and the mixer's parameter channel and its part in
+  the live-value handover. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the video mixes with their
-  captured displays and windows, a CPU readback into the encoder, and the platform
-  fakes in the test. Other sources show frames the host injects with `set_source_frame`.
+  captured displays and windows, an encode target or a CPU readback into the encoder,
+  and the platform fakes in the test. Other sources show frames the host injects with
+  `set_source_frame`.
 - Keeping a window source on its window across restarts (its target ID names a window
   handle, which a new session of the app doesn't keep).
 
@@ -1602,8 +1609,25 @@ encoder's size, the program at the canvas size: the mix's scene and the scenes i
 nests, with every `display` and `window` source that has no stored frame showing its
 capture. With no scene it draws the primary display's capture scaled to fill the
 canvas, fitted to the frame. A capture whose mailbox is empty repeats its last frame.
-It reads the frames back. This cut encodes that CPU readback, and the readback is
-counted (`OutputStats::readbacks`, one per mix drawn).
+
+**Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
+platform's context when there is one (`VideoSession::open_on`): it takes GPU frames when
+the codecs can encode the context's encode targets (`Codecs::on_context`), and CPU
+frames otherwise, which is logged. The render thread learns which with the session's
+input. For each mix with a session on the GPU path it allocates a ring of
+`encode_target`s at the mix's size once, and converts each of the mix's composites
+into the next one the ring alone holds (besides the last frame converted, kept to
+repeat it): a target is written again only once every frame queued from it has been
+read or dropped. When frames still hold every target (the encoder has fallen behind),
+the tick's frame is dropped for that mix's GPU sessions and counted in
+`encode_frames`, never written over a held one. The conversion (`Nv12Converter`,
+BT.709 in the target's range) is a submit of its own that stages the target's fence.
+It pushes that target, stamped with the tick's time, to every such session. Sessions
+on the CPU path get the mix read back as RGBA8, and virtual cameras the program; a
+mix none of them is fed is not read back, and each readback is counted
+(`OutputStats::readbacks`, one per mix read back). A mix that stops being drawn hands
+its ring to the collector; the rest drop before the compositor and the context. A
+target the platform refuses is fatal: the session could not be fed.
 
 **Capture path** (ARCH › GPU pipeline, step 6). Opening the program stage asks the
 platform's `GpuInterop` for its device. With one, the render thread's compositor opens on that
@@ -1673,13 +1697,14 @@ writes it to the file, syncing each fragment (writes may block on the disk; the
 encoder queues absorb that and drop when full). The `output.start` that opens the
 program stage also starts `jstream-stats`, which is not a real-time thread: it emits
 `stats.tick` about once a second from the stage counters, and once more when the last
-output stops, and `meters.tick` about ten times a second. The render loop publishes capture mailbox skips, and a tick that falls a
+output stops, and `meters.tick` about ten times a second. The render loop publishes capture mailbox skips and the frames an encode ring drops
+(`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
-values, GPU images, finished sessions' inputs, the frame buffers of a mix no session
-needs any more, replaced lists of bus and source scopes) goes to the program stage's
+values, GPU images, finished sessions' inputs, the frame buffers and encode targets of a
+mix no session needs any more, replaced lists of bus and source scopes) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer
 threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a
@@ -1689,8 +1714,7 @@ publish or recording write failure, an encoder stream that ends before stop, a r
 or mixer panic) is a channel message to a watcher the control thread started; the
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
 running output. Frame hand-off is the encoder session queues. The audio and outputs
-snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer also has its own collector, which frees input rings, their counters and
+snapshots are still rows of the ARCH thread table, not this cut. The mixer also has its own collector, which frees input rings, their counters and
 their own blocks, removed buses' state, and removed filter chains and filters. The program stage's
 `jstream-audio-sources` thread opens and closes the audio sources' inputs as the
 collection changes (see *Audio sources* in Design); it takes no engine lock and is
