@@ -168,8 +168,16 @@ It has:
   from the stream's first output sample time) and the host time its first frame is
   expected to play, on `MachClock`. The handler's channels go to the planned device
   channels, and the rest stay silent; a buffer list the plan doesn't match plays
-  silence until the watcher re-plans. Desktop and application audio are refused before
-  14.2 (`check_input`) and, like `processes`, report `Unsupported` for now.
+  silence until the watcher re-plans. **`processes`** lists, on 14.2 and later, the
+  processes Core Audio knows as audio clients (`kAudioHardwarePropertyProcessObjectList`),
+  which are the ones a process tap can record, not every process as on Windows. Each has
+  its PID, its parent's PID and its executable's file name, read from the kernel by PID
+  (`proc_pidpath`, and `proc_pidinfo`'s short BSD info, which the kernel gives for other
+  users' processes such as system daemons too), falling back to the kernel's short name,
+  the bundle ID, then the PID; one that exits while being read is left out. Before 14.2 it is
+  `MissingComponent` naming the update. Desktop and
+  application audio are refused before 14.2 (`check_input`) and report `Unsupported`
+  for now.
 
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
@@ -184,13 +192,13 @@ The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until i
 ADR.
 
 Tests run on every platform where they can: the capture's target IDs, names, sizes, frame
-layouts and statuses, permission steps, the keychain item names and the error mapping are
-platform independent. The macOS ones (the clock, reading the release, encoding with
+layouts and statuses, permission steps, process names and parents, the keychain item
+names and the error mapping are platform independent. The macOS ones (the clock, reading the release, encoding with
 VideoToolbox, which falls back to Apple's software encoder on a Mac without a hardware
 one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
 the login keychain with uniquely named items, deleted afterwards, listing audio
-devices and their input formats, refusing an unknown output, and reading the Microphone
-status without prompting) need no permission, so they run in the `macos` CI job. The
+devices and their input formats, refusing an unknown output, reading the Microphone
+status without prompting, and listing processes) need no permission, so they run in the `macos` CI job. The
 `hw-tests` feature is for tests that need the Screen Recording, Camera, Microphone or
 system audio recording permission (listing and capturing a display, the
 missing-permission error, and recording the default input), speakers (playing a tone on
