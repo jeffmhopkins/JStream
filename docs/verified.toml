@@ -3516,7 +3516,7 @@ stamp = { hash = "b3:0c768a21be15de21" }
 stamp = { hash = "b3:3adcff769a347c8c" }
 
 ["CRATE-jstream-ui#build"."body"]
-stamp = { hash = "b3:00f87ebc465a51ad", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Swapped in #675's revised text (41bbb43a). Re-read Build: the ui-dev profile (dev, no debug info, stripped) picked by data-cargo-profile-dev; without it the wasm is over the server's limit; no panic hook is installed (none in src), so a panic shows only as RuntimeError: unreachable with unnamed frames in debug. Matches." }
+stamp = { hash = "b3:d5d04df86b3b2eb8", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: added the pointer to CI's ui-e2e job and tests/e2e/README.md; trunk build steps unchanged and still what CI runs" }
 
 ["CRATE-jstream-ui#build"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -3528,7 +3528,7 @@ stamp = { hash = "b3:3629d078a0c82378", by = "agent:claude@session_016SaCkMFyjjx
 stamp = { hash = "b3:f87a888e55181fde" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/index.html"]
-stamp = { hash = "b3:68005f7e328eef0e", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Cherry-picked #675's fix (f2f8369c) onto #658. Re-read Build: trunk build is the ui-dev profile, index.html's rust link carries data-cargo-profile-dev=ui-dev, the profile is dev without debug info and stripped, release keeps its own profile; matches Cargo.toml and index.html." }
+stamp = { hash = "b3:8547ab2b9342942f" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -3555,7 +3555,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:fd8ba08fe1f048e1", by = "agent:claude-ui-features", note = "Rewrote 'What it shows', 'Selecting and dragging', 'Snapping' and the undo sentence for this PR. mod.rs: layout is a Memo of Layout::of(studio.collection, studio.selection.scene) and the selection is studio.selection.item via select_item; its own load/event loop and Undo/Redo/Snap toolbar are gone; caption '<scene> · W × H', legacy note top left, hover outline, cursors, 2px outline, 10px handles, 14px knob on a 30px stem, readout pill (readout_text), floating tools with Move and Snapping; history errors other than empty go to studio.problem. model.rs: load() replaced by the pure Layout::of, Depths::after_batch dropped. transform.rs: Modifiers{ctrl}, Pointer half speed, MIN_SIZE 10, aspect kept on corners and edges unless Ctrl, corner follows the snapped axis, Move doesn't snap with Ctrl or when rotated, ROTATE_STEP 45 on Ctrl, ROTATE_SNAP 3, 0.1° rounding, ROTATE_OFFSET 31. ADR-0022/0032 claims (last writer wins, one batch per gesture) unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:ef27a7810d169c12", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Swapped in #675's revised text (41bbb43a). Re-read the Debug bundle size bullet: an unstripped build's name section exceeds the server's UI file limit (jstream-server Design: at most 64 MiB), so the debug build uses the ui-dev profile from index.html's data-cargo-profile-dev; AnyView still keeps the code smaller; matches Cargo.toml and index.html." }
+stamp = { hash = "b3:1ce0e7c2d9ad5b0e", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304 adds the Studio mode bullet; merging wave/m1-3 brought the dock, so the bullet now names the Transitions panel (tab beside Outputs in Editing, under the canvas in Live) and the workspace bullet counts six panels; style.css drops the old under-the-canvas frame; re-read against studio.rs, dock.rs and workspace.rs; holds" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:99f6d98a873b37b7", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via control#design (mock privacy bullet); the UI doesn't show privacy yet (N4 follow-up); holds | merge: merged wave/m1-3 at ae19d3f1 (B11 folders/labels/metadata at 0.31 (#323), UI dark theme (#495), render filter frame report, browser permissions): control README dep changed; UI text unaffected (the dark theme is the wave's own change)" }
@@ -4569,7 +4569,7 @@ stamp = { hash = "b3:8cea4845a5663521", by = "agent:claude@session_016SaCkMFyjjx
 stamp = { hash = "b3:6f67cfe4e2c4aa4e", by = "agent:claude-ui-features", note = "style.css: the WS-01 palette variables, 10px scrollbars with a #3a3f48 thumb, 2px accent focus ring and #2b4a7a selection are in, so WS-01 and WS-03 are built; the Plex-first stack falls back since no font is bundled (WS-02 stays a decision); the problem bar uses the menu colours (WS-08 still to build)." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/index.html"]
-stamp = { hash = "b3:68005f7e328eef0e", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "index.html changed only in the rust link's data-cargo-profile-dev attribute (#675's fix, cherry-picked); the theme rows (palette in style.css, fonts, scrollbars, icons, controls) don't depend on it and still hold." }
+stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude-ui-features", note = "style.css: 7 colour variables under color-scheme light dark with a prefers-color-scheme dark block and system-ui font, so WS-01/WS-03 to build and WS-08's bottom-right Dismiss box hold; index.html: only the Trunk css and rust links, no font link, matching WS-02 waiting on bundling Plex." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:938ada584218df29", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304's studio block now only lays out the panel inside the dock and uses the wave's theme variables; WS rows unchanged; holds" }
