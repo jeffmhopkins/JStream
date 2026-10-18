@@ -316,7 +316,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `index.html`), which strips the symbols and leaves no name section
   ([Build](#build)). The mixer's strips, rows, meters, faders and mute buttons also
   return `AnyView` rather than `impl IntoView`, which keeps a nested view's type out of
-  its parents' names and so the code smaller.
+  its parents' types, and so out of their names in an unstripped build.
 
 <a id="canvas"></a>
 ## Canvas
