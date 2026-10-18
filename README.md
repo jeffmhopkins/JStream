@@ -64,7 +64,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A3 | Daemon goes live on Windows | M1a | 🧪 Windows run | Windows 11 Pro N run (#333) | #226 |
 | A4 | Go-live runbook and smoke | M1a | 🧪 Windows run | smoke script run | #234 |
 | A6b | Daemon YouTube wiring | M1a | 🌊 its wave lands, then 👤 maintainer, then 🧪 Windows run | #312 merged into wave/m1-2; sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
-| C4c | Webcam source (CPU path; MJPEG and paired audio to follow) | M1b | 🔨 build, then 🌊 its wave lands, then 🧪 Windows run |  | #654 |
+| C4c | Webcam source (CPU path, MJPEG on Windows; paired audio to follow) | M1b | 🔨 build, then 🌊 its wave lands, then 🧪 Windows run |  | #654, #658 |
 | C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
 | C3 | Display and window capture sources | M1b | 🌊 its wave lands, then 🧪 Windows run | #365 merged into wave/m1-2; Windows run #378 | #365 |
 | C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
@@ -155,7 +155,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C6 | Nested scene rendering | ✅ merged | #147 |
 | C4a | Video device trait | ✅ merged | #158 |
 | C4b | Media Foundation webcam backend | ✅ merged | #177, #225, #227 |
-| C4c | Webcam source (CPU path; MJPEG and paired audio to follow) | 🔍 in review | #654 |
+| C4c | Webcam source (CPU path, MJPEG on Windows; paired audio to follow) | 🔍 in review | #654, #658 |
 | C1a | Sources crate: color, image | ✅ merged | #179, #217 |
 | C1b | Sources render live | ✅ merged | #222 |
 | C2 | Text source | ✅ merged | #221 |

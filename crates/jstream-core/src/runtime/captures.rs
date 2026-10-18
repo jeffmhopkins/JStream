@@ -208,7 +208,9 @@ fn open_device(
     }
     let format = device_format(&formats, decoder.is_some()).ok_or_else(|| match &no_decoder {
         Some(err) => {
-            format!("{id} offers only MJPEG, and the platform has no MJPEG decoder: {err}")
+            format!(
+                "{id} offers no uncompressed format the engine reads, and the platform has no MJPEG decoder: {err}"
+            )
         }
         None => format!("{id} offers no format the engine reads"),
     })?;
