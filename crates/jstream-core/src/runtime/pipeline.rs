@@ -566,6 +566,10 @@ pub(crate) struct Program {
     gpu_captures: Arc<AtomicU64>,
     gpu_fallbacks: Arc<AtomicU64>,
     gpu_losses: Arc<AtomicU64>,
+    /// Set by the render thread once it leaves the platform's context (a fallback or a
+    /// lost device), and never cleared: from then on a new video session opens on the
+    /// CPU path, since the render thread has no encode targets for it (#699).
+    off_context: Arc<AtomicBool>,
     /// The mixer's inputs, one per audio source, and the thread that follows the
     /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
     /// only so the program can be shared.
@@ -603,7 +607,7 @@ impl Program {
             };
             let video = Arc::new(open_video(
                 self.codecs.as_ref(),
-                self.context.as_deref(),
+                self.session_context(),
                 &feed,
                 &key.2,
             )?);
@@ -617,6 +621,16 @@ impl Program {
                 drop_guard: Some(DropGuard::new(engine.drop_ledger(), ids)),
             })
         })
+    }
+
+    /// The context a new video session may open on: none once the render thread has
+    /// left it, so a session opened after a fallback reads back on the CPU path instead
+    /// of asking for encode targets the render thread can't give, which would fail every
+    /// output on the stage (#699).
+    fn session_context(&self) -> Option<&GpuContext> {
+        self.context
+            .as_deref()
+            .filter(|_| !self.off_context.load(Ordering::Acquire))
     }
 
     /// The master bus's audio encode on `encoders`, shared by every output on them
@@ -1470,6 +1484,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let gpu_captures = Arc::new(AtomicU64::new(0));
     let gpu_fallbacks = Arc::new(AtomicU64::new(0));
     let gpu_losses = Arc::new(AtomicU64::new(0));
+    let off_context = Arc::new(AtomicBool::new(false));
     let failures = Arc::new(Failures::default());
     let (ready_tx, ready_rx) = mpsc::channel();
     let (video_taps, video_inputs) = mpsc::channel();
@@ -1512,6 +1527,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             gpu_captures: Arc::clone(&gpu_captures),
             gpu_fallbacks: Arc::clone(&gpu_fallbacks),
             gpu_losses: Arc::clone(&gpu_losses),
+            off_context: Arc::clone(&off_context),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
         };
@@ -1570,6 +1586,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         gpu_captures,
         gpu_fallbacks,
         gpu_losses,
+        off_context,
         audio: Mutex::new(audio),
         capture_drops,
         bus,
@@ -2045,6 +2062,8 @@ struct RenderJob {
     gpu_captures: Arc<AtomicU64>,
     gpu_fallbacks: Arc<AtomicU64>,
     gpu_losses: Arc<AtomicU64>,
+    /// Set once the thread leaves the platform's context ([`Program::session_context`]).
+    off_context: Arc<AtomicBool>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
 }
@@ -2332,6 +2351,7 @@ fn render_loop(job: RenderJob) {
         gpu_captures,
         gpu_fallbacks,
         gpu_losses,
+        off_context,
         drops,
         fail,
     } = job;
@@ -2528,6 +2548,7 @@ fn render_loop(job: RenderJob) {
                         Switch::start(&open, sources, open_timeout, why.clone(), leave_gpu)
                     };
                     on_context = false;
+                    off_context.store(true, Ordering::Release);
                     draw_errors = 0;
                     match started {
                         Ok(started) => switch = Some(started),
@@ -2548,6 +2569,7 @@ fn render_loop(job: RenderJob) {
                     // errors run on to MAX_DRAW_ERRORS, as without one.
                     if on_context && draw_errors >= GPU_FALLBACK_ERRORS && !frames.feeds_gpu() {
                         on_context = false;
+                        off_context.store(true, Ordering::Release);
                         let why = SwitchWhy::Failing {
                             cause: err,
                             errors: draw_errors,

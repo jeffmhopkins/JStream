@@ -4,18 +4,36 @@
 //! backend cancels the ones it refuses.
 //!
 //! - `http`, `https`, `ws` and `wss` are allowed for every page: overlays load fonts,
-//!   scripts and data from the web. Except (#347): a page loaded from the internet may
-//!   not reach this computer or the local network unless its source opts in
-//!   ([`PageSpec::local_network`]). A target is local when its host is a loopback,
-//!   private, link-local, shared (CGNAT) or unspecified address, `localhost` or a name
-//!   under it, a single-label name (`nas`, `router`), or a name under `.local`, `.lan`,
-//!   `.home.arpa` or `.internal`. A page loaded from a local file, or from a local
-//!   address itself, is the user's own and may. The check reads the URL, whose host
+//!   scripts and data from the web. Except (#347): a page from the internet may not
+//!   reach this computer or the local network. A target is local when its host is a
+//!   loopback, private, link-local, shared (CGNAT) or unspecified address, `localhost`
+//!   or a name under it, a single-label name (`nas`, `router`), or a name under
+//!   `.local`, `.lan`, `.home.arpa` or `.internal`. The check reads the URL, whose host
 //!   Chromium has already canonicalised (an address such as `0x7f.1` arrives as
 //!   `127.0.0.1`). It can't see a public name that resolves to a local address, whether
 //!   fixed (`*.nip.io`) or by DNS rebinding. Chromium's own Local Network Access checks
-//!   can, at the network layer: they ask the page's permission handler first, which
-//!   answers with [`local_allowed`](RequestPolicy::local_allowed) (`permission.rs`).
+//!   are meant to, at the network layer (not yet confirmed on a Windows run, #347): they
+//!   ask the page's permission handler first, which answers with
+//!   [`local_allowed_from`](RequestPolicy::local_allowed_from) (`permission.rs`).
+//!
+//!   Who may is decided by the origin that makes the request (#721), as CEF names it:
+//!   - a document whose own origin is local (a `localhost` dev server, a LAN widget) is
+//!     the user's own and may;
+//!   - a document from the source's own origin may when the source's location is itself
+//!     local or its source opts in ([`PageSpec::local_network`]). The opt-in covers that
+//!     origin exactly (scheme, host and port), never a third-party frame inside it nor a
+//!     page it navigates or redirects to;
+//!   - a document from a local file or a blank page has an opaque origin (`null`), which
+//!     may only in a file or blank source whose main frame is still on a file or blank
+//!     page: once the main frame navigates to the web
+//!     ([`main_frame_to`](RequestPolicy::main_frame_to)), an opaque frame inside it is
+//!     the web's;
+//!   - a request CEF names no origin for was started by the browser itself (the
+//!     source's own load, a reload) and is judged as the source's own.
+//!
+//!   Every other origin from the internet is refused. CEF can't tell one opaque origin
+//!   from another, so a sandboxed or `data:` frame that a third-party frame inside a
+//!   file page creates counts as the file page's.
 //! - `data:` and `blob:` are allowed: they hold only what the page itself made.
 //! - `about:blank` and `about:srcdoc` are allowed; other `about:` pages are not.
 //! - `file:` is allowed only for a page loaded from a local file, and only for files in
@@ -34,7 +52,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::{PageLocation, PageSpec};
 
@@ -44,10 +62,38 @@ pub struct RequestPolicy {
     /// The folder a file page may read below. `None` for a web or blank page, and for a
     /// file page whose folder could not be resolved: then no file is allowed.
     folder: Option<Folder>,
-    /// Whether requests to this computer and the local network are refused: a page from
-    /// the internet whose source didn't opt in.
-    local_refused: bool,
+    /// Where the source's own content comes from.
+    home: Home,
+    /// Whether the source's own content may reach this computer and the local network:
+    /// its location is local, a file or blank, or its source opted in.
+    home_local: bool,
+    /// Whether the main frame has navigated away from the source's own location, so an
+    /// opaque origin is no longer the file or blank page's
+    /// ([`main_frame_to`](Self::main_frame_to)).
+    left_home: AtomicBool,
     denied: AtomicU64,
+}
+
+/// Where a page's own content comes from, which its local-network access covers.
+#[derive(Debug, PartialEq, Eq)]
+enum Home {
+    /// A web page from this origin; `None` when its URL's origin can't be read.
+    Web(Option<Origin>),
+    /// A local file.
+    File,
+    /// A blank page.
+    Blank,
+}
+
+/// A web origin, as [`Origin::parse`] reads it.
+#[derive(Debug, PartialEq, Eq)]
+struct Origin {
+    /// Lower case.
+    scheme: String,
+    /// As [`url_host`] gives it.
+    host: String,
+    /// The port, or `None` for the scheme's default (named or not).
+    port: Option<u16>,
 }
 
 /// A file page's folder, both ways the policy compares it.
@@ -72,20 +118,22 @@ impl RequestPolicy {
     /// The rules for the page `spec` opens.
     pub fn for_page(spec: &PageSpec) -> Self {
         let mut policy = Self::for_location(&spec.location);
-        policy.local_refused &= !spec.local_network;
+        policy.home_local |= spec.local_network;
         policy
     }
 
     /// The rules for a page loaded from `location`, with requests to the local network
     /// refused when it is a page from the internet.
     pub fn for_location(location: &PageLocation) -> Self {
-        let local_refused = match location {
+        let home = match location {
+            PageLocation::Web(url) => Home::Web(Origin::parse(url)),
+            PageLocation::File(_) => Home::File,
+            PageLocation::Blank => Home::Blank,
+        };
+        let home_local = match &home {
             // A page whose host can't be read counts as one from the internet.
-            PageLocation::Web(url) => url
-                .split_once(':')
-                .and_then(|(_, rest)| url_host(rest))
-                .is_none_or(|host| !is_local(&host)),
-            PageLocation::Blank | PageLocation::File(_) => false,
+            Home::Web(origin) => origin.as_ref().is_some_and(|o| is_local(&o.host)),
+            Home::File | Home::Blank => true,
         };
         let folder = match location {
             PageLocation::File(file) => file.parent().and_then(|dir| {
@@ -98,25 +146,68 @@ impl RequestPolicy {
         };
         Self {
             folder,
-            local_refused,
+            home,
+            home_local,
+            left_home: AtomicBool::new(false),
             denied: AtomicU64::new(0),
         }
     }
 
-    /// Whether the page may request `url`. A refusal is counted ([`denied`](Self::denied)).
+    /// Whether the page's own content may request `url`: [`check_from`](Self::check_from)
+    /// with no initiator.
     pub fn check(&self, url: &str) -> Verdict {
-        let verdict = self.verdict(url);
+        self.check_from(url, None)
+    }
+
+    /// Whether a request for `url` that `initiator` makes may go ahead: CEF's
+    /// `request_initiator`, the origin of the document that makes it, or `None` (or
+    /// empty) for one the browser itself started. A refusal is counted
+    /// ([`denied`](Self::denied)).
+    pub fn check_from(&self, url: &str, initiator: Option<&str>) -> Verdict {
+        let verdict = self.verdict(url, initiator);
         if verdict != Verdict::Allow {
             self.denied.fetch_add(1, Ordering::Relaxed);
         }
         verdict
     }
 
-    /// Whether the page may make requests to this computer and the local network: its
-    /// source opted in, or the page is itself local, a file or blank. Chromium's Local
-    /// Network Access prompt is answered with this (`permission.rs`).
-    pub fn local_allowed(&self) -> bool {
-        !self.local_refused
+    /// Whether `initiator` (an origin, as for [`check_from`](Self::check_from)) may make
+    /// requests to this computer and the local network: it is itself local, it is the
+    /// source's own origin and the source's location is local or it opted in, or it is
+    /// opaque in a file or blank page whose main frame hasn't left it. Chromium's Local
+    /// Network Access prompt is answered with this, for the prompt's requesting origin
+    /// (`permission.rs`).
+    pub fn local_allowed_from(&self, initiator: Option<&str>) -> bool {
+        let Some(initiator) = initiator.filter(|origin| !origin.is_empty()) else {
+            // The browser started it: the source's own load, or a reload.
+            return self.home_local;
+        };
+        match Origin::parse(initiator) {
+            Some(origin) if is_local(&origin.host) => true,
+            Some(origin) => self.home_local && self.home == Home::Web(Some(origin)),
+            // Opaque (`null`), or a file's.
+            None => {
+                matches!(self.home, Home::File | Home::Blank)
+                    && !self.left_home.load(Ordering::Acquire)
+            }
+        }
+    }
+
+    /// The main frame navigates to `url`, a request [`check_from`](Self::check_from)
+    /// allowed: whether it is still on the source's own location decides what an opaque
+    /// origin may do from then on. Called before the new document exists, so its requests
+    /// are judged by where it is. A navigation that never commits (a download, a `204`)
+    /// leaves it as if it had.
+    pub fn main_frame_to(&self, url: &str) {
+        let scheme = url
+            .split_once(':')
+            .map(|(scheme, _)| scheme.to_ascii_lowercase());
+        let home = match &self.home {
+            Home::File => scheme.as_deref() == Some("file"),
+            Home::Blank => scheme.as_deref() == Some("about"),
+            Home::Web(own) => own.is_some() && Origin::parse(url) == *own,
+        };
+        self.left_home.store(!home, Ordering::Release);
     }
 
     /// How many requests the page has had refused.
@@ -124,12 +215,12 @@ impl RequestPolicy {
         self.denied.load(Ordering::Relaxed)
     }
 
-    fn verdict(&self, url: &str) -> Verdict {
+    fn verdict(&self, url: &str, initiator: Option<&str>) -> Verdict {
         let Some((scheme, rest)) = url.split_once(':') else {
             return Verdict::Deny("the URL has no scheme");
         };
         match scheme.to_ascii_lowercase().as_str() {
-            "http" | "https" | "ws" | "wss" => self.network(rest),
+            "http" | "https" | "ws" | "wss" => self.network(rest, initiator),
             "data" | "blob" => Verdict::Allow,
             "about" if matches!(before_query(rest), "blank" | "srcdoc") => Verdict::Allow,
             "file" => self.file(rest),
@@ -138,16 +229,14 @@ impl RequestPolicy {
     }
 
     /// The verdict on an `http`, `https`, `ws` or `wss` URL, given what follows the
-    /// scheme's `:`.
-    fn network(&self, rest: &str) -> Verdict {
-        if !self.local_refused {
-            return Verdict::Allow;
-        }
+    /// scheme's `:`, that `initiator` requests.
+    fn network(&self, rest: &str, initiator: Option<&str>) -> Verdict {
         match url_host(rest) {
             Some(host) if !is_local(&host) => Verdict::Allow,
+            _ if self.local_allowed_from(initiator) => Verdict::Allow,
             Some(_) => Verdict::Deny(
                 "a page from the internet may not reach this computer or the local network \
-                 unless its source allows it",
+                 unless it is the source's own page and its source allows it",
             ),
             None => Verdict::Deny("the URL has no host"),
         }
@@ -179,18 +268,54 @@ impl RequestPolicy {
 /// (`//user@host:port/path`): lower case, without a trailing dot, and an IPv6 address
 /// without its brackets. `None` without a `//` authority or with an empty host.
 fn url_host(rest: &str) -> Option<String> {
+    host_port(rest).map(|(host, _)| host)
+}
+
+/// [`url_host`], and what follows the host's `:` (the port as written), if anything.
+fn host_port(rest: &str) -> Option<(String, Option<&str>)> {
     let authority = rest
         .strip_prefix("//")?
         .split(['/', '?', '#', '\\'])
         .next()
         .unwrap_or_default();
     let host_port = authority.rsplit('@').next().unwrap_or_default();
-    let host = match host_port.strip_prefix('[') {
-        Some(v6) => v6.split(']').next().unwrap_or_default(),
-        None => host_port.split(':').next().unwrap_or_default(),
+    let (host, port) = match host_port.strip_prefix('[') {
+        Some(v6) => {
+            let (host, after) = v6.split_once(']').unwrap_or((v6, ""));
+            (host, after.strip_prefix(':'))
+        }
+        None => match host_port.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (host_port, None),
+        },
     };
     let host = host.trim_end_matches('.').to_ascii_lowercase();
-    (!host.is_empty()).then_some(host)
+    (!host.is_empty()).then_some((host, port))
+}
+
+impl Origin {
+    /// The origin of an `http`, `https`, `ws` or `wss` URL, or of an origin as CEF
+    /// writes one (`https://example.com`, a trailing `/` and path ignored). `None` for
+    /// any other scheme, `null`, a URL without a host, or a port that isn't a number.
+    fn parse(url: &str) -> Option<Self> {
+        let (scheme, rest) = url.split_once(':')?;
+        let scheme = scheme.to_ascii_lowercase();
+        let default = match scheme.as_str() {
+            "http" | "ws" => 80,
+            "https" | "wss" => 443,
+            _ => return None,
+        };
+        let (host, port) = host_port(rest)?;
+        let port = match port.filter(|port| !port.is_empty()) {
+            Some(port) => port.parse::<u16>().ok()?,
+            None => default,
+        };
+        Some(Self {
+            scheme,
+            host,
+            port: Some(port).filter(|&port| port != default),
+        })
+    }
 }
 
 /// Whether `host` (as [`url_host`] gives it) names this computer or the local network.
@@ -536,7 +661,7 @@ mod tests {
         }
         assert_eq!(web.denied(), local.len() as u64);
         // And Chromium's Local Network Access prompt is refused for it (`permission.rs`).
-        assert!(!web.local_allowed());
+        assert!(!web.local_allowed_from(None));
 
         // The source opted in.
         let spec = PageSpec {
@@ -547,7 +672,7 @@ mod tests {
             local_network: true,
         };
         let allowed = RequestPolicy::for_page(&spec);
-        assert!(allowed.local_allowed());
+        assert!(allowed.local_allowed_from(None));
         for url in local.iter().chain(&public) {
             assert_eq!(allowed.check(url), Verdict::Allow, "{url}");
         }
@@ -557,7 +682,7 @@ mod tests {
             ..spec
         });
         assert!(deny(refused.check(local[0])));
-        assert!(!refused.local_allowed());
+        assert!(!refused.local_allowed_from(None));
 
         // A page that is itself local (a dev server, a LAN widget), a local file and a
         // blank page are the user's own: no refusal.
@@ -569,12 +694,166 @@ mod tests {
             PageLocation::Blank,
         ] {
             let policy = RequestPolicy::for_location(&location);
-            assert!(policy.local_allowed(), "{location:?}");
+            assert!(policy.local_allowed_from(None), "{location:?}");
             for url in local {
                 assert_eq!(policy.check(url), Verdict::Allow, "{location:?} {url}");
             }
         }
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    fn web_spec(url: &str, local_network: bool) -> PageSpec {
+        PageSpec {
+            location: PageLocation::Web(url.into()),
+            size: jstream_media::FrameSize::new(16, 16).expect("size"),
+            fps: 30,
+            css: String::new(),
+            local_network,
+        }
+    }
+
+    /// Whether `initiator` may reach a local target, by both of the policy's answers:
+    /// the request check and Chromium's prompt.
+    fn reaches(policy: &RequestPolicy, initiator: Option<&str>) -> bool {
+        let by_request =
+            policy.check_from("http://127.0.0.1:8080/api", initiator) == Verdict::Allow;
+        assert_eq!(
+            by_request,
+            policy.local_allowed_from(initiator),
+            "{initiator:?}: the request check and the prompt disagree"
+        );
+        // A public target is never refused, whoever asks.
+        assert_eq!(
+            policy.check_from("https://cdn.example.org/x.js", initiator),
+            Verdict::Allow
+        );
+        by_request
+    }
+
+    /// #721: a source's local-network opt-in covers its own origin only, never a
+    /// third-party frame inside it.
+    #[test]
+    fn the_opt_in_covers_only_the_sources_own_origin() {
+        let policy = RequestPolicy::for_page(&web_spec("https://example.com/overlay", true));
+        for own in [
+            None,
+            Some(""),
+            Some("https://example.com"),
+            Some("https://example.com/"),
+            Some("HTTPS://Example.COM.:443"),
+        ] {
+            assert!(reaches(&policy, own), "{own:?}");
+        }
+        for other in [
+            "https://ads.example.net",
+            "https://sub.example.com",
+            "http://example.com",
+            "https://example.com:8443",
+            "https://example.com:x",
+            "null",
+            "file://",
+        ] {
+            assert!(!reaches(&policy, Some(other)), "{other}");
+        }
+        // A document that is itself local is the user's own, wherever it sits.
+        for local in [
+            "http://localhost:3000",
+            "http://192.168.1.20",
+            "http://[::1]:4455",
+        ] {
+            assert!(reaches(&policy, Some(local)), "{local}");
+        }
+        assert_eq!(policy.denied(), 7);
+
+        // Without the opt-in, the source's own origin may not either.
+        let refused = RequestPolicy::for_page(&web_spec("https://example.com/overlay", false));
+        for origin in [None, Some("https://example.com"), Some("null")] {
+            assert!(!reaches(&refused, origin), "{origin:?}");
+        }
+        assert!(reaches(&refused, Some("http://localhost:3000")));
+
+        // A page whose own host is local: its own origin may, an internet one inside it
+        // may not, nor an opaque one.
+        let local =
+            RequestPolicy::for_location(&PageLocation::Web("http://localhost:3000/".into()));
+        assert!(reaches(&local, None));
+        assert!(reaches(&local, Some("http://localhost:3000")));
+        assert!(!reaches(&local, Some("https://widgets.example.net")));
+        assert!(!reaches(&local, Some("null")));
+    }
+
+    /// #721: a file or blank page is the user's own until its main frame navigates to the
+    /// web; then an opaque origin inside it is the web's.
+    #[test]
+    fn a_file_or_blank_page_that_navigates_to_the_web_loses_local_access() {
+        let root = tree("navigate");
+        let page = root.join("page/index.html");
+        let file = RequestPolicy::for_location(&PageLocation::File(page.clone()));
+        // The source's own load, then what its document asks for.
+        assert_eq!(file.check(&file_url(&page)), Verdict::Allow);
+        file.main_frame_to(&file_url(&page));
+        for own in [None, Some("null"), Some("file://")] {
+            assert!(reaches(&file, own), "{own:?}");
+        }
+        // A third-party frame inside it is the internet's.
+        assert!(!reaches(&file, Some("https://widgets.example.net")));
+
+        file.main_frame_to("https://evil.example/");
+        for origin in [Some("null"), Some("file://"), Some("https://evil.example")] {
+            assert!(!reaches(&file, origin), "{origin:?}");
+        }
+        // The browser's own reload, and a local document, still may.
+        assert!(reaches(&file, None));
+        assert!(reaches(&file, Some("http://localhost:3000")));
+        // Back on one of its files, it is its own again.
+        file.main_frame_to(&file_url(&root.join("page/img/a.png")));
+        assert!(reaches(&file, Some("null")));
+
+        let blank = RequestPolicy::for_location(&PageLocation::Blank);
+        assert!(reaches(&blank, Some("null")));
+        blank.main_frame_to("https://evil.example/");
+        assert!(!reaches(&blank, Some("null")));
+        blank.main_frame_to("about:blank");
+        assert!(reaches(&blank, Some("null")));
+
+        // A web source's main frame moving doesn't change what its own origin may.
+        let web = RequestPolicy::for_page(&web_spec("https://example.com/", true));
+        web.main_frame_to("https://elsewhere.example/");
+        assert!(reaches(&web, Some("https://example.com")));
+        assert!(!reaches(&web, Some("https://elsewhere.example")));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn origins_compare_by_scheme_host_and_port() {
+        let origin = |url: &str| Origin::parse(url);
+        assert_eq!(
+            origin("https://Example.com/x"),
+            origin("https://example.com:443")
+        );
+        assert_eq!(origin("ws://a.example:80"), origin("ws://a.example"));
+        assert_ne!(origin("http://a.example"), origin("https://a.example"));
+        assert_ne!(origin("http://a.example:8080"), origin("http://a.example"));
+        assert_eq!(
+            origin("http://[::1]:4455"),
+            Some(Origin {
+                scheme: "http".into(),
+                host: "::1".into(),
+                port: Some(4455),
+            })
+        );
+        assert_eq!(origin("https://[::1]").and_then(|o| o.port), None);
+        for opaque in [
+            "null",
+            "file://",
+            "file:///a",
+            "data:text/plain,x",
+            "about:blank",
+            "http://",
+            "http://a:99999",
+        ] {
+            assert_eq!(origin(opaque), None, "{opaque}");
+        }
     }
 
     #[cfg(unix)]
