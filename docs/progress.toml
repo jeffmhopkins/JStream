@@ -861,8 +861,8 @@ needs = ["build", "hardware"]
 id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
-status = "planned"
-needs = ["build"]
+status = "review"
+prs = [642]
 
 [[item]]
 id = "MAC1"
