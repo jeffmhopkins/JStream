@@ -40,7 +40,7 @@ mod private_file;
 #[cfg(any(windows, test))]
 mod security;
 mod vcam;
-// Its path comparison is tested on every platform.
+// Its path, content and DACL decisions are tested on every platform.
 #[cfg(any(windows, test))]
 mod vcam_register;
 mod video_device;
@@ -73,7 +73,9 @@ pub use private_file::{check_private_file, create_private_file};
 pub use vcam::WindowsVcam;
 #[cfg(windows)]
 pub use vcam_register::{
-    VCAM_DLL, VcamRegistration, is_elevated, register_vcam, run_elevated, vcam_registration,
+    Access, COPY_DACL, Outdated, Trustee, Unregistered, VCAM_DLL, VcamRegistration, is_elevated,
+    program_files, register_vcam, run_elevated, unregister_vcam, vcam_copy_dir, vcam_copy_path,
+    vcam_registration,
 };
 #[cfg(windows)]
 pub use video_device::{MfMjpegDecoder, MfVideoDevices};
