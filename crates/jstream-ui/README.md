@@ -269,6 +269,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
   sets or clears a key, since no event reports that. Another client's key change shows
   on the next re-read.
+- **Plain `rtmp://` gets a warning.** A stream output whose server URL is `rtmp://` to
+  a host other than `localhost` or a loopback address shows, under its target, that
+  the key is sent unencrypted and to use `rtmps://` if the service offers it
+  (`cleartext_warning`, #353). The panel works it out from the URL `state.get`
+  reports. `output.status` carries no such flag, so a client of its own does the same.
 - **Mixer** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)). The panel reads
   the audio sources (those `state.get` reports with `audio`), the buses and the sends
   into a copy of its own, not `Studio`'s, and re-reads them on `state.changed` and
@@ -309,11 +314,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   what "Add" sends, the form's sections, parsing and checks); only the components
   themselves need a browser.
 - **Debug bundle size.** A leptos view's type spells out every element and closure
-  inside it, and a debug build names each function with those types: most of its
-  `_bg.wasm` is that name section. The server refuses a file over its size limit
-  ([jstream-server › Design](../jstream-server/README.md#design)), so the mixer's strips, rows, meters, faders and mute buttons return `AnyView` rather than
-  `impl IntoView`, which keeps a nested view's type out of its parents' names. A
-  component that grows as large does the same.
+  inside it, and an unstripped build names each function with those types in the
+  `_bg.wasm`'s name section. The server refuses a file over its size limit
+  ([jstream-server › Design](../jstream-server/README.md#design)), so the debug build
+  uses the workspace's `ui-dev` Cargo profile (`data-cargo-profile-dev` in
+  `index.html`), which strips the symbols and leaves no name section
+  ([Build](#build)). The mixer's strips, rows, meters, faders and mute buttons also
+  return `AnyView` rather than `impl IntoView`, which keeps a nested view's type out of
+  its parents' types, and so out of their names in an unstripped build.
 
 <a id="canvas"></a>
 ## Canvas
@@ -408,7 +416,7 @@ The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
 
 ```sh
 cd crates/jstream-ui
-trunk build            # debug, into dist/
+trunk build            # debug (the `ui-dev` profile), into dist/
 trunk build --release  # what the daemon and the desktop app ship
 trunk serve            # rebuilds on change and serves dist/ locally
 ```
@@ -420,6 +428,15 @@ and the stylesheet, with content hashes in their names. It is not committed. tru
 inline loader script carries a `{{__TRUNK NONCE__}}` placeholder (`create_nonce` in
 `Trunk.toml`), which the serving engine replaces with each response's
 Content-Security-Policy nonce.
+
+A debug build uses the workspace's `ui-dev` Cargo profile, which `index.html` picks with
+`data-cargo-profile-dev`: `dev` without debug info and with the symbols stripped. With
+`dev` itself, wasm-bindgen's `_bg.wasm` is many times larger, nearly all of it the name
+section, and over the server's size limit for a UI file
+([jstream-server › Design](../jstream-server/README.md#design)), so every load would
+get a 500. A release build keeps its own profile. The UI installs no panic hook, so a
+panic shows in the browser console only as `RuntimeError: unreachable`, with no message
+or location; in a debug build its stack frames are unnamed (`wasm-function[N]`) too.
 
 CI's `wasm` job builds the UI this way on every PR, with trunk and the `wasm-bindgen`
 CLI downloaded at pinned versions and checked against pinned SHA-256 sums, and runs
