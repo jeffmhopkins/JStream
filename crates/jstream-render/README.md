@@ -157,9 +157,11 @@ depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.
 
 `render` does not wait on the control plane and does no file or network I/O
 ([R-RT-002](../../docs/RULES.md#R-RT-002)). This crate has no render thread: calling
-`render` is the caller's tick, on `jstream-core`'s render thread. Nothing here drops
-an image on its own: `ResourceCache` returns what it frees as `Reclaimed`, so that
-thread can hand it to a collector ([R-RT-003](../../docs/RULES.md#R-RT-003)). GPU
+`render` is the caller's tick, on `jstream-core`'s render thread. `ResourceCache`
+returns what it frees as `Reclaimed`, so that thread can hand it to a collector
+([R-RT-003](../../docs/RULES.md#R-RT-003)). The one image this crate drops itself is a
+multi-pass filter's scratch layer that a call replaces at a new size or no longer asks
+for (**Filters**), so it happens only when a filter's size or settings change. GPU
 calls may allocate inside the driver; this crate does not allocate per item on the
 steady path.
 
@@ -425,8 +427,8 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
   output size, about 16.6 MB at 1080p) come from a pool its `VideoFilter` keeps (V0): a
   call's `n`th scratch layer is the call before's `n`th when the size is the same, so a
   filter at a steady size makes them once. A layer of another size replaces it, and one
-  a call doesn't ask for is dropped at its end. A scratch layer is never kept past the
-  call that takes it. The video delay's ring of held frames is the other thing a filter
+  a call doesn't ask for is dropped at its end. A pass never keeps a scratch layer, or
+  relies on its contents, past the call that takes it. The video delay's ring of held frames is the other thing a filter
   keeps between frames; those are its own layers (`Ctx::layer`), never scratch ones.
 
 **External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
