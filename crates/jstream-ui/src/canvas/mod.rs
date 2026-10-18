@@ -199,15 +199,18 @@ pub fn Canvas() -> impl IntoView {
         show(placed.clone());
         awaiting.update_value(|a| a.in_flight += 1);
         spawn_local(async move {
-            let result = model::commit(&*open.control, scene_id, placed).await;
+            let result = model::commit(&*open.control, scene_id, placed.clone()).await;
             drop(open);
             awaiting.update_value(|a| a.in_flight = a.in_flight.saturating_sub(1));
             match result {
                 Ok(rev) => awaiting.update_value(|a| a.last = a.last.max(Some(rev))),
-                Err(error) => problem(&error),
+                Err(error) => {
+                    problem(&error);
+                    // Stop showing the failed geometries, unless a later gesture has
+                    // already replaced them.
+                    preview.update(|shown| shown.retain(|entry| !placed.contains(entry)));
+                }
             }
-            // A failed commit's preview stays only while a later one is in flight,
-            // which will replace it.
             drop_preview_if_caught_up();
         });
     };
