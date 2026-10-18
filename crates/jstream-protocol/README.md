@@ -57,7 +57,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `studio.set_preview`,
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set`,
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
@@ -83,7 +83,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
-  and `EncoderSessionInfo`, the per-output sharing `output.status` reports
+  and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
   (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
@@ -104,7 +104,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `video.snapshot`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
-  `studio.get`, `device.list`, `live.list` and `capture.targets`, with `QueryResult`
+  `studio.get`, `privacy.get`, `device.list`, `live.list` and `capture.targets`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo` and
   `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and
   `ItemInfo`
@@ -132,7 +132,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   shares them. No source or filter kind is defined here; the transition kinds are
   (Transitions above).
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
-  (program, preview and the transition a switch started), `events.dropped`,
+  (program, preview and the transition a switch started), `privacy.changed`,
+  `events.dropped`,
   `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
   `live.changed` and `live.ended`.
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
@@ -159,8 +160,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.32 because of the
-  geometry flips (`ItemGeometry`'s `flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.33 because of the
+  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`) and the `dedicated`
+  flag on an output's encoder session; 0.32 added the geometry flips (`ItemGeometry`'s
+  `flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
   `scene.set_folder`, `scene.set_meta`, `source.set_meta`, `state.get`'s `folders` and
   `labels`, `SceneInfo`'s `folder` and `meta`, `SourceInfo`'s `meta`, the `folder` and
   `label` `delete.plan` targets, entity kinds and blockers); 0.30 added
@@ -256,8 +259,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":32},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":32},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":33},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":33},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -761,8 +764,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
   `false`). While it runs, `encoder` names its session's profile (absent for the
-  default), the other running outputs that share the session (`shared_with`, by ID)
-  and whether the session is a hardware one; `encoder_sessions` and
+  default), the other running outputs that share the session (`shared_with`, by ID),
+  whether the session is a hardware one, and whether it is `dedicated` to this output
+  because the output has its own video chain (0.33; omitted when false), so it can
+  never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
   the cap (0.13; missing, they parse as absent and 0). None of it is collection state,
@@ -781,6 +786,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   for the display an empty `display` target captures. Runtime state, so no `rev`; a
   source can still name a window closed since. `action_failed` when the engine has no
   capture backend or the OS refuses the list. Added in 0.27.
+- `privacy.get`: whether the privacy screen is on (`on`). Runtime state, so no `rev`.
+  Added in 0.33.
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
@@ -1001,6 +1008,12 @@ After `welcome`, the server pushes every event to every client.
   with the committing batch's `rev`, whose `state.changed` comes first, `cancelled` or
   `expired`. A client that doesn't know these events ignores them and shows committed
   state only.
+- `privacy.changed {on, client_id, request_id?}` reports the privacy screen going on or
+  off, with the client and request that did it. A `privacy.set` that changes nothing
+  emits nothing. A client that subscribes while the screen is on gets this event first,
+  naming the client that turned it on and with no `request_id`, so it never shows an
+  uncovered picture. Runtime state, so no `rev`
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Added in 0.33.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

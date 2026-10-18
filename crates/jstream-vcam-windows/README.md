@@ -49,9 +49,13 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   namespace is used only if that session is active (at the console, or an active remote
   connection) and the mapping's owner is the session's logged-on user, SYSTEM or
   Administrators (`trust`), so another user's engine, say in a session switched away
-  from, can't feed this camera. The DLL runs as LOCAL SERVICE, which can't call
-  `WTSQueryUserToken`, so it reads the owner with `GetSecurityInfo` and the session's
-  user with `WTSQuerySessionInformationW` and `LookupAccountNameW`; anything unreadable
+  from, can't feed this camera. While several sessions are active at once (Windows
+  Server, several remote sessions), only the console session's block is used; another
+  session's block is used only when it is the only active session, as when one remote
+  session has taken over a workstation (#204). A block in use is checked again every 5 s
+  (`RECHECK`) and dropped once it fails. The DLL runs as LOCAL SERVICE, which can't call
+  `WTSQueryUserToken`, so it reads the owner with `GetSecurityInfo`, the active
+  sessions with `WTSEnumerateSessionsW` and the session's user with `WTSQuerySessionInformationW` and `LookupAccountNameW`; anything unreadable
   refuses the block. `Global\` blocks are not owner-checked: only administrators and
   services can create them. The DLL then requires the contract's format
   (`format_matches`), requires the scope and session the block names to be the
