@@ -1,8 +1,8 @@
 //! CEF's callbacks: the app (command-line switches), and per page a client with its
 //! render, audio, life-span, load and request handlers, each forwarding to the page's
 //! [`PageShared`], and a permission handler that refuses everything but local network
-//! access its request policy allows ([`crate::permission`]). Plus a task that runs a
-//! closure on CEF's UI thread.
+//! access its request policy allows the requesting origin ([`crate::permission`]). Plus
+//! a task that runs a closure on CEF's UI thread.
 
 use std::os::raw::c_int;
 use std::sync::Arc;
@@ -106,7 +106,7 @@ pub(crate) fn client(page: &Arc<PageShared>) -> Client {
         PageAudioHandler::new(page.clone()),
         PageLifeSpan::new(page.clone()),
         PageLoad::new(page.clone()),
-        PageRequests::new(PageResources::new(page.clone())),
+        PageRequests::new(page.clone()),
         PagePermissions::new(page),
     )
 }
@@ -301,7 +301,7 @@ wrap_load_handler! {
 
 wrap_request_handler! {
     pub(crate) struct PageRequests {
-        resources: ResourceRequestHandler,
+        page: Page,
     }
 
     impl RequestHandler {
@@ -312,11 +312,16 @@ wrap_request_handler! {
             _request: Option<&mut Request>,
             _is_navigation: c_int,
             _is_download: c_int,
-            _request_initiator: Option<&CefString>,
+            request_initiator: Option<&CefString>,
             _disable_default_handling: Option<&mut c_int>,
         ) -> Option<ResourceRequestHandler> {
-            // Every request of the page, navigations included, goes past its policy.
-            Some(self.resources.clone())
+            // Every request of the page, navigations included, goes past its policy, as
+            // the origin that makes it (#721): only this callback names it, so each
+            // request gets a handler that holds it.
+            let initiator = request_initiator
+                .map(|origin| origin.to_string())
+                .filter(|origin| !origin.is_empty());
+            Some(PageResources::new(self.page.clone(), initiator))
         }
     }
 }
@@ -324,6 +329,9 @@ wrap_request_handler! {
 wrap_resource_request_handler! {
     pub(crate) struct PageResources {
         page: Page,
+        // The origin of the document making the request (CEF's `request_initiator`), or
+        // `None` for one the browser itself started.
+        initiator: Option<String>,
     }
 
     impl ResourceRequestHandler {
@@ -339,8 +347,15 @@ wrap_resource_request_handler! {
             };
             let url = CefString::from(&request.url()).to_string();
             let page = &self.page.0;
-            match page.policy.check(&url) {
-                crate::Verdict::Allow => ReturnValue::CONTINUE,
+            match page.policy.check_from(&url, self.initiator.as_deref()) {
+                crate::Verdict::Allow => {
+                    // Before the new document exists, so its requests are judged by where
+                    // the main frame now is.
+                    if request.resource_type() == ResourceType::MAIN_FRAME {
+                        page.policy.main_frame_to(&url);
+                    }
+                    ReturnValue::CONTINUE
+                }
                 crate::Verdict::Deny(_) => {
                     // The URL may be a local path, which the engine's logs must never
                     // name: it gets the count.
@@ -354,7 +369,7 @@ wrap_resource_request_handler! {
             &self,
             _browser: Option<&mut Browser>,
             _frame: Option<&mut Frame>,
-            _request: Option<&mut Request>,
+            request: Option<&mut Request>,
             _response: Option<&mut Response>,
             new_url: Option<&mut CefString>,
         ) {
@@ -369,13 +384,21 @@ wrap_resource_request_handler! {
                 return;
             };
             let page = &self.page.0;
-            if let crate::Verdict::Deny(_) = page.policy.check(&new_url.to_string())
-                && new_url.try_set(REFUSED_REDIRECT)
-            {
-                // Counted only once the target is really replaced: `try_set` fails only
-                // when CEF passed no string to write into, and then nothing here can
-                // stop the redirect.
-                page.denied();
+            let target = new_url.to_string();
+            match page.policy.check_from(&target, self.initiator.as_deref()) {
+                crate::Verdict::Allow => {
+                    if request.is_some_and(|r| r.resource_type() == ResourceType::MAIN_FRAME) {
+                        page.policy.main_frame_to(&target);
+                    }
+                }
+                crate::Verdict::Deny(_) => {
+                    // Counted only once the target is really replaced: `try_set` fails
+                    // only when CEF passed no string to write into, and then nothing here
+                    // can stop the redirect.
+                    if new_url.try_set(REFUSED_REDIRECT) {
+                        page.denied();
+                    }
+                }
             }
         }
     }
@@ -423,11 +446,18 @@ wrap_permission_handler! {
             &self,
             _browser: Option<&mut Browser>,
             _prompt_id: u64,
-            _requesting_origin: Option<&CefString>,
+            requesting_origin: Option<&CefString>,
             requested_permissions: u32,
             callback: Option<&mut PermissionPromptCallback>,
         ) -> c_int {
-            let local_allowed = self.page.0.policy.local_allowed();
+            // Decided for the origin that asks, not the page's starting one (#721). Only a
+            // page asks, so a prompt without an origin is judged as an opaque one, never
+            // as one the browser started.
+            let origin = requesting_origin
+                .map(|origin| origin.to_string())
+                .filter(|origin| !origin.is_empty())
+                .unwrap_or_else(|| "null".to_owned());
+            let local_allowed = self.page.0.policy.local_allowed_from(Some(&origin));
             let result = match crate::permission::answer_prompt(requested_permissions, local_allowed) {
                 crate::permission::Answer::Accept => PermissionRequestResult::ACCEPT,
                 crate::permission::Answer::Deny => PermissionRequestResult::DENY,
