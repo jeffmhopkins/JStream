@@ -26,8 +26,18 @@ fn main() -> ExitCode {
         jstream_platform::paths::data_dir_for(exe_dir.as_deref(), |name| std::env::var_os(name));
     // Local crash reports beside the log file, as early as the folder is known
     // (R-SEC-004).
+    // The hook, the token and the key store share one redaction list.
+    let secrets = jstream_crash::Secrets::new();
     if let Some(data) = data.as_deref() {
-        jstream_desktop::crash::install(data.join("logs"));
+        jstream_crash::install(
+            data.join("logs"),
+            jstream_crash::Program {
+                name: env!("CARGO_PKG_NAME"),
+                version: env!("CARGO_PKG_VERSION"),
+            },
+            secrets.clone(),
+            crash_line,
+        );
     }
     let log = app::init_logging(data.as_deref());
     tracing::info!(
@@ -37,7 +47,7 @@ fn main() -> ExitCode {
         "jstream-desktop starting"
     );
     let startup = match app::parse(&args) {
-        Ok(options) => app::start(&options, exe_dir.as_deref(), data.as_deref()),
+        Ok(options) => app::start(&options, exe_dir.as_deref(), data.as_deref(), &secrets),
         Err(message) => Startup::problem(message),
     };
     match jstream_desktop::shell::run(startup.ui, startup.script, startup.host) {
@@ -47,6 +57,14 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Prints the crash hook's redacted line naming the report. Best effort: a release
+/// build has no console, and the report is what matters.
+#[cfg(windows)]
+fn crash_line(line: &str) {
+    use std::io::Write;
+    let _ = writeln!(std::io::stderr().lock(), "{line}");
 }
 
 /// No window here yet: says so and fails.
