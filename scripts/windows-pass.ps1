@@ -768,7 +768,8 @@ function Test-Media {
         $dur = [double]$probe.format.duration
         if ($name -eq 'sync.mp4') {
             $r = Invoke-Native (Find-Tool 'ffmpeg') @('-hide_banner', '-nostdin', '-i', $file, '-vf', 'blackdetect=d=0.01:pix_th=0.10', '-an', '-f', 'null', '-') 120
-            $ends = @([regex]::Matches($r.Err, 'black_end:([\d.]+)') | ForEach-Object { [double]$_.Groups[1].Value })
+            # blackdetect closes the last black run at the end of the file: that's not a flash.
+            $ends = @([regex]::Matches($r.Err, 'black_end:([\d.]+)') | ForEach-Object { [double]$_.Groups[1].Value } | Where-Object { $_ -lt $dur - 0.1 })
             $gaps = @(); for ($i = 1; $i -lt $ends.Count; $i++) { $gaps += [Math]::Round($ends[$i] - $ends[$i - 1], 3) }
             $bad = @($gaps | Where-Object { [Math]::Abs($_ - 1.0) -gt 0.035 })
             Check ($gaps.Count -ge 8 -and -not $bad) 'sync clip flashes 1.000 s apart' "$($gaps.Count) gaps: $($gaps -join ' ')"
@@ -1205,7 +1206,7 @@ function Test-Clap {
         $clap = @(($kinds | ConvertTo-Json -Depth 30 -Compress) | Select-String -Pattern '"(clap/[^"]+)"' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
         Check ($clap.Count -ge 1) 'kind.list has the plugin' ($clap -join ', ')
         if ($clap) {
-            $desc = Invoke-Op $d 'kind' @{ type = 'kind.describe'; kind = $clap[0] }
+            $desc = Invoke-Op $d 'kind' @{ type = 'kind.describe'; kind_id = $clap[0] }
             $json = $desc | ConvertTo-Json -Depth 30 -Compress
             Write-Text (Join-Path $OutDir 'clap-describe.json') $json
             Check ($json -match 'default') 'kind.describe lists parameters' "$($json.Length) bytes; see clap-describe.json"
