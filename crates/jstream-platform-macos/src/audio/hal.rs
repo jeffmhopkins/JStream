@@ -25,7 +25,7 @@ use objc2_core_audio::{
 use objc2_core_audio_types::{AudioBuffer, AudioBufferList, AudioStreamBasicDescription};
 use objc2_core_foundation::{CFRetained, CFString};
 
-use super::layout::{InputPlan, is_native_f32, plan_input, rate_hz};
+use super::layout::{StreamPlan, is_native_f32, plan_stream, rate_hz};
 use crate::fourcc::os_status;
 
 /// The system object, which owns the device list and the defaults.
@@ -372,13 +372,17 @@ pub(super) fn find(
         })
 }
 
-/// How to record `device`: its input streams must be native `f32`, at a whole nominal rate.
+/// How to record or play `device` in `direction`: its streams in that direction must be
+/// native `f32`, at a whole nominal rate.
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for another virtual format, a fractional rate or no
-/// input channels, and [`PlatformError::Os`] when a property can't be read.
-pub(super) fn input_plan(device: AudioObjectID) -> Result<InputPlan, PlatformError> {
-    let input = kAudioObjectPropertyScopeInput;
+/// channels in that direction, and [`PlatformError::Os`] when a property can't be read.
+pub(super) fn plan(
+    device: AudioObjectID,
+    direction: AudioDirection,
+) -> Result<StreamPlan, PlatformError> {
+    let side = scope(direction);
     let nominal = read_value(
         device,
         &address(
@@ -390,7 +394,7 @@ pub(super) fn input_plan(device: AudioObjectID) -> Result<InputPlan, PlatformErr
     let rate = rate_hz(nominal).ok_or_else(|| PlatformError::Unsupported {
         what: format!("an audio device running at {nominal} Hz"),
     })?;
-    let streams = read_list(device, &address(kAudioDevicePropertyStreams, input), 0)?;
+    let streams = read_list(device, &address(kAudioDevicePropertyStreams, side), 0)?;
     for stream in streams {
         let zero = AudioStreamBasicDescription {
             mSampleRate: 0.0,
@@ -414,7 +418,11 @@ pub(super) fn input_plan(device: AudioObjectID) -> Result<InputPlan, PlatformErr
         if !is_native_f32(f.mFormatID, f.mFormatFlags, f.mBitsPerChannel) {
             return Err(PlatformError::Unsupported {
                 what: format!(
-                    "an audio input stream in format {} with flags {:#x} and {} bits",
+                    "an audio {} stream in format {} with flags {:#x} and {} bits",
+                    match direction {
+                        AudioDirection::Input => "input",
+                        AudioDirection::Output => "output",
+                    },
                     crate::fourcc_str(f.mFormatID).unwrap_or_else(|| f.mFormatID.to_string()),
                     f.mFormatFlags,
                     f.mBitsPerChannel
@@ -422,12 +430,12 @@ pub(super) fn input_plan(device: AudioObjectID) -> Result<InputPlan, PlatformErr
             });
         }
     }
-    let buffers = buffer_channels(device, AudioDirection::Input)?;
+    let buffers = buffer_channels(device, direction)?;
     let pair = read_value(
         device,
-        &address(kAudioDevicePropertyPreferredChannelsForStereo, input),
+        &address(kAudioDevicePropertyPreferredChannelsForStereo, side),
         [0u32; 2],
     )
     .ok();
-    plan_input(rate, &buffers, pair)
+    plan_stream(rate, &buffers, pair)
 }
