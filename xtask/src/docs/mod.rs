@@ -303,6 +303,7 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
         let mut paths: Vec<String> = rewritten.iter().map(|(_, p)| p.clone()).collect();
         paths.sort();
         paths.dedup();
+        report_merged_prs(root, &point, doc, key, inputs, text)?;
         let later = merge::changed_after(root, &point, &paths)?;
         let refused: Vec<String> = rewritten
             .iter()
@@ -329,7 +330,8 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
 fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) -> Result<()> {
     let note = check_stamp(by, note)?;
     let base = merge::base_ledger(root, branch)?;
-    stamp_section(root, target, &|_, key, old, inputs| {
+    let point = merge::last_merge(root)?;
+    stamp_section(root, target, &|doc, key, old, inputs| {
         if !ledger::diff(old, inputs).is_empty() {
             bail!(
                 "{key} is stale: re-read it and verify with --note (or --merge after \
@@ -337,10 +339,46 @@ fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) 
             );
         }
         let old = old.context("invariant: a fresh section has a stamp")?;
+        if let Some(p) = &point {
+            report_merged_prs(root, p, doc, key, inputs, note)?;
+        }
         ledger::renote(old, base.sections.get(key), by, note).with_context(|| {
             format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
         })
     })
+}
+
+/// Prints the PRs `point`'s merge brought in on `key`'s inputs, and those `note` doesn't
+/// name, so a note written after a merge credits each PR whose change it covers
+/// (docs/DOCS.md#notes). It only advises: a note may rightly leave out a PR that changed
+/// nothing this section says.
+fn report_merged_prs(
+    root: &Path,
+    point: &merge::MergePoint,
+    doc: &str,
+    key: &str,
+    inputs: &BTreeMap<String, String>,
+    note: &str,
+) -> Result<()> {
+    let mut paths: Vec<String> = inputs.keys().map(|k| merge::input_path(doc, k)).collect();
+    paths.sort();
+    paths.dedup();
+    let prs = merge::pr_numbers(&merge::merged_commits(root, point, &paths)?);
+    if prs.is_empty() {
+        return Ok(());
+    }
+    eprintln!(
+        "{key}: the merge brought in {} on this section's inputs",
+        merge::pr_list(&prs)
+    );
+    let unnamed = merge::unnamed_prs(note, &prs);
+    if !unnamed.is_empty() {
+        eprintln!(
+            "  the note doesn't name {}: credit each PR whose change it covers (docs/DOCS.md#notes)",
+            merge::pr_list(&unnamed)
+        );
+    }
+    Ok(())
 }
 
 /// The section's new stamp from its doc's path, its key, its current stamp and its current
@@ -750,6 +788,11 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                     if i.commits.len() > SHOWN {
                         eprintln!("    merged: … and {} more", i.commits.len() - SHOWN);
                     }
+                }
+                let inputs = m.inputs.get(s).into_iter().flatten();
+                let prs = merge::pr_numbers(inputs.flat_map(|i| &i.commits));
+                if !prs.is_empty() {
+                    eprintln!("  merged PRs on these inputs: {}", merge::pr_list(&prs));
                 }
             }
             eprintln!(
@@ -1390,6 +1433,8 @@ mod tests {
         let i = &m.inputs["S#a"];
         assert_eq!(i[0].note.as_deref(), Some(joined(first).as_str()), "{i:?}");
         assert_eq!(subjects(&i[0].commits), vec!["main: a5 2 (#2)"]);
+        // #677: the PRs behind the section are the ones its note credits.
+        assert_eq!(merge::pr_numbers(&i[0].commits), vec![2]);
         let second = "main's second a5 edit (#2) is outside it too";
         verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
         assert_eq!(note("file:src/a.rs"), joined(second));

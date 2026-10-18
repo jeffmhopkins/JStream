@@ -466,7 +466,10 @@ holds**. The note says what was checked and why it still holds, e.g.:
   `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
   this PR changes and adds the text. On an input whose hash equals the merged side's
   entry, it keeps that entry as it is. `merge-main` prints the merged commits behind each
-  stale input to write it from ([Hash-bound verification](#verification)). The text is
+  stale input to write it from ([Hash-bound verification](#verification)), and under each
+  stale section the PRs (`(#N)` in their subjects) those commits came from. `--merge` and
+  `--renote` print the same PRs for the section they stamp and name any the text leaves
+  out: credit each PR whose change the note covers, by number. The text is
   still per section: one stock text across every stale section, such as "rechecked after merging
   main", fails review. A section this PR also changed after the merge takes `--note`, and
   `--merge` refuses it.
