@@ -241,8 +241,9 @@ state machine. Contents:
   and starting it again after a failed start or a lost target, and opening each webcam
   on program from the fake video devices, shared between sources, closed when it leaves
   or the output stops, and closed when unplugged with the output staying up
-  (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in and its frames
-  read as RGBA (`runtime/captures.rs`), which capture path an output takes and each
+  (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in, with and
+  without an MJPEG decoder, and its frames, decoded or not, read as RGBA
+  (`runtime/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
@@ -1843,8 +1844,12 @@ capture starts. A webcam or capture card is opened on the backends' `VideoDevice
 the CPU path, in the format `device_format` picks from those it lists: frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device
-listed, looked up when it starts. MJPEG needs a decoder the engine doesn't build yet, so
-a device that offers only MJPEG doesn't start. Nothing opens its paired microphone. A
+listed, looked up when it starts. MJPEG is a candidate when the device offers it and the
+platform's codecs make a decoder (`Codecs::capture_decoder`, Media Foundation's on
+Windows): one decoder per stream, passed to `VideoDevices::open`. At the same size and
+rate an uncompressed format wins. Without a decoder (the default, and Linux and macOS
+for now), only uncompressed formats are chosen, so a device that offers only MJPEG
+doesn't start. Nothing opens its paired microphone. A
 capture that doesn't start, or whose stream reports `DeviceLost` (a
 closed window, an unplugged display or webcam), keeps its last frame and is started again 2 s
 later on the media clock. The skips of every stream the pipeline ran are added up into

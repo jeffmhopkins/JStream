@@ -707,7 +707,8 @@ pub const FAKE_DECODE_SIZE: (u32, u32) = (16, 16);
 /// fake encoder have `dts == pts`, so their frames are released at once; packets with
 /// B-frame reordering are held only as deep as their `dts` lag needs. The video encoder
 /// and decoder hold up to [`FAKE_CODEC_QUEUE`] unpolled outputs (frames still held for
-/// reordering don't count); the audio encoder has no limit.
+/// reordering don't count); the audio encoder has no limit. Its capture decoder, for
+/// MJPEG only, is a [`FakeCaptureDecoder`] that outputs NV12.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FakeCodecs;
 
@@ -803,6 +804,18 @@ impl Codecs for FakeCodecs {
             pending: VecDeque::new(),
             finished: false,
         }))
+    }
+
+    fn capture_decoder(
+        &self,
+        encoding: CaptureEncoding,
+    ) -> Result<Box<dyn CaptureDecoder>, PlatformError> {
+        match encoding {
+            CaptureEncoding::Mjpeg => Ok(Box::new(FakeCaptureDecoder::new(PixelFormat::Nv12))),
+            other => Err(PlatformError::Unsupported {
+                what: format!("decoding {other:?} capture frames"),
+            }),
+        }
     }
 }
 

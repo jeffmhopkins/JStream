@@ -373,9 +373,9 @@ prs = [177, 225, 227]
 [[item]]
 id = "C4c"
 milestone = "M1b"
-title = "Webcam source (CPU path; MJPEG and paired audio to follow)"
+title = "Webcam source (CPU path, MJPEG on Windows; paired audio to follow)"
 status = "review"
-prs = [654]
+prs = [654, 658]
 needs = ["build", "wave", "hardware"]
 
 [[item]]
