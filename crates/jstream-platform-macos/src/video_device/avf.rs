@@ -485,9 +485,10 @@ struct Watched {
     session: Retained<AVCaptureSession>,
 }
 
-// SAFETY: the watcher only reads `isConnected` and `isRunning`, properties AVFoundation
-// documents as key-value observable from any thread; the objects are reference counted
-// atomically.
+// SAFETY: the watcher only reads `isConnected` and `isRunning`, and the objects are
+// reference counted atomically. AVFoundation documents both properties as key-value
+// observable, but doesn't say they can be read from any thread. That is assumed here,
+// and unverified until the hardware run (#609).
 unsafe impl Send for Watched {}
 
 /// Checks the camera every [`WATCH`] until told to stop or it is lost.
