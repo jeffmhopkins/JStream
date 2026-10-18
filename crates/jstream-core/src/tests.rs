@@ -1036,10 +1036,14 @@ fn live(gesture_id: &str, values: Vec<Edit>) -> Call {
     }
 }
 
+/// The idempotency key of the organise script's scene-and-source delete, which the test
+/// checks applied: a refused one would compare equal on both sides and test nothing.
+const ORGANISED_DELETE: &str = "organised-delete";
+
 /// The differential script's folder, label and metadata calls (ADR-0024 §3 and §4, #387),
-/// run after the rest on scene `z` and source `cam`: each check that refuses one, what
-/// the reads report, the in-use deletes, undo and redo, and a scene and source delete
-/// undone with their metadata.
+/// run after the rest on scene `z` and sources `cam` and `tagged`: each check that
+/// refuses one, what the reads report, the in-use deletes, undo and redo, and a filed
+/// scene's and a labelled source's delete, applied and then undone with their metadata.
 fn organise_script() -> Vec<Call> {
     use jstream_protocol::{FolderId, LabelId, SceneMeta, SourceMeta};
     fn one(edit: Edit) -> Call {
@@ -1186,17 +1190,43 @@ fn organise_script() -> Vec<Call> {
         }),
         read(Query::SourceList),
         undo(),
-        // Deleting the scene and the source, and undoing it, restores their metadata.
+        // A source only `z` places, carrying a label: deleting `z` and then it applies
+        // (the test checks that it does), and undoing that restores the scene's folder
+        // and metadata and the source's labels. Then the source goes again.
         Call::Batch(edits(vec![
-            Edit::SceneDelete {
-                scene_id: SceneId::new("z"),
+            Edit::SourceCreate {
+                source_id: SourceId::new("tagged"),
+                name: "Tagged".into(),
+                kind: SourceKind::Builtin {
+                    kind: "webcam".into(),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
             },
-            Edit::SourceDelete {
-                source_id: SourceId::new("cam"),
+            add("z", "iz2", "tagged"),
+            Edit::SourceSetMeta {
+                source_id: SourceId::new("tagged"),
+                meta: SourceMeta {
+                    labels: vec![LabelId::new("sponsor")],
+                    favourite: true,
+                },
             },
         ])),
+        Call::Batch(
+            edits(vec![
+                Edit::SceneDelete {
+                    scene_id: SceneId::new("z"),
+                },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("tagged"),
+                },
+            ])
+            .with_idempotency_key(IdempotencyKey::new(ORGANISED_DELETE)),
+        ),
+        read(Query::StateGet),
         undo(),
         read(Query::StateGet),
+        undo(),
         // Emptying `inner` still leaves `outer` holding it, so this batch is refused
         // whole; emptied in order, the folders and labels go, and undo brings them back
         // in order.
@@ -1443,6 +1473,13 @@ fn the_engine_answers_like_the_mock() {
         let got = comparable(block_on(real.call(call.clone())).map(|r| r.result));
         let want = comparable(block_on(mock.call(call.clone())).map(|r| r.result));
         assert_eq!(got, want, "{call:?}");
+        if matches!(&call, Call::Batch(b) if b.idempotency_key == Some(IdempotencyKey::new(ORGANISED_DELETE)))
+        {
+            assert!(
+                got.is_ok(),
+                "the organised scene and source delete applies: {got:?}"
+            );
+        }
     }
     assert_eq!(engine.rev(), mock_engine.rev());
     let real_events: Vec<Event> = drain(&mut real_events).into_iter().map(normalize).collect();

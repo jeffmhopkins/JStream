@@ -184,8 +184,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `SceneMeta::problem`: a missing parent, folder or label, a folder inside itself, a
   label listed twice, and no deleting a folder that holds a scene or folder or a label a
   source carries (with the graph's `blockers`). Reads report the folders, labels and
-  each scene's and source's metadata, `source.duplicate` copies a source's, and deleting
-  a scene or source undoes with it;
+  each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
+  a scene's or source's delete restores its folder and metadata;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing

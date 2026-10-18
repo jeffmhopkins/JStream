@@ -479,10 +479,10 @@ That script does not call `video.snapshot`. The mock has no compositor and answe
 with `internal`, so the two are not compared. Nor does it call `capture.targets`,
 which the mock answers with a made-up display. It does send the folder, label and
 metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): each
-refusal, the in-use deletes, the reads, undo and redo, and a scene's and a source's
-delete undone with their metadata; `history.rs` checks the engine's undo of them
-further. The mock stays the reference clients
-were developed against, and `jstream-graph` the only implementation of the edit rules
+refusal, the in-use deletes, the reads, undo and redo, and a filed scene's and a
+labelled source's delete, which the test checks applies, undone with their metadata;
+`history.rs` checks the engine's undo of them further. The mock stays the reference
+clients were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 
 ### Undo and redo

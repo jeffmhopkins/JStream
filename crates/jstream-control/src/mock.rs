@@ -4774,14 +4774,37 @@ mod tests {
                 field: "folder".into(),
             }]
         );
+        let blocked = |error: ControlError| match error.protocol() {
+            Some(ProtocolError::InvalidArgument {
+                field, blockers, ..
+            }) => (field.clone(), blockers.clone()),
+            other => panic!("not invalid_argument: {other:?}"),
+        };
+        let blocker = |entity, id: &str, field: &str| Blocker {
+            entity,
+            id: id.into(),
+            field: field.into(),
+        };
         let label_in_use = refused(Edit::LabelDelete {
             label_id: LabelId::new("sponsor"),
         });
-        assert_eq!(field(label_in_use), "edits.0.label_id");
+        assert_eq!(
+            blocked(label_in_use),
+            (
+                "edits.0.label_id".into(),
+                vec![blocker(EntityKind::Source, "webcam", "labels")]
+            )
+        );
         let outer = refused(Edit::FolderDelete {
             folder_id: FolderId::new("outer"),
         });
-        assert_eq!(field(outer), "edits.0.folder_id");
+        assert_eq!(
+            blocked(outer),
+            (
+                "edits.0.folder_id".into(),
+                vec![blocker(EntityKind::Folder, "inner", "parent")]
+            )
+        );
 
         // The copy carries the labels and favourite flag.
         let copy = Edit::SourceDuplicate {
