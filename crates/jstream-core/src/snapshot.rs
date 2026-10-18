@@ -2915,7 +2915,7 @@ pub(crate) mod tests {
                 View { mix: None, privacy },
                 &LiveParams::default(),
                 &super::NoCaptures,
-                square,
+                super::DrawAt::read(square),
             )
             .expect("compose");
             drop(cache.end_frame(&compositor));

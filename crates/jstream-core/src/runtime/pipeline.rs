@@ -1988,12 +1988,8 @@ impl Frames {
         match found {
             Some(at) => self.targets[at].push(tap),
             None => {
-                self.mixes.push(MixFrame::new(
-                    feed.mix,
-                    feed.size,
-                    feed.divisor,
-                    feed.owner,
-                ));
+                self.mixes
+                    .push(MixFrame::new(feed.mix, feed.size, feed.divisor, feed.owner));
                 self.shown.push(Vec::new());
                 self.targets.push(vec![tap]);
                 self.encode.push(MixEncode::default());
@@ -3367,14 +3363,15 @@ mod tests {
         let mut frames = no_frames();
         let session = open_video(
             &jstream_platform::fake::FakeCodecs,
+            None,
             &shared,
             &EncoderProfile::DEFAULT,
         )
         .expect("fake session");
-        frames.add(shared.clone(), session.input());
-        frames.add(owned.clone(), session.input());
-        frames.add(owned, session.input());
-        frames.add(shared, session.input());
+        frames.add(shared.clone(), cpu_tap(session.input()));
+        frames.add(owned.clone(), cpu_tap(session.input()));
+        frames.add(owned, cpu_tap(session.input()));
+        frames.add(shared, cpu_tap(session.input()));
         assert_eq!(frames.mixes.len(), 2);
         assert_eq!(frames.mixes[1].owner, Some(OutputId::new("rec")));
         assert_eq!((frames.targets[0].len(), frames.targets[1].len()), (2, 2));
@@ -3382,7 +3379,8 @@ mod tests {
     }
 
     /// Under the privacy screen, a tick that could not draw blackens the frames due on
-    /// it rather than repeating what they showed; frames not due keep theirs.
+    /// it rather than repeating what they showed, and their GPU sessions miss the frame
+    /// rather than get the last encode target again; frames not due keep theirs.
     #[test]
     fn the_privacy_screen_fails_closed() {
         let feed = |divisor| Feed {
@@ -3394,20 +3392,34 @@ mod tests {
         let mut frames = no_frames();
         let session = open_video(
             &jstream_platform::fake::FakeCodecs,
+            None,
             &feed(1),
             &EncoderProfile::DEFAULT,
         )
         .expect("fake session");
-        frames.add(feed(1), session.input());
-        frames.add(feed(2), session.input());
+        frames.add(feed(1), cpu_tap(session.input()));
+        frames.add(feed(2), cpu_tap(session.input()));
+        // A session on the GPU path on the first feed too.
+        frames.add(
+            feed(1),
+            VideoTap {
+                input: session.input(),
+                gpu: true,
+            },
+        );
         assert_eq!(frames.schedule(0, false), 2);
         for shown in &mut frames.shown {
             *shown = vec![200; 8];
         }
         assert_eq!(frames.schedule(1, true), 1);
-        frames.blacken_due();
+        assert_eq!(frames.blacken_due(), 1, "the GPU session misses the frame");
         assert_eq!(frames.shown[0], [0, 0, 0, 255, 0, 0, 0, 255]);
+        assert!(
+            frames.encode[0].starved,
+            "its last encode target isn't repeated"
+        );
         assert_eq!(frames.shown[1], [200; 8], "not due, not pushed");
+        assert!(!frames.encode[1].starved);
     }
 
     /// The CPU stand-in draws a covered frame black whatever the capture's size, and

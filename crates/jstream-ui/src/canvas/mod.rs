@@ -22,6 +22,7 @@ use crate::app::SessionContext;
 use crate::dock::PanelId;
 use crate::store::Studio;
 use crate::workspace::DockState;
+use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
 use jstream_control::protocol::{HistoryOp, ItemGeometry, ItemId, Placed, Rev};
 use leptos::ev;
@@ -658,7 +659,10 @@ pub fn Canvas() -> impl IntoView {
     // The preview is the program mix, so it lies under the boxes only while the canvas
     // shows the program scene; another selected scene gets the placeholder instead.
     let on_program = move || {
-        let shown = layout.with(|l| l.as_ref().and_then(|l| l.scene.as_ref().map(|s| s.0.clone())));
+        let shown = layout.with(|l| {
+            l.as_ref()
+                .and_then(|l| l.scene.as_ref().map(|s| s.0.clone()))
+        });
         shown.is_some() && studio.program.with(|program| *program == shown)
     };
     let preview_message = move || {

@@ -454,7 +454,7 @@ mod tests {
                 },
                 &LiveParams::default(),
                 &NoCaptures,
-                canvas,
+                snapshot::DrawAt::read(canvas),
             )
             .expect("compose");
             pixel = output.pixels().expect("read back").pixel(1, 1);
