@@ -87,8 +87,9 @@ and calls this crate.
   (`Compositor::context`), so a caller can tell a texture from that context from one
   it can't sample. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
-  before the submit that samples it, and ends that submit by moving each staged
-  texture to `PRESENT`, as `stage` requires. Staging stays the safe method on
+  before the submit that samples it, holding the context's `SubmitLock` from the stage
+  through that submit, and ends that submit by moving each staged texture to
+  `PRESENT`, as `stage` requires. Staging stays the safe method on
   `jstream-platform`. This crate never calls wgpu-hal.
 - An `Image` draws only in the `Compositor` that made it. It carries that
   compositor's identity, and `render` refuses an item whose image came from another
@@ -235,7 +236,10 @@ ends by transitioning each of those textures to `PRESENT` (on D3D12 the `COMMON`
 the platform's other APIs read a shared texture in), which `stage` requires of the
 submit. `render_into` does the same. Staging comes after every other step that can
 fail (targets, vertex buffer, readback buffer), so a refused canvas or readback stages
-nothing. The compositor lets go of the holds after the submit, so it keeps no platform
+nothing. From the first stage through the submit, the compositor holds the queue's
+`SubmitLock`. On a platform context that is the context's lock, which the platform's
+other submitters on that queue take too, so none of their submits takes the staged
+wait and signal. The lock is let go before the readback's wait. The compositor lets go of the holds after the submit, so it keeps no platform
 texture busy between frames. The output texture is the
 compositor's own, not a shared encode target, so nothing transitions it; an encode
 target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
@@ -595,7 +599,8 @@ stacking); crop; integer scale; 90° rotation about the top-left; opacity over a
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
 staged once per submit, and not staged when the item is hidden or when a readback
-too large for a buffer refuses the render. Nested scenes
+too large for a buffer refuses the render; on a platform context it is staged with the
+context's `SubmitLock` held, which is free again after the submit. Nested scenes
 (`render_image`), three pixel tests and an ownership check: an image placed in
 another scene lands where its scene put the item and is transparent elsewhere, and
 survives a later `render`; a half-opaque item stays exact in linear light; images
