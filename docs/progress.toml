@@ -747,8 +747,8 @@ needs = ["build"]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "planned"
-note = "draft #304, on T1"
+status = "review"
+prs = [304]
 needs = ["build"]
 
 [[item]]
@@ -759,6 +759,13 @@ status = "review"
 prs = [259]
 note = "#259 merged into wave/m1-2"
 needs = ["wave"]
+
+[[item]]
+id = "E2b"
+milestone = "M2"
+title = "Privacy screen and encoder sharing key"
+status = "review"
+prs = [317]
 
 [[item]]
 id = "D8"

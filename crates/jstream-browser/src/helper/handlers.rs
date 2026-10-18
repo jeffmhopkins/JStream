@@ -348,8 +348,40 @@ wrap_resource_request_handler! {
                 }
             }
         }
+
+        fn on_resource_redirect(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _request: Option<&mut Request>,
+            _response: Option<&mut Response>,
+            new_url: Option<&mut CefString>,
+        ) {
+            // A redirect's target passes the same policy (#347): a public URL that
+            // answers 302 to `http://127.0.0.1/` must not reach it. CEF can't cancel
+            // here, so a refused target is replaced by a URL no request may follow
+            // (Chromium refuses a redirect to a non-web scheme, and the policy refuses
+            // `about:` pages other than blank and srcdoc if it sees the URL again).
+            // `try_set` writes into the string CEF passed in; assigning a new `CefString`
+            // would only replace this wrapper, and CEF would follow the old target.
+            let Some(new_url) = new_url else {
+                return;
+            };
+            let page = &self.page.0;
+            if let crate::Verdict::Deny(_) = page.policy.check(&new_url.to_string())
+                && new_url.try_set(REFUSED_REDIRECT)
+            {
+                // Counted only once the target is really replaced: `try_set` fails only
+                // when CEF passed no string to write into, and then nothing here can
+                // stop the redirect.
+                page.denied();
+            }
+        }
     }
 }
+
+/// What a refused redirect is pointed at instead: a URL that loads nothing.
+const REFUSED_REDIRECT: &str = "about:jstream-refused";
 
 wrap_permission_handler! {
     pub(crate) struct PagePermissions;
