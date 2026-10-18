@@ -2,7 +2,8 @@
 //! capture, geolocation, notifications, clipboard, MIDI and every other permission
 //! Chromium asks about are refused by policy, so the answer doesn't depend on what CEF's
 //! windowless default happens to be in a given version. The helper's permission handler
-//! (`helper/handlers.rs`) asks [`answer`] for every request and acts on it.
+//! (`helper/handlers.rs`) asks [`answer_media`] for every media request and
+//! [`answer_prompt`] for every permission prompt, and acts on the answer.
 //!
 //! One exception: Chromium's Local Network Access checks ask for a permission before a
 //! page reaches this computer or the local network from a less private address. That
@@ -13,10 +14,10 @@
 //! the network layer, what the request policy can't see: a public name that resolves to
 //! a local address, and requests that never reach the resource handler.
 
-/// How a page's permission request is answered.
+/// How a page's permission prompt is answered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Answer {
-    /// Refused: a media request is cancelled, a permission prompt is answered `DENY`.
+    /// Refused: the prompt is answered `DENY`.
     Deny,
     /// Granted: a permission prompt is answered `ACCEPT`. Only ever a prompt that asks
     /// for local network access alone.
@@ -42,16 +43,24 @@ pub(crate) fn answer_prompt(requested: u32, local_allowed: bool) -> Answer {
     }
 }
 
+/// How a page's media access request (camera, microphone, screen capture) is answered:
+/// never granted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MediaAnswer {
+    /// Refused: the request is cancelled.
+    Deny,
+}
+
 /// The answer to a page asking for media access (`requested`, CEF's media bit mask):
-/// always [`Answer::Deny`], whatever it names.
-pub(crate) fn answer_media(requested: u32) -> Answer {
+/// always [`MediaAnswer::Deny`], whatever it names.
+pub(crate) fn answer_media(requested: u32) -> MediaAnswer {
     let _ = requested;
-    Answer::Deny
+    MediaAnswer::Deny
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Answer, LOCAL_NETWORK_BITS, answer_media, answer_prompt};
+    use super::{Answer, LOCAL_NETWORK_BITS, MediaAnswer, answer_media, answer_prompt};
 
     fn masks() -> impl Iterator<Item = u32> {
         (0..u32::BITS).map(|bit| 1u32 << bit).chain([0, u32::MAX])
@@ -63,7 +72,7 @@ mod tests {
     #[test]
     fn every_permission_is_refused() {
         for requested in masks() {
-            assert_eq!(answer_media(requested), Answer::Deny, "{requested:#x}");
+            assert_eq!(answer_media(requested), MediaAnswer::Deny, "{requested:#x}");
             assert_eq!(
                 answer_prompt(requested, false),
                 Answer::Deny,
@@ -84,7 +93,7 @@ mod tests {
                 Answer::Deny
             };
             assert_eq!(answer_prompt(requested, true), expected, "{requested:#x}");
-            assert_eq!(answer_media(requested), Answer::Deny, "{requested:#x}");
+            assert_eq!(answer_media(requested), MediaAnswer::Deny, "{requested:#x}");
         }
         assert_eq!(answer_prompt(LOCAL_NETWORK_BITS, true), Answer::Accept);
         assert_eq!(answer_prompt(LOCAL_NETWORK_BITS, false), Answer::Deny);

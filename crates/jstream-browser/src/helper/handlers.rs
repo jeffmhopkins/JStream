@@ -407,10 +407,12 @@ wrap_permission_handler! {
             requested_permissions: u32,
             callback: Option<&mut MediaAccessCallback>,
         ) -> c_int {
-            // Never granted: `Accept` is only ever a local-network prompt's answer.
-            let _ = crate::permission::answer_media(requested_permissions);
-            if let Some(callback) = callback {
-                callback.cancel();
+            match crate::permission::answer_media(requested_permissions) {
+                crate::permission::MediaAnswer::Deny => {
+                    if let Some(callback) = callback {
+                        callback.cancel();
+                    }
+                }
             }
             // Handled here, never by CEF's default. A request left unanswered (no
             // callback) is never granted either.
