@@ -655,14 +655,14 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "Blocker": {
-      "description": "One reference that stops a `scene.delete` or `source.delete`: the object that refers\nto the target, and the field of that object that holds the reference.\n\n```json\n{\"entity\": \"source\", \"id\": \"webcam\", \"field\": \"settings.mask\"}\n```",
+      "description": "One reference that stops a `scene.delete`, `source.delete`, `folder.delete` or\n`label.delete`: the object that refers to the target, and the field of that object\nthat holds the reference.\n\n```json\n{\"entity\": \"source\", \"id\": \"webcam\", \"field\": \"settings.mask\"}\n```",
       "properties": {
         "entity": {
           "$ref": "#/$defs/EntityKind",
-          "description": "What kind of object refers to the target: an `item` that places a source, a\n`source` that shows a scene or whose settings refer to the target, or a\n`video_mix` that shows a scene."
+          "description": "What kind of object refers to the target: an `item` that places a source, a\n`source` that shows a scene, whose settings refer to the target or that carries\na label, a `video_mix` that shows a scene, or a `scene` or `folder` that sits in a\nfolder."
         },
         "field": {
-          "description": "The field of that object that refers to the target, as a dotted path into its\nquery form: `source_id` for an item, `kind.scene_id` for a `scene` source,\n`settings.<param>` for a settings reference, and `mix.input.scene_id` for a mix.",
+          "description": "The field of that object that refers to the target, as a dotted path into its\nquery form: `source_id` for an item, `kind.scene_id` for a `scene` source,\n`settings.<param>` for a settings reference, `mix.input.scene_id` for a mix,\n`labels` for a source carrying a label, `folder` for a scene in a folder, and\n`parent` for a folder in one.",
           "type": "string"
         },
         "id": {
@@ -1282,7 +1282,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "DeleteTarget": {
-      "description": "What a `delete.plan` deletes: a scene, a source or (since 0.24) a bus.",
+      "description": "What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a\nlabel.",
       "oneOf": [
         {
           "description": "A scene.",
@@ -1335,6 +1335,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "bus_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A folder. The plan moves the scenes and folders in it up to its parent (to the\ntop level for a top-level folder), then deletes it.",
+          "properties": {
+            "folder_id": {
+              "$ref": "#/$defs/FolderId",
+              "description": "The folder to delete."
+            },
+            "type": {
+              "const": "folder",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "folder_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A label. The plan takes it off every source that carries it, then deletes it.",
+          "properties": {
+            "label_id": {
+              "$ref": "#/$defs/LabelId",
+              "description": "The label to delete."
+            },
+            "type": {
+              "const": "label",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "label_id"
           ],
           "type": "object"
         }
@@ -1533,7 +1569,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, then each deleted item's\n`item.remove` inverse, from bottom to top, then `hotkey.set` for each removed\nbinding.",
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top, then\n`hotkey.set` for each removed binding.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -2001,7 +2037,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Copies a source under a new ID: a separate instance with the same kind, settings,\nfilters (with the same filter IDs), audio settings and sends, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
+          "description": "Copies a source under a new ID: a separate instance with the same kind, settings,\nfilters (with the same filter IDs), audio settings and sends, labels and favourite\nflag, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
           "properties": {
             "name": {
               "description": "The copy's display name.",
@@ -2029,7 +2065,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's or filter's settings refer to it: remove those items, or clear\nthose references, first (in the same batch if needed). Deleting a source that\nothers were copied from is allowed: their `duplicated_from` then reads as absent.\nIts sends go with it, and so do the hotkey bindings whose action names it\n(ADR-0040 §3). Inverse: `source.create` with its name, kind, settings and\n`duplicated_from`, then `send.remove` of its master send if it had none,\n`send.set` for each send that `source.create` doesn't restore as it was,\n`source.set_audio` if its audio settings were not the defaults, and `filter.add`\nfor each of its filters, video chain first, in chain order, then `hotkey.set` for\neach removed binding.",
+          "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's or filter's settings refer to it: remove those items, or clear\nthose references, first (in the same batch if needed). Deleting a source that\nothers were copied from is allowed: their `duplicated_from` then reads as absent.\nIts sends go with it, and so do the hotkey bindings whose action names it\n(ADR-0040 §3). Inverse: `source.create` with its name, kind, settings and\n`duplicated_from`, then `send.remove` of its master send if it had none,\n`send.set` for each send that `source.create` doesn't restore as it was,\n`source.set_audio` if its audio settings were not the defaults, `filter.add`\nfor each of its filters, video chain first, in chain order, `source.set_meta` if\nit carried labels or was a favourite, then `hotkey.set` for each removed binding.",
           "properties": {
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -2528,6 +2564,346 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "output_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders\norganise only: they change no rendering, switching or nesting. Inverse:\n`folder.delete`.",
+          "properties": {
+            "folder_id": {
+              "$ref": "#/$defs/FolderId",
+              "description": "The new folder's ID, chosen by the client. Rejected if it exists."
+            },
+            "name": {
+              "description": "Display name.",
+              "type": "string"
+            },
+            "parent": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FolderId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The folder it sits in, which must exist, else `not_found`. Omitted means top\nlevel."
+            },
+            "type": {
+              "const": "folder.create",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "folder_id",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Renames a folder. Inverse: `folder.rename` back to the previous name.",
+          "properties": {
+            "folder_id": {
+              "$ref": "#/$defs/FolderId",
+              "description": "The folder to rename."
+            },
+            "name": {
+              "description": "The new display name.",
+              "type": "string"
+            },
+            "type": {
+              "const": "folder.rename",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "folder_id",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves a folder into another folder, or to the top level (ADR-0064: folders nest).\nA parent that would put the folder inside itself is `invalid_argument` (field\n`parent`), and a parent that doesn't exist `not_found`. Inverse:\n`folder.set_parent` with the previous parent.",
+          "properties": {
+            "folder_id": {
+              "$ref": "#/$defs/FolderId",
+              "description": "The folder to move."
+            },
+            "parent": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FolderId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Its new parent. Absent or `null` means top level."
+            },
+            "type": {
+              "const": "folder.set_parent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "folder_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves a folder to another position in folder order. The folders in one parent\nshow in that order. Inverse: `folder.reorder` back to its previous index.",
+          "properties": {
+            "folder_id": {
+              "$ref": "#/$defs/FolderId",
+              "description": "The folder to move."
+            },
+            "index": {
+              "description": "The new position, counted from the first folder (0). Must be less than the\nnumber of folders, else `invalid_argument`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "folder.reorder",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "folder_id",
+            "index"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes an empty folder. Rejected with `invalid_argument` while a scene or another\nfolder sits in it, listing them as `blockers`: move them out first, or send the\nbatch `delete.plan` returns, which moves them up to the folder's parent. Inverse:\n`folder.create` with its name and parent, then `folder.reorder` to its old\nposition (unless it was last).",
+          "properties": {
+            "folder_id": {
+              "$ref": "#/$defs/FolderId",
+              "description": "The folder to delete."
+            },
+            "type": {
+              "const": "folder.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "folder_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Puts a scene in a folder, or takes it out of one. The scene keeps its position in\nthe flat display order. Inverse: `scene.set_folder` with the previous folder.",
+          "properties": {
+            "folder_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FolderId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The folder, which must exist, else `not_found`. Absent or `null` means none."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to file."
+            },
+            "type": {
+              "const": "scene.set_folder",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty or longer than 64 bytes, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
+          "properties": {
+            "color": {
+              "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "favourite": {
+              "description": "Whether it is a favourite. JStream is single-user, so this is not per person.\nOmitted for `false`.",
+              "type": "boolean"
+            },
+            "icon": {
+              "description": "An icon name from the UI's icon set, at most 64 bytes. Omitted for none.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "show_in_multiview": {
+              "description": "Whether a multiview shows it. Omitted for `true`, the default.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "scene.set_meta",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
+          "properties": {
+            "color": {
+              "description": "Its colour, sRGB as `#rrggbb`.",
+              "type": "string"
+            },
+            "icon": {
+              "description": "An icon name from the UI's icon set. Omitted means none.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_id": {
+              "$ref": "#/$defs/LabelId",
+              "description": "The new label's ID, chosen by the client. Rejected if it exists."
+            },
+            "name": {
+              "description": "Display name.",
+              "type": "string"
+            },
+            "type": {
+              "const": "label.create",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "label_id",
+            "name",
+            "color"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Replaces a label's name, colour and icon, validated as in `label.create`. Every\nsource carrying it shows the change. Inverse: `label.update` with the previous\nvalues.",
+          "properties": {
+            "color": {
+              "description": "The new colour.",
+              "type": "string"
+            },
+            "icon": {
+              "description": "The new icon. Omitted means none.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_id": {
+              "$ref": "#/$defs/LabelId",
+              "description": "The label to change."
+            },
+            "name": {
+              "description": "The new display name.",
+              "type": "string"
+            },
+            "type": {
+              "const": "label.update",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "label_id",
+            "name",
+            "color"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves a label to another position in label order. Inverse: `label.reorder` back\nto its previous index.",
+          "properties": {
+            "index": {
+              "description": "The new position, counted from the first label (0). Must be less than the\nnumber of labels, else `invalid_argument`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "label_id": {
+              "$ref": "#/$defs/LabelId",
+              "description": "The label to move."
+            },
+            "type": {
+              "const": "label.reorder",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "label_id",
+            "index"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a label. Rejected with `invalid_argument` while a source carries it,\nlisting them as `blockers`: take it off those sources first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
+          "properties": {
+            "label_id": {
+              "$ref": "#/$defs/LabelId",
+              "description": "The label to delete."
+            },
+            "type": {
+              "const": "label.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "label_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Replaces a source's organisation metadata: the labels it carries and its\nfavourite flag. Every field left out takes its default, so `labels` omitted\nremoves them all. A label that doesn't exist is `not_found`, and one listed twice\n`invalid_argument`; the engine stores them ordered by ID. Inverse:\n`source.set_meta` with the previous metadata.",
+          "properties": {
+            "favourite": {
+              "description": "Whether it is a favourite. Omitted for `false`.",
+              "type": "boolean"
+            },
+            "labels": {
+              "description": "The labels it carries, ordered by ID, each at most once. Every one must exist.\nOmitted for none.",
+              "items": {
+                "$ref": "#/$defs/LabelId"
+              },
+              "type": "array"
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source to change."
+            },
+            "type": {
+              "const": "source.set_meta",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
           ],
           "type": "object"
         },
@@ -3099,6 +3475,16 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         {
+          "const": "folder",
+          "description": "A folder of the scene list.",
+          "type": "string"
+        },
+        {
+          "const": "label",
+          "description": "A label.",
+          "type": "string"
+        },
+        {
           "const": "bus",
           "description": "An audio bus.",
           "type": "string"
@@ -3657,6 +4043,39 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "FolderId": {
+      "description": "A folder of the scene list (ADR-0024 §3). Folders organise only.",
+      "type": "string"
+    },
+    "FolderInfo": {
+      "description": "One folder of the scene list, as `state.get` reports it.",
+      "properties": {
+        "folder_id": {
+          "$ref": "#/$defs/FolderId",
+          "description": "The folder's ID."
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FolderId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The folder it sits in. Omitted for a top-level folder."
+        }
+      },
+      "required": [
+        "folder_id",
+        "name"
+      ],
+      "type": "object"
+    },
     "GestureId": {
       "description": "A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by\nthe client that opens it, and unique among that client's open gestures.",
       "type": "string"
@@ -3927,7 +4346,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "ItemGeometry": {
-      "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, and omitted `perspective_px` means orthographic.",
+      "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
       "properties": {
         "center": {
           "$ref": "#/$defs/Vec2",
@@ -3942,6 +4361,14 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/FitMode",
           "default": "fit",
           "description": "How the cropped source fills the box. Default [`FitMode::Fit`]."
+        },
+        "flip_h": {
+          "description": "Mirror the content left to right, about the box's vertical centre line in its\nlocal frame, after crop and fit and before rotation. The box itself does not\nchange. Default `false`.",
+          "type": "boolean"
+        },
+        "flip_v": {
+          "description": "Mirror the content top to bottom, about the box's horizontal centre line in its\nlocal frame, after crop and fit and before rotation. Default `false`.",
+          "type": "boolean"
         },
         "perspective_px": {
           "anyOf": [
@@ -4203,6 +4630,40 @@ source: crates/jstream-protocol/src/fixtures.rs
         "category",
         "name",
         "version"
+      ],
+      "type": "object"
+    },
+    "LabelId": {
+      "description": "A label that sources carry (ADR-0024 §4).",
+      "type": "string"
+    },
+    "LabelInfo": {
+      "description": "One label, as `state.get` reports it.",
+      "properties": {
+        "color": {
+          "description": "Its colour, sRGB as `#rrggbb`.",
+          "type": "string"
+        },
+        "icon": {
+          "description": "An icon name from the UI's icon set. The engine stores it and checks only its\nlength. Omitted for none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label_id": {
+          "$ref": "#/$defs/LabelId",
+          "description": "The label's ID."
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label_id",
+        "name",
+        "color"
       ],
       "type": "object"
     },
@@ -4937,7 +5398,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, every output, every encoder profile, every video mix, the buses and sends,\nand every hotkey binding) at one revision: what a client\nreads on connecting, after a `state.changed` it didn't cause, or before an edit it\nsends with `expected_rev`.",
+          "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, every output, every encoder profile, every video mix, the buses and sends,\nevery hotkey binding, and the folders and labels) at one revision: what a client\nreads on connecting, after a `state.changed` it didn't cause, or before an edit it\nsends with `expected_rev`.",
           "properties": {
             "type": {
               "const": "state.get",
@@ -5135,7 +5596,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The batch that deletes a scene, source or bus together with everything that\nrefers to it, which `scene.delete`, `source.delete` and `bus.delete` alone refuse\n(their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,\ndeletes the `scene` sources that show a deleted scene (and their items), and sets\nsettings references to the target to `null`, keeping the sources that hold them.\nIt also lists the hotkey bindings the delete removes with what they name\n(ADR-0040 §3), which need no edit of their own. The client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
+          "description": "The batch that deletes a scene, source, bus, folder or label together with\neverything that refers to it, which `scene.delete`, `source.delete`, `bus.delete`,\n`folder.delete` and `label.delete` alone refuse (their `invalid_argument` lists\nthose `blockers`). The plan removes the items that place a deleted source, deletes\nthe `scene` sources that show a deleted scene (and their items), and sets settings\nreferences to the target to `null`, keeping the sources that hold them. For a\nfolder it moves what sits in it up to the folder's parent; for a label it takes\nthe label off the sources carrying it. It also lists the hotkey bindings the\ndelete removes with what they name (ADR-0040 §3), which need no edit of their own.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
           "properties": {
             "target": {
               "$ref": "#/$defs/DeleteTarget",
@@ -5346,11 +5807,25 @@ source: crates/jstream-protocol/src/fixtures.rs
               },
               "type": "array"
             },
+            "folders": {
+              "description": "Every folder of the scene list, in folder order (ADR-0024 §3). Omitted when\nthere are none; missing (from an older server) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/FolderInfo"
+              },
+              "type": "array"
+            },
             "hotkeys": {
               "default": [],
               "description": "Every hotkey binding, ordered by chord. Missing (from a server older than\n0.25) parses as empty.",
               "items": {
                 "$ref": "#/$defs/HotkeyBinding"
+              },
+              "type": "array"
+            },
+            "labels": {
+              "description": "Every label, in label order (ADR-0024 §4). Omitted when there are none;\nmissing (from an older server) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/LabelInfo"
               },
               "type": "array"
             },
@@ -5984,6 +6459,35 @@ source: crates/jstream-protocol/src/fixtures.rs
     "SceneInfo": {
       "description": "One scene with its items, as `state.get` reports it.",
       "properties": {
+        "color": {
+          "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "favourite": {
+          "description": "Whether it is a favourite. JStream is single-user, so this is not per person.\nOmitted for `false`.",
+          "type": "boolean"
+        },
+        "folder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FolderId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The folder it is filed in (ADR-0024 §3). Omitted for none."
+        },
+        "icon": {
+          "description": "An icon name from the UI's icon set, at most 64 bytes. Omitted for none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "items": {
           "description": "Its items, in stacking order: the first is at the bottom.",
           "items": {
@@ -6002,6 +6506,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "scene_id": {
           "$ref": "#/$defs/SceneId",
           "description": "The scene's ID."
+        },
+        "show_in_multiview": {
+          "description": "Whether a multiview shows it. Omitted for `true`, the default.",
+          "type": "boolean"
         },
         "transition_in": {
           "anyOf": [
@@ -6051,6 +6559,35 @@ source: crates/jstream-protocol/src/fixtures.rs
     "SceneSummary": {
       "description": "One scene in a `scene.list` result.",
       "properties": {
+        "color": {
+          "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "favourite": {
+          "description": "Whether it is a favourite. JStream is single-user, so this is not per person.\nOmitted for `false`.",
+          "type": "boolean"
+        },
+        "folder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FolderId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The folder it is filed in (ADR-0024 §3). Omitted for none."
+        },
+        "icon": {
+          "description": "An icon name from the UI's icon set, at most 64 bytes. Omitted for none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "item_count": {
           "description": "How many items it has.",
           "format": "uint32",
@@ -6068,6 +6605,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "scene_id": {
           "$ref": "#/$defs/SceneId",
           "description": "The scene's ID."
+        },
+        "show_in_multiview": {
+          "description": "Whether a multiview shows it. Omitted for `true`, the default.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -6245,6 +6786,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           ],
           "description": "The source this one was copied from by `source.duplicate`, while that source\nexists. Omitted if it was not copied, or its original has been deleted. An item\nplacing this source can go back to placing the original with `item.set_source`."
         },
+        "favourite": {
+          "description": "Whether it is a favourite. Omitted for `false`.",
+          "type": "boolean"
+        },
         "filters": {
           "$ref": "#/$defs/FilterChains",
           "description": "Its filter chains (ADR-0026). Omitted while both are empty."
@@ -6252,6 +6797,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         "kind": {
           "$ref": "#/$defs/SourceKind",
           "description": "What it shows."
+        },
+        "labels": {
+          "description": "The labels it carries, ordered by ID, each at most once. Every one must exist.\nOmitted for none.",
+          "items": {
+            "$ref": "#/$defs/LabelId"
+          },
+          "type": "array"
         },
         "name": {
           "description": "Its display name.",
@@ -7026,5 +7578,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.30"
+  "title": "JStream protocol 0.32"
 }

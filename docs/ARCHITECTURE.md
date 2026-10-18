@@ -167,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md", "docs/adr/0064-nested-scene-folders.md"]
 -->
 
 ```
@@ -180,8 +180,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                          items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (reserved, empty in v1), transition }
-├── folders        Folder { id, name }   ordered, one level; organising only
-├── labels         Label { id, name, icon, color }   ordered
+├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
+├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
@@ -220,8 +220,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   collection's `canvas` is every scene's coordinate space, in pixels, and a `VideoMix`
   scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
-  and 3D tilt, turn, depth and per-item perspective, drawn in stacking order with no
-  depth buffer. `crop` is in source pixels. A source's current size is runtime state,
+  horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
+  turn, depth and per-item perspective, drawn in stacking order with no depth buffer. `crop` is in source pixels. A source's current size is runtime state,
   not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
   protocol 0.3's transform as written, which the compositor evaluates against the
   source's current size every frame. Only an explicit `item.set_geometry` turns it into
@@ -262,7 +262,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   and saved with the collection, so every client and agent sees the same thing
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
   person). Folders change no rendering, switching or nesting; scenes keep their flat
-  display order, and a variant sits under its parent, never in a folder. Labels and
+  display order, and a variant sits under its parent, never in a folder. A folder sits in
+  at most one other (`parent`, [ADR-0064](adr/0064-nested-scene-folders.md)), never inside itself, and
+  the folders in one parent show in folder order. A folder that holds anything, or a
+  label a source carries, can't be deleted; `delete.plan` moves what the folder holds up
+  to its parent, or takes the label off its sources. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
   decision. Deleting the scene, source, output or transition preset a binding's action
@@ -417,16 +421,18 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the master at 0 dB. A send always runs from a source to a bus, and filters have no
   sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
   the program stage's mixer while it runs.
+  Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
+  and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), video filter kinds, blend modes other than `normal`,
   bus monitors, per-placement effects, 3D
   geometry, variants and overrides (so no edit drops
-  any yet), folders, labels, favourites and other organisation metadata,
-  `background`, output audio buses and chains, the `YouTube` kind, a virtual camera's
-  video mix (it always shows the program), and everything outside `sources`, `scenes`,
-  `outputs`, `encoders`, `video_mixes`, `audio`, `hotkeys` and `transitions`. The
-  collection file saves everything built so far, encoder profiles, video mixes, each
-  output's profile and mix, `duplicated_from`, buses, sends, source audio, hotkeys and
+  any yet), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  camera's video mix (it always shows the program), and everything outside `sources`,
+  `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
+  `hotkeys` and `transitions`. The collection file saves everything built so far,
+  encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -603,7 +609,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
-  `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
+  `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
+  0.32). `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
   `video_mix.create`, `video_mix.update` and `video_mix.delete` configure video mixes
@@ -625,6 +632,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   output or transition preset an action names removes its bindings in the same edit, the batch result lists
   them as `removed_hotkeys`, and undo restores them
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
+  `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
+  `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
+  `source.set_meta` edit labels and organisation metadata
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -692,7 +704,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
-  batch that deletes a scene or source (or, from protocol 0.24, a bus) with everything
+  batch that deletes a scene or source (or, from protocol 0.24, a bus, or a folder or
+  label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name; audio levels are the `meters.tick` event, not a query).
@@ -727,7 +740,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)), and so does a `bus.delete`
   refused because a setting draws the bus (protocol 0.24: a `bus` reference, as the
-  `waveform` and `spectrum` kinds' `audio` setting holds).
+  `waveform` and `spectrum` kinds' `audio` setting holds), and a `folder.delete` or
+  `label.delete` refused because a scene or folder is in the folder or a source carries
+  the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
   `preview.subscribe` opens a stream of the program mix for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
@@ -784,7 +799,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -801,7 +816,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 593 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 662 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -874,7 +889,7 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
 is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's forms: a
 geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
-which is clipped to the box, then rotated about the box centre), or a legacy 0.3
+which is clipped to the box, mirrored by its flips, then rotated about the box centre), or a legacy 0.3
 transform through `legacy_quad` (crop, scale against the current source size,
 top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
@@ -892,7 +907,7 @@ after the GPU has finished the last frame that used it (see
 [Threads › State to RT threads](#threading)). On the GPU path the engine's render
 thread composites on the platform's `GpuContext`, and capture moves onto it through
 `Capture::on_context`: each captured texture is imported once into the cache and
-sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
+sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
@@ -1040,8 +1055,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 - **Collections:** JSON with a `schema_version` field and forward migrations in
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
-  settings) is omitted when empty or at its default (for presets, a new collection's one
-  `cut`), so a file without it is still valid at the same `schema_version`. `jstream-core`
+  settings, folders, labels and organisation metadata) is omitted when empty or at its
+  default (for presets, a new collection's one `cut`), so a file without it is still
+  valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
@@ -1050,7 +1066,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
   migrations, a source, filter or preset saved at another version is refused on load.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
-  `normal`, a disabled filter's `enabled` only when false, and the reserved `effects[]`
+  `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
   must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.

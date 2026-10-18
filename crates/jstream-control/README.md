@@ -114,7 +114,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but the transition ones (below), with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but the transition and organisation ones (both below), with the
+  checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -175,7 +176,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
   cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
-  `internal`, and its refused deletes carry no `blockers`;
+  `internal`, and its refused deletes carry no `blockers`. The folder, label and
+  metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4:
+  `folder.*`, `label.*`, `scene.set_folder`, `scene.set_meta` and `source.set_meta`)
+  answer `internal` too, so its reads report no folders, labels or metadata;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
