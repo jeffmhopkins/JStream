@@ -3,7 +3,7 @@
 //! sources drive decoders, whatever platform provides them.
 //!
 //! Every implementation wraps an OS or GPU-vendor codec, never a bundled C codec library
-//! (docs/adr/0031-source-types-and-decoding-scope.md). The call pattern is the one spike S1 drives
+//! (docs/adr/0061-source-types-and-decoding-scope-v2.md). The call pattern is the one spike S1 drives
 //! a Media Foundation encoder MFT with: check [`can_accept`](VideoEncoder::can_accept),
 //! submit, then [`poll`](VideoEncoder::poll) without blocking for whatever output is
 //! ready, and [`finish`](VideoEncoder::finish) to drain at the end of the stream. A
@@ -40,7 +40,7 @@ pub struct CodecInfo {
     pub hardware: bool,
 }
 
-/// Whether to use a hardware codec. ADR-0031: hardware first, with the OS software codec
+/// Whether to use a hardware codec. ADR-0061: hardware first, with the OS software codec
 /// as the fallback.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum HardwarePreference {

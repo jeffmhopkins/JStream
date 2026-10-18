@@ -10,8 +10,9 @@ name: ci
 
 # Linux only. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
 # after-review.yml, which runs on main and, on a PR, once review passes (ADR-0054).
-# A PR into a `wave/*` branch runs only the quick jobs (fmt, Linux clippy, docs,
-# lint-deps, gate-test, pr-title); the wave's own PR into main runs everything (ADR-0055).
+# A PR into a `wave/*` branch runs the quick jobs (fmt, Linux clippy, docs, lint-deps,
+# gate-test, pr-title) and the Linux tests (ADR-0070); it skips doc, deny and wasm, which
+# the wave's own PR into main runs with everything else (ADR-0055).
 on:
   pull_request:
     # ready_for_review: draft PRs skip every job below, so CI runs when a draft is marked ready.
@@ -51,9 +52,13 @@ jobs:
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # The macOS platform crate, type-checked for Apple Silicon from Linux, so a macOS-only
+      # compile error shows before review (ADR-0063 §14). Its bindings need no Apple SDK.
+      - run: rustup target add aarch64-apple-darwin
+      - run: cargo clippy -p jstream-platform-macos --all-targets --locked --target aarch64-apple-darwin -- -D warnings
 
   test:
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
