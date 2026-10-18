@@ -369,6 +369,10 @@ camera registered by this step, a program running as the user can't change the c
 Frame Server loads from the copy. The host
 compares the copy with the DLL it ships by content and reports an outdated copy;
 registering again is a new opt-in. Unregistering removes the keys and the copy.
+The producer refuses a control mapping that already existed unless its owner is the
+user, SYSTEM or Administrators and its DACL lets no one but them and LOCAL SERVICE in;
+the DLL checks the owner of a session block's textures and fence as it does the
+block's (#540, #356).
 
 **Accepted:** every app that opens the virtual camera sees its frames; LOCAL SERVICE
 needs full access; `Global\` blocks, which only an administrator or service can create,
@@ -381,8 +385,8 @@ again. A camera registered before ADR-0066, from the app's own folder, stays
 registered there until the user runs the step again; the host reports it as outdated.
 A DLL registered by hand with `regsvr32` is registered where it is.
 
-**Gaps:** a control mapping created before the producer's keeps its own DACL (#356).
-The copy's DACL and Frame Server loading it are not yet checked on Windows hardware (#563).
+**Gaps:** the copy's DACL and Frame Server loading it are not yet checked on Windows
+hardware (#563).
 
 <a id="gaps"></a>
 ## Known gaps

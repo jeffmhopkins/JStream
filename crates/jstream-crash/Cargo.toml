@@ -1,0 +1,28 @@
+[package]
+name = "jstream-crash"
+version = "0.0.0"
+description = "Local crash reports for the JStream apps: the panic hook, secret redaction by digest, the report format and pruning."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "Local crash reports for the apps (ADR-0067): the panic hook, redaction of registered secrets by BLAKE3 digest, the report format and pruning, and `Redacting`, a key and token store wrapper that registers what passes through it. No global state: the apps hold the `Secrets` handle"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# Secrets are kept only as digests, and found by hashing each window of their length.
+blake3.workspace = true
+# `StreamKeyStore`, `OAuthTokenStore` and their `Secret`, for `Redacting`.
+jstream-platform.workspace = true
+# `PROTOCOL_VERSION`, named in every report.
+jstream-protocol.workspace = true
+
+[dev-dependencies]
+# `Redacting`'s tests: in-memory key and token stores.
+jstream-platform = { workspace = true, features = ["fake"] }

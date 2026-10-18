@@ -57,11 +57,11 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
 | [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 7 | 2 | 5 | 4 | 0 |
+| [Canvas](#canvas) | 18 | 9 | 3 | 1 | 5 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
-| [Scene objects panel](#objects) | 9 | 0 | 3 | 5 | 1 | 0 |
+| [Scene objects panel](#objects) | 9 | 1 | 3 | 4 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 0 | 0 | 6 | 4 | 0 |
 | [Transform panel](#transform) | 4 | 0 | 0 | 4 | 0 | 0 |
 | [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **26** | **23** | **47** | **33** | **1** |
+| **Total** | **130** | **29** | **24** | **42** | **34** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -89,7 +89,7 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. |
 | WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
-| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | Today: text glyphs (▲ ▼ ✕ ● ○ ↺). |
+| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | Today: text glyphs (▲ ▼ ✕ ● ○ ↺), except the canvas tools' two stroke icons. |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ⬜ | Used by the Inspector, filters, mixer and dialogs. |
 | WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ⬜ | |
 | WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ⬜ | Rows already show tools on hover; the prototype's look and "stays on" rule are missing. |
@@ -158,12 +158,12 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | ✅ | A rotated item doesn't snap, as in the prototype. |
 | CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | ✅ | A corner follows the axis that snapped, else the larger change; an edge scales the other axis about the centre. |
 | CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | ✅ | Off the 90° snap, the angle rounds to 0.1°. |
-| CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | ⬜ | `item.set_crop` exists. |
-| CV-09 | Multi-select | Shift-click adds or removes; Ctrl+A selects all; the group gets a dashed box with its own handles to scale and rotate. | ⬜ | |
-| CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ⬜ | |
-| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Move/resize and Snapping are built; Crop lands with CV-08. |
+| CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | 🔒 | `item.set_crop` is in source pixels, and turning a dragged edge into source pixels needs the source's size: runtime source sizes (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md)) aren't in the protocol. |
+| CV-09 | Multi-select | Shift-click adds or removes; Ctrl+A selects all; the group gets a dashed box with its own handles to scale and rotate. | ✅ | The group box can reach past the frame; the pointer is followed over the whole canvas area so its handles stay reachable. A corner scales by the larger change (as a single item's resize does), where the prototype takes the larger factor; they differ only when shrinking. |
+| CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ✅ | A marquee can start on the dark margin too. Hits use each item's axis-aligned bounds. |
+| CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Move/resize and Snapping are built; Crop waits on CV-08. |
 | CV-12 | Nudge | Arrows move 1px, Shift 10px. | ✅ | |
-| CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ⬜ | |
+| CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | 🟡 | Selects the item and shows the Inspector, since the Properties dialog (DL-02) isn't built yet; a reference doesn't open its source separately. |
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ⬜ | |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend and no 3D yet (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | 🔒 | Keyframe scenes in the protocol are K1. |
@@ -246,7 +246,7 @@ Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-obj
 | OB-05 | Scene-input filter rows | An object with a mask, matte, clip or displacement filter shows the scene it uses as a child row with a role badge. | 🔒 | Scene-input video filters (V3, #313). |
 | OB-06 | Drag to reorder and group | Drag before, after or into a group. | ⬜ | Reorder exists as ▲/▼. |
 | OB-07 | Search | "Search objects". | ⬜ | |
-| OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ⬜ | |
+| OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ✅ | Shift-click adds a row or takes it out; every selected item's row is highlighted. |
 | OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | 🟡 | Built with inline controls; the dialog is DL-06. |
 
 <a id="inspector"></a>
@@ -391,8 +391,8 @@ handlers; the real UI makes them work.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc and arrows built; C and V land with crop (CV-08), Ctrl+A with multi-select (CV-09). |
-| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Shift half speed and all of Ctrl built; Shift adding to the selection lands with CV-09, Alt crop with CV-08. |
+| KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc, Ctrl+A and arrows built (arrows move every selected item, as one edit); C and V wait on crop (CV-08). |
+| KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Shift half speed and add, and all of Ctrl, built; Alt crop waits on CV-08. |
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ⬜ | |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
@@ -439,8 +439,10 @@ starts when the one before it has passed review.
    into Scenes, Scene objects, Inspector, Mixer and Outputs; Filters and Transform join
    with their batches.
 3. **Canvas:** edits the selected scene with one shared selection, frame and chrome,
-   floating toolbar, crop, multi-select, box select, the prototype's modifier keys
-   (CV-01, CV-02, CV-04 to CV-14, CV-18, KB-01, KB-02).
+   floating toolbar, multi-select, box select, the prototype's modifier keys
+   (CV-01, CV-02, CV-04 to CV-07, CV-09 to CV-13, CV-18, KB-01, KB-02). The context
+   menu (CV-14) comes with the other menus in batch 5, and crop (CV-08) once the
+   protocol reports source sizes.
 4. **Inspector and Transform:** placement number fields, W/H link, crop, opacity, scene
    section, align and distribute (IN-01, IN-02, IN-04, IN-06 to IN-08, TF-01 to TF-04).
 5. **Menus and dialogs:** context menus, Properties dialog, Add source dialog,

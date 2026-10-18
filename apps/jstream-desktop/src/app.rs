@@ -8,6 +8,7 @@ use crate::host::{self, Host};
 use crate::logs::LogFile;
 use crate::ui::{self, Ui};
 use anyhow::Context;
+use jstream_crash::Secrets;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -75,8 +76,14 @@ impl Startup {
 }
 
 /// Starts the engine and its server and finds the UI. Every failure becomes the page
-/// the window shows, and is logged.
-pub fn start(options: &Options, exe_dir: Option<&Path>, data: Option<&Path>) -> Startup {
+/// the window shows, and is logged. The control token and every stream key are
+/// registered with `secrets`, the crash reports' redaction.
+pub fn start(
+    options: &Options,
+    exe_dir: Option<&Path>,
+    data: Option<&Path>,
+    secrets: &Secrets,
+) -> Startup {
     let problem = |error: anyhow::Error| {
         tracing::error!(error = format!("{error:#}"), "the app could not start");
         Startup::problem(format!("{error:#}"))
@@ -100,8 +107,9 @@ pub fn start(options: &Options, exe_dir: Option<&Path>, data: Option<&Path>) -> 
             data,
             Arc::new(audit),
             !options.no_vcam,
+            secrets,
         )?;
-        Host::start(engine, ui::ORIGIN)
+        Host::start(engine, ui::ORIGIN, secrets)
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
     tracing::info!(vcam = vcam.as_str(), "virtual camera");

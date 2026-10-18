@@ -85,7 +85,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   scene in the list switches the canvas to it; a Ctrl drag sends nothing until the drop
   and shows the top-left readout meanwhile, then one edit that Ctrl+Z and Ctrl+Shift+Z
   reverse; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
-  (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
+  (Shift by 10) and Ctrl+Z undoes; a second client sees a move; a marquee started on
+  the margin selects the box it touches and Escape clears it; with a second item
+  placed, Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
+  canvas takes one out and Shift-click on its row in the sources list adds it back; a
+  double click brings the closed Inspector back showing the item, and a double click
+  on the canvas tools over an item leaves the selection alone.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
   preview goes to program with Transition, and the old program scene comes back on
   preview; Transition and Cut are off while preview is the program scene; a value the
