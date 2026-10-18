@@ -9,12 +9,13 @@
 //! ScreenCaptureKit (`ScreenCaptureKitCapture`) on CPU frames, behind the Screen Recording
 //! permission, the Keychain store for stream keys and OAuth tokens (`MacosKeychain`), and
 //! Core Audio devices, input recording (behind the Microphone permission) and output
-//! playback through the HAL (`CoreAudioIo`), and the VideoToolbox H.264 and HEVC decoder
-//! on CPU frames, its packets split by `split_access_unit` and its frames put in
-//! presentation order by `Reorder`, and local media files through AVFoundation's asset
-//! reader (`AvMediaDecoders`), with stand-ins for the webcams and GPU interop not built
-//! yet (`NoVideoDevices`, `NoGpuInterop`). Desktop and application audio report `Unsupported`
-//! until their follow-up lands. Layer 2, and one of the crates allowed `unsafe` (R-UNSAFE-001): every
+//! playback through the HAL, the processes Core Audio knows as audio clients, and
+//! desktop and application audio through process taps (`CoreAudioIo`), and the
+//! VideoToolbox H.264 and HEVC decoder on CPU frames, its packets split by
+//! `split_access_unit` and its frames put in presentation order by `Reorder`, and
+//! local media files through AVFoundation's asset reader (`AvMediaDecoders`), with
+//! stand-ins for the webcams and GPU interop not built yet (`NoVideoDevices`,
+//! `NoGpuInterop`). Layer 2, and one of the crates allowed `unsafe` (R-UNSAFE-001): every
 //! system call is wrapped here behind safe APIs.
 //!
 //! Apple's frameworks are called through the objc2 crates and Mach time through `mach2`
