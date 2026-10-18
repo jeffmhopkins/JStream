@@ -32,18 +32,24 @@ use jstream_platform::PlatformError;
 use jstream_platform::media::ChannelLayout;
 
 /// How long a stream's thread waits on the PCM before checking whether it should stop.
+/// This and the stream constants below are used only by the Linux-only stream code.
+#[cfg(target_os = "linux")]
 pub(crate) const WAIT_MS: i32 = 100;
 
 /// The period a stream asks for, in microseconds: 10 ms.
+#[cfg(target_os = "linux")]
 const PERIOD_US: u32 = 10_000;
 
 /// The buffer a stream asks for, in microseconds: four periods.
+#[cfg(target_os = "linux")]
 const BUFFER_US: u32 = 4 * PERIOD_US;
 
 /// The rate a stream asks for before taking the device's nearest.
+#[cfg(target_os = "linux")]
 const PREFERRED_RATE: u32 = 48_000;
 
 /// The channel count a stream asks for before taking the device's nearest.
+#[cfg(target_os = "linux")]
 const PREFERRED_CHANNELS: u32 = 2;
 
 /// 100 ns ticks per second, the media clock's unit.
