@@ -7,12 +7,15 @@
 //!
 //! One exception: Chromium's Local Network Access checks ask for a permission before a
 //! page reaches this computer or the local network from a less private address. That
-//! prompt is answered by the page's [`RequestPolicy`](crate::RequestPolicy): granted when
-//! the policy lets the page make local requests (its source opted in, or the page is
-//! itself local or a file), refused otherwise. So an opted-in widget can still reach an
-//! app on `127.0.0.1`, and for every other page from the internet Chromium refuses, at
-//! the network layer, what the request policy can't see: a public name that resolves to
-//! a local address, and requests that never reach the resource handler.
+//! prompt is answered by the page's [`RequestPolicy`](crate::RequestPolicy) for the
+//! prompt's requesting origin (#721): granted when the policy lets that origin make local
+//! requests (it is the source's own and the source opted in or is itself local, a file
+//! or blank, or the origin is itself local), refused otherwise, a third-party frame's
+//! included. So an opted-in widget can still reach an app on `127.0.0.1`, and for every
+//! other origin from the internet Chromium is meant to refuse, at the network layer, what
+//! the request policy can't see: a public name that resolves to a local address, and
+//! requests that never reach the resource handler. That the pinned CEF enforces these
+//! checks in windowless pages is not yet confirmed on a Windows run (#347).
 
 /// How a page's permission prompt is answered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,9 +34,10 @@ pub(crate) enum Answer {
 pub(crate) const LOCAL_NETWORK_BITS: u32 = 0x0200_0000 | 0x0400_0000 | 0x0800_0000;
 
 /// The answer to a page asking for `requested`, CEF's bit mask of permissions in a
-/// prompt. `local_allowed` is whether the page's request policy lets it make local
-/// requests. Granted only when the prompt asks for local network access and nothing
-/// else, and the page may; every other prompt is refused, whatever it names.
+/// prompt. `local_allowed` is whether the page's request policy lets the prompt's
+/// requesting origin make local requests. Granted only when the prompt asks for local
+/// network access and nothing else, and that origin may; every other prompt is refused,
+/// whatever it names.
 pub(crate) fn answer_prompt(requested: u32, local_allowed: bool) -> Answer {
     let only_local = requested != 0 && requested & !LOCAL_NETWORK_BITS == 0;
     if only_local && local_allowed {
