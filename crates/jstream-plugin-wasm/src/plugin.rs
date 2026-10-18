@@ -108,9 +108,11 @@ struct HostState {
     result: Vec<u8>,
     /// What the host passed to the current invocation, for `input_read`.
     input: Vec<u8>,
-    /// The deadline of one entry into the plugin, in epoch ticks, re-armed after each
-    /// `call`.
+    /// The deadline of one invocation, in epoch ticks.
     call_ticks: u64,
+    /// The deadline of the current entry into the plugin, the load's or an
+    /// invocation's, in epoch ticks: what each `call` re-arms when it returns.
+    entry_ticks: u64,
 }
 
 /// One loaded plugin: its own store, memory and instance, and the session it calls
@@ -132,8 +134,8 @@ pub struct Plugin {
 impl Plugin {
     /// Compiles and instantiates `wasm`, a binary core module. Every import must be one of the [`abi`] functions, so a module that asks
     /// for WASI or anything else is refused before any of its code runs. The module's
-    /// `start` function, if any, runs with one invocation's fuel, and the load as a whole
-    /// within [`Limits::load_deadline`].
+    /// `start` function, if any, runs with one invocation's fuel, within
+    /// [`Limits::load_deadline`] of wall time between host calls.
     pub fn load(
         host: &PluginHost,
         wasm: impl AsRef<[u8]>,
@@ -164,6 +166,7 @@ impl Plugin {
             result: Vec::new(),
             input: Vec::new(),
             call_ticks: limits::ticks(limits.call_deadline(), EPOCH_TICK),
+            entry_ticks: limits::ticks(limits.load_deadline(), EPOCH_TICK),
         };
         let mut store = Store::new(&host.engine, state);
         store.limiter(|state| &mut state.limits);
@@ -171,7 +174,8 @@ impl Plugin {
             .set_fuel(limits.fuel())
             .map_err(|e| Error::Engine(e.into()))?;
         store.epoch_deadline_trap();
-        store.set_epoch_deadline(limits::ticks(limits.load_deadline(), EPOCH_TICK));
+        let ticks = store.data().entry_ticks;
+        store.set_epoch_deadline(ticks);
 
         let linker = linker(&host.engine).map_err(|e| Error::Engine(e.into()))?;
         let instance = linker
@@ -202,6 +206,7 @@ impl Plugin {
         let ticks = self.store.data().call_ticks;
         self.store.set_epoch_deadline(ticks);
         let state = self.store.data_mut();
+        state.entry_ticks = ticks;
         state.input.clear();
         state.input.extend_from_slice(input);
         state.result.clear();
@@ -236,7 +241,7 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
             let (status, result) = call(caller.data(), &bytes);
             caller.data_mut().result = result;
             // The time the engine took to answer doesn't count against the plugin.
-            let ticks = caller.data().call_ticks;
+            let ticks = caller.data().entry_ticks;
             caller.as_context_mut().set_epoch_deadline(ticks);
             Ok(status)
         },
@@ -361,6 +366,13 @@ mod tests {
         (memory (export "memory") 1)
         (func $start (loop $forever (br $forever)))
         (start $start))"#;
+    /// A `start` function that makes one (malformed) host call, then loops forever.
+    const CALL_THEN_SPIN_AT_START: &str = r#"(module
+        (import "jstream" "call" (func $call (param i32 i32) (result i32)))
+        (memory (export "memory") 1)
+        (func $spin (loop $forever (br $forever)))
+        (func $start (drop (call $call (i32.const 0) (i32.const 0))) (call $spin))
+        (start $start))"#;
 
     fn load_on(host: &PluginHost, wat: &str, limits: Limits) -> Result<Plugin, Error> {
         let control: Arc<dyn Control> = Arc::new(MockEngine::new().connect());
@@ -407,6 +419,25 @@ mod tests {
             "{:?}",
             refused.err()
         );
+    }
+
+    #[test]
+    fn a_host_call_during_the_load_re_arms_the_load_deadline() {
+        let load_deadline = Duration::from_millis(400);
+        let limits = Limits::unmetered()
+            .with_call_deadline(Duration::from_millis(30))
+            .with_load_deadline(load_deadline);
+        let started = Instant::now();
+        let refused = load(CALL_THEN_SPIN_AT_START, limits);
+        let took = started.elapsed();
+        assert!(
+            matches!(refused, Err(Error::Deadline)),
+            "{:?}",
+            refused.err()
+        );
+        // The invocation deadline would have stopped it after about 40 ms.
+        assert!(took >= load_deadline, "{took:?}");
+        assert!(took < Duration::from_secs(5), "{took:?}");
     }
 
     #[test]

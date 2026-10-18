@@ -44,8 +44,10 @@ wasn't granted:
   spend host time its fuel doesn't cover. Each entry into the plugin also has a
   wall-time deadline, by default 100 ms for an invocation and 1 s for the load (#348's
   figures). A ticker thread advances wasmtime's epoch every 10 ms (`EPOCH_TICK`), so a
-  plugin gets at least its deadline and at most one tick more. Each `call` re-arms the
-  deadline when it returns, so the time the engine spends answering doesn't count.
+  plugin gets at least its deadline and at most its deadline rounded up to a whole tick,
+  plus one tick, as the ticker keeps time. Each `call` re-arms the deadline of the entry
+  it was made from (the load's or the invocation's) when it returns, so the time the
+  engine spends answering doesn't count.
   Running past the deadline stops the plugin with `Error::Deadline`. This catches what
   fuel misses, such as a plugin whose few instructions are slow. The ticker runs while
   the host or any plugin loaded on it lives. Linear memory is capped at 64 MiB and tables
@@ -74,8 +76,8 @@ denied even a read; capability checks of queries, actions, batches and history c
 limits only lower; through a fake `Control`, a granted call arrives intact, and denied
 and malformed calls never arrive; time a slow `Control` takes to answer doesn't count
 against the deadline; with fuel unmetered, an endless loop and a spinning `start`
-function miss the default and a lowered deadline, even after the host is dropped; an
-endless loop runs out of fuel under the default and
+function miss the default and a lowered deadline, even after the host is dropped, and a
+host call in `start` re-arms the load's deadline, not an invocation's; an endless loop runs out of fuel under the default and
 a lowered budget, in an invocation and in `start`; memory can't grow past the default or
 a lowered cap, nor start above it; a result read outside memory traps.
 

@@ -32,11 +32,12 @@ impl Limits {
     /// The default wall time of one entry into the plugin: an invocation, re-armed after
     /// each of its `call`s returns, so the time the engine spends answering doesn't
     /// count. Measured in ticks of [`EPOCH_TICK`](crate::EPOCH_TICK), so a plugin gets at
-    /// least this long and at most one tick more.
+    /// least this long and at most this rounded up to a whole tick, plus one tick, as
+    /// the ticker keeps time.
     pub const DEFAULT_CALL_DEADLINE: Duration = Duration::from_millis(100);
 
     /// The default wall time of the load: instantiating the module and its `start`
-    /// function.
+    /// function, re-armed after each of its `call`s returns like an invocation's.
     pub const DEFAULT_LOAD_DEADLINE: Duration = Duration::from_secs(1);
 
     /// Lowers the fuel per invocation to `fuel`, if that is lower.
