@@ -107,10 +107,6 @@ fn the_registry_describes_every_builtin_kind_in_order() {
         }
     }
     let ctx = Context::default();
-    assert!(matches!(
-        registry.create("webcam", &Settings::new(), &ctx),
-        Err(SourceError::NotBuilt { kind_id }) if kind_id == "webcam"
-    ));
     for kind_id in ["app_audio", "audio_input", "desktop_audio"] {
         let kind = registry.descriptor(kind_id).expect("an audio kind");
         assert!(kind.audio && !kind.video, "{kind_id}");
@@ -209,7 +205,7 @@ fn a_colour_source_is_one_solid_frame_and_its_colour_is_live() {
 }
 
 #[test]
-fn display_and_window_sources_say_what_to_capture() {
+fn display_window_and_webcam_sources_say_what_to_capture() {
     let registry = Registry::builtin();
     let ctx = Context::default();
     let spec = |kind_id: &str, target: &str| {
@@ -240,6 +236,34 @@ fn display_and_window_sources_say_what_to_capture() {
         spec("window", "hwnd:0x1a2b"),
         CaptureSpec::Window(Some("hwnd:0x1a2b".into()))
     );
+
+    let device = |id: &str| {
+        let settings = complete("webcam", &[("device", json!(id))]);
+        let mut source = registry
+            .create("webcam", &settings, &ctx)
+            .expect("a source");
+        assert!(
+            matches!(source.frame(ms(0)), Err(SourceError::Captured { kind_id: k }) if k == "webcam"),
+            "webcam: frames come from the device"
+        );
+        source.capture().cloned().expect("a capture source")
+    };
+    assert_eq!(device(""), CaptureSpec::Device(None), "the first device");
+    assert_eq!(
+        device("fake-webcam-0"),
+        CaptureSpec::Device(Some("fake-webcam-0".into()))
+    );
+    let webcam = registry.descriptor("webcam").expect("webcam");
+    assert!(webcam.video && !webcam.audio);
+    assert!(needs_restart(
+        webcam,
+        &complete("webcam", &[]),
+        &complete("webcam", &[("device", json!("fake-webcam-0"))])
+    ));
+    assert!(matches!(
+        registry.create("webcam", &complete("webcam", &[("device", json!(1))]), &ctx),
+        Err(SourceError::Setting { param, .. }) if param == "device"
+    ));
 
     let colour = registry
         .create("color", &complete("color", &[]), &ctx)

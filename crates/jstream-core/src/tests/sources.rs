@@ -181,6 +181,14 @@ fn capture_sources_capture_their_targets() {
             source("second", "display", target("monitor:2")),
             source("editor", "window", target("hwnd:0x2a")),
             source("unset", "window", Settings::new()),
+            source("cam", "webcam", Settings::new()),
+            source(
+                "card",
+                "webcam",
+                settings(&[("device", json!("fake-capture-card-0"))]),
+            ),
+            add("a", "i6", "cam"),
+            add("a", "i7", "card"),
             add("a", "i1", "screen"),
             add("a", "i2", "again"),
             add("a", "i3", "second"),
@@ -197,6 +205,8 @@ fn capture_sources_capture_their_targets() {
             CaptureSpec::Display(None),
             CaptureSpec::Display(Some("monitor:2".into())),
             CaptureSpec::Window(Some("hwnd:0x2a".into())),
+            CaptureSpec::Device(None),
+            CaptureSpec::Device(Some("fake-capture-card-0".into())),
         ])
     );
     assert_eq!(shown(&engine, "screen"), None, "no frame of its own");

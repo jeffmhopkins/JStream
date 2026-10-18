@@ -440,7 +440,9 @@ hotkeys the parity collection gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
-moves on, and a migration has to load it); a file without `encoders` or any
+moves on, and a migration has to load it); the fixture with its `webcam` sources'
+settings taken out (as saved before the kind had a `device`) loading to the same state;
+a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none, and one without
 `video_mixes` or any `video_mix` likewise; a file without `sends`, `buses` or source
 `audio` (as saved before audio existed) keeping its audio sources' master sends at

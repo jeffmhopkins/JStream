@@ -702,7 +702,18 @@ source: crates/jstream-sources/tests/kinds.rs
     "version": 1,
     "video": true,
     "audio": false,
-    "params": []
+    "params": [
+      {
+        "id": "device",
+        "type": "string",
+        "multiline": false,
+        "max_len": 1024,
+        "default": "",
+        "label": "Device",
+        "description": "The ID of the webcam or capture card, as the platform lists it. Empty captures the first device listed.",
+        "live": false
+      }
+    ]
   },
   {
     "kind_id": "window",

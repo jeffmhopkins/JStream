@@ -46,16 +46,16 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 94% | 17 | 1 | 0 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 92% | 33 | 3 | 0 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 89% | 33 | 4 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `███████░░░` 68% | 17 | 6 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 2 | 5 |
 
-97 of 116 items are merged; 8 of those still wait on a run on Windows hardware.
+97 of 117 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 27 items, by next step: 🔨 build 6, 🌊 its wave lands 8, 🧪 Windows run 8, 👤 maintainer 2, ❔ not set 3</summary>
+<summary><b>What's left</b>: 28 items, by next step: 🔨 build 7, 🌊 its wave lands 8, 🧪 Windows run 8, 👤 maintainer 2, ❔ not set 3</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -64,6 +64,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A3 | Daemon goes live on Windows | M1a | 🧪 Windows run | Windows 11 Pro N run (#333) | #226 |
 | A4 | Go-live runbook and smoke | M1a | 🧪 Windows run | smoke script run | #234 |
 | A6b | Daemon YouTube wiring | M1a | 🌊 its wave lands, then 👤 maintainer, then 🧪 Windows run | #312 merged into wave/m1-2; sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
+| C4c | Webcam source (CPU path; MJPEG and paired audio to follow) | M1b | 🔨 build, then 🌊 its wave lands, then 🧪 Windows run |  | #654 |
 | C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
 | C3 | Display and window capture sources | M1b | 🌊 its wave lands, then 🧪 Windows run | #365 merged into wave/m1-2; Windows run #378 | #365 |
 | C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
@@ -137,7 +138,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M1b</b> Scenes and mixing: 33 of 36 merged</summary>
+<summary><b>M1b</b> Scenes and mixing: 33 of 37 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -156,6 +157,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C6 | Nested scene rendering | ✅ merged | #147 |
 | C4a | Video device trait | ✅ merged | #158 |
 | C4b | Media Foundation webcam backend | ✅ merged | #177, #225, #227 |
+| C4c | Webcam source (CPU path; MJPEG and paired audio to follow) | 🔍 in review | #654 |
 | C1a | Sources crate: color, image | ✅ merged | #179, #217 |
 | C1b | Sources render live | ✅ merged | #222 |
 | C2 | Text source | ✅ merged | #221 |
