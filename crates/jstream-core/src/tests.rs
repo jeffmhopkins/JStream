@@ -85,6 +85,8 @@ fn create(scene: &str) -> Edit {
     }
 }
 
+/// A `webcam` source with complete settings: the mock engine stores settings as sent,
+/// while the engine fills in defaults, so a parity script sends them all.
 fn webcam() -> Edit {
     Edit::SourceCreate {
         source_id: SourceId::new("webcam"),
@@ -92,7 +94,9 @@ fn webcam() -> Edit {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
-        settings: Default::default(),
+        settings: [("device".to_owned(), serde_json::Value::from(""))]
+            .into_iter()
+            .collect(),
         duplicated_from: None,
     }
 }
@@ -1276,7 +1280,10 @@ fn organise_script() -> Vec<Call> {
                 kind: SourceKind::Builtin {
                     kind: "webcam".into(),
                 },
-                settings: Default::default(),
+                // Complete settings, as `webcam()` sends: the mock stores them as sent.
+                settings: [("device".to_owned(), serde_json::Value::from(""))]
+                    .into_iter()
+                    .collect(),
                 duplicated_from: None,
             },
             add("z", "iz2", "tagged"),
