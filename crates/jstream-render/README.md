@@ -734,7 +734,12 @@ a hardware GPU.
   rotated 2D items should get edge coverage too, which changes their goldens; whether
   strongly minified 2D items should get mips; and whether a layer or an import should
   carry a change count, so its chain is rebuilt only when it changed rather than each
-  call that draws it in 3D.
+  call that draws it in 3D. Decision 5 asks for once per source and frame; a source
+  drawn in 3D by two mixes, or inside a nested scene, is rebuilt once per call that
+  draws it. Also open: a cropped 3D item samples the whole source's chain, so at coarser
+  levels, and along the anisotropic footprint, texels just past the crop bleed into its
+  edge (the UV clamp keeps the sample point inside, not the footprint). Clamping the
+  level near the crop, or building the chain from the cropped region, would fix that.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and
