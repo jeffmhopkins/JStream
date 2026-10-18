@@ -3549,7 +3549,7 @@ stamp = { hash = "b3:0c768a21be15de21" }
 stamp = { hash = "b3:3adcff769a347c8c" }
 
 ["CRATE-jstream-ui#build"."body"]
-stamp = { hash = "b3:cb355e96baf13697", by = "agent:claude", note = "Build now says a debug trunk build uses the ui-dev profile through index.html's data-cargo-profile-dev (dev, debug = false, strip = symbols), why (78 MiB over the server's 64 MiB file cap, #674), that it's about 8 MiB stripped (measured 8,609,124 bytes with trunk 0.21.14 and wasm-bindgen 0.2.129), what a panic still shows, and that release keeps its profile." }
+stamp = { hash = "b3:d5d04df86b3b2eb8", by = "agent:claude", note = "Reverted both #675 merges on #662 (86daca81, f1448218), so index.html, Cargo.toml and this section match wave/m1-3 again: a plain trunk rust link with no data-cargo-profile-dev, and the Build text without the ui-dev paragraph. Re-read: trunk build/serve/--release, the wasm-bindgen CLI, dist/ contents and create_nonce all hold for the wave's files" }
 
 ["CRATE-jstream-ui#build"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -3561,7 +3561,7 @@ stamp = { hash = "b3:3629d078a0c82378", by = "agent:claude@session_016SaCkMFyjjx
 stamp = { hash = "b3:f87a888e55181fde" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/index.html"]
-stamp = { hash = "b3:68005f7e328eef0e", by = "agent:claude", note = "Build now says a debug trunk build uses the ui-dev profile through index.html's data-cargo-profile-dev (dev, debug = false, strip = symbols), why (78 MiB over the server's 64 MiB file cap, #674), that it's about 8 MiB stripped (measured 8,609,124 bytes with trunk 0.21.14 and wasm-bindgen 0.2.129), what a panic still shows, and that release keeps its profile." }
+stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude", note = "Reverted both #675 merges on #662 (86daca81, f1448218), so index.html, Cargo.toml and this section match wave/m1-3 again: a plain trunk rust link with no data-cargo-profile-dev, and the Build text without the ui-dev paragraph. Re-read: trunk build/serve/--release, the wasm-bindgen CLI, dist/ contents and create_nonce all hold for the wave's files" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -4614,7 +4614,7 @@ stamp = { hash = "b3:8cea4845a5663521", by = "agent:claude@session_016SaCkMFyjjx
 stamp = { hash = "b3:dc623b3c08b50bb9", by = "agent:claude-ui-features", note = "This PR: WS-04's note mentions the canvas tools' two stroke icons; status stays partial; style.css adds .stage-overlay overflow: visible so group handles and readout show past the frame, no palette or shared-control change. Merge of wave/m1-3 (#304): style.css adds the studio panel's .studio, .preset and .inline-label rules using the existing --muted, --line, --accent, --bg and --text variables plus program-red #d92d20, with no new shared control or font, so WS-01 to WS-08 statuses hold." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/index.html"]
-stamp = { hash = "b3:68005f7e328eef0e", by = "agent:claude", note = "Re-read against index.html's change, which only adds data-cargo-profile-dev to the rust link. That's a build setting; the palette, fonts, scrollbar, icon and control rows are unaffected." }
+stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude", note = "index.html is back to the wave's on #662 (the #675 merges are reverted): the trunk css and rust links only. The palette, fonts, scrollbar, icon and control rows don't depend on it" }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:4b2f83164c17de9b", by = "agent:claude-ui-features", note = "This PR: WS-04's note mentions the canvas tools' two stroke icons; status stays partial; style.css adds .stage-overlay overflow: visible so group handles and readout show past the frame, no palette or shared-control change. Merge of wave/m1-3 (#304): style.css adds the studio panel's .studio, .preset and .inline-label rules using the existing --muted, --line, --accent, --bg and --text variables plus program-red #d92d20, with no new shared control or font, so WS-01 to WS-08 statuses hold." }
