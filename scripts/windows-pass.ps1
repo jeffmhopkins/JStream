@@ -482,7 +482,8 @@ function Start-Daemon([string]$Src, [string[]]$Arguments = @(), [string]$Exe) {
 function Stop-Daemon($d, [switch]$Graceful) {
     if (-not $d -or -not $d.Proc) { return $null }
     if ($d.Session) { try { [void](Send-Mcp $d ([System.Net.Http.HttpMethod]::Delete) $null) } catch {}; $d.Session = $null }
-    $graceful = $null
+    # Not $graceful: names ignore case, so that would be the -Graceful switch.
+    $result = $null
     if (-not $d.Proc.HasExited) {
         if ($Graceful) {
             $sent = Send-CtrlC $d.Proc.Id
@@ -490,7 +491,7 @@ function Stop-Daemon($d, [switch]$Graceful) {
             if ($exited) { $d.Proc.WaitForExit() }
             $out = ''
             if ($exited -and $d.OutTask) { $out = $d.OutTask.Result }
-            $graceful = [pscustomobject]@{ Sent = $sent; Exited = $exited; Code = $(if ($exited) { $d.Proc.ExitCode } else { $null }); Stopped = ($out -match '(?m)^stopped') }
+            $result = [pscustomobject]@{ Sent = $sent; Exited = $exited; Code = $(if ($exited) { $d.Proc.ExitCode } else { $null }); Stopped = ($out -match '(?m)^stopped') }
         }
         Stop-Native $d.Proc
     }
@@ -498,7 +499,7 @@ function Stop-Daemon($d, [switch]$Graceful) {
     if ($d.OutTask -and $d.OutTask.IsCompleted) { $out = $d.OutTask.Result }
     Write-Text (Join-Path $d.Dir 'stdout.txt') ((($d.Lines) -join "`r`n") + "`r`n" + $out)
     if ($d.ErrTask.IsCompleted) { Write-Text (Join-Path $d.Dir 'stderr.txt') $d.ErrTask.Result }
-    $graceful
+    $result
 }
 
 function Send-Mcp($d, [System.Net.Http.HttpMethod]$HttpMethod, [string]$Body) {
@@ -541,7 +542,8 @@ function Invoke-Op($d, [string]$Tool, [hashtable]$Op) { Invoke-Tool $d $Tool @{ 
 function Invoke-Batch($d, [object[]]$Edits) { Invoke-Tool $d 'batch' @{ edits = $Edits } }
 
 function Get-OutputState($d, [string]$Output) {
-    try { (Invoke-Op $d 'output' @{ type = 'output.status'; output_id = $Output }).result.state } catch { $null }
+    # A query's structured result is { kind: "query", result: { type, ... } }.
+    try { (Invoke-Op $d 'output' @{ type = 'output.status'; output_id = $Output }).result.result.state } catch { $null }
 }
 function Wait-OutputState($d, [string]$Output, [string]$Want, [int]$TimeoutSec = 30) {
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
@@ -629,6 +631,7 @@ function Test-Smoke {
     $d = Start-Daemon 'main'
     if (-not (Need-Daemon $d)) { return }
     $g = Stop-Daemon $d -Graceful
+    if (-not $g) { Fail 'graceful stop' 'the daemon had already exited'; return }
     Check ($g.Exited -and $g.Code -eq 0 -and $g.Stopped) 'graceful stop' "Ctrl-C sent: $($g.Sent); exited: $($g.Exited); exit code: $($g.Code); printed stopped: $($g.Stopped)"
 }
 
@@ -653,12 +656,20 @@ function Test-Nv12 {
     $skipped = $text -match 'skipping the native test'
     Check ($code -eq 0 -and -not $skipped -and (Get-TestNames 'main' @('-p', 'jstream-render') 'render-list' | Where-Object { $_ -match 'native_nv12_texture_matches_the_planes_path' })) 'native NV12 plane-view test' "exit $code; skipped: $skipped"
 
+    # The webcam tests belong to the webcam check, and the virtual-camera test needs the DLL
+    # registered (vcam-owner runs it). The media-file tests play a generated clip.
     $log = Join-Path $OutDir 'nv12-hw-tests.log'
-    $code = Invoke-Cargo 'main' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--',
-        '--ignored', '--skip', 'frame_server_serves_the_published_frames') 'nv12-hw-tests'
+    $hwArgs = @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--',
+        '--ignored', '--skip', 'frame_server_serves_the_published_frames', '--skip', 'video_device')
+    $clip = $null
+    if (Find-Tool 'ffmpeg') { New-TestMedia (Join-Path $OutDir 'media'); $clip = Join-Path $OutDir 'media\longsound.mp4' }
+    if ($clip) { $env:JSTREAM_TEST_MEDIA = $clip } else { $hwArgs += @('--skip', 'media_file') }
+    try { $code = Invoke-Cargo 'main' $hwArgs 'nv12-hw-tests' }
+    finally { Remove-Item Env:\JSTREAM_TEST_MEDIA -ErrorAction SilentlyContinue }
     $text = Get-Content -LiteralPath $log -Raw
     $failed = @([regex]::Matches($text, '(?m)^test (\S+) \.\.\. FAILED') | ForEach-Object { $_.Groups[1].Value })
-    Check ($code -eq 0) 'platform-windows hw-tests' "exit $code; failed: $(if ($failed) { $failed -join ', ' } else { 'none' }) (the virtual-camera test is left out: it needs the DLL registered)"
+    $summary = ''; if ($text -match 'test result: \w+\. (\d+) passed; (\d+) failed') { $summary = "$($Matches[1]) passed, $($Matches[2]) failed; " }
+    Check ($code -eq 0) 'platform-windows hw-tests' "exit $code; $($summary)failed: $(if ($failed) { $failed -join ', ' } else { 'none' }) (webcam and virtual-camera tests run in their own checks)"
 
     $d = Start-Daemon 'main'
     if (-not (Need-Daemon $d)) { return }
@@ -937,7 +948,9 @@ function Test-TokenAcl {
         if (-not (Need-Daemon $d)) { return }
         Stop-Daemon $d | Out-Null
         Check-UserOnly 'token file in Public' $token
-        foreach ($f in @(Get-ChildItem -LiteralPath $logs -File -ErrorAction SilentlyContinue)) { Check-UserOnly "log file $($f.Name)" $f.FullName }
+        # audit.jsonl is jstream-core's, made user-only by #574: the private-files check.
+        foreach ($f in @(Get-ChildItem -LiteralPath $logs -File -Filter 'jstream-daemon*.log' -ErrorAction SilentlyContinue)) { Check-UserOnly "log file $($f.Name)" $f.FullName }
+        if (-not @(Get-ChildItem -LiteralPath $logs -File -Filter 'jstream-daemon*.log' -ErrorAction SilentlyContinue)) { Fail 'log files' "no jstream-daemon log in $logs" }
 
         & icacls $token /grant '*S-1-1-0:R' | Out-Null
         $d = Start-Daemon 'm1-3' @('--token-file', $token, '--log-dir', $logs)
@@ -1175,10 +1188,19 @@ function Test-Clap {
     $d = Start-Daemon 'pr573'
     if (-not (Need-Daemon $d)) { return }
     try {
-        Start-Sleep -Seconds 5
-        $s = Search-Logs $d.LogDir 'scanned the CLAP plugins|CLAP plugins are unavailable|could not be scanned'
+        # The scan runs in the background; wait for its line.
+        $deadline = (Get-Date).AddSeconds(60)
+        do {
+            Start-Sleep -Seconds 1
+            $s = Search-Logs $d.LogDir 'scanned the CLAP plugins|CLAP plugins are unavailable|could not be scanned'
+        } while (-not ($s | Where-Object { $_.Line -match 'scanned the CLAP plugins|unavailable' }) -and (Get-Date) -lt $deadline)
         $found = $s | Where-Object { $_.Line -match 'found=(\d+)' } | ForEach-Object { [int]$Matches[1] } | Select-Object -First 1
-        Check ($found -ge 1 -and -not ($s | Where-Object { $_.Line -match 'could not be scanned' })) 'daemon scan' (($s | ForEach-Object { $_.Line.Trim() } | Select-Object -First 3) -join ' | ')
+        $detail = ($s | ForEach-Object { $_.Line.Trim() } | Select-Object -First 3) -join ' | '
+        if (-not $detail) {
+            $hosts = @(Get-CimInstance Win32_Process -Filter "Name = 'jstream-plugin-host.exe'" -ErrorAction SilentlyContinue | ForEach-Object { $_.CommandLine })
+            $detail = "no scan line in the log after 60 s; plugin hosts still running: $(if ($hosts) { $hosts -join ' | ' } else { 'none' })"
+        }
+        Check ($found -ge 1 -and -not ($s | Where-Object { $_.Line -match 'could not be scanned' })) 'daemon scan' $detail
         $kinds = Invoke-Op $d 'kind' @{ type = 'kind.list' }
         $clap = @(($kinds | ConvertTo-Json -Depth 30 -Compress) | Select-String -Pattern '"(clap/[^"]+)"' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
         Check ($clap.Count -ge 1) 'kind.list has the plugin' ($clap -join ', ')
@@ -1188,13 +1210,13 @@ function Test-Clap {
             Write-Text (Join-Path $OutDir 'clap-describe.json') $json
             Check ($json -match 'default') 'kind.describe lists parameters' "$($json.Length) bytes; see clap-describe.json"
         }
-        $left = @(Get-Process -Name 'jstream-plugin-host' -ErrorAction SilentlyContinue)
-        Check (-not $left) 'no plugin host left after the scan' "$($left.Count) running"
+        $left = @(Get-CimInstance Win32_Process -Filter "Name = 'jstream-plugin-host.exe'" -ErrorAction SilentlyContinue | ForEach-Object { $_.CommandLine })
+        Check (-not $left) 'no plugin host left after the scan' $(if ($left) { "$($left.Count) running: $($left -join ' | ')" } else { 'none running' })
     } catch { Fail 'script' $_.Exception.Message }
     $g = Stop-Daemon $d -Graceful
     Start-Sleep -Seconds 2
     $left = @(Get-Process -Name 'jstream-plugin-host' -ErrorAction SilentlyContinue)
-    Check (-not $left -and $g.Exited) 'none after Ctrl-C either' "$($left.Count) running; daemon exit $($g.Code)"
+    Check (-not $left -and $g -and $g.Exited) 'none after Ctrl-C either' "$($left.Count) running; daemon exit $(if ($g) { $g.Code } else { 'n/a' })"
 }
 
 # --- Run ---------------------------------------------------------------------------------------
