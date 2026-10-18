@@ -4,8 +4,9 @@
 //!
 //! A multi-pass filter's intermediate layers come from its own [`Scratch`] pool, so a
 //! filter that runs every frame at one size makes them once. So do each draw's two
-//! uniform buffers and its bind group: a draw rewrites its buffers and makes a bind group
-//! (with its two views) only when it reads other textures than the same draw last call.
+//! uniform buffers, which a draw rewrites in place. Its bind group, with its two views,
+//! is still made per draw: it holds the textures the draw reads, and a kept one could
+//! outlive the cache entry that owns them and free them on the drawing thread (R-RT-003).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -322,8 +323,8 @@ fn ready<T>(future: impl Future<Output = Option<T>>) -> Option<T> {
 /// are dropped at its end, and one replaced for a new size at once, on the drawing thread:
 /// a size change or a filter needing fewer layers, not every frame.
 ///
-/// It keeps each draw's uniform buffers and bind group the same way ([`DrawSlot`]): the
-/// `n`th draw of a call reuses the `n`th draw's of the call before.
+/// It keeps each draw's uniform buffers the same way ([`DrawSlot`]): the `n`th draw of a
+/// call reuses the `n`th draw's of the call before.
 #[derive(Default)]
 pub(crate) struct Scratch {
     layers: Vec<Image>,
@@ -332,38 +333,21 @@ pub(crate) struct Scratch {
     draws: Vec<DrawSlot>,
     /// How many draws this call has recorded.
     drawn: usize,
-    /// Uniform buffers and bind groups made, for tests.
+    /// Uniform buffers made, for tests.
     #[cfg(test)]
-    made: Made,
+    made_buffers: usize,
 }
 
 /// What one draw of a filter keeps between calls: its two uniform buffers, rewritten
-/// with `queue.write_buffer` before the submit that reads them, and its bind group, kept
-/// while the draw reads the same input and auxiliary textures. Buffers belong to one
-/// compositor's device, so a draw for another compositor makes them again. Commands on
-/// the queue run in order, so rewriting a buffer an earlier submit read doesn't change
-/// what that submit drew, and two draws of one call never share a slot.
+/// with `queue.write_buffer` before the submit that reads them. They hold no texture, so
+/// keeping them keeps nothing of the cache's alive. Buffers belong to one compositor's
+/// device, so a draw for another compositor makes them again. Commands on the queue run
+/// in order, so rewriting a buffer an earlier submit read doesn't change what that submit
+/// drew, and two draws of one call never share a slot.
 struct DrawSlot {
     owner: Owner,
     frame: wgpu::Buffer,
     params: wgpu::Buffer,
-    /// The bind group and the textures it reads, `None` once a buffer is replaced.
-    bound: Option<Bound>,
-}
-
-/// A draw's bind group and the input and auxiliary textures it was made for.
-struct Bound {
-    input: wgpu::Texture,
-    aux: wgpu::Texture,
-    group: wgpu::BindGroup,
-}
-
-/// How many uniform buffers and bind groups a filter's draws have made.
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Made {
-    pub buffers: usize,
-    pub bind_groups: usize,
 }
 
 impl Scratch {
@@ -379,71 +363,46 @@ impl Scratch {
         self.draws.truncate(self.drawn);
     }
 
-    /// The call's next draw slot, holding `frame` and `params` once the queue writes
-    /// them, its bind group made for `input` and `aux` if it doesn't have one for them.
-    fn slot(&mut self, io: SlotIo<'_>) -> &wgpu::BindGroup {
-        let SlotIo {
-            gpu,
-            owner,
-            runtime,
-            label,
-            frame,
-            params,
-            input,
-            aux,
-        } = io;
+    /// The call's next draw slot's uniform buffers, holding `frame` and `params` once the
+    /// queue writes them.
+    fn slot(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        frame: &[u8],
+        params: &[u8],
+    ) -> (&wgpu::Buffer, &wgpu::Buffer) {
         let index = self.drawn;
         self.drawn += 1;
-        let size = |buffer: &wgpu::Buffer| buffer.size() == params.len() as u64;
         let fits = self
             .draws
             .get(index)
-            .is_some_and(|slot| slot.owner.is(owner) && size(&slot.params));
+            .is_some_and(|slot| slot.owner.is(owner) && slot.params.size() == params.len() as u64);
         if !fits {
             let slot = DrawSlot {
                 owner: owner.clone(),
                 frame: uniform_buffer(&gpu.device, "jstream-render-filter-frame", frame.len()),
                 params: uniform_buffer(&gpu.device, "jstream-render-filter-params", params.len()),
-                bound: None,
             };
             #[cfg(test)]
             {
-                self.made.buffers += 2;
+                self.made_buffers += 2;
             }
             match self.draws.get_mut(index) {
                 Some(old) => *old = slot,
                 None => self.draws.push(slot),
             }
         }
-        let slot = &mut self.draws[index];
+        let slot = &self.draws[index];
         gpu.queue.write_buffer(&slot.frame, 0, frame);
         gpu.queue.write_buffer(&slot.params, 0, params);
-        let same = slot
-            .bound
-            .as_ref()
-            .is_some_and(|bound| &bound.input == input.texture() && &bound.aux == aux.texture());
-        if !same {
-            let group = bind_group(gpu, runtime, label, input, aux, &slot.frame, &slot.params);
-            #[cfg(test)]
-            {
-                self.made.bind_groups += 1;
-            }
-            slot.bound = Some(Bound {
-                input: input.texture().clone(),
-                aux: aux.texture().clone(),
-                group,
-            });
-        }
-        match &slot.bound {
-            Some(bound) => &bound.group,
-            None => unreachable!("the slot was just bound"),
-        }
+        (&slot.frame, &slot.params)
     }
 
-    /// The uniform buffers and bind groups the filter's draws have made, for tests.
+    /// The uniform buffers the filter's draws have made, for tests.
     #[cfg(test)]
-    pub(crate) fn made(&self) -> Made {
-        self.made
+    pub(crate) fn made_buffers(&self) -> usize {
+        self.made_buffers
     }
 
     /// The call's next layer, of `width` by `height`.
@@ -568,16 +527,18 @@ impl Ctx<'_> {
             .f32(alpha(aux))
             .finish();
         debug_assert_eq!(frame.len() as u64, FRAME_BYTES);
-        let bind_group = self.scratch.slot(SlotIo {
-            gpu: self.gpu,
-            owner: self.maker.owner,
-            runtime: self.runtime,
-            label: shader.label,
-            frame: &frame,
-            params: draw.params,
-            input: draw.input,
+        let (frame_buffer, params_buffer) =
+            self.scratch
+                .slot(self.gpu, self.maker.owner, &frame, draw.params);
+        let bind_group = bind_group(
+            self.gpu,
+            self.runtime,
+            shader.label,
+            draw.input,
             aux,
-        });
+            frame_buffer,
+            params_buffer,
+        );
         let load = match shader.blend {
             Blend::Replace => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
             Blend::Over => wgpu::LoadOp::Load,
@@ -600,7 +561,7 @@ impl Ctx<'_> {
             multiview_mask: None,
         });
         pass.set_pipeline(pipeline);
-        pass.set_bind_group(0, bind_group, &[]);
+        pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..3, 0..1);
         Ok(())
     }
@@ -612,18 +573,6 @@ struct Io<'a> {
     aux: Option<&'a Image>,
     params: &'a [u8],
     target: &'a Image,
-}
-
-/// What [`Scratch::slot`] needs to fill and bind a draw's slot.
-struct SlotIo<'a> {
-    gpu: &'a Gpu,
-    owner: &'a Owner,
-    runtime: &'a Runtime,
-    label: &'a str,
-    frame: &'a [u8],
-    params: &'a [u8],
-    input: &'a Image,
-    aux: &'a Image,
 }
 
 /// A uniform buffer of `size` bytes, written with `queue.write_buffer`.

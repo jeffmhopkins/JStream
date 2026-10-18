@@ -777,7 +777,8 @@ captures, however many mixes the tick draws (`ResourceCache::frame`), each filte
 a layer of the cache (`GpuKey::Chain`, the last into `GpuKey::Filtered`) through
 `Compositor::apply_filter_into`, so a steady chain allocates no output texture, and
 each multi-pass filter's `VideoFilter` keeps its scratch layers while the size holds,
-and each filter's draws keep their uniform buffers and bind groups.
+and each filter's draws keep their uniform buffers (their bind groups are made per
+draw).
 `claim_layers` keeps those layers for a mix that isn't due. A filter no shot runs any
 more is retired into the cache (`ResourceCache::retire_filter`) and dropped with the
 images it reclaims, on that thread's collector. A chain whose filter fails (its layer

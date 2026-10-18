@@ -472,7 +472,7 @@ milestone = "M1b"
 title = "Video filter chain runtime"
 status = "review"
 prs = [595, 607, 626, 712, 718]
-note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers, and each draw's uniform buffers and bind group; then effect-pack kinds and the bounds inset"
+note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers, and each draw's uniform buffers; then effect-pack kinds and the bounds inset"
 needs = ["build"]
 
 [[item]]

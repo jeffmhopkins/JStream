@@ -161,7 +161,8 @@ depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.
 returns what it frees as `Reclaimed`, so that thread can hand it to a collector
 ([R-RT-003](../../docs/RULES.md#R-RT-003)). The one image this crate drops itself is a
 multi-pass filter's scratch layer that a call replaces at a new size or no longer asks
-for (**Filters**), so it happens only when a filter's size or settings change. GPU
+for (**Filters**), so it happens only when a filter's size or settings change; the same
+goes for a filter draw's two small uniform buffers, which hold no texture. GPU
 calls may allocate inside the driver; this crate does not allocate per item on the
 steady path.
 
@@ -258,7 +259,7 @@ compositor's own, not a shared encode target, so nothing transitions it.
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
 | A multi-pass filter's scratch layers | Its `VideoFilter`: reused by the next call at the same size; replaced for a new size, and dropped when a call asks for fewer ([Filters](#filters)) |
-| A filter draw's uniform buffers and bind group | Its `VideoFilter`: rewritten by the next call's same draw; the bind group made again when that draw reads other textures (it keeps the last ones alive until then), the buffers for another compositor or parameter size, and dropped when a call draws fewer times ([Filters](#filters)) |
+| A filter draw's uniform buffers | Its `VideoFilter`: rewritten by the next call's same draw; made again for another compositor or parameter size, and dropped when a call draws fewer times. They hold no texture ([Filters](#filters)) |
 | `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
 
 **`ResourceCache`.** A frame runs `begin_frame`, `upload`, `import` or `layer` for each
@@ -423,11 +424,12 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each `apply_filter` makes its output layer (`apply_filter_into` reuses the caller's).
-  A filter's draws keep their two small uniform buffers and bind group in the same pool
-  (#369): a call's `n`th draw reuses the call before's `n`th, rewriting its buffers with
-  `queue.write_buffer` before the submit, and makes a bind group (with its two views)
-  only when it reads another input or auxiliary texture than last call. Its buffers are
-  made again for another compositor or when the parameter block changes size. A
+  A filter's draws keep their two small uniform buffers in the same pool (#369): a
+  call's `n`th draw reuses the call before's `n`th, rewriting them with
+  `queue.write_buffer` before the submit. They are made again for another compositor or
+  when the parameter block changes size. Each draw still makes its bind group and two
+  views: they hold the textures it reads, and a kept one could outlive the cache entry
+  that owns those textures and free them on the drawing thread (R-RT-003). A
   multi-pass filter's `Ctx::scratch` layers (up to three, each at most the filter's
   output size, about 16.6 MB at 1080p) come from a pool its `VideoFilter` keeps (V0): a
   call's `n`th scratch layer is the call before's `n`th when the size is the same, so a
