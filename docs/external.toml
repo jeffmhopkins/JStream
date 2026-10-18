@@ -277,6 +277,14 @@ status = "ok"
 checked_note = "Re-read the default allocation and the audit requirement for more quota"
 
 [[external]]
+id = "yt-videos-list"
+url = "https://developers.google.com/youtube/v3/docs/videos/list"
+relied_on = "videos.list costs 1 unit and takes a comma-separated id list; with part=liveStreamingDetails,statistics a video carries liveStreamingDetails.concurrentViewers (present only while the broadcast has current viewers and dropped once it ends), actualStartTime, actualEndTime, and statistics.likeCount and viewCount, unsigned longs sent as strings (jstream-youtube stats)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the method's quota cost and parameters, and the videos resource's liveStreamingDetails and statistics properties"
+
+[[external]]
 id = "yt-quota-costs"
 url = "https://developers.google.com/youtube/v3/determine_quota_cost"
 relied_on = "Quota costs: liveBroadcasts.insert 1, liveBroadcasts.transition 1, liveStreams.list 1, liveChatMessages.list 5, liveChatMessages.streamList 5; daily quotas reset at midnight Pacific time (ADR-0058)"
