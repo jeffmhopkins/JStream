@@ -237,3 +237,30 @@ test('a double click shows the item in the Inspector', async ({ page, daemon }) 
   await page.mouse.dblclick(centre.x, centre.y);
   await expect(page.locator('.panel-inspector .source-title')).toHaveText('Backdrop');
 });
+
+test('a double click on the canvas tools selects nothing under them', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  // A second item covering the canvas, nudged up and right so it reaches under the
+  // tools, which sit above the frame's top-right corner.
+  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
+  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.sources-panel li.row')).toHaveCount(2);
+  await page.getByLabel('Scene canvas, Main').focus();
+  for (let i = 0; i < 25; i += 1) {
+    await page.keyboard.press('Shift+ArrowUp');
+  }
+  for (let i = 0; i < 10; i += 1) {
+    await page.keyboard.press('Shift+ArrowRight');
+  }
+  // Select the seed's item, then double-click Snapping over the covering one.
+  const seed = page.locator('.sources-panel li.row').last();
+  await seed.locator('.row-main').click();
+  const snapping = page.getByRole('toolbar', { name: 'Canvas tools' }).getByRole('button', { name: 'Snapping' });
+  await snapping.dblclick();
+  await expect(snapping).toHaveAttribute('aria-pressed', 'true');
+  // Give a stray double click time to land before checking nothing changed.
+  await page.waitForTimeout(200);
+  await expect(seed).toHaveClass(/selected/);
+  await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(1);
+});

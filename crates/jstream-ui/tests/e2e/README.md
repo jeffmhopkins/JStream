@@ -87,7 +87,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   (Shift by 10) and Ctrl+Z undoes; a second client sees a move; a marquee started on
   the margin selects the box it touches and Escape clears it; with a second item
   placed, Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
-  canvas takes one out and Shift-click on its row in the sources list adds it back; a double click brings the closed Inspector back showing the item.
+  canvas takes one out and Shift-click on its row in the sources list adds it back; a
+  double click brings the closed Inspector back showing the item, and a double click
+  on the canvas tools over an item leaves the selection alone.
 
 <a id="running"></a>
 ## Running them

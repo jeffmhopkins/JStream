@@ -175,6 +175,15 @@ pub fn Canvas() -> impl IntoView {
 
     let problem = move |error: &CanvasError| studio.problem.set(Some(describe(error)));
 
+    // Shows these items at these geometries, keeping every other item's pending one, so
+    // a drag doesn't hide an earlier commit still in flight.
+    let show = move |placed: Vec<(ItemId, ItemGeometry)>| {
+        preview.update(|shown| {
+            shown.retain(|(id, _)| !placed.iter().any(|(p, _)| p == id));
+            shown.extend(placed);
+        });
+    };
+
     // Sends the items' new geometries as one batch, and shows them until the
     // collection has them.
     let commit = move |placed: Vec<(ItemId, ItemGeometry)>| {
@@ -187,10 +196,7 @@ pub fn Canvas() -> impl IntoView {
         if placed.is_empty() {
             return;
         }
-        preview.update(|shown| {
-            shown.retain(|(id, _)| !placed.iter().any(|(p, _)| p == id));
-            shown.extend(placed.iter().cloned());
-        });
+        show(placed.clone());
         awaiting.update_value(|a| a.in_flight += 1);
         spawn_local(async move {
             let result = model::commit(&*open.control, scene_id, placed).await;
@@ -442,14 +448,14 @@ pub fn Canvas() -> impl IntoView {
             Action::One { item_id, gesture } => {
                 let at = current.pointer.follow(point, event.shift_key());
                 if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
-                    preview.set(vec![(item_id.clone(), update.geometry)]);
+                    show(vec![(item_id.clone(), update.geometry)]);
                     guides.set(update.guides);
                 }
             }
             Action::Group(gesture) => {
                 let at = current.pointer.follow(point, event.shift_key());
                 if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
-                    preview.set(update.geometries);
+                    show(update.geometries);
                     guides.set(update.guides);
                 }
             }
@@ -488,7 +494,8 @@ pub fn Canvas() -> impl IntoView {
         if keep && !moved.is_empty() {
             commit(moved);
         } else {
-            preview.set(Vec::new());
+            // Back to where the gesture started, which is any commit's pending geometry.
+            show(starts);
             drop_preview_if_caught_up();
         }
     };
@@ -931,6 +938,7 @@ pub fn Canvas() -> impl IntoView {
                 role="toolbar"
                 aria-label="Canvas tools"
                 on:pointerdown=|event: ev::PointerEvent| event.stop_propagation()
+                on:dblclick=|event: ev::MouseEvent| event.stop_propagation()
             >
                 <button
                     class="canvas-tool"
