@@ -69,7 +69,8 @@ pub(crate) struct Faults {
 /// on it afterwards is invalid, so each later use is an uncaptured error. wgpu reports
 /// the loss itself on a later poll, so the errors can come first, and a panic there
 /// would end the render thread instead of letting it open a new device (#349). The
-/// first error is kept for [`crate::Compositor::take_error`] and logged once.
+/// first error is kept for [`crate::Compositor::take_error`] and logged once until it is
+/// taken, which `render` does each frame.
 ///
 /// wgpu keeps one callback and one handler per device. The compositor is the only code
 /// that sets them, on its own device and on the platform's context (the program stage

@@ -422,7 +422,8 @@ impl Compositor {
     /// one no call returned, such as a validation error in a submitted command. wgpu's
     /// default would panic on it. The compositor installs its own handler instead, so a
     /// lost device's invalid resources fail the frame rather than the thread; an error
-    /// before a loss is also logged once, as `uncaptured wgpu error`.
+    /// before a loss is also logged, as `uncaptured wgpu error`, once until it is taken:
+    /// `render` takes it each frame, so one that recurs is logged once per frame.
     pub fn take_error(&self) -> Option<String> {
         self.gpu
             .faults
