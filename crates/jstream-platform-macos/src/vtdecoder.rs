@@ -179,7 +179,10 @@ impl Drop for ReadLocked<'_> {
 }
 
 /// `buffer`'s picture as a tightly packed CPU frame presented at `pts`.
-fn copy_image(buffer: &CVPixelBuffer, pts: MediaTime) -> Result<VideoFrame, PlatformError> {
+pub(crate) fn copy_image(
+    buffer: &CVPixelBuffer,
+    pts: MediaTime,
+) -> Result<VideoFrame, PlatformError> {
     let code = CVPixelBufferGetPixelFormatType(buffer);
     let format = pixel_format_from_cv(code).ok_or_else(|| PlatformError::Unsupported {
         what: format!("a decoded frame in Core Video format {code:#010x}"),
