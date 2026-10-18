@@ -17,8 +17,11 @@ mod filter;
 mod finite;
 mod geometry;
 mod history;
+mod hotkey;
 mod id;
 mod kind;
+mod live;
+mod mix;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
@@ -50,25 +53,32 @@ pub use event::{DropCounts, Event, OutputState};
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
 pub use geometry::{
-    Canvas, CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad,
-    Placed, PlacementForm, ProjectedQuad, Size, legacy_quad,
+    Canvas, CanvasPoint, ContentRect, DrawnPolygon, DrawnVertex, FitMode, GeometryError,
+    ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, NEAR_W, Placed, PlacementForm, ProjectedQuad,
+    Size, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
+pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
-    BusId, ClientId, DeviceId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId,
-    RequestId, Rev, SceneId, SourceId,
+    BusId, ClientId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId,
+    OutputId, RequestId, Rev, SceneId, SourceId, VideoMixId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
 };
+pub use live::{
+    GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
+};
+pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
     PreviewCodec, PreviewSettings, StreamKind,
 };
 pub use query::{
-    DeleteTarget, DeviceInfo, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo,
+    CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, ItemInfo, MasterInfo,
+    PixelSize, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
