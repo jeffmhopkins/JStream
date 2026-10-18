@@ -4566,7 +4566,7 @@ stamp = { hash = "b3:2a6f8f601d4598b2", by = "agent:windows-pass", note = "Writt
 stamp = { hash = "b3:9e3a9ddf79167120", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.ps1"]
-stamp = { hash = "b3:c884022bd48bca8a", by = "agent:windows-pass", note = "Re-read after the browser-check fixes (page_check's first-window overlap tolerance, vswhere on PATH for vcvars64): the section still holds" }
+stamp = { hash = "b3:b94a64c10a0c7d25", by = "agent:windows-pass", note = "Re-read after vcam-register unregisters again when the declined-prompt step gets a yes: the section still holds" }
 
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:4fabbaa71adf77ab", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }

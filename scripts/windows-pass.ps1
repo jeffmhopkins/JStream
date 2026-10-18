@@ -1057,6 +1057,12 @@ function Test-VcamRegister {
     if (Prompt-Do 'Next, --register-vcam runs once more: click No on its UAC prompt.') {
         $r = Invoke-Native $exe @('--register-vcam') 300
         Check ($r.Code -eq 1 -and ($r.Out + $r.Err) -match 'the administrator prompt was declined') 'declined prompt' "exit $($r.Code): $(($r.Out + $r.Err).Trim())"
+        if ($r.Code -eq 0) {
+            # The prompt got a yes: undo it, so the run leaves nothing registered.
+            Say 'That registered the camera again; unregistering it (click Yes this time).' 'Yellow'
+            $u = Invoke-Native $exe @('--unregister-vcam') 300
+            Check ($u.Code -eq 0) 'unregister again' "exit $($u.Code): $($u.Out.Trim()) $($u.Err.Trim())"
+        }
     } else { Skip 'declined prompt' 'skipped by you' }
 }
 
