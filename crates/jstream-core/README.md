@@ -792,6 +792,20 @@ changing with time (`Shot::changes_with_time`), so the preview redraws it like a
 running transition. `video.snapshot` runs the chains on its own compositor, so a
 stateful kind (a video delay) starts empty there. The built-in video filter kinds are
 in `kind.list` and `filter.add` takes them on a video chain.
+
+A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
+`image_mask`'s `image`, whose first frame is the mask) gets it through the live
+sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
+name, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+reads and decodes each new one, as it builds sources, and an asset no filter names any
+more is let go. A plan hands each chain filter the asset it names, numbered by its load,
+and each compositor makes the filter's reference image from it once: the LUT's tile
+layout (`jstream_render::lut_image`) or the mask uploaded as straight sRGB. A reference
+kind keeps no state between frames, so a new load makes the filter again with the new
+image, and the old filter, which holds the old image, is retired through the cache. A
+file that can't be read or decoded is logged and its filter passes its input through
+until the setting changes. Moving the collection file reloads every `collection`
+asset.
 A `display`, `window` or `webcam` source with no stored frame shows what the pipeline
 captures for it on the render thread, and nothing in `video.snapshot`, which has no
 capture; a stored frame wins. The `Shot` lists what the passes of the program, or the
@@ -1725,11 +1739,10 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
 - Blend modes other than `normal` in the compositor.
-- The rest of the video chain runtime (V0): the asset and scene references
-  `apply_lut`, `image_mask` and `scene_mask` read (they pass their input through until
-  then), effect-pack kinds in a chain (bypassed), placing a bounds-growing filter's
-  output at the original content box, and pooling a multi-pass filter's scratch
-  layers.
+- The rest of the video chain runtime (V0): the referenced scene `scene_mask` reads
+  (it passes its input through until then), effect-pack kinds in a chain (bypassed),
+  placing a bounds-growing filter's output at the original content box, and pooling a
+  multi-pass filter's scratch layers.
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the

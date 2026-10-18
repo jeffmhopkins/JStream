@@ -436,8 +436,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), video filters that read an asset or scene reference
-  (`apply_lut`, `image_mask` and `scene_mask` pass their input through), blend modes
+  version is refused on load), video filters that read a scene (`scene_mask` passes
+  its input through), blend modes
   other than `normal`,
   bus monitors, per-placement effects, 3D
   geometry, variants and overrides (so no edit drops
