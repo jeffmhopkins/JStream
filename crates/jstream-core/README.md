@@ -774,7 +774,8 @@ settings change and kept while the shot keeps it, so a stateful kind sees its fr
 in order. `compose` runs every chain once per frame of the cache, after the uploads and
 captures, however many mixes the tick draws (`ResourceCache::frame`), each filter into
 a layer of the cache (`GpuKey::Chain`, the last into `GpuKey::Filtered`) through
-`Compositor::apply_filter_into`, so a steady chain allocates no output texture.
+`Compositor::apply_filter_into`, so a steady chain allocates no output texture, and
+each multi-pass filter's `VideoFilter` keeps its scratch layers while the size holds.
 `claim_layers` keeps those layers for a mix that isn't due. A filter no shot runs any
 more is retired into the cache (`ResourceCache::retire_filter`) and dropped with the
 images it reclaims, on that thread's collector. A chain whose filter fails (its layer
@@ -1743,8 +1744,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   it.
 - Blend modes other than `normal` in the compositor.
 - The rest of the video chain runtime (V0): effect-pack kinds in a chain (bypassed),
-  placing a bounds-growing filter's output at the original content box, and pooling a
-  multi-pass filter's scratch layers.
+  and placing a bounds-growing filter's output at the original content box.
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the

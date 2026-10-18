@@ -112,14 +112,14 @@ pub fn lut_image(compositor: &mut Compositor, lut: &Lut) -> Result<Image, Render
     let (width, height, texels) = lut.layout();
     // A data upload only lives inside a filter pass, where the compositor's image maker
     // is at hand; copying it into the pass's output layer keeps the f16 values exactly.
-    let mut upload = VideoFilter {
-        kind: "assets-lut-upload".into(),
-        pass: Box::new(Upload {
+    let mut upload = VideoFilter::of(
+        "assets-lut-upload",
+        Box::new(Upload {
             width,
             height,
             texels,
         }),
-    };
+    );
     let unused = compositor.layer(1, 1)?;
     compositor.apply_filter(&mut upload, &unused, FilterClock::default())
 }

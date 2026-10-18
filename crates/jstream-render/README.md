@@ -255,6 +255,7 @@ compositor's own, not a shared encode target, so nothing transitions it.
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
+| A multi-pass filter's scratch layers | Its `VideoFilter`: reused by the next call at the same size; replaced for a new size, and dropped when a call asks for fewer ([Filters](#filters)) |
 | `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
 
 **`ResourceCache`.** A frame runs `begin_frame`, `upload`, `import` or `layer` for each
@@ -420,10 +421,13 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
   its target or blends premultiplied src-over it.
 - Each draw creates its two small uniform buffers, two views and a bind group, and each
   `apply_filter` its output layer (`apply_filter_into` reuses the caller's). A
-  multi-pass filter also creates its `Ctx::scratch` layers on every call: up to three,
-  each at most the filter's output size (about 16.6 MB at 1080p). Pooling the scratch
-  layers is still to do (V0); until then a multi-pass filter costs them per frame. The video delay's ring of held frames is
-  the one thing a filter keeps between frames.
+  multi-pass filter's `Ctx::scratch` layers (up to three, each at most the filter's
+  output size, about 16.6 MB at 1080p) come from a pool its `VideoFilter` keeps (V0): a
+  call's `n`th scratch layer is the call before's `n`th when the size is the same, so a
+  filter at a steady size makes them once. A layer of another size replaces it, and one
+  a call doesn't ask for is dropped at its end. A scratch layer is never kept past the
+  call that takes it. The video delay's ring of held frames is the other thing a filter
+  keeps between frames; those are its own layers (`Ctx::layer`), never scratch ones.
 
 **External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
 whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
