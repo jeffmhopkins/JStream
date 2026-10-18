@@ -446,10 +446,14 @@ mod tests {
             self.sup.tick(self.now)
         }
 
-        /// Ticks until the host is ready, returning everything seen.
+        /// Ticks until the host is ready, returning everything seen. The bound is wall
+        /// time, not a tick count: under a loaded test run the fake host's thread can take
+        /// seconds to answer. At 1 ms of supervisor time per tick of at least 5 ms, 20 s
+        /// stays well inside the default `start_timeout`.
         fn until_ready(&mut self) -> Vec<HostEvent> {
             let mut seen = Vec::new();
-            for _ in 0..400 {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            while Instant::now() < deadline {
                 let events = self.tick(Duration::from_millis(1));
                 let ready = events.iter().any(|e| matches!(e, HostEvent::Ready { .. }));
                 seen.extend(events);
