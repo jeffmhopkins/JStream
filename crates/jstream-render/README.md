@@ -549,7 +549,8 @@ imported frame as both and counts one stage.
   from decoded RGBA8. `lut_image(compositor, lut)` makes the reference image: the blue
   slices as near-square 2D tiles (512x512 for 64 points, so no adapter limit is near),
   stored `Rgba16Float` through a one-function data upload in `image.rs`, values clamped to
-  0 to 1. The shader recovers the size from the image's dimensions and does the
+  0 to 1. It is an upload made straight through the compositor's image maker, with no
+  draw, layer or submit (#369). The shader recovers the size from the image's dimensions and does the
   trilinear lookup as two bilinear taps in adjacent slices at texel centres; an image
   that is not such a layout passes the input through. `Lut` (with `parse_cube`,
   `from_tiled_rgba8` and `size`), `LutError` and `lut_image` are public, for the chain
