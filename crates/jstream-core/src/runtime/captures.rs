@@ -10,7 +10,9 @@
 //! The render thread asks it to start what a new snapshot captures and hands it the
 //! streams it no longer reads, through channels it never waits on (R-RT-002,
 //! R-RT-003). A capture that fails to start, or whose target goes away, keeps showing
-//! its last frame and is started again after [`RETRY_MS`].
+//! its last frame and is started again after [`RETRY_MS`]. When the render thread leaves
+//! the GPU path mid-run ([`RenderCaptures::leave_gpu`]), every capture restarts on the
+//! CPU path.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -47,15 +49,21 @@ const MAX_DEVICE_PIXELS: u64 = 1920 * 1080;
 
 /// What the render thread asks the `jstream-capture` thread to do.
 enum Request {
-    Start(CaptureSpec),
+    /// Start a capture, for the render thread's capture path `epoch`.
+    Start(CaptureSpec, u32),
     /// Stop a capture: its stream is dropped there.
     Stop(Box<dyn CaptureStream>),
+    /// Drop the GPU backend: every later start is on the CPU path.
+    CpuOnly,
 }
 
 /// A start's outcome, sent back to the render thread.
 struct Started {
     spec: CaptureSpec,
     stream: Option<Box<dyn CaptureStream>>,
+    /// The epoch of the start: one from before the render thread left the GPU path is
+    /// stopped again.
+    epoch: u32,
 }
 
 /// Starts the `jstream-capture` thread, and returns the render thread's side of it.
@@ -64,7 +72,7 @@ pub(crate) fn spawn(backends: Backends, clock: Timebase) -> Result<RenderCapture
     let (tx, started) = mpsc::channel();
     let thread = std::thread::Builder::new()
         .name("jstream-capture".into())
-        .spawn(move || capture_thread(&backends, &rx, &tx))
+        .spawn(move || capture_thread(backends, &rx, &tx))
         .map_err(|err| format!("starting the jstream-capture thread: {err}"))?;
     let retry = MediaTime::new(RETRY_MS, Timebase::MILLIS)
         .rescale(clock, Rounding::Up)
@@ -79,17 +87,18 @@ pub(crate) fn spawn(backends: Backends, clock: Timebase) -> Result<RenderCapture
         ended: CaptureStats::default(),
         versions: 0,
         gpu_captures: 0,
+        epoch: 0,
     })
 }
 
-fn capture_thread(backends: &Backends, rx: &Receiver<Request>, tx: &Sender<Started>) {
+fn capture_thread(mut backends: Backends, rx: &Receiver<Request>, tx: &Sender<Started>) {
     // The captures whose last start failed: a retry that fails again logs at `debug`,
     // so a closed window kept on program doesn't warn every retry.
     let mut failing = BTreeSet::new();
     for request in rx {
         match request {
-            Request::Start(spec) => {
-                let stream = match start(backends, &spec) {
+            Request::Start(spec, epoch) => {
+                let stream = match start(&backends, &spec) {
                     Ok(stream) => {
                         failing.remove(&spec);
                         Some(stream)
@@ -105,9 +114,14 @@ fn capture_thread(backends: &Backends, rx: &Receiver<Request>, tx: &Sender<Start
                 };
                 // An error hands the stream back: the render thread is gone, so it
                 // stops here.
-                drop(tx.send(Started { spec, stream }));
+                drop(tx.send(Started {
+                    spec,
+                    stream,
+                    epoch,
+                }));
             }
             Request::Stop(stream) => drop(stream),
+            Request::CpuOnly => backends.gpu = None,
         }
     }
 }
@@ -298,6 +312,9 @@ pub(crate) struct RenderCaptures {
     /// Numbers every new frame, across captures.
     versions: u64,
     gpu_captures: u64,
+    /// Bumped when the render thread leaves the GPU path, so a start asked for before it
+    /// is stopped again when it comes back.
+    epoch: u32,
 }
 
 struct Slot {
@@ -333,6 +350,36 @@ impl RenderCaptures {
         self.on_gpu = on_gpu;
     }
 
+    /// Moves every capture onto the CPU path, for a compositor that leaves the platform's
+    /// GPU context mid-run (#451): lets go of the frames held, tells the
+    /// `jstream-capture` thread to drop its GPU backend, and stops and starts again every
+    /// capture that is running or starting. Never waits; the streams and the backend drop
+    /// on that thread, which ends before the context goes ([`stop`](Self::stop)). A
+    /// capture keeps no frame until its CPU stream delivers one.
+    pub(crate) fn leave_gpu(&mut self) {
+        self.on_gpu = false;
+        self.release_frames();
+        let Some(requests) = &self.requests else {
+            return;
+        };
+        let _ = requests.send(Request::CpuOnly);
+        self.epoch = self.epoch.wrapping_add(1);
+        for (spec, slot) in &mut self.slots {
+            match std::mem::replace(&mut slot.state, State::Starting) {
+                State::Running { stream, .. } => {
+                    add(&mut self.ended, stream.stats());
+                    let _ = requests.send(Request::Stop(stream));
+                    let _ = requests.send(Request::Start(spec.clone(), self.epoch));
+                }
+                State::Starting => {
+                    let _ = requests.send(Request::Start(spec.clone(), self.epoch));
+                }
+                // Started again, on the CPU path, when it is due.
+                failed @ State::Failed { .. } => slot.state = failed,
+            }
+        }
+    }
+
     /// Starts what `wanted` captures and isn't running, stops what it no longer
     /// captures, takes the streams the `jstream-capture` thread started, and reads every
     /// running capture's mailbox. Never waits.
@@ -355,20 +402,32 @@ impl RenderCaptures {
         for spec in wanted {
             match self.slots.get_mut(spec) {
                 None => {
-                    let _ = requests.send(Request::Start(spec.clone()));
+                    let _ = requests.send(Request::Start(spec.clone(), self.epoch));
                     self.slots.insert(spec.clone(), Slot::new());
                 }
                 Some(slot) => {
                     if let State::Failed { at } = slot.state
                         && at.checked_add(self.retry).is_ok_and(|due| due <= now)
                     {
-                        let _ = requests.send(Request::Start(spec.clone()));
+                        let _ = requests.send(Request::Start(spec.clone(), self.epoch));
                         slot.state = State::Starting;
                     }
                 }
             }
         }
-        while let Ok(Started { spec, stream }) = self.started.try_recv() {
+        while let Ok(Started {
+            spec,
+            stream,
+            epoch,
+        }) = self.started.try_recv()
+        {
+            if epoch != self.epoch {
+                // Asked for before the GPU path was left: started again since.
+                if let Some(stream) = stream {
+                    let _ = requests.send(Request::Stop(stream));
+                }
+                continue;
+            }
             match (self.slots.get_mut(&spec), stream) {
                 (Some(slot), Some(stream)) if matches!(slot.state, State::Starting) => {
                     slot.state = State::Running {
