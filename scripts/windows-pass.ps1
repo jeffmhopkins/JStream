@@ -923,10 +923,11 @@ regsvr32 /s '$test\jstream_vcam_windows.dll'
         $verdict = ($r.Out -split "`n" | Where-Object { $_ -match 'verdict' } | Select-Object -First 1)
         Check ($r.Code -eq 0 -and $verdict -match 'reached|pass|ok') 'vcam_smoke' "exit $($r.Code); $verdict"
         Ask 'producer frames' 'Did the Camera app show dark teal with a moving white bar (not the colour bars)?'
-        Say 'Restarting the producer while Frame Server still holds the old control block. Keep the Camera app open.'
+        Say 'Restarting the producer while Frame Server still holds the old control block. Keep the Camera app open on "JStream Virtual Camera"; if its picture froze or went away, pick the camera again within 15 s.'
         $r = Invoke-Native $smoke @('--seconds', '15') 60
         Write-Text (Join-Path $OutDir 'vcam-smoke-2.txt') ($r.Out + $r.Err)
-        Check ($r.Code -eq 0) 'producer restarts' "exit $($r.Code); $(($r.Out -split "`n" | Where-Object { $_ -match 'verdict' } | Select-Object -First 1))"
+        $verdict = ($r.Out -split "`n" | Where-Object { $_ -match 'verdict' } | Select-Object -First 1)
+        Check ($r.Code -eq 0 -and $verdict -match 'PASS') 'producer restarts' "exit $($r.Code); $verdict"
         $code = Invoke-Cargo 'm1-3' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--',
             '--ignored', 'frame_server_serves_the_published_frames') 'vcam-hw-test'
         Check ($code -eq 0) 'virtual-camera hw-test' "exit $code (frame_server_serves_the_published_frames)"
@@ -1141,21 +1142,34 @@ function Test-PrivateFiles {
 }
 
 function Test-Webcam {
+    $holders = @(Get-Process -Name 'WindowsCamera', 'Teams', 'ms-teams', 'Zoom', 'obs64' -ErrorAction SilentlyContinue)
+    if ($holders) {
+        Prompt-Do "Close these apps, which may hold the webcam: $(($holders | ForEach-Object { $_.ProcessName } | Sort-Object -Unique) -join ', ')."
+    }
     $code = Invoke-Cargo 'pr726' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--', '--ignored', 'video_device', '--nocapture') 'webcam-hw-tests'
     $text = Get-Content -LiteralPath (Join-Path $OutDir 'webcam-hw-tests.log') -Raw
     $failed = @([regex]::Matches($text, '(?m)^test (\S+) \.\.\. FAILED') | ForEach-Object { $_.Groups[1].Value })
     Check ($code -eq 0) 'video-device hw-tests (MJPEG included)' "exit $code; failed: $(if ($failed) { $failed -join ', ' } else { 'none' })"
+    if ($code -ne 0 -and $text -match 'Busy') {
+        Fail 'webcam free' 'the webcam is in use by another app (close the Camera app, Teams, Zoom or OBS), so the rest of this check would record black; run -Only webcam again'
+        return
+    }
     if (-not (Build 'pr726' @('jstream-daemon', 'jstream-cli'))) { return }
     $d = Start-Daemon 'pr726'
     if (-not (Need-Daemon $d)) { return }
     $file = Join-Path $OutDir 'webcam.mp4'
+    $seen = @{ NoMic = $false }
     With-Daemon $d {
         New-ProgramScene $d @{ type = 'builtin'; kind = 'webcam' } @{ device = '' }
         Say 'Recording the first webcam for 10 s. Say something into its microphone.'
         $r = Invoke-Recording $d $file 10
         Check ($r -eq 'ok') 'webcam recording' $r
-        $fmt = Search-Logs $d.LogDir 'webcam|video device|MJPEG|format'
-        Pass 'format picked' $(if ($fmt) { ($fmt | Select-Object -First 2 | ForEach-Object { $_.Line.Trim() }) -join ' | ' } else { 'no format line in the log' })
+        $fmt = @(Search-Logs $d.LogDir 'opening the video device.*encoding=' | Select-Object -First 1)
+        if ($fmt -and $fmt[0].Line -match '(size=.*)$') { Pass 'format picked' $Matches[1] }
+        else { Fail 'format picked' 'no "opening the video device" line in the log' }
+        $busy = @(Search-Logs $d.LogDir 'video capture device is busy')
+        if ($busy) { Fail 'webcam free' 'the daemon logged "video capture device is busy": close the app that holds the webcam and run -Only webcam again' }
+        $seen.NoMic = [bool](Search-Logs $d.LogDir 'no paired audio input')
     }
     $probe = Get-Probe $file
     if ($probe) {
@@ -1165,7 +1179,8 @@ function Test-Webcam {
         if (-not $Unattended) { Invoke-Item -LiteralPath $file }
         Ask 'webcam colours' 'webcam.mp4 is open: is the picture right, with natural colours?'
         Ask 'paired microphone (#726)' 'Is your voice in the recording, from the webcam''s own microphone?'
-        Pass 'audio stream' "$($a.Count) audio streams in the recording"
+        if ($seen.NoMic) { Warn 'audio stream' "$($a.Count) audio streams, but the daemon logged that the webcam has no paired audio input" }
+        else { Check ($a.Count -ge 1) 'audio stream' "$($a.Count) audio streams in the recording" }
     }
     if (Confirm 'Run the interactive unplug test? It asks you to unplug the webcam mid-stream.') {
         $env:JSTREAM_UNPLUG_TEST = '1'

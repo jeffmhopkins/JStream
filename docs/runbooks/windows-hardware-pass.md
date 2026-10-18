@@ -346,7 +346,8 @@ On `wave/m1-3`, in the same run as item 10:
 ### 15. MJPEG webcam and its paired microphone (#673, #726)
 
 On #726's branch (stacked on `wave/m1-3`, so #658's MJPEG path is in it), with a webcam
-that has a microphone:
+that has a microphone. Close every app that holds the webcam first (the Camera app, Teams,
+Zoom, OBS): a busy webcam fails the device tests with `Busy` and records black.
 
 1. `cargo test -p jstream-platform-windows --features hw-tests -- --ignored video_device`.
    **Pass:** the device tests pass, the largest MJPEG format included.
