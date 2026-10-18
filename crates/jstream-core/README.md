@@ -148,6 +148,10 @@ state machine. Contents:
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
   which preset a switch runs (`resolve`), and the plan that pairs what is on screen
   with the new scene's items, one `jstream-render` `Track` per item (`plan`).
+- **Privacy** (`privacy.rs`): whether the privacy screen is on and which client turned
+  it on, runtime state under the collection lock that `privacy.set` sets and
+  `privacy.get` reads, with the atomic flag the render thread reads
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox of each
   display and window the program mix or a video mix shows (`runtime/captures.rs`,
@@ -233,7 +237,8 @@ state machine. Contents:
   window on program, sharing one between sources, stopping it when its source leaves
   and starting it again after a failed start or a lost target
   (`src/tests/cpu_pipeline/captures.rs`), which capture path an output takes and each
-  fallback, an output compositing GPU capture frames, and a browser page painting on
+  fallback, an output compositing GPU capture frames (opaque, whatever alpha the
+  texture holds), and a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, on a software device that stands in for the platform's
   (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
@@ -257,7 +262,7 @@ state machine. Contents:
   profiles, and on a half-rate video mix held to its rate without being starved), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
-  it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
+  it, a refused start keeping the sink, a failed publish failing only that output, black under the privacy screen), a render panic failing both outputs, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), audio sources becoming mixer inputs on the CPU
@@ -457,11 +462,12 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
-  and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see
-  *Audio routing*), which succeeds whether or not the mixer runs, and `live.set` and
-  `live.cancel` (see *Live values* below). `live.list` is a query answered from the
-  gesture table.
-- **`studio.get`** reads the program and preview scenes under the collection lock.
+  and `studio.set_preview` (see *Program scene* below), `privacy.set` (see *Privacy
+  screen* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
+  or not the mixer runs, and `live.set` and `live.cancel` (see *Live values* below).
+  `live.list` is a query answered from the gesture table.
+- **`studio.get`** reads the program and preview scenes under the collection lock, and
+  **`privacy.get`** the privacy screen.
 - **`capture.targets`** lists the platform capture backend's displays, then its
   windows, with no engine lock held, since listing windows calls the OS. With no
   backends it answers `action_failed`, and so it does when the OS refuses the list.
@@ -476,10 +482,12 @@ The engine's answers are the mock's for the differential script: `tests.rs` runs
 script of calls against both and compares results, error codes and fields, and events.
 That script does not call `video.snapshot`. The mock has no compositor and answers it
 with `internal`, so the two are not compared. Nor does it call `capture.targets`,
-which the mock answers with a made-up display, or send the folder, label and
-metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4), which
-the mock doesn't implement yet; `history.rs` checks the engine's undo of them. The mock stays the reference clients
-were developed against, and `jstream-graph` the only implementation of the edit rules
+which the mock answers with a made-up display. It does send the folder, label and
+metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): each
+refusal, the in-use deletes, the reads, undo and redo, and a filed scene's and a
+labelled source's delete, which the test checks applies, undone with their metadata;
+`history.rs` checks the engine's undo of them further. The mock stays the reference
+clients were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 
 ### Undo and redo
@@ -636,6 +644,30 @@ and is opaque, so a scene shown at another size or faded moves as one image
 the incoming items (§3). Audio does not follow a transition
 yet (D29).
 
+### Privacy screen
+
+The privacy screen is runtime state in `privacy.rs`, under the collection lock like the
+program scene, never saved and never part of `rev`
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). `privacy.set`
+turns it on or off and emits `privacy.changed` naming the client and request; setting
+the state it already has emits nothing. A subscription opened while it is on starts
+with `privacy.changed { on: true }` naming the client that turned it on, with no
+request. Every `privacy.set` is audited with the state it asked for.
+
+The engine stores an atomic flag with release ordering when the state changes; the
+render thread loads it with acquire ordering at the start of each tick and marks every
+mix it draws on that tick covered. A covered mix is drawn as usual, then blurred last,
+after the letterbox: the frame is halved, rounding up, until its longer side is 32
+pixels or less, and the smallest layer is stretched back to the frame (the linear
+sampler makes each halving a box filter). Those layers live in the frame's
+`ResourceCache` whenever a mix is drawn, and a mix not due on a tick claims them with
+its other layers, so turning privacy on allocates nothing on the render thread. A
+virtual camera is fed the program frame, so it is covered too. It fails closed: a covered tick whose draw failed blackens the
+frames due on it instead of repeating them, including after a fatal draw error. The
+CPU stand-in draws covered frames black. `video.snapshot` and the preview streams show
+the editing view and are never covered. Only the default blur exists: the look setting, the slate and muting
+sources come later.
+
 ### Snapshots
 
 `video.snapshot` returns the program mix as a PNG
@@ -696,7 +728,8 @@ transition at that time.
 render, snapshot and preview threads through a `jstream-render` `ResourceCache` keyed
 by `GpuKey`: a source's upload (or the import of a `browser` page's texture, see
 *Live sources*), each capture's (an upload of a CPU frame, or an import of the
-platform's texture, `ResourceCache::import`), a nested scene's layer at its depth, and
+platform's texture, `ResourceCache::import_opaque`; a capture is opaque on both paths,
+its alpha read as 255, #451), a nested scene's layer at its depth, and
 the mix's scene at the canvas size. An unchanged frame is not uploaded again, and each
 nested scene is redrawn into the layer it had (`render_into`), so a steady frame
 allocates no texture. On a render tick, a mix that isn't due claims its layers without
@@ -1176,13 +1209,17 @@ entries.
 `EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
 when they have the same key: the video mix (or none, for the program at the canvas
 size and base rate), its resolution and rate, and the profile ID and its settings, all
-as they were at start. So `encoder.update`, `output.set_encoder`, a mix's new
+as they were at start. An output with its own video chain adds its ID to the key, so
+its session and its drawn frame are its own; outputs carry no chain yet
+(`Output::has_video_chain` is false), so none does so far. So `encoder.update`, `output.set_encoder`, a mix's new
 resolution or rate, or `output.set_video_mix` on a running output changes nothing until
 it restarts, and an
 output started after the update opens a session of its own rather than joining one
 with stale settings. `output.status` reports, per running output, the profile, the
-other outputs on the same session and whether its video encoder is a hardware one,
-plus the video sessions and hardware sessions open
+other outputs on the same session, whether its video encoder is a hardware one
+(read from `VideoSession::codec`, so a hardware encoder that fell back to software at
+its first frame reports software) and whether the session is `dedicated` to it, plus
+the video sessions and hardware sessions open
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
 guess a hardware cap. A hardware session limit fails the start with the encoder's own
 error for now, not a session-limit code.
@@ -1398,7 +1435,8 @@ keeps each capture's newest `GpuFrame` until a newer one replaces it, and the ca
 frame's hold only to the frame that draws it, so a held capture slot is the frame on
 screen and nothing more. On the CPU path it converts each capture's newest frame to
 RGBA8 (RGBA copied, BGRA swizzled, NV12, which Windows' capture delivers, converted
-with its frame's matrix and range); only what the program mix shows is captured, so
+with its frame's matrix and range), opaque: alpha is 255 on every pixel, as the GPU
+path reads a capture's (#451); only what the program mix shows is captured, so
 a program without a `display` or `window` source converts nothing. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
@@ -1573,7 +1611,7 @@ Every agent action goes to the audit log
 the time, `client_id`, the client's name from its latest `hello` (`client_name`, cut
 to 128 bytes; `client_id`s restart at `client_1` with the engine, so the name is what
 says which agent acted across restarts), the session's `request_id`, the call (`batch`,
-`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`, `studio.set_preview`), the `rev` before and
+`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`, `studio.set_preview`) or the state `privacy.set` asked for (`privacy`), the `rev` before and
 after, the result (`ok` or the error code), and `replayed` for a batch, undo or redo whose
 idempotency key had already been applied. It holds no argument of any call: no names,
 settings, URLs or keys, so `output.set_key` records only that action on that output
@@ -1739,7 +1777,7 @@ routing* in Design). Every running output shares that one program stage (capture
 render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same video mix and encoder profile
-share one video session; those of them with no audio chain share one audio session of
+share one video session (an output with its own video chain would get its own); those of them with no audio chain share one audio session of
 the master bus; an output with an audio chain has an audio session of its own that the
 mixer thread feeds from the output's tap. The render and mixer threads take a new
 session's inputs from a channel, never a lock, and hand a finished session's input to
@@ -1768,7 +1806,8 @@ needs any more, replaced lists of bus and source scopes) goes to the program sta
 emits `stopped` only after the start has dropped its threads. The render and mixer
 threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a
 capture error or a missing frame repeats the last one, and a render panic repeats the
-last frame until teardown. A fatal error on the render, mixer or output thread (a
+last frame until teardown; under the privacy screen a frame that couldn't be drawn is
+black instead (see *Privacy screen* in Design). A fatal error on the render, mixer or output thread (a
 publish or recording write failure, an encoder stream that ends before stop, a render
 or mixer panic) is a channel message to a watcher the control thread started; the
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every

@@ -189,6 +189,21 @@ impl<K: Ord + Clone> ResourceCache<K> {
         self.import_as(compositor, key, frame, Alpha::PremultipliedSrgb)
     }
 
+    /// [`Self::import`] of a captured frame, sampled as [`Compositor::import_opaque`]
+    /// samples it: its alpha is read as 1. An entry under `key` imported another way is
+    /// replaced.
+    ///
+    /// # Errors
+    /// As for [`Compositor::import_opaque`]. The entry is left as it was.
+    pub fn import_opaque(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        frame: &GpuFrame,
+    ) -> Result<&Image, RenderError> {
+        self.import_as(compositor, key, frame, Alpha::Opaque)
+    }
+
     fn import_as(
         &mut self,
         compositor: &Compositor,

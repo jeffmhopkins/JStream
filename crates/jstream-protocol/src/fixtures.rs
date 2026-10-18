@@ -118,6 +118,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             geometry: ItemGeometry {
                 fit_mode: FitMode::Fill,
                 rotation_deg: Finite32::new(12.5).expect("finite"),
+                flip_h: true,
                 ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
             },
         },
@@ -838,6 +839,7 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
         },
+        Action::PrivacySet { on: true },
     ]
 }
 
@@ -880,6 +882,7 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::OutputList,
         Query::StudioGet,
+        Query::PrivacyGet,
         Query::EncoderList,
         Query::VideoMixList,
         Query::CaptureTargets,
@@ -1198,6 +1201,7 @@ fn item_infos() -> Vec<ItemInfo> {
             transform: corner_box().transform_view().expect("finite"),
             geometry: Some(ItemGeometry {
                 fit_mode: FitMode::Stretch,
+                flip_v: true,
                 ..corner_box()
             }),
             crop: Crop::NONE,
@@ -1274,6 +1278,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 profile_id: None,
                 shared_with: vec![OutputId::new("out_tw")],
                 hardware: false,
+                dedicated: false,
+            }),
+            encoder_sessions: 2,
+            hardware_sessions: 1,
+        },
+        QueryResult::OutputStatus {
+            output_id: OutputId::new("out_rec"),
+            state: OutputState::Active,
+            key_set: false,
+            encoder: Some(EncoderSessionInfo {
+                profile_id: None,
+                shared_with: vec![],
+                hardware: true,
+                dedicated: true,
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
@@ -1397,6 +1415,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             program_scene: None,
             preview_scene: None,
         },
+        QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
@@ -1557,6 +1576,11 @@ pub(crate) fn events() -> Vec<Event> {
         transition: None,
         client_id: ClientId::new("cli_8"),
         request_id: None,
+    });
+    events.push(Event::PrivacyChanged {
+        on: true,
+        client_id: ClientId::new("cli_7"),
+        request_id: Some(RequestId::new("r3")),
     });
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::StatsTick {
