@@ -150,7 +150,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.30 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.37 because of
+  `output.status`'s `cleartext` (#562); 0.31 to 0.36 are other changes queued ahead of
+  it (0.33 is #317's, 0.34 accepts non-neutral 3D), which land first; 0.30 added
   transition presets and studio mode's preview (the `transition.*` edits,
   `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
   `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
@@ -243,8 +245,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":30},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":30},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":37},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":37},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -730,8 +732,12 @@ Queries read and never change `rev`. Those that read the collection state carry 
   and whether the session is a hardware one; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
-  the cap (0.13; missing, they parse as absent and 0). None of it is collection state,
-  so it carries no `rev`.
+  the cap (0.13; missing, they parse as absent and 0). `cleartext` says whether
+  publishing sends the stream key across the network unencrypted: a generic RTMP
+  target whose URL is plain `rtmp://` to a host other than `localhost` or a loopback
+  address (`OutputKind::sends_key_in_cleartext`; 0.37, missing it parses as `false`).
+  The engine still publishes; a client shows it as a warning. None of it is
+  collection state, so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview

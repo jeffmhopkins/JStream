@@ -468,6 +468,7 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             state,
             key_set,
             encoder,
+            cleartext,
             ..
         } => {
             let key = if *key_set { "set" } else { "not set" };
@@ -479,6 +480,12 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                     write!(out, ", encoder shared with {}", names.join(", "))?;
                 }
                 None => {}
+            }
+            if *cleartext {
+                write!(
+                    out,
+                    "; warning: plain rtmp://, the stream key is sent unencrypted"
+                )?;
             }
             writeln!(out)?;
         }

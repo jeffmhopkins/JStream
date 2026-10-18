@@ -71,7 +71,10 @@ pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
 };
 pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
-pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
+pub use output::{
+    OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
+    rtmp_url_sends_key_in_cleartext,
+};
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
     PreviewCodec, PreviewSettings, StreamKind,

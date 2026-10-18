@@ -1409,9 +1409,9 @@ polls the audio sources' inputs into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
 publish target. Drops on a full encoder queue are counted in `output_stats`. The
 test records tags in memory. `connect_rtmp` is the live publisher. When its URL is
-plain `rtmp://` to another machine (`RtmpUrl::sends_key_in_cleartext`), it logs a
-warning naming the host, never the path, since the key then crosses the network
-unencrypted (#353). `RtmpPublish`
+plain `rtmp://` to another machine (`jstream_protocol::rtmp_url_sends_key_in_cleartext`,
+the rule `output.status` reports as `cleartext`), it logs a warning naming the host,
+never the path, since the key then crosses the network unencrypted (#353). `RtmpPublish`
 wraps `jstream-outputs`' `ReconnectingPublisher` with its default `ReconnectPolicy`
 (backoff from 1 s up to 30 s, giving up after a 5-minute outage). It opens the first
 session itself, on the caller's thread, so a refused first connect is still its
