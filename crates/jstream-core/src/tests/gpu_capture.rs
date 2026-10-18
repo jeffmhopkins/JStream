@@ -9,7 +9,7 @@
 //! installs one, fails instead.
 
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -862,4 +862,68 @@ fn an_output_fails_when_the_gpu_fallback_fails() {
         vec![true, false],
         "one fallback was tried"
     );
+}
+
+/// How a fallback's own open misbehaves in [`stuck_fallback_draw`].
+#[derive(Clone, Copy, Debug)]
+enum OwnOpen {
+    /// Blocks until the test lets it go, as an adapter that hangs while opening.
+    Hangs,
+    /// Panics.
+    Panics,
+}
+
+/// A compositor whose every frame fails on the platform's context, so the render thread
+/// falls back, and whose open on a device of its own misbehaves as `own` says. It draws
+/// nothing itself, so the first open is immediate and a short deadline can be tested.
+fn stuck_fallback_draw(own: OwnOpen, release: Arc<AtomicBool>) -> OpenDraw {
+    Arc::new(move |context: Option<&GpuContext>| {
+        if context.is_some() {
+            let draw: DrawFn = Box::new(|_, _, _, _, _| Err("device removed".to_owned()));
+            return Ok(draw);
+        }
+        match own {
+            OwnOpen::Hangs => {
+                while !release.load(Ordering::Acquire) {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err("let go by the test".to_owned())
+            }
+            OwnOpen::Panics => panic!("the adapter fell over"),
+        }
+    })
+}
+
+/// A fallback whose compositor hangs while opening, or panics, fails the output within
+/// the open deadline, instead of freezing the program on the render thread (#577).
+#[test]
+fn an_output_fails_when_the_gpu_fallback_hangs_or_panics() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    for own in [OwnOpen::Hangs, OwnOpen::Panics] {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let release = Arc::new(AtomicBool::new(false));
+        let engine = Engine::new()
+            .with_output(OutputId::new("yt"))
+            .with_backends(backends(&clock, Arc::new(SoftwareGpu), GpuMode::None))
+            .with_open_timeout(Duration::from_secs(2))
+            .with_draw(stuck_fallback_draw(own, Arc::clone(&release)))
+            .with_publish(Box::new(RecordingPublish::new()));
+        let control = connected(&engine);
+        block_on(control.call(output_call("yt", true))).expect("output.start");
+        let started = Instant::now();
+        let failed = tick_until(&clock, || {
+            output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none()
+        });
+        assert!(failed, "{own:?}: the output did not fail");
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "{own:?}: failed only after {:?}",
+            started.elapsed()
+        );
+        // Lets a hanging open finish; its thread then drops it.
+        release.store(true, Ordering::Release);
+    }
 }

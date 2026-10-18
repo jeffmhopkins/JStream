@@ -114,15 +114,17 @@ const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 /// there is none yet), read back as RGBA8 into its `out` (replacing its contents), as it
 /// is at the tick's time on the media clock (a running transition samples it). Returns
 /// the GPU images its cache let go of, for the collector. Created on the render thread
-/// and kept there, so it need not be `Send`.
+/// and kept there. It is `Send` so a mid-run fallback can open it on a thread of its
+/// own under a deadline ([`leave_gpu`]) and hand it to the render thread.
 pub(crate) type DrawFn = Box<
     dyn FnMut(
-        &Shot,
-        &LiveParams,
-        &dyn Captures,
-        &mut [MixFrame],
-        MediaTime,
-    ) -> Result<Option<Reclaimed>, String>,
+            &Shot,
+            &LiveParams,
+            &dyn Captures,
+            &mut [MixFrame],
+            MediaTime,
+        ) -> Result<Option<Reclaimed>, String>
+        + Send,
 >;
 
 /// One picture the render thread draws for the encoder sessions it feeds: a video mix
@@ -1247,6 +1249,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             reader: RenderReader::new(Arc::clone(&parts.render), collector.clone()),
             collector,
             open: Arc::clone(&parts.draw),
+            open_timeout: parts.open_timeout,
             clock: Arc::clone(&parts.clock),
             inputs: video_inputs,
             cams: vcam_inputs,
@@ -1745,6 +1748,9 @@ struct RenderJob {
     /// the last reference to it (R-RT-003).
     collector: Collector,
     open: OpenDraw,
+    /// How long a mid-run fallback waits for the compositor to open on a device of its
+    /// own: the first open's deadline.
+    open_timeout: Duration,
     clock: Arc<dyn MediaClock>,
     /// The sessions to push frames into, as they are opened, with what each is fed.
     inputs: Receiver<(Feed, VideoInput)>,
@@ -1902,7 +1908,8 @@ impl Frames {
 /// [`MAX_DRAW_ERRORS`] in a row. On the platform's context, [`GPU_FALLBACK_ERRORS`] in a
 /// row leave the GPU path once ([`leave_gpu`]) and the count starts again. Fatal,
 /// reported on the failure channel: more composite errors than [`MAX_DRAW_ERRORS`], a
-/// fallback whose compositor does not open, a panic inside a tick (the compositor's
+/// fallback whose compositor does not open within the open deadline or that panics, a
+/// panic inside a tick (the compositor's
 /// state is unknown), and a frame time that overflows. After a fatal error the thread keeps pushing the last
 /// frame until the pipeline stops, so the stream does not freeze before teardown. A
 /// tick that falls a whole period or more behind the clock skips to the current tick
@@ -1928,6 +1935,7 @@ fn render_loop(job: RenderJob) {
         mut reader,
         collector,
         open,
+        open_timeout,
         clock,
         inputs,
         cams: cam_inputs,
@@ -2037,7 +2045,15 @@ fn render_loop(job: RenderJob) {
                             captures: &mut captures,
                             gpu_sources: gpu_sources.take(),
                         };
-                        match leave_gpu(stage, &open) {
+                        // Outside the tick's catch: a panic while falling back fails
+                        // the output, and the thread repeats the last frame.
+                        let left = panic::catch_unwind(AssertUnwindSafe(|| {
+                            leave_gpu(stage, &open, open_timeout)
+                        }))
+                        .unwrap_or_else(|panic| {
+                            Err(format!("it panicked: {}", panic_message(&*panic)))
+                        });
+                        match left {
                             Ok(()) => {
                                 tracing::warn!(
                                     error = %err,
@@ -2148,17 +2164,20 @@ struct GpuStage<'a> {
 /// context; the context itself stays until the render loop ends, after the captures
 /// have stopped, as its platform state requires (README › GPU frames). The old
 /// compositor is owned by this thread and never shared, so it is not the collector's to
-/// free (R-RT-003). The open blocks the thread once, like the first open, and the ticks
-/// it misses are counted as skipped.
+/// free (R-RT-003). The open runs on a thread of its own and is waited for up to
+/// `timeout`, the first open's deadline (#577): the render thread blocks for at most that
+/// long, and the ticks it misses are counted as skipped. The captures restart through
+/// the capture thread, so they don't block it.
 ///
-/// On an error the stage is left on the GPU path, and the caller fails the output.
-fn leave_gpu(stage: GpuStage<'_>, open: &OpenDraw) -> Result<(), String> {
+/// On an error, a timeout included, the stage is left on the GPU path, and the caller
+/// fails the output.
+fn leave_gpu(stage: GpuStage<'_>, open: &OpenDraw, timeout: Duration) -> Result<(), String> {
     let GpuStage {
         draw,
         captures,
         gpu_sources,
     } = stage;
-    let own = open(None)?;
+    let own = open_own(open, timeout)?;
     captures.leave_gpu();
     *draw = own;
     if let Some(sources) = gpu_sources
@@ -2168,6 +2187,34 @@ fn leave_gpu(stage: GpuStage<'_>, open: &OpenDraw) -> Result<(), String> {
         tracing::warn!(error = %err, "live sources keep painting on the GPU context");
     }
     Ok(())
+}
+
+/// Opens the compositor on a device of its own (`open(None)`) on a thread of its own,
+/// waiting up to `timeout`. An open that takes longer, or panics, is an error. A late
+/// open finishes on its thread, which then drops what it opened, so the render thread
+/// never waits for it.
+fn open_own(open: &OpenDraw, timeout: Duration) -> Result<DrawFn, String> {
+    let (done, opened) = mpsc::channel();
+    let open = Arc::clone(open);
+    spawn("jstream-compositor-open", move || {
+        let result = panic::catch_unwind(AssertUnwindSafe(|| open(None)));
+        // The render thread has stopped waiting when this fails; the compositor drops here.
+        let _ = done.send(result);
+    })?;
+    match opened.recv_timeout(timeout) {
+        Ok(Ok(result)) => result,
+        Ok(Err(panic)) => Err(format!(
+            "opening the compositor panicked: {}",
+            panic_message(&*panic)
+        )),
+        Err(RecvTimeoutError::Timeout) => Err(format!(
+            "the compositor did not open within {}s",
+            timeout.as_secs()
+        )),
+        Err(RecvTimeoutError::Disconnected) => {
+            Err("the compositor's open thread ended without an answer".into())
+        }
+    }
 }
 
 /// Whether `frame` is the program at the program stage's `size` on every base tick: what an

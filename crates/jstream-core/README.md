@@ -239,7 +239,7 @@ state machine. Contents:
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, and an output leaving the GPU path mid-run when every GPU frame
   fails to import or the context breaks (taking the context from browser pages, and
-  failing when that fallback fails), on a software device that stands in for the platform's
+  failing when that fallback fails, hangs past the open deadline or panics), on a software device that stands in for the platform's
   (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -1685,8 +1685,12 @@ path (a start asked for before is stopped when it comes back). Browser pages are
 stop painting on the context, on a thread of its own because that takes the collection
 lock; until the re-planned snapshot arrives their frames, carrying the context's key,
 draw nothing on the new compositor. The fallback is logged as a warning and counted
-(`OutputStats::gpu_fallbacks`). If the compositor can't open on its own device, the
-output fails at once. Errors that go on after the fallback are counted again from zero
+(`OutputStats::gpu_fallbacks`). The reopen runs on a thread of its own, and the
+render thread waits for it only as long as a start waits for the first open (10 s, the
+open deadline), so an adapter that hangs while opening fails the output rather than
+freezing it; a late open is dropped on its own thread when it finishes. If the
+compositor can't open on its own device in time, or the fallback panics, the output
+fails at once and the render thread repeats the last frame until it stops. Errors that go on after the fallback are counted again from zero
 and fail the output as they would on the CPU path. The context itself stays until the
 render loop ends.
 
