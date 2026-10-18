@@ -2,14 +2,14 @@
 id = "ADR-0071"
 title = "Linux secret store: the Secret Service, else a 0600 file"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0071: Linux secret store: the Secret Service, else a 0600 file
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -37,7 +37,7 @@ The forces:
   ([threat model › Secrets](../security/threat-model.md#secrets)), so Linux can't
   stream to any target that needs a key.
 - **Build.** The Linux crate already speaks D-Bus itself, for the ScreenCast portal,
-  with no `libdbus` or `-sys` crate (ADR-0060 §8).
+  with no `libdbus` or `-sys` crate (ADR-0060 §3).
 
 The options:
 1. **Keyring only.** The safest at rest. A machine without a keyring can't stream to
@@ -95,7 +95,7 @@ added with the implementation, under the protocol's usual versioning.
 `jstream.toml` that makes Linux keyring-only, so that without a keyring `set_key` fails
 as it does today. Until then, the fallback is always available.
 
-**6. R-SEC-001 gains one exception.** It applies once this ADR is accepted: on Linux,
+**6. R-SEC-001 gains one exception.** On Linux,
 where no Secret Service is reachable, secrets live in the `0600` file described here.
 The exception covers nothing else. Secrets still never appear in collection files,
 logs, events, snapshots or MCP responses.
@@ -112,7 +112,6 @@ logs, events, snapshots or MCP responses.
   and the later keyring-only setting.
 - **More code to review.** The crate gains a Secret Service client and a file store,
   both behind the existing traits and without new dependencies.
-- **Edits that follow acceptance** (none are made while this ADR is proposed):
-  R-SEC-001 gains the exception in decision 6. ARCHITECTURE's persistence section and
-  SECURITY.md's secrets promise name it. The threat model's Linux row moves from
-  proposed to built when the store merges.
+- **Edits made at acceptance:** R-SEC-001 gains the exception in decision 6.
+  ARCHITECTURE's persistence section and SECURITY.md's secrets promise name it. The
+  threat model's Linux row moves from accepted to built when the store merges.

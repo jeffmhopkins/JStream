@@ -288,13 +288,13 @@ stamp = { hash = "b3:61cf92f665e234af", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:712aa0a6f80c3dea", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers adds xtask/src/dist.rs and .cargo/config.toml (declared); State bullet names the data folder via paths; new Building-the-zip bullet matches dist.rs (trunk UI or --ui-dir, four binaries, vcruntime/msvcp refused, UCRT and msvcrt.dll allowed, deterministic deflate zip, git describe or --revision naming) and config.toml's crt-static flag; CI dist job as described" }
 
 ["ARCH#persistence"."body"]
-stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:24d4361b1ae39ea2", by = "agent:acc756d9", note = "Re-read persistence: secrets stay in the OS credential store, and the new sentence names the accepted ADR-0071 Linux 0600 file fallback; collections, assets, settings, token and logs text unchanged and still true." }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-API-003"]
 stamp = { hash = "b3:f17cde9b0d3da07c" }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read persistence: secrets stay in the OS credential store, and the new sentence names the accepted ADR-0071 Linux 0600 file fallback; collections, assets, settings, token and logs text unchanged and still true." }
 
 ["ARCH#persistence"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -1377,7 +1377,7 @@ stamp = { hash = "b3:66b28773c491abf0", by = "agent:claude@session_011FozW2QGjNv
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:24d4361b1ae39ea2", by = "agent:acc756d9", note = "Re-read design against the persistence edit: the daemon uses WindowsCredentials on Windows and wires no Linux store yet, so the new ADR-0071 fallback sentence changes nothing it claims." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:31adea4c41afd5dd", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
@@ -1473,7 +1473,7 @@ stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:69eee667f84adbfe", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave's vcam, delay-load and media_foundation.rs text is unchanged by this PR; the browser-sources bullet still matches host.rs/browser.rs (backend on the media clock, device from WindowsGpu::open_device, CEF only in the sandboxed helper started on the first page)" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Cascade from R-SEC-002 gaining "a device token is accepted only over loopback or TLS": the desktop binds loopback with ServerConfig::new and sets no device_file, so the sentence doesn't change what it says; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
@@ -3339,7 +3339,7 @@ stamp = { hash = "b3:311cefe9eebe1f9a", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:8efb19c99c8be969" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read purpose against the R-SEC-001 exception: tokens and keys are Secret values and the refresh token goes through the key store trait, so the Linux file fallback behind that trait leaves the text true." }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/adr/0058-youtube-sign-in-with-a-jstream-client.md"]
 stamp = { hash = "b3:32c488609c43c2cd", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
@@ -3606,7 +3606,7 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:7c0a5283f684f83d", by = "agent:youtube-sign-in", note = "Re-read: R-ARCH-001 and R-API-002 now carry the youtube exception ADR-0058 §3 requires; the other rules in the section are unchanged and consistent with it" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:24d4361b1ae39ea2", by = "agent:acc756d9", note = "Re-read compatibility against the persistence edit: the Linux secrets file is not built and holds no versioned format today; collection and protocol compatibility text unchanged." }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale through ARCH#protocol, which carries main's 0.20 to 0.23 additions (preview, pairing, filters, YouTube) and the wave's 0.24 bus references; each is an addition under R-API-001's minor-bump rule, R-API-002 keeps the youtube exception ADR-0058 §3 requires, and the section names no specific version; holds" }
@@ -3699,10 +3699,10 @@ stamp = { hash = "b3:1a6aeaec37c5f24f", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
 ["SECURITY#scope"."body"]
-stamp = { hash = "b3:4fabbaa71adf77ab", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:a7d08d8dbb13095d", by = "agent:acc756d9", note = "Re-read the scope list: the secrets promise now names the ADR-0071 Linux file fallback, matching the amended R-SEC-001; the other promises are unchanged." }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read the scope list: the secrets promise now names the ADR-0071 Linux file fallback, matching the amended R-SEC-001; the other promises are unchanged." }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -3714,10 +3714,10 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#assets"."body"]
-stamp = { hash = "b3:e5e064defab31a15", by = "agent:acc756d9", note = "Stream keys row adds the proposed Linux store from ADR-0071, the Secret Service else a 0600 plaintext file, marked proposed since nothing is built; the Windows, macOS and other rows are unchanged" }
+stamp = { hash = "b3:0b1c3557b54f1eb0", by = "agent:acc756d9", note = "Re-read the assets table: the stream keys row says Windows Credential Manager today, the macOS Keychain store is built but wired into no app, and the Linux store is accepted (ADR-0071) but not built; the other rows are untouched." }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read the assets table: the stream keys row says Windows Credential Manager today, the macOS Keychain store is built but wired into no app, and the Linux store is accepted (ADR-0071) but not built; the other rows are untouched." }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d" }
@@ -3756,16 +3756,16 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:56b6301e2e6a132b" }
 
 ["THREAT-MODEL#secrets"."body"]
-stamp = { hash = "b3:b1b3bae6e4e6fc83", by = "agent:acc756d9", note = "New Proposed paragraph matches ADR-0071 decisions 2 to 5: plaintext-at-rest risk of the fallback file to anyone reading the account, its files or backups, and the mitigations 0600 file in a 0700 folder, the UI and startup warning, moving secrets into the keyring, and the later keyring-only setting. Controls on main are unchanged" }
+stamp = { hash = "b3:8183b51371e3ed45", by = "agent:acc756d9", note = "Re-read secrets: controls on main now say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph moved from proposed to accepted, nothing built, with the same risk and mitigations as the accepted ADR." }
 
 ["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read secrets: controls on main now say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph moved from proposed to accepted, nothing built, with the same risk and mitigations as the accepted ADR." }
 
 ["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#secrets"."dep:docs/adr/0071-linux-secret-store.md"]
-stamp = { hash = "b3:76bc3422c784ca69", by = "agent:acc756d9", note = "New Proposed paragraph matches ADR-0071 decisions 2 to 5: plaintext-at-rest risk of the fallback file to anyone reading the account, its files or backups, and the mitigations 0600 file in a 0700 folder, the UI and startup warning, moving secrets into the keyring, and the later keyring-only setting. Controls on main are unchanged" }
+stamp = { hash = "b3:18c6a50ca7ccdbf6", by = "agent:acc756d9", note = "Re-read secrets: controls on main now say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph moved from proposed to accepted, nothing built, with the same risk and mitigations as the accepted ADR." }
 
 ["THREAT-MODEL#server"."body"]
 stamp = { hash = "b3:9d68f95562892706", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
