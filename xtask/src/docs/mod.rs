@@ -329,7 +329,7 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
 /// A stale section is refused: re-read it and verify with `--note` or `--merge`.
 fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) -> Result<()> {
     let note = check_stamp(by, note)?;
-    let base = merge::base_ledger(root, branch)?;
+    let bases = merge::base_ledgers(root, branch)?;
     stamp_section(root, target, &|_, key, old, inputs| {
         if !ledger::diff(old, inputs).is_empty() {
             bail!(
@@ -338,7 +338,9 @@ fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) 
             );
         }
         let old = old.context("invariant: a fresh section has a stamp")?;
-        ledger::renote(old, base.sections.get(key), by, note).with_context(|| {
+        let stamps: Vec<&ledger::Stamp> =
+            bases.iter().filter_map(|b| b.sections.get(key)).collect();
+        ledger::renote(old, &stamps, by, note).with_context(|| {
             format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
         })
     })
@@ -1708,13 +1710,19 @@ mod tests {
     }
 
     /// #715: `docs verify --renote --from <base>` on a PR stacked on another PR's branch
-    /// rewrites only the entries written above that base, keeping the base's own; it
-    /// refuses a base that isn't on the remote or isn't an ancestor of `HEAD`.
+    /// rewrites only the entries written above that base, keeping the base's own, and
+    /// main's after the stacked PR merges main ahead of its base (#719 B1); it refuses a
+    /// base that isn't on the remote or isn't an ancestor of `HEAD`.
     #[test]
     fn verify_renote_takes_a_stacked_base() {
         let mut files = REGISTRIES.to_vec();
         let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
-        files.extend([("S.md", s), ("src/a.rs", "a\n"), ("src/b.rs", "b\n")]);
+        files.extend([
+            ("S.md", s),
+            ("src/a.rs", "a\n"),
+            ("src/b.rs", "b\n"),
+            ("src/c.rs", "c\n"),
+        ]);
         let (origin, work) = origin_and_clone("verify-renote-stacked", &files);
         verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies");
         commit_all(&origin, "stamps");
@@ -1748,6 +1756,38 @@ mod tests {
             "the base PR's entry keeps its note"
         );
 
+        // #719 B1: main moves on (another PR restamps c.rs) and the stacked PR merges it
+        // ahead of its base. Main's entry is still not this branch's own.
+        commit_all(&work, "stacked PR: renoted");
+        origin.write("src/c.rs", "c main\n");
+        let mains = "main changed c.rs and the text still holds";
+        verify(&origin.0, "S#a", "agent:main", mains).expect("verifies");
+        commit_all(&origin, "main: c.rs");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert!(m.committed, "{:?}", m.refused);
+        for key in &m.stale {
+            verify_merge(&work.0, key, "agent:stacked", "main's c.rs edit").expect("verifies");
+        }
+        if !m.stale.is_empty() {
+            commit_all(&work, "stacked PR: re-verified after merging main");
+        }
+        let best = "b.rs now returns early and logs why; the sentence on b.rs still says so";
+        verify_renote(&work.0, "S#a", "agent:review", best, "base-pr").expect("renotes");
+        let after = ledger::Ledger::read(&work.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        assert_eq!(after["file:src/b.rs"].note.as_deref(), Some(best));
+        assert_eq!(
+            after["file:src/c.rs"].note.as_deref(),
+            Some(mains),
+            "main's note"
+        );
+        assert_eq!(
+            after["file:src/a.rs"].note.as_deref(),
+            Some("the base PR's a.rs edit")
+        );
+
         let err = verify_renote(&work.0, "S#a", "agent:review", better, "gone")
             .expect_err("not on the remote");
         assert!(
@@ -1755,7 +1795,7 @@ mod tests {
             "{err:#}"
         );
         // The base PR moves on; until the stacked PR merges it, it isn't an ancestor.
-        commit_all(&work, "stacked PR: renoted");
+        commit_all(&work, "stacked PR: renoted again");
         work.git(&["checkout", "-q", "base-pr"]);
         work.write("src/a.rs", "a base 2\n");
         commit_all(&work, "base PR, round 2");
