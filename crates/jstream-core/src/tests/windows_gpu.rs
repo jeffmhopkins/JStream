@@ -163,7 +163,11 @@ fn capture_targets_name_what_wgc_captures() {
         CaptureSpec::Display(Some(display.target.clone())),
         CaptureSpec::Window(Some(window.target.clone())),
     ] {
-        let mut stream = start_capture(&capture, &spec).expect("the capture starts");
+        let key = crate::snapshot::CaptureKey {
+            spec: spec.clone(),
+            source: None,
+        };
+        let mut stream = start_capture(&capture, &key).expect("the capture starts");
         let deadline = Instant::now() + Duration::from_secs(5);
         let frame = loop {
             match stream.latest() {

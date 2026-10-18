@@ -14,7 +14,7 @@ mod render;
 mod sink;
 mod vcam;
 
-#[cfg(all(test, windows, feature = "hw-tests"))]
+#[cfg(test)]
 pub(crate) use captures::Backends as CaptureBackends;
 #[cfg(test)]
 pub(crate) use captures::{RETRY_MS, start as start_capture};

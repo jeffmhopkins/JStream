@@ -226,9 +226,11 @@ enum SourceRef {
     /// Another scene, composited first and then placed.
     Scene(SceneId),
     /// A `display` or `window` source with no stored frame: what the output pipeline
-    /// captures for it, on the render thread. Sources that capture the same thing share
-    /// it. `video.snapshot` has no capture, so it draws nothing there.
-    Capture(CaptureSpec),
+    /// captures for it, on the render thread. Each source has a capture of its own, so a
+    /// backend that keeps a grant per source (the ScreenCast portal's restore token)
+    /// keeps each source's apart. `video.snapshot` has no capture, so it draws nothing
+    /// there.
+    Capture(CaptureKey),
 }
 
 #[derive(Debug, PartialEq)]
@@ -270,7 +272,7 @@ pub(crate) struct Shot {
     /// What the output pipeline captures for this shot: what the program's passes and
     /// each mix's place, or the primary display, which fills the output, when there is
     /// no program scene.
-    captures: BTreeSet<CaptureSpec>,
+    captures: BTreeSet<CaptureKey>,
 }
 
 impl Default for Shot {
@@ -319,7 +321,7 @@ impl Shot {
     }
 
     /// What the output pipeline captures for this shot, in order.
-    pub(crate) fn captures(&self) -> &BTreeSet<CaptureSpec> {
+    pub(crate) fn captures(&self) -> &BTreeSet<CaptureKey> {
         &self.captures
     }
 }
@@ -409,9 +411,9 @@ pub(crate) fn plan_with(
 
 /// What the passes place from the pipeline's capture, or the primary display, which
 /// fills the output, without a program scene.
-fn captures(passes: &[Pass]) -> BTreeSet<CaptureSpec> {
+fn captures(passes: &[Pass]) -> BTreeSet<CaptureKey> {
     if passes.is_empty() {
-        return BTreeSet::from([CaptureSpec::Display(None)]);
+        return BTreeSet::from([CaptureKey::primary()]);
     }
     placed_captures(passes.iter()).collect()
 }
@@ -419,7 +421,7 @@ fn captures(passes: &[Pass]) -> BTreeSet<CaptureSpec> {
 /// What `passes` place from the pipeline's capture.
 fn placed_captures<'a>(
     passes: impl Iterator<Item = &'a Pass> + 'a,
-) -> impl Iterator<Item = CaptureSpec> + 'a {
+) -> impl Iterator<Item = CaptureKey> + 'a {
     passes
         .flat_map(|pass| &pass.layers)
         .filter_map(|layer| match &layer.image {
@@ -433,7 +435,7 @@ pub(crate) enum Look {
     /// Its frame now, and when that frame is next replaced.
     Frame(Frame, Option<MediaTime>),
     /// What the output pipeline captures for it.
-    Capture(CaptureSpec),
+    Capture(CaptureKey),
 }
 
 /// What [`plan_with`] asks for each source it reaches; `None` shows nothing.
@@ -508,7 +510,7 @@ pub(crate) enum GpuKey {
     /// The upload of a source's stored frame.
     Frame(SourceId),
     /// The upload or import of what the pipeline captures.
-    Capture(CaptureSpec),
+    Capture(CaptureKey),
     /// The layer a nested scene is composited into, at its depth.
     Layer(SceneId, usize),
     /// The program scene at the canvas size, when the output is another size.
@@ -1014,18 +1016,46 @@ pub(crate) enum CaptureImage<'a> {
     Gpu(&'a GpuFrame),
 }
 
+/// One capture the output pipeline runs: what it captures, and for which source.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct CaptureKey {
+    /// What is captured.
+    pub(crate) spec: CaptureSpec,
+    /// The source it is captured for: `None` for the primary display that fills an
+    /// output without a program scene, which no source owns.
+    pub(crate) source: Option<SourceId>,
+}
+
+impl CaptureKey {
+    /// The capture of `spec` for the source `source`.
+    pub(crate) fn for_source(spec: CaptureSpec, source: SourceId) -> Self {
+        Self {
+            spec,
+            source: Some(source),
+        }
+    }
+
+    /// The primary display, for no source.
+    pub(crate) fn primary() -> Self {
+        Self {
+            spec: CaptureSpec::Display(None),
+            source: None,
+        }
+    }
+}
+
 /// The latest frame of each capture a shot places ([`Shot::captures`]).
 pub(crate) trait Captures {
     /// The latest frame of `spec`'s capture; `None` before its first frame, or when it
     /// isn't running.
-    fn frame(&self, spec: &CaptureSpec) -> Option<CaptureFrame<'_>>;
+    fn frame(&self, spec: &CaptureKey) -> Option<CaptureFrame<'_>>;
 }
 
 /// No captures, for `video.snapshot` and tests.
 pub(crate) struct NoCaptures;
 
 impl Captures for NoCaptures {
-    fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+    fn frame(&self, _: &CaptureKey) -> Option<CaptureFrame<'_>> {
         None
     }
 }
@@ -1417,6 +1447,8 @@ pub(crate) mod tests {
     use jstream_sources::CaptureSpec;
     use std::collections::BTreeMap;
     use std::collections::BTreeSet;
+
+    use super::CaptureKey;
     use std::io::Write;
     use std::time::{Duration, Instant};
 
@@ -1484,14 +1516,14 @@ pub(crate) mod tests {
 
     /// What the primary display shows in these tests.
     fn primary() -> SourceRef {
-        SourceRef::Capture(CaptureSpec::Display(None))
+        SourceRef::Capture(CaptureKey::primary())
     }
 
     /// Every capture shows `frame`.
     struct Every<'a>(Option<CaptureFrame<'a>>);
 
     impl Captures for Every<'_> {
-        fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+        fn frame(&self, _: &CaptureKey) -> Option<CaptureFrame<'_>> {
             self.0
         }
     }
@@ -1687,14 +1719,20 @@ pub(crate) mod tests {
             .expect("edits");
         let second = CaptureSpec::Display(Some("monitor:2".into()));
         let (shot, _) = super::plan_with(&graph, Some(&SceneId::new("main")), &mut |id| {
-            Some(super::Look::Capture(match id.as_str() {
+            let spec = match id.as_str() {
                 "second" => second.clone(),
                 _ => CaptureSpec::Display(None),
-            }))
+            };
+            Some(super::Look::Capture(CaptureKey::for_source(
+                spec,
+                id.clone(),
+            )))
         });
-        assert_eq!(
-            shot.captures(),
-            &BTreeSet::from([CaptureSpec::Display(None), second])
+        let specs: BTreeSet<_> = shot.captures().iter().map(|k| k.spec.clone()).collect();
+        assert_eq!(specs, BTreeSet::from([CaptureSpec::Display(None), second]));
+        assert!(
+            shot.captures().iter().all(|k| k.source.is_some()),
+            "each capture is for its source"
         );
     }
 
@@ -2030,10 +2068,7 @@ pub(crate) mod tests {
             "program",
             vec![fill("red"), placed(primary(), half)],
         )]);
-        assert_eq!(
-            display.captures,
-            BTreeSet::from([CaptureSpec::Display(None)])
-        );
+        assert_eq!(display.captures, BTreeSet::from([CaptureKey::primary()]));
         let out = frame_at(&mut compositor, &mut cache, &display, Some(&capture), size);
         assert_eq!(
             out.pixel(4, 9),

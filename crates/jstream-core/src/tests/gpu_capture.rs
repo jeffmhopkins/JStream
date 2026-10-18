@@ -39,7 +39,6 @@ use crate::runtime::{
     DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from, start_capture,
 };
 use crate::{Engine, RecordingPublish};
-use jstream_sources::CaptureSpec;
 
 /// The colour every GPU capture frame is.
 const RED: [u8; 4] = [255, 0, 0, 255];
@@ -322,7 +321,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         (1280, 720),
     );
     let opened = open_capture(&parts).expect("a capture path");
-    let mut stream = start_capture(&opened.backends, &CaptureSpec::Display(None))
+    let mut stream = start_capture(&opened.backends, &crate::snapshot::CaptureKey::primary())
         .expect("a capture starts on some path");
     let frame = stream.latest().expect("latest").expect("a first frame");
     (

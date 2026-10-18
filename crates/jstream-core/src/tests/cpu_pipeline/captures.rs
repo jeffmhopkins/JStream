@@ -225,10 +225,11 @@ fn capture_targets_lists_the_displays_then_the_windows() {
     );
 }
 
-/// The output captures each display and window its program scene shows, once however
-/// many sources show it, and nothing else: not the primary display, which only fills an
-/// output with no scene. A capture whose source leaves the program stops, and one that
-/// comes back starts again.
+/// The output captures each display and window its program scene shows, once for each
+/// source that shows it (so a backend that keeps a grant per source keeps each source's
+/// apart), and nothing else: not the primary display, which only fills an output with no
+/// scene. A capture whose source leaves the program stops, and one that comes back
+/// starts again.
 #[test]
 fn an_output_captures_what_its_program_shows() {
     let setup = Setup::new();
@@ -255,11 +256,11 @@ fn an_output_captures_what_its_program_shows() {
     let mut events = control.events();
     start(&control, &mut events);
     assert!(
-        setup.until(|| setup.live() == 2),
-        "two captures run: {}",
+        setup.until(|| setup.live() == 3),
+        "three captures run: {}",
         setup.live()
     );
-    assert_eq!(setup.starts(&display("d2")), 1, "shared by two sources");
+    assert_eq!(setup.starts(&display("d2")), 2, "one for each source");
     assert_eq!(setup.starts(&window("w1")), 1);
     assert_eq!(
         setup.starts(&display("d1")),
@@ -275,12 +276,12 @@ fn an_output_captures_what_its_program_shows() {
     )
     .expect("removed");
     assert!(
-        setup.until(|| setup.live() == 1),
+        setup.until(|| setup.live() == 2),
         "the window's capture stopped"
     );
     batch(&control, edits(vec![add("a", "i4", "editor")])).expect("added");
     assert!(
-        setup.until(|| setup.live() == 2 && setup.starts(&window("w1")) == 2),
+        setup.until(|| setup.live() == 3 && setup.starts(&window("w1")) == 2),
         "the window's capture started again"
     );
 

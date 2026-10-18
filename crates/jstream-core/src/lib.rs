@@ -29,6 +29,7 @@ mod drops;
 mod engine;
 mod events;
 mod filters;
+mod forget;
 mod gesture;
 mod history;
 mod kinds;

@@ -1904,7 +1904,10 @@ fn the_render_snapshot_follows_the_program_mix() {
     assert!(engine.settle_sources(), "the display source was built");
     // The scene, then the display source's build.
     assert_eq!(generation(), 3);
-    let primary = std::collections::BTreeSet::from([jstream_sources::CaptureSpec::Display(None)]);
+    let primary = std::collections::BTreeSet::from([crate::snapshot::CaptureKey::for_source(
+        jstream_sources::CaptureSpec::Display(None),
+        SourceId::new("screen"),
+    )]);
     assert_eq!(
         hub.load().shot().captures(),
         &primary,
