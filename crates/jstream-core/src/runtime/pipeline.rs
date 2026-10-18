@@ -66,6 +66,7 @@ use jstream_sources::AudioScopes;
 
 use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
+use crate::chain::Chains;
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, DropGuard, DropSnapshot, FnDropSource, VideoEncodeDrops,
     capture_drops, output_packet_drops, render_tick_drops,
@@ -1075,6 +1076,7 @@ pub(crate) fn gpu_draw() -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
+        let mut chains = Chains::default();
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
@@ -1084,7 +1086,7 @@ pub(crate) fn gpu_draw() -> OpenDraw {
             for frame in frames.iter().filter(|frame| !frame.due) {
                 snapshot::claim_layers(
                     &mut compositor,
-                    &mut cache,
+                    (&mut cache, &mut chains),
                     shot,
                     frame.mix.as_ref(),
                     frame.size,
@@ -1099,7 +1101,7 @@ pub(crate) fn gpu_draw() -> OpenDraw {
                 };
                 snapshot::compose(
                     &mut compositor,
-                    &mut cache,
+                    (&mut cache, &mut chains),
                     (shot, at),
                     view,
                     live,

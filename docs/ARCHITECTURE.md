@@ -400,8 +400,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   records each as a mixer input, routed as its audio and sends say, running the
   source's enabled audio filters of the built-in kinds (`gain`, `noise_gate`,
   `compressor`, `limiter`, `delay`). A `browser` page's audio and a `media` file's
-  sound are mixer inputs of their running source, routed the same way. No video filter
-  kind is built in yet.
+  sound are mixer inputs of their running source, routed the same way. A source's
+  enabled video filters of `jstream-render`'s built-in kinds run in order over its
+  frame or capture before every placement of it, in every mix (roadmap V0,
+  [core › Design](../crates/jstream-core/README.md#design)); effect-pack kinds are
+  bypassed there for now.
   Outputs, ordered by ID, with their `kind`, an optional `encoder_profile` and an
   optional `video_mix`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
@@ -430,7 +433,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), video filter kinds, blend modes other than `normal`,
+  version is refused on load), video filters that read an asset or scene reference
+  (`apply_lut`, `image_mask` and `scene_mask` pass their input through), blend modes
+  other than `normal`,
   bus monitors, per-placement effects, 3D
   geometry, variants and overrides (so no edit drops
   any yet), `background`, output audio buses and chains, the `YouTube` kind, a virtual
@@ -935,8 +940,10 @@ on D3D11 into a texture of their own, fence-synchronized both ways, and
 Nothing writes the encode targets yet. Built-in video filters are kinds with
 descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
-([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
-runtime that runs a source's video chain before placement is not built yet. Still outside this crate: the render
+([jstream-render › Filters](../crates/jstream-render/README.md#filters));
+`apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
+chain runtime runs a source's video chain before placement without allocating per
+frame. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
 

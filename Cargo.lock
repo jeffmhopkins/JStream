@@ -2863,6 +2863,7 @@ name = "jstream-render"
 version = "0.0.0"
 dependencies = [
  "criterion",
+ "insta",
  "jstream-media",
  "jstream-platform",
  "jstream-protocol",
@@ -2882,6 +2883,7 @@ dependencies = [
  "getrandom 0.4.3",
  "jstream-control",
  "jstream-mcp",
+ "jstream-platform-windows",
  "jstream-protocol",
  "serde_json",
  "thiserror 2.0.21",
@@ -2898,6 +2900,7 @@ dependencies = [
  "assert_no_alloc",
  "gif",
  "image-webp",
+ "insta",
  "jstream-browser",
  "jstream-media",
  "jstream-platform",

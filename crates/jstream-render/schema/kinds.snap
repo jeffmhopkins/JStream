@@ -1,0 +1,997 @@
+---
+source: crates/jstream-render/tests/kinds.rs
+---
+[
+  {
+    "kind_id": "apply_lut",
+    "category": "video_filter",
+    "name": "Apply LUT",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "lut",
+        "type": "asset",
+        "accept": [
+          "cube",
+          "png"
+        ],
+        "default": null,
+        "label": "LUT file",
+        "live": true
+      },
+      {
+        "id": "amount",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "label": "Amount",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "aspect_ratio",
+    "category": "video_filter",
+    "name": "Aspect ratio",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "ratio",
+        "type": "enum",
+        "options": [
+          {
+            "value": "16:9",
+            "label": "16:9 (widescreen)"
+          },
+          {
+            "value": "9:16",
+            "label": "9:16 (vertical)"
+          },
+          {
+            "value": "4:3",
+            "label": "4:3 (standard)"
+          },
+          {
+            "value": "1:1",
+            "label": "1:1 (square)"
+          },
+          {
+            "value": "21:9",
+            "label": "21:9 (ultrawide)"
+          },
+          {
+            "value": "custom",
+            "label": "Custom"
+          }
+        ],
+        "default": "16:9",
+        "label": "Ratio",
+        "description": "The shape to give the frame, width:height.",
+        "live": true
+      },
+      {
+        "id": "custom_width",
+        "type": "int",
+        "min": 1,
+        "max": 10000,
+        "default": 4,
+        "label": "Custom width",
+        "description": "The width part of a custom ratio.",
+        "visible_if": {
+          "param": "ratio",
+          "equals": "custom"
+        },
+        "live": true
+      },
+      {
+        "id": "custom_height",
+        "type": "int",
+        "min": 1,
+        "max": 10000,
+        "default": 5,
+        "label": "Custom height",
+        "description": "The height part of a custom ratio.",
+        "visible_if": {
+          "param": "ratio",
+          "equals": "custom"
+        },
+        "live": true
+      },
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "crop",
+            "label": "Crop to fill"
+          },
+          {
+            "value": "pad",
+            "label": "Pad (letterbox or pillarbox)"
+          },
+          {
+            "value": "stretch",
+            "label": "Stretch"
+          }
+        ],
+        "default": "crop",
+        "label": "Mode",
+        "description": "Crop cuts the long side down, pad adds bars to the short side, stretch resamples the whole frame.",
+        "live": true
+      },
+      {
+        "id": "anchor",
+        "type": "enum",
+        "options": [
+          {
+            "value": "center",
+            "label": "Centre"
+          },
+          {
+            "value": "top",
+            "label": "Top"
+          },
+          {
+            "value": "bottom",
+            "label": "Bottom"
+          },
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          },
+          {
+            "value": "top_left",
+            "label": "Top left"
+          },
+          {
+            "value": "top_right",
+            "label": "Top right"
+          },
+          {
+            "value": "bottom_left",
+            "label": "Bottom left"
+          },
+          {
+            "value": "bottom_right",
+            "label": "Bottom right"
+          }
+        ],
+        "default": "center",
+        "label": "Anchor",
+        "description": "Crop: the part of the frame kept. Pad: where the frame sits among the bars. Unused by stretch.",
+        "live": true
+      },
+      {
+        "id": "pad_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Pad colour",
+        "description": "The colour of the bars; may be transparent.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "pad"
+        },
+        "live": true
+      },
+      {
+        "id": "resampling",
+        "type": "enum",
+        "options": [
+          {
+            "value": "bilinear",
+            "label": "Bilinear"
+          },
+          {
+            "value": "bicubic",
+            "label": "Bicubic"
+          },
+          {
+            "value": "lanczos",
+            "label": "Lanczos"
+          }
+        ],
+        "default": "bicubic",
+        "label": "Resampling",
+        "description": "How stretch scales: bilinear, bicubic (Catmull-Rom) or Lanczos-3.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "stretch"
+        },
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "blur",
+    "category": "video_filter",
+    "name": "Blur",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Radius",
+        "description": "How far each pixel spreads, in source pixels. Large radii blur a downsampled copy, so the cost stays bounded.",
+        "live": true
+      },
+      {
+        "id": "area",
+        "type": "enum",
+        "options": [
+          {
+            "value": "whole",
+            "label": "Whole frame"
+          },
+          {
+            "value": "inside",
+            "label": "Inside the rectangle"
+          },
+          {
+            "value": "outside",
+            "label": "Outside the rectangle"
+          }
+        ],
+        "default": "whole",
+        "label": "Area",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_x",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.25,
+        "label": "Left",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_y",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.25,
+        "label": "Top",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Width",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_height",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Height",
+        "group": "Area",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "chroma_key",
+    "category": "video_filter",
+    "name": "Chroma key",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "key_color_type",
+        "type": "enum",
+        "options": [
+          {
+            "value": "green",
+            "label": "Green"
+          },
+          {
+            "value": "blue",
+            "label": "Blue"
+          },
+          {
+            "value": "magenta",
+            "label": "Magenta"
+          },
+          {
+            "value": "custom",
+            "label": "Custom"
+          }
+        ],
+        "default": "green",
+        "label": "Key color type",
+        "live": true
+      },
+      {
+        "id": "key_color",
+        "type": "color",
+        "alpha": false,
+        "default": "#00ff00",
+        "label": "Key color",
+        "visible_if": {
+          "param": "key_color_type",
+          "equals": "custom"
+        },
+        "live": true
+      },
+      {
+        "id": "similarity",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 400,
+        "label": "Similarity",
+        "description": "How far in chroma from the key colour is removed, in thousandths.",
+        "live": true
+      },
+      {
+        "id": "smoothness",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 80,
+        "label": "Smoothness",
+        "description": "How far past the similarity the edge fades back in, in thousandths.",
+        "live": true
+      },
+      {
+        "id": "spill",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 100,
+        "label": "Key color spill reduction",
+        "description": "How far past the similarity kept colour is desaturated, removing the key colour's cast from edges.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "color_correction",
+    "category": "video_filter",
+    "name": "Color correction",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "gamma",
+        "type": "float",
+        "min": -3.0,
+        "max": 3.0,
+        "default": 0.0,
+        "label": "Gamma",
+        "description": "Above 0 brightens the mid-tones, below 0 darkens them; black and white stay.",
+        "live": true
+      },
+      {
+        "id": "contrast",
+        "type": "float",
+        "min": -4.0,
+        "max": 4.0,
+        "default": 0.0,
+        "label": "Contrast",
+        "description": "0 is unchanged, -1 is flat grey; below -1 inverts.",
+        "live": true
+      },
+      {
+        "id": "brightness",
+        "type": "float",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Brightness",
+        "description": "Added to every channel.",
+        "live": true
+      },
+      {
+        "id": "saturation",
+        "type": "float",
+        "min": -1.0,
+        "max": 5.0,
+        "default": 0.0,
+        "label": "Saturation",
+        "description": "0 is unchanged, -1 is greyscale.",
+        "live": true
+      },
+      {
+        "id": "hue_shift",
+        "type": "float",
+        "min": -180.0,
+        "max": 180.0,
+        "unit": "°",
+        "default": 0.0,
+        "label": "Hue shift",
+        "description": "Rotates every colour around the grey axis; 120° turns red green.",
+        "live": true
+      },
+      {
+        "id": "multiply",
+        "type": "color",
+        "alpha": false,
+        "default": "#ffffff",
+        "label": "Multiply color",
+        "description": "Multiplies each channel; white is unchanged. Sepia is saturation -1 times a warm colour.",
+        "live": true
+      },
+      {
+        "id": "opacity",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "%",
+        "default": 100.0,
+        "label": "Opacity",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "color_key",
+    "category": "video_filter",
+    "name": "Color key",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "key_color",
+        "type": "color",
+        "alpha": false,
+        "default": "#00ff00",
+        "label": "Key color",
+        "live": true
+      },
+      {
+        "id": "similarity",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 80,
+        "label": "Similarity",
+        "description": "How far in RGB from the key colour is removed, in thousandths.",
+        "live": true
+      },
+      {
+        "id": "smoothness",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 50,
+        "label": "Smoothness",
+        "description": "How far past the similarity the edge fades back in, in thousandths.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "drop_shadow",
+    "category": "video_filter",
+    "name": "Drop shadow",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000b3",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "offset_x",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Offset X",
+        "live": true
+      },
+      {
+        "id": "offset_y",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Offset Y",
+        "live": true
+      },
+      {
+        "id": "blur",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Blur",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "glow",
+    "category": "video_filter",
+    "name": "Glow",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Radius",
+        "live": true
+      },
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "label": "Strength",
+        "description": "Multiplies the glow's opacity before it is clamped, so values above 1 widen its bright core.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "image_mask",
+    "category": "video_filter",
+    "name": "Image mask",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "image",
+        "type": "asset",
+        "accept": [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif",
+          "bmp"
+        ],
+        "default": null,
+        "label": "Mask image",
+        "live": true
+      },
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "alpha",
+            "label": "Alpha mask"
+          },
+          {
+            "value": "luma",
+            "label": "Luma mask"
+          }
+        ],
+        "default": "alpha",
+        "label": "Mode",
+        "live": true
+      },
+      {
+        "id": "invert",
+        "type": "bool",
+        "default": false,
+        "label": "Invert",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "luma_key",
+    "category": "video_filter",
+    "name": "Luma key",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "luma_max",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "label": "Luma max",
+        "description": "Brighter than this is removed.",
+        "live": true
+      },
+      {
+        "id": "luma_max_smooth",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Luma max smooth",
+        "live": true
+      },
+      {
+        "id": "luma_min",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Luma min",
+        "description": "Darker than this is removed.",
+        "live": true
+      },
+      {
+        "id": "luma_min_smooth",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Luma min smooth",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "outline",
+    "category": "video_filter",
+    "name": "Outline",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "width",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 4.0,
+        "label": "Width",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "position",
+        "type": "enum",
+        "options": [
+          {
+            "value": "outside",
+            "label": "Outside"
+          },
+          {
+            "value": "inside",
+            "label": "Inside"
+          }
+        ],
+        "default": "outside",
+        "label": "Position",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "pixelate",
+    "category": "video_filter",
+    "name": "Pixelate",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "block_size",
+        "type": "int",
+        "min": 1,
+        "max": 256,
+        "unit": "px",
+        "default": 16,
+        "label": "Block size",
+        "live": true
+      },
+      {
+        "id": "area",
+        "type": "enum",
+        "options": [
+          {
+            "value": "whole",
+            "label": "Whole frame"
+          },
+          {
+            "value": "inside",
+            "label": "Inside the rectangle"
+          },
+          {
+            "value": "outside",
+            "label": "Outside the rectangle"
+          }
+        ],
+        "default": "whole",
+        "label": "Area",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_x",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.25,
+        "label": "Left",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_y",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.25,
+        "label": "Top",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Width",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_height",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Height",
+        "group": "Area",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "rounded_corners",
+    "category": "video_filter",
+    "name": "Rounded corners",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Corner radius",
+        "description": "In source pixels. Past half the shorter side it stays at half.",
+        "live": true
+      },
+      {
+        "id": "border_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 500.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Border width",
+        "description": "Drawn inside the frame, over the picture. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "border_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Border color",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "scene_mask",
+    "category": "video_filter",
+    "name": "Scene mask",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "scene",
+        "type": "scene",
+        "default": null,
+        "label": "Mask scene",
+        "live": true
+      },
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "alpha",
+            "label": "Alpha mask"
+          },
+          {
+            "value": "luma",
+            "label": "Luma matte"
+          },
+          {
+            "value": "clip",
+            "label": "Clip to scene"
+          }
+        ],
+        "default": "alpha",
+        "label": "Mode",
+        "live": true
+      },
+      {
+        "id": "invert",
+        "type": "bool",
+        "default": false,
+        "label": "Invert",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "scroll",
+    "category": "video_filter",
+    "name": "Scroll",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "speed_x",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 0.0,
+        "label": "Horizontal speed",
+        "description": "Positive moves the picture right.",
+        "live": true
+      },
+      {
+        "id": "speed_y",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 0.0,
+        "label": "Vertical speed",
+        "description": "Positive moves the picture down.",
+        "live": true
+      },
+      {
+        "id": "loop_x",
+        "type": "bool",
+        "default": true,
+        "label": "Loop horizontally",
+        "description": "Wrap the picture around. Off, the area it leaves is transparent.",
+        "live": true
+      },
+      {
+        "id": "loop_y",
+        "type": "bool",
+        "default": true,
+        "label": "Loop vertically",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "sharpen",
+    "category": "video_filter",
+    "name": "Sharpen",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "amount",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 0.5,
+        "label": "Amount",
+        "description": "How far each pixel is pushed away from its neighbourhood's mean. 0 is unchanged.",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "int",
+        "min": 1,
+        "max": 3,
+        "unit": "px",
+        "default": 1,
+        "label": "Radius",
+        "description": "The neighbourhood's half-width. Larger sharpens coarser detail.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "video_delay",
+    "category": "video_filter",
+    "name": "Video delay",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "delay_ms",
+        "type": "int",
+        "min": 0,
+        "max": 5000,
+        "unit": "ms",
+        "default": 0,
+        "label": "Delay",
+        "live": true
+      },
+      {
+        "id": "max_memory_mb",
+        "type": "int",
+        "min": 64,
+        "max": 16384,
+        "unit": "MB",
+        "default": 1024,
+        "label": "Memory limit",
+        "description": "The most GPU memory the held frames take. Past it, frames are held farther apart: the delay holds and the delayed picture's frame rate drops.",
+        "advanced": true,
+        "live": true
+      }
+    ]
+  }
+]

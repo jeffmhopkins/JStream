@@ -347,14 +347,52 @@ impl Compositor {
         input: &Image,
         clock: FilterClock,
     ) -> Result<Image, RenderError> {
-        if !input.owner().is(&self.owner) {
-            return Err(RenderError::Invalid {
-                what: "image",
-                detail: "the filter input was made by another compositor".into(),
-            });
-        }
+        self.check_filter_input(input)?;
         let (width, height) = filter.output_size(input.width(), input.height());
         let output = self.layer(width, height)?;
+        self.apply_filter_into(filter, input, &output, clock)?;
+        Ok(output)
+    }
+
+    /// [`Self::apply_filter`] into `output`, a [`Self::layer`] of the filter's
+    /// [`VideoFilter::output_size`] for `input`, replacing what it held. The layer is
+    /// reused, so a chain that runs every frame allocates no output texture (a
+    /// multi-pass kind's scratch layers are still its own). Earlier submits that read
+    /// `output` are ordered before this one, so they keep its old contents.
+    ///
+    /// # Errors
+    /// As for [`Self::apply_filter`]; also [`RenderError::Invalid`] when `output` is not
+    /// a layer this compositor made, is not the filter's output size, or is `input`.
+    pub fn apply_filter_into(
+        &mut self,
+        filter: &mut VideoFilter,
+        input: &Image,
+        output: &Image,
+        clock: FilterClock,
+    ) -> Result<(), RenderError> {
+        self.check_filter_input(input)?;
+        let invalid = |detail: String| RenderError::Invalid {
+            what: "filter output",
+            detail,
+        };
+        if !output.owner().is(&self.owner) || output.target().is_none() {
+            return Err(invalid(
+                "the output is not a layer this compositor made".into(),
+            ));
+        }
+        if output.texture() == input.texture() {
+            return Err(invalid("a filter cannot draw into its own input".into()));
+        }
+        let size = filter.output_size(input.width(), input.height());
+        if (output.width(), output.height()) != size {
+            return Err(invalid(format!(
+                "the output is {}x{}, but the filter draws {}x{}",
+                output.width(),
+                output.height(),
+                size.0,
+                size.1
+            )));
+        }
         let mut encoder = self
             .gpu
             .device
@@ -375,7 +413,7 @@ impl Compositor {
             holds: &mut self.staged,
         };
         ctx.holds.clear();
-        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, &output) {
+        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, output) {
             self.staged.clear();
             return Err(err);
         }
@@ -384,13 +422,27 @@ impl Compositor {
         // handed back to the platform at the end of that submit, as `render` does: the
         // input's hold and those of the images the filter reads besides it, each once.
         for (sync, _) in &self.staged {
-            sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
+            if let Err(err) = sync.stage(&self.gpu.queue) {
+                self.staged.clear();
+                return Err(RenderError::Sync(err));
+            }
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
-        Ok(output)
+        Ok(())
+    }
+
+    fn check_filter_input(&self, input: &Image) -> Result<(), RenderError> {
+        if input.owner().is(&self.owner) {
+            Ok(())
+        } else {
+            Err(RenderError::Invalid {
+                what: "image",
+                detail: "the filter input was made by another compositor".into(),
+            })
+        }
     }
 
     /// The device images and targets are created on.
