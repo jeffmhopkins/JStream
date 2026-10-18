@@ -57,7 +57,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
 | [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 9 | 3 | 1 | 5 | 0 |
+| [Canvas](#canvas) | 18 | 9 | 4 | 1 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **29** | **24** | **42** | **34** | **1** |
+| **Total** | **130** | **29** | **25** | **42** | **33** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -153,7 +153,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 |---|---|---|---|---|
 | CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | ✅ | The frame is the largest 16:9 box inside 28/28/20px margins; the caption is mono 11px. |
 | CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ✅ | Laid out from the shared collection and `Selection`, so a box click selects its row and opens its properties. |
-| CV-03 | Live picture | The scene's real picture under the item boxes. | 🔒 | U4p (#302) adds the program preview; other scenes need previews for any target (D36). |
+| CV-03 | Live picture | The scene's real picture under the item boxes. | 🟡 | The program scene's live picture is under the boxes while it is the selected scene (U4p, #302); another scene shows a placeholder. Other scenes need previews for any target (D36). |
 | CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Outline, handles, knob and stem, pill and hover outline are built; " · cropped" waits on crop (CV-08). Until the picture is drawn (CV-03), every box gets a faint outline and its name. |
 | CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | ✅ | A rotated item doesn't snap, as in the prototype. |
 | CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | ✅ | A corner follows the axis that snapped, else the larger change; an edge scales the other axis about the centre. |

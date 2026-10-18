@@ -216,11 +216,14 @@ pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
 /// this branch had written itself before the merge. Each entry that `restamp` would rewrite,
 /// and each the branch had written whose input the merge has since changed (as when a
 /// re-verify after the merge replaced the branch's note), gets [`merge_note`] of the branch's
-/// note on it. The rest are kept, and removed inputs dropped, as `restamp` does.
+/// note on it. `merged` is the section's stamp on the merged side: an input whose hash equals
+/// that side's entry gets that entry as it is, since this branch changes nothing in it
+/// (#596). The rest are kept, and removed inputs dropped, as `restamp` does.
 pub(crate) fn restamp_merge(
     old: Option<&Stamp>,
     inputs: &BTreeMap<String, String>,
     branch: Option<&Stamp>,
+    merged: Option<&Stamp>,
     by: &str,
     merge: &str,
 ) -> Stamp {
@@ -228,8 +231,10 @@ pub(crate) fn restamp_merge(
         .iter()
         .map(|(k, h)| {
             let own = branch.and_then(|b| b.get(k));
-            let e = match old.and_then(|o| o.get(k)) {
-                Some(e) if &e.hash == h && own.is_none_or(|o| &o.hash == h) => e.clone(),
+            let theirs = merged.and_then(|m| m.get(k)).filter(|e| &e.hash == h);
+            let e = match (theirs, old.and_then(|o| o.get(k))) {
+                (Some(t), _) => t.clone(),
+                (None, Some(e)) if &e.hash == h && own.is_none_or(|o| &o.hash == h) => e.clone(),
                 _ => Entry {
                     hash: h.clone(),
                     by: Some(by.to_owned()),

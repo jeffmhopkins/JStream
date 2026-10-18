@@ -43,7 +43,7 @@ mod backend {
     use super::video::{Format, MfVideoEncoder};
     use crate::gpu::EncodeGpu;
 
-    /// Codecs through Media Foundation, the OS codecs ADR-0031 chooses.
+    /// Codecs through Media Foundation, the OS codecs ADR-0061 chooses.
     ///
     /// It holds no COM objects, so it is `Send + Sync`. Each session starts Media
     /// Foundation for itself and can be driven from any thread. Open sessions from a
