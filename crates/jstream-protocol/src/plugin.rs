@@ -431,8 +431,8 @@ pub enum Reach {
 /// - every string value that starts as an absolute URL does, `scheme://` after
 ///   [`url_text`]'s clean-up, is a [`Reach::Host`] when it parses as an `http`, `https`,
 ///   `ws` or `wss` URL with a host and no credentials, and [`Reach::Unchecked`] otherwise.
-///   Text with a `://` later in it ("Follow me at https://…") is no URL a parser would
-///   load, so it reaches nothing.
+///   Text with a `://` later in it ("Follow me at https://…") is no URL a parser or
+///   the engine would load, so it reaches nothing.
 ///
 /// Values nested in arrays and objects count too. A value without `://` that the engine
 /// would still resolve to a host (a `youtube_chat` video ID) is not found here.
@@ -475,14 +475,17 @@ fn value_reach(value: &serde_json::Value, found: &mut Vec<Reach>) {
     }
 }
 
-/// `text` as a URL parser reads it, when it starts with `scheme://`: leading and trailing
-/// spaces and control characters dropped, and tabs and newlines removed anywhere (the
-/// WHATWG URL parser does both), with a scheme of an ASCII letter then letters, digits,
-/// `+`, `-` or `.`. `None` for text that doesn't start so, which no parser takes for an
-/// absolute URL.
+/// `text` as a URL parser or the engine reads it, when it starts with `scheme://`:
+/// leading and trailing ASCII spaces, control characters and Unicode white space dropped
+/// (the WHATWG URL parser trims the first two, and the engine's `str::trim`, as in the
+/// browser source's page location, the last), and tabs and newlines removed anywhere,
+/// with a scheme of an ASCII letter then letters, digits, `+`, `-` or `.`. Trimming the
+/// union of what every consumer trims keeps a string the engine would load from slipping
+/// past the check (#642 review B2). `None` for text that doesn't start so, which no
+/// consumer takes for an absolute URL.
 fn url_text(text: &str) -> Option<String> {
     let cleaned: String = text
-        .trim_matches(|c: char| c <= ' ')
+        .trim_matches(|c: char| c <= ' ' || c.is_whitespace())
         .chars()
         .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
         .collect();
@@ -856,6 +859,13 @@ mod tests {
             vec![Reach::Host("https://evil.example:443".into())],
             "a tab inside the scheme is dropped, as the parser drops it"
         );
+        for space in ["\u{a0}", "\u{3000}", "\u{2003}", "\u{85}"] {
+            assert_eq!(
+                reach(&format!("{space}https://evil.example/{space}")),
+                vec![Reach::Host("https://evil.example:443".into())],
+                "Unicode white space is trimmed, as the engine's str::trim trims it (B2)"
+            );
+        }
         assert_eq!(
             reach("https://evil.example/a page with spaces"),
             vec![Reach::Host("https://evil.example:443".into())]
