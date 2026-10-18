@@ -1,7 +1,7 @@
 [package]
 name = "jstream-platform-linux"
 version = "0.0.0"
-description = "Linux platform backends: the CLOCK_MONOTONIC media clock, ScreenCast portal and PipeWire capture, PipeWire audio and VA-API codecs (ADR-0060). First three parts."
+description = "Linux platform backends: the CLOCK_MONOTONIC media clock, ScreenCast portal and PipeWire capture with DMA-BUF import into Vulkan, PipeWire audio and VA-API codecs (ADR-0060)."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 2
-summary = "First three parts of ADR-0060: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal and PipeWire screen capture, PipeWire and VA-API loaded at run time with `dlopen`, VA-API H.264 encoding from CPU frames, Cisco's OpenH264 downloaded on request as the software H.264 encoder (ADR-0061), AAC encoding through `jstream-aac` (ADR-0061, ADR-0062)"
+summary = "Parts of ADR-0060: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal and PipeWire screen capture, its DMA-BUF frames imported into the engine's Vulkan device (`LinuxGpu`), PipeWire and VA-API loaded at run time with `dlopen`, VA-API H.264 encoding from CPU frames, Cisco's OpenH264 downloaded on request as the software H.264 encoder (ADR-0061), AAC encoding through `jstream-aac` (ADR-0061, ADR-0062)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
@@ -48,6 +48,8 @@ jstream-aac = { workspace = true, optional = true }
 jstream-platform.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# The DMA-BUF modifier queries beside wgpu-hal's Vulkan backend (`gpu/dmabuf.rs`).
+ash.workspace = true
 libc.workspace = true
 libloading.workspace = true
 # SHA-256 for checking Cisco's OpenH264 download against its pin, and TLS for fetching it
@@ -56,3 +58,7 @@ libloading.workspace = true
 ring.workspace = true
 rustls.workspace = true
 rustls-native-certs.workspace = true
+# The Vulkan backend, for the GPU interop's device and wgpu-hal's DMA-BUF import
+# (ADR-0004), and WGSL for the capture copy's shader. The version is the workspace's
+# exact pin, the one jstream-platform re-exports.
+wgpu = { workspace = true, features = ["vulkan", "wgsl"] }
