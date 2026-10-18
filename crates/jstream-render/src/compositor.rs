@@ -7,6 +7,7 @@ use jstream_platform::FrameSync;
 
 use crate::color::{self, premultiplied_linear};
 use crate::error::RenderError;
+use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::place::{self, Quad};
@@ -53,6 +54,7 @@ pub struct Compositor {
     /// The holds staged for the submit being built, and their textures, which the
     /// submit hands back to the platform (`PRESENT`) after its last use.
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
+    filters: filter::Runtime,
 }
 
 impl Compositor {
@@ -101,7 +103,36 @@ impl Compositor {
         texture: wgpu::Texture,
         sync: Option<Arc<dyn FrameSync>>,
     ) -> Result<Image, RenderError> {
-        image::import(&self.maker(), texture, sync)
+        self.import_as(texture, sync, Alpha::Straight)
+    }
+
+    /// Samples `texture`, as [`Self::import`] does, but holding sRGB code values already
+    /// multiplied by alpha, as a browser page paints (CEF's layout). It must be
+    /// `Rgba8Unorm` or `Bgra8Unorm`, so sampling does not decode it.
+    ///
+    /// The texels are filtered premultiplied, so transparent edges keep no fringe, then
+    /// divided by alpha, decoded from sRGB and multiplied by alpha again in linear light.
+    /// Filtering the code values rather than linear light differs from an upload only
+    /// where the filter mixes texels of different colour.
+    ///
+    /// # Errors
+    /// As for [`Self::import`].
+    pub fn import_premultiplied(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+    ) -> Result<Image, RenderError> {
+        self.import_as(texture, sync, Alpha::PremultipliedSrgb)
+    }
+
+    /// [`Self::import`] or [`Self::import_premultiplied`], by `alpha`.
+    pub(crate) fn import_as(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+        alpha: Alpha,
+    ) -> Result<Image, RenderError> {
+        image::import(&self.maker(), texture, sync, alpha)
     }
 
     /// [`Self::import`] of a [`jstream_platform::GpuFrame`], keeping its [`FrameSync`] hold.
@@ -137,6 +168,8 @@ impl Compositor {
         } else {
             None
         };
+        // Last, so no error between the staging and the submit it arms (#391).
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -258,6 +291,7 @@ impl Compositor {
             });
         }
         self.load(scene)?;
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -283,6 +317,66 @@ impl Compositor {
         image::rewrite(&self.maker(), image, rgba)
     }
 
+    /// Draws `filter` over `input` into a new layer of the filter's
+    /// [`VideoFilter::output_size`], at the media-clock time `clock`. The filter keeps
+    /// its state, so a stateful kind (a video delay) must see every frame in order.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when `input` came from another compositor,
+    /// [`RenderError::TooLarge`] for an output past the adapter limit, and
+    /// [`RenderError::Sync`] when staging an imported input or reference image fails.
+    pub fn apply_filter(
+        &mut self,
+        filter: &mut VideoFilter,
+        input: &Image,
+        clock: FilterClock,
+    ) -> Result<Image, RenderError> {
+        if !input.owner().is(&self.owner) {
+            return Err(RenderError::Invalid {
+                what: "image",
+                detail: "the filter input was made by another compositor".into(),
+            });
+        }
+        let (width, height) = filter.output_size(input.width(), input.height());
+        let output = self.layer(width, height)?;
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-filter"),
+            });
+        let mut ctx = filter::Ctx {
+            gpu: &self.gpu,
+            maker: Maker {
+                gpu: &self.gpu,
+                layout: &self.image_layout,
+                sampler: &self.sampler,
+                owner: &self.owner,
+            },
+            runtime: &mut self.filters,
+            encoder: &mut encoder,
+            clock,
+            holds: &mut self.staged,
+        };
+        ctx.holds.clear();
+        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, &output) {
+            self.staged.clear();
+            return Err(err);
+        }
+        ctx.hold(input);
+        // Staged only once recording succeeded, right before the submit it arms, and
+        // handed back to the platform at the end of that submit, as `render` does: the
+        // input's hold and those of the images the filter reads besides it, each once.
+        for (sync, _) in &self.staged {
+            sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
+        }
+        self.record_release(&mut encoder);
+        self.gpu.queue.submit([encoder.finish()]);
+        // The platform reuses a frame's texture once nothing holds it.
+        self.staged.clear();
+        Ok(output)
+    }
+
     /// The device images and targets are created on.
     pub fn device(&self) -> &wgpu::Device {
         &self.gpu.device
@@ -296,6 +390,13 @@ impl Compositor {
     /// The adapter the device was opened on.
     pub fn adapter(&self) -> &wgpu::Adapter {
         &self.gpu.adapter
+    }
+
+    /// The platform context this compositor was opened on ([`Self::on_context`]), or
+    /// `None` when it opened a device of its own. A texture made on that context can be
+    /// imported here; one from another context or device can't.
+    pub fn context(&self) -> Option<&jstream_platform::ContextKey> {
+        self.gpu.context.as_ref()
     }
 
     /// A one-line description of the adapter, for logs and test output.
@@ -313,6 +414,7 @@ impl Compositor {
             adapter: self.gpu.adapter.clone(),
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
+            context: self.gpu.context.clone(),
         })
     }
 
@@ -350,6 +452,7 @@ impl Compositor {
             include_str!("resolve.wgsl"),
         );
         let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
+        let filters = filter::Runtime::new(&gpu.device);
         let vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-vertices"),
             size: VERTEX_STRIDE * u64::from(VERTICES_PER_ITEM),
@@ -369,6 +472,7 @@ impl Compositor {
             vertex_buffer,
             draws: Vec::new(),
             staged: Vec::new(),
+            filters,
         }
     }
 
@@ -543,12 +647,12 @@ impl Compositor {
         Ok(())
     }
 
-    /// Validates `scene`, builds its vertices, stages its frame holds and writes the
-    /// vertex buffer: everything before the passes are recorded.
+    /// Validates `scene`, builds its vertices and writes the vertex buffer. The caller
+    /// stages the frame holds after this and every other step that can fail, so an
+    /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         color::validate(scene.background)?;
         self.prepare(scene)?;
-        self.stage_sources(scene)?;
         self.ensure_vertex_buffer()?;
         if !self.vertices.is_empty() {
             self.gpu
@@ -631,6 +735,14 @@ impl Compositor {
     }
 }
 
+#[cfg(test)]
+impl Compositor {
+    /// Lowers the buffer limit, as a smaller adapter's would be.
+    pub(crate) fn cap_buffer_size(&mut self, bytes: u64) {
+        self.gpu.max_buffer_size = bytes;
+    }
+}
+
 impl std::fmt::Debug for Compositor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Compositor")
@@ -647,9 +759,11 @@ fn push_quad(
     opacity: f32,
     alpha: Alpha,
 ) {
-    let straight = match alpha {
+    // The shader's `mode`: how it turns a filtered sample into premultiplied linear.
+    let mode = match alpha {
         Alpha::Premultiplied => 0.0,
         Alpha::Straight => 1.0,
+        Alpha::PremultipliedSrgb => 2.0,
     };
     let corner = |i: usize| {
         let [x, y] = quad.corners[i];
@@ -664,7 +778,7 @@ fn push_quad(
         push_f32(buf, u);
         push_f32(buf, v);
         push_f32(buf, opacity);
-        push_f32(buf, straight);
+        push_f32(buf, mode);
     }
 }
 

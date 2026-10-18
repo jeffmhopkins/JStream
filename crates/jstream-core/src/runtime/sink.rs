@@ -14,9 +14,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
-use jstream_media::{FrameSize, MediaTime, Packet};
+use jstream_media::{Codec, FrameSize, MediaTime, Packet};
 use jstream_mux::aac::{AOT_AAC_LC, AudioSpecificConfig};
-use jstream_mux::flv::{self, FlvConfig, FlvTag, FlvTagger, MetadataStyle};
+use jstream_mux::flv::{self, ExVideoConfig, FlvConfig, FlvTag, FlvTagger, MetadataStyle};
 use jstream_mux::fmp4::{self, Fmp4Config};
 use jstream_mux::h264::AvcDecoderConfig;
 use jstream_outputs::record::{RecordError, Recorder, temp_path_for};
@@ -33,6 +33,10 @@ pub(crate) enum Destination {
 
 /// What the stream carries, which both containers describe in their headers.
 pub(crate) struct StreamInfo {
+    /// The video codec. H.264 goes in legacy FLV tags and MP4 with the parameter sets
+    /// below; HEVC and AV1 go in enhanced RTMP tags, whose decoder configuration the
+    /// tagger takes from the first keyframe, and can't be recorded yet.
+    pub(crate) codec: Codec,
     pub(crate) size: FrameSize,
     pub(crate) origin: MediaTime,
     pub(crate) frame_rate: f64,
@@ -75,13 +79,17 @@ impl Sink {
     ) -> Result<Self, String> {
         match destination {
             Destination::Publish(publish) => {
+                let avc = match info.codec {
+                    Codec::H264 => Some(info.avc()?),
+                    _ => None,
+                };
                 let config = FlvConfig {
                     video: Some(flv::VideoTrack {
                         width: info.size.width(),
                         height: info.size.height(),
                         frame_rate: Some(info.frame_rate),
                         bitrate_kbps: Some(info.video_kbps),
-                        avc: Some(info.avc()?),
+                        avc,
                     }),
                     audio: Some(flv::AudioTrack {
                         config: info.aac()?,
@@ -91,10 +99,24 @@ impl Sink {
                     metadata_style: MetadataStyle::File,
                     encoder: Some("jstream".into()),
                 };
-                let tagger = FlvTagger::new(config).map_err(|err| format!("FLV tagger: {err}"))?;
+                let tagger = match info.codec {
+                    Codec::H264 => FlvTagger::new(config),
+                    Codec::Hevc => {
+                        FlvTagger::with_enhanced_video(config, ExVideoConfig::Hevc(None))
+                    }
+                    Codec::Av1 => FlvTagger::with_enhanced_video(config, ExVideoConfig::Av1(None)),
+                    other => return Err(format!("FLV can't carry {other:?} video")),
+                }
+                .map_err(|err| format!("FLV tagger: {err}"))?;
                 Ok(Self::Flv { tagger, publish })
             }
             Destination::Record(path) => {
+                if info.codec != Codec::H264 {
+                    return Err(format!(
+                        "recording {:?} video is not supported yet; record in H.264",
+                        info.codec
+                    ));
+                }
                 // The collection's check is the same on every platform, so `/show.mp4`
                 // passes it on Windows and `C:\show.mp4` on Linux, where it would be a
                 // relative name in the working directory.
@@ -296,5 +318,123 @@ fn discard(recorder: Recorder) {
     drop(recorder);
     if let Err(err) = fs::remove_file(&temp) {
         tracing::warn!(error = %err, part = %temp.display(), "removing a failed start's recording");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicU64};
+
+    use jstream_media::{Codec, FrameSize, MediaTime, Packet, Timebase};
+    use jstream_mux::flv::TagType;
+
+    use super::{Destination, Sink, StreamInfo};
+    use crate::runtime::RecordingPublish;
+
+    fn info(codec: Codec) -> StreamInfo {
+        StreamInfo {
+            codec,
+            size: FrameSize::new(1280, 720).expect("size"),
+            origin: MediaTime::zero(Timebase::MPEG_90K),
+            frame_rate: 30.0,
+            video_kbps: 3000,
+            audio_kbps: 160,
+            sample_rate: 48_000,
+            sps: &[0x67, 0x42, 0xC0, 0x1E, 0xDA],
+            pps: &[0x68, 0xCE, 0x3C, 0x80],
+        }
+    }
+
+    /// An HEVC IDR access unit with its VPS, SPS and PPS in-band.
+    fn hevc_keyframe() -> Vec<u8> {
+        const VPS: [u8; 24] = [
+            0x40, 0x01, 0x0C, 0x01, 0xFF, 0xFF, 0x01, 0x60, 0x00, 0x00, 0x03, 0x00, 0x90, 0x00,
+            0x00, 0x03, 0x00, 0x00, 0x03, 0x00, 0x1E, 0x91, 0x30, 0x24,
+        ];
+        const SPS: [u8; 41] = [
+            0x42, 0x01, 0x01, 0x01, 0x60, 0x00, 0x00, 0x03, 0x00, 0x90, 0x00, 0x00, 0x03, 0x00,
+            0x00, 0x03, 0x00, 0x1E, 0xA0, 0x20, 0x81, 0x05, 0x96, 0x44, 0xE4, 0x93, 0x2B, 0xC0,
+            0x5A, 0x02, 0x00, 0x00, 0x03, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x3C, 0x10,
+        ];
+        const PPS: [u8; 7] = [0x44, 0x01, 0xC1, 0x72, 0xB4, 0x22, 0x40];
+        let mut au = Vec::new();
+        for nalu in [&VPS[..], &SPS[..], &PPS[..], &[0x28, 0x01, 0xAF, 0x08]] {
+            au.extend_from_slice(&[0, 0, 0, 1]);
+            au.extend_from_slice(nalu);
+        }
+        au
+    }
+
+    /// An AV1 keyframe temporal unit: temporal delimiter, sequence header and a frame.
+    fn av1_keyframe() -> Vec<u8> {
+        let mut tu = vec![0x12, 0x00];
+        tu.extend_from_slice(&[
+            0x0A, 0x0D, 0x20, 0x00, 0x00, 0x02, 0xAF, 0xFF, 0x9B, 0x5F, 0x24, 0x04, 0x34, 0x00,
+            0x80,
+        ]);
+        tu.extend_from_slice(&[0x30, 0xAA, 0xBB]);
+        tu
+    }
+
+    /// HEVC and AV1 go out in enhanced RTMP video tags, named by FourCC, with the
+    /// decoder configuration taken from the first keyframe.
+    #[test]
+    fn publishes_hevc_and_av1_as_enhanced_rtmp() {
+        for (codec, keyframe, fourcc) in [
+            (Codec::Hevc, hevc_keyframe(), b"hvc1"),
+            (Codec::Av1, av1_keyframe(), b"av01"),
+        ] {
+            let publish = RecordingPublish::new();
+            let mut sink = Sink::open(
+                Destination::Publish(Box::new(publish.clone())),
+                &info(codec),
+                Arc::new(AtomicBool::new(true)),
+            )
+            .expect("open");
+            sink.start().expect("start");
+            let pts = MediaTime::zero(Timebase::MPEG_90K);
+            let packet = Packet::new(codec, true, pts, pts, keyframe).expect("packet");
+            let drops = AtomicU64::new(0);
+            sink.forward(&packet, &drops).expect("forward");
+            assert_eq!(
+                drops.into_inner(),
+                0,
+                "{codec:?}: the muxer took the keyframe"
+            );
+            let video: Vec<_> = publish
+                .tags()
+                .into_iter()
+                .filter(|t| t.tag_type == TagType::Video)
+                .collect();
+            // The sequence start, then the frame.
+            assert_eq!(video.len(), 2, "{codec:?}");
+            for tag in &video {
+                assert_ne!(tag.body[0] & 0x80, 0, "{codec:?}: an enhanced RTMP header");
+                assert_eq!(&tag.body[1..5], fourcc, "{codec:?}");
+            }
+        }
+    }
+
+    /// MP4 recording is H.264 only for now, so another codec fails the start with a
+    /// reason, before any file is opened.
+    #[test]
+    fn refuses_to_record_hevc_or_av1() {
+        let path = PathBuf::from(if cfg!(windows) {
+            r"C:\no-such-dir\show.mp4"
+        } else {
+            "/no-such-dir/show.mp4"
+        });
+        for codec in [Codec::Hevc, Codec::Av1] {
+            let err = Sink::open(
+                Destination::Record(path.clone()),
+                &info(codec),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .err()
+            .expect("refused");
+            assert!(err.contains("not supported yet"), "{err}");
+        }
     }
 }
