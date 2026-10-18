@@ -1146,11 +1146,11 @@ function Test-Webcam {
     if ($holders) {
         Prompt-Do "Close these apps, which may hold the webcam: $(($holders | ForEach-Object { $_.ProcessName } | Sort-Object -Unique) -join ', ')."
     }
-    $code = Invoke-Cargo 'pr726' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--', '--ignored', 'video_device', '--nocapture') 'webcam-hw-tests'
+    $code = Invoke-Cargo 'pr726' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--', '--ignored', 'video_device', '--test-threads=1', '--nocapture') 'webcam-hw-tests'
     $text = Get-Content -LiteralPath (Join-Path $OutDir 'webcam-hw-tests.log') -Raw
     $failed = @([regex]::Matches($text, '(?m)^test (\S+) \.\.\. FAILED') | ForEach-Object { $_.Groups[1].Value })
     Check ($code -eq 0) 'video-device hw-tests (MJPEG included)' "exit $code; failed: $(if ($failed) { $failed -join ', ' } else { 'none' })"
-    if ($code -ne 0 -and $text -match 'Busy') {
+    if ($code -ne 0 -and $text -cmatch 'open: Busy|Busy \{|\bBusy\b\)') {
         Fail 'webcam free' 'the webcam is in use by another app (close the Camera app, Teams, Zoom or OBS), so the rest of this check would record black; run -Only webcam again'
         return
     }

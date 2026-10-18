@@ -349,7 +349,8 @@ On #726's branch (stacked on `wave/m1-3`, so #658's MJPEG path is in it), with a
 that has a microphone. Close every app that holds the webcam first (the Camera app, Teams,
 Zoom, OBS): a busy webcam fails the device tests with `Busy` and records black.
 
-1. `cargo test -p jstream-platform-windows --features hw-tests -- --ignored video_device`.
+1. `cargo test -p jstream-platform-windows --features hw-tests -- --ignored video_device --test-threads=1`
+   (one at a time: the tests open the same camera).
    **Pass:** the device tests pass, the largest MJPEG format included.
 2. A `webcam` source on program, recorded for 10 s. **Pass:** the picture has the right
    colours, and the webcam's own microphone is in the recording.
