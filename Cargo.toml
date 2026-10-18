@@ -115,10 +115,11 @@ leptos = { version = "0.8", default-features = false, features = ["csr"] }
 mach2 = { version = "0.6", default-features = false }
 # Foundation through the objc2 framework crates (ADR-0063 §12), for the running macOS
 # version (`NSProcessInfo`), the arrays, errors and strings ScreenCaptureKit hands back,
-# and the numbers and UUIDs of a Core Audio tap description (`NSValue`, `NSUUID`).
+# the numbers and UUIDs of a Core Audio tap description (`NSValue`, `NSUUID`), and a
+# camera output's video settings (`NSDictionary`, with `NSObject` for its keys).
 # The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
 # only `std` and the classes the macOS crate calls.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString", "NSUUID", "NSValue"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString", "NSUUID", "NSValue", "NSDictionary", "NSObject"] }
 # Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
 # crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
 # and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
@@ -144,10 +145,12 @@ objc2-core-audio-types = { version = "0.3", default-features = false, features =
 # Objective-C class (no blocks or dispatch features).
 objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2", "objc2-core-audio-types", "objc2-foundation"] }
 # AVFoundation through the objc2 framework crates (ADR-0063 §4, §11, §12), for the
-# Microphone permission: `AVCaptureDevice`'s authorization status and request for the
-# audio media type. The 0.3 line, as above; no build script. Only those headers, and
-# `block2` for the request's completion handler.
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+# Microphone and Camera permissions (`AVCaptureDevice`'s authorization status and
+# request), and webcams (ADR-0063 §10): the discovery session, the device's formats, and
+# a capture session with a video data output. The 0.3 line, as above; no build script.
+# Only those headers, `block2` for the request's completion handler, `dispatch2` for the
+# output's callback queue, and the Core Media and Core Video types the frames come in.
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVCaptureInput", "AVCaptureOutputBase", "AVCaptureSession", "AVCaptureVideoDataOutput", "AVMediaFormat", "block2", "dispatch2", "objc2-core-media", "objc2-core-video"] }
 # ScreenCaptureKit through the objc2 framework crates (ADR-0063 §3, §12), for display and
 # window capture: `SCShareableContent` lists targets, `SCStream` captures them, and
 # `SCError` has the codes for a refused permission or a stopped stream. The 0.3 line, as
