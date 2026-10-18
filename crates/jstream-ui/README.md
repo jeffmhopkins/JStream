@@ -378,7 +378,8 @@ sends the edits. These are pure and tested natively, `model.rs` against `MockEng
   item it changed commits it, so each gesture (and each nudge) is one undo step. The
   local geometries stay drawn until no commit is in flight and the collection has
   caught up with the last one's revision; a later drag replaces only its own items',
-  so a nudge still in flight isn't lost. It carries no
+  so a nudge still in flight isn't lost. A commit that fails shows its error and stops
+  drawing its geometries, unless a later gesture has replaced them. It carries no
   `expected_rev`: a drag is last writer wins per field
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
   (`live.set` with `ends_gesture` on the committing batch), which would show the drag
