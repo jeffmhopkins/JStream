@@ -213,8 +213,9 @@ AAC, 6 s).
 ### 12. Canvas H.264 preview (#380)
 
 Build the UI with trunk and run the desktop app, as in
-[jstream-desktop](../../apps/jstream-desktop/README.md), with a display source in a
-scene. **Pass:** the preview shows under the canvas boxes with H.264 in the frames; it
+[jstream-desktop](../../apps/jstream-desktop/README.md), with a text, image or media
+source on the program scene (not a display source: the preview draws display capture as
+nothing, by design). **Pass:** the preview shows under the canvas boxes with H.264 in the frames; it
 follows committed edits and scene switches; after a slow moment it recovers at the next
 keyframe, within 2 s; and a decoder failure falls back to JPEG, not "No preview".
 

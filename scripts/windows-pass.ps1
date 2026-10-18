@@ -945,7 +945,7 @@ function Test-Preview {
     if (-not (Build 'main' @('jstream-desktop'))) { return }
     $app = Start-Native (Bin 'main' 'jstream') @('--ui-dir', (Join-Path $ui 'dist'))
     try {
-        if (-not (Prompt-Do 'The desktop app is open. Add a display source to a scene so the canvas has something to preview.')) { Skip 'preview' 'skipped by you'; return }
+        if (-not (Prompt-Do 'The desktop app is open. Add a text source with some words in a light colour (or an image or media source) to the program scene. Not a display source: the preview draws display capture as nothing, by design.')) { Skip 'preview' 'skipped by you'; return }
         Ask 'preview shows' 'Does the live preview show under the canvas boxes (WebView2), with H.264 in the frames?'
         Ask 'follows edits' 'Does it follow committed edits and scene switches?'
         Ask 'backlog recovers' 'After a slow moment (drag a big window around), does it recover at the next keyframe, within 2 s?'
