@@ -1,7 +1,8 @@
 //! CEF's callbacks: the app (command-line switches), and per page a client with its
 //! render, audio, life-span, load and request handlers, each forwarding to the page's
-//! [`PageShared`], and a permission handler that refuses everything
-//! ([`crate::permission`]). Plus a task that runs a closure on CEF's UI thread.
+//! [`PageShared`], and a permission handler that refuses everything but local network
+//! access its request policy allows ([`crate::permission`]). Plus a task that runs a
+//! closure on CEF's UI thread.
 
 use std::os::raw::c_int;
 use std::sync::Arc;
@@ -105,8 +106,8 @@ pub(crate) fn client(page: &Arc<PageShared>) -> Client {
         PageAudioHandler::new(page.clone()),
         PageLifeSpan::new(page.clone()),
         PageLoad::new(page.clone()),
-        PageRequests::new(PageResources::new(page)),
-        PagePermissions::new(),
+        PageRequests::new(PageResources::new(page.clone())),
+        PagePermissions::new(page),
     )
 }
 
@@ -383,8 +384,19 @@ wrap_resource_request_handler! {
 /// What a refused redirect is pointed at instead: a URL that loads nothing.
 const REFUSED_REDIRECT: &str = "about:jstream-refused";
 
+// `permission.rs` names CEF's local-network prompt bits without depending on CEF.
+const _: () = assert!(
+    crate::permission::LOCAL_NETWORK_BITS
+        == sys::cef_permission_request_types_t::CEF_PERMISSION_TYPE_LOCAL_NETWORK_ACCESS_DEPRECATED
+            as u32
+            | sys::cef_permission_request_types_t::CEF_PERMISSION_TYPE_LOCAL_NETWORK as u32
+            | sys::cef_permission_request_types_t::CEF_PERMISSION_TYPE_LOOPBACK_NETWORK as u32
+);
+
 wrap_permission_handler! {
-    pub(crate) struct PagePermissions;
+    pub(crate) struct PagePermissions {
+        page: Page,
+    }
 
     impl PermissionHandler {
         fn on_request_media_access_permission(
@@ -395,8 +407,8 @@ wrap_permission_handler! {
             requested_permissions: u32,
             callback: Option<&mut MediaAccessCallback>,
         ) -> c_int {
-            match crate::permission::answer(requested_permissions) {
-                crate::permission::Answer::Deny => {
+            match crate::permission::answer_media(requested_permissions) {
+                crate::permission::MediaAnswer::Deny => {
                     if let Some(callback) = callback {
                         callback.cancel();
                     }
@@ -415,12 +427,13 @@ wrap_permission_handler! {
             requested_permissions: u32,
             callback: Option<&mut PermissionPromptCallback>,
         ) -> c_int {
-            match crate::permission::answer(requested_permissions) {
-                crate::permission::Answer::Deny => {
-                    if let Some(callback) = callback {
-                        callback.cont(PermissionRequestResult::DENY);
-                    }
-                }
+            let local_allowed = self.page.0.policy.local_allowed();
+            let result = match crate::permission::answer_prompt(requested_permissions, local_allowed) {
+                crate::permission::Answer::Accept => PermissionRequestResult::ACCEPT,
+                crate::permission::Answer::Deny => PermissionRequestResult::DENY,
+            };
+            if let Some(callback) = callback {
+                callback.cont(result);
             }
             1
         }
