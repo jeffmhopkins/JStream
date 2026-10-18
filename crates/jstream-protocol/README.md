@@ -1028,8 +1028,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
     characters and Unicode white space from both ends, and dropping tabs and newlines,
     which covers what both a URL parser and the engine's `str::trim` remove) must be
     an `http`, `https`, `ws` or `wss` URL whose `scheme://host:port` (default port
-    filled in, host compared without case) is granted. Text with an address later in it, such as a caption that ends with a
-    link, is no URL and reaches nothing.
+    filled in, host compared without case) is granted. Text with an address later in
+    it, such as a caption that ends with a link, is no URL and reaches nothing.
   Anything neither rule lets through is `forbidden`: a file under the collection's or the
   app's folder, another scheme, credentials in the URL, and a path with a `.` or `..`
   segment. A grant's folders can't have one either. A value the engine would resolve to
