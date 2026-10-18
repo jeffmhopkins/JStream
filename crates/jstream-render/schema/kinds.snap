@@ -591,8 +591,7 @@ source: crates/jstream-render/tests/kinds.rs
           "jpg",
           "jpeg",
           "webp",
-          "gif",
-          "bmp"
+          "gif"
         ],
         "default": null,
         "label": "Mask image",

@@ -250,12 +250,13 @@ state machine. Contents:
   fails to import or the context breaks (taking the context from browser pages, and
   failing when that fallback fails, or at its deadline when it hangs, still repeating
   the last frame meanwhile), a recording started after that fallback, whose encoder
-  could take GPU frames, encoding the readback with every output staying up, an output surviving a lost device (its own, reopened on a
-  new one; the context's, left at once) and failing at the third loss in a minute, and
+  could take GPU frames, encoding the readback with every output staying up, an output
+  surviving a lost device (its own, reopened on a new one; the context's, left at once) and failing at the third loss in a minute, and
   an output whose encoder takes GPU frames getting NV12 encode targets with no
-  readback and riding out 20 composite errors in a row with no fallback, on a software
-  device that stands in for the platform's (`src/tests/gpu_capture.rs`; the last two
-  skip without `TEXTURE_FORMAT_NV12`), a page's
+  readback, riding out 20 composite errors in a row with no fallback, and failing at
+  once when the context's device is lost, on a software device that stands in for the
+  platform's (`src/tests/gpu_capture.rs`; the last three skip without
+  `TEXTURE_FORMAT_NV12`), a page's
   GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -793,6 +794,20 @@ changing with time (`Shot::changes_with_time`), so the preview redraws it like a
 running transition. `video.snapshot` runs the chains on its own compositor, so a
 stateful kind (a video delay) starts empty there. The built-in video filter kinds are
 in `kind.list` and `filter.add` takes them on a video chain.
+
+A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
+`image_mask`'s `image`, whose first frame is the mask) gets it through the live
+sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
+name, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+reads and decodes each new one, as it builds sources, and an asset no filter names any
+more is let go. A plan hands each chain filter the asset it names, numbered by its load,
+and each compositor makes the filter's reference image from it once: the LUT's tile
+layout (`jstream_render::lut_image`) or the mask uploaded as straight sRGB. A reference
+kind keeps no state between frames, so a new load makes the filter again with the new
+image, and the old filter, which holds the old image, is retired through the cache. A
+file that can't be read or decoded is logged and its filter passes its input through
+until the setting changes. Moving the collection file reloads every `collection`
+asset.
 A `display`, `window` or `webcam` source with no stored frame shows what the pipeline
 captures for it on the render thread, and nothing in `video.snapshot`, which has no
 capture; a stored frame wins. The `Shot` lists what the passes of the program, or the
@@ -1726,11 +1741,10 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
 - Blend modes other than `normal` in the compositor.
-- The rest of the video chain runtime (V0): the asset and scene references
-  `apply_lut`, `image_mask` and `scene_mask` read (they pass their input through until
-  then), effect-pack kinds in a chain (bypassed), placing a bounds-growing filter's
-  output at the original content box, and pooling a multi-pass filter's scratch
-  layers.
+- The rest of the video chain runtime (V0): the referenced scene `scene_mask` reads
+  (it passes its input through until then), effect-pack kinds in a chain (bypassed),
+  placing a bounds-growing filter's output at the original content box, and pooling a
+  multi-pass filter's scratch layers.
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the

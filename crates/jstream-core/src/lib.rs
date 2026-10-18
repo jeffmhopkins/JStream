@@ -29,6 +29,7 @@ mod collection;
 mod drops;
 mod engine;
 mod events;
+mod filter_assets;
 mod filters;
 mod gesture;
 mod history;
