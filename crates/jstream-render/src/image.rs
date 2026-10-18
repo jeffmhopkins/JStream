@@ -75,7 +75,8 @@ pub struct Image {
     /// The render-target view of a layer, kept so drawing into it again allocates no
     /// view. `None` for uploads and imports, which are never drawn into.
     target: Option<wgpu::TextureView>,
-    /// How many times an upload has been rewritten, so its mips know when to rebuild.
+    /// How many times the texels have changed: an upload rewritten, a layer drawn into,
+    /// an import marked changed. Its mips rebuild when this moves.
     generation: AtomicU64,
     /// The mip chain, made the first time the image is placed in 3D.
     mips: OnceLock<Mips>,
@@ -102,15 +103,25 @@ impl Image {
         &self.bind_group
     }
 
-    /// Whether only [`rewrite`] changes the texels: an upload. A layer is drawn into and
-    /// an import is the platform's, so neither is.
-    pub(crate) fn is_static(&self) -> bool {
-        self.alpha == Alpha::Premultiplied && self.target.is_none()
+    /// Says that the texels changed where this crate can't see it: the platform wrote a
+    /// new frame into an imported texture. A 3D placement's mip chain is rebuilt from
+    /// the image only after a change (ADR-0050 decision 5), so the caller marks each new
+    /// frame. [`crate::ResourceCache::import`] does this once per frame for its imports;
+    /// [`crate::Compositor::rewrite_rgba8`] and [`crate::Compositor::render_into`] mark
+    /// an upload and a layer themselves. An image never placed in 3D ignores it.
+    pub fn mark_changed(&self) {
+        self.generation.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// How many times [`rewrite`] has refilled the image.
+    /// How many times the texels have changed, as [`Self::mark_changed`] counts them.
     pub(crate) fn generation(&self) -> u64 {
         self.generation.load(Ordering::Relaxed)
+    }
+
+    /// How many times the mip chain was built, 0 without one.
+    #[cfg(test)]
+    pub(crate) fn mip_builds(&self) -> u64 {
+        self.mips.get().map_or(0, Mips::builds)
     }
 
     /// The mip chain, made by `make` the first time it is asked for.
@@ -264,7 +275,7 @@ pub(crate) fn rewrite(maker: &Maker<'_>, image: &Image, rgba: &[u8]) -> Result<(
     }
     check_bytes(image.width, image.height, rgba)?;
     write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)?;
-    image.generation.fetch_add(1, Ordering::Relaxed);
+    image.mark_changed();
     Ok(())
 }
 

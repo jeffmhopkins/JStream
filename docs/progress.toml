@@ -844,8 +844,8 @@ id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "review"
-prs = [359, 368, 611, 622, 624, 629]
-note = "effect packs #368 land with wave/m1-2; 3D transforms in review: part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), and part 3, accepting 3D at protocol 0.34 (#629), which merges after 0.33"
+prs = [359, 368, 611, 622, 624, 643, 629]
+note = "effect packs #368 land with wave/m1-2; 3D transforms in review: part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), and part 3, accepting 3D at protocol 0.34 (#629), which merges after 0.33"
 needs = ["wave", "build"]
 
 [[item]]
