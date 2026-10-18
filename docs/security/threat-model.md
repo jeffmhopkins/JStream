@@ -363,33 +363,35 @@ user-writable file loaded into Frame Server.
 session's `Local\` namespace with a protected DACL (SYSTEM, Administrators, LOCAL
 SERVICE for Frame Server, and the user). The DLL inside Frame Server checks that a
 session block's owner is that session's user, SYSTEM or Administrators before using
-it, and checks every texture's format.
+it, and checks every texture's format. Registering the camera is optional, and only
+the explicit step registers it
+([ADR-0066](../adr/0066-portable-windows-distribution-v2.md)). The registered DLL is
+an administrators-only copy, never the one in the app's folder (#242). In its one UAC
+prompt, the step creates `%ProgramFiles%\JStream\vcam\` and gives it and the copy a
+protected DACL: SYSTEM and Administrators full control, LOCAL SERVICE and Users read
+and execute, nothing inherited. It then points `InprocServer32` at the copy. So, for a
+camera registered by this step, a program running as the user can't change the code
+Frame Server loads from the copy. The host
+compares the copy with the DLL it ships by content and reports an outdated copy;
+registering again is a new opt-in. Unregistering removes the keys and the copy.
+The producer refuses a control mapping that already existed unless its owner is the
+user, SYSTEM or Administrators and its DACL lets no one but them and LOCAL SERVICE in;
+the DLL checks the owner of a session block's textures and fence as it does the
+block's (#540, #356).
 
 **Accepted:** every app that opens the virtual camera sees its frames; LOCAL SERVICE
 needs full access; `Global\` blocks, which only an administrator or service can create,
 are trusted.
 
-**Controls (in flight, #540):** the producer refuses a control mapping that already
-existed unless its owner is the user, SYSTEM or Administrators and its DACL lets no one
-but them and LOCAL SERVICE in; the DLL checks the owner of a session block's textures and fence as it does the
-block's.
+**Accepted, registration:** the copy is as trustworthy as the portable folder was when the user
+approved the prompt: the elevated step copies whatever DLL is there then. An update
+whose DLL changed leaves Frame Server loading the old copy until the user registers
+again. A camera registered before ADR-0066, from the app's own folder, stays
+registered there until the user runs the step again; the host reports it as outdated.
+A DLL registered by hand with `regsvr32` is registered where it is.
 
-**Accepted, not yet on main (#242):** today the registered media source DLL is the one in
-the app's own folder, which the user can usually write to. Any program running as that
-user can replace it without an administrator prompt, and its code then runs in Frame
-Server's `svchost` (LOCAL SERVICE, session 0) the next time the camera loads. A hash
-check can't fix this, because Windows loads the DLL, not JStream, and a stub loader in
-the same folder could be replaced the same way. The maintainer chose the fix: "If you
-have to register it, name it optional, and then yeah, I think the program files makes
-sense". [ADR-0066](../adr/0066-portable-windows-distribution-v2.md) (accepted) makes
-registering optional. In the same UAC prompt, it copies the DLL to `%ProgramFiles%`
-with a DACL only administrators can write through, and registers that copy. The code
-is #561. Once it lands, the copy is as trustworthy as the portable folder was when the
-user approved the prompt.
-
-**Gaps:** a user-writable registered DLL runs in Frame Server until #561 lands (#242); a
-control mapping created before the producer's keeps its own DACL (#356, fix in flight in
-#540).
+**Gaps:** the copy's DACL and Frame Server loading it are not yet checked on Windows
+hardware (#563).
 
 <a id="gaps"></a>
 ## Known gaps
@@ -409,7 +411,6 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
-| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium; fix accepted ([ADR-0066](../adr/0066-portable-windows-distribution-v2.md)), code in #561 |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |
 
 <a id="upkeep"></a>
