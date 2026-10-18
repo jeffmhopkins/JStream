@@ -1,7 +1,10 @@
 //! How drop shadow, outline and glow fit an effect that reaches past the source's
 //! frame: the output grows by the effect's extent on each side, rounded up to whole
 //! pixels, and the input is drawn 1:1 at the matching inset. This changes the source's
-//! reported size; the inset is where the original frame sits in the grown one.
+//! reported size; the inset is where the original frame sits in the grown one, which
+//! each of them reports as its [`ContentBox`].
+
+use crate::filter::ContentBox;
 
 /// Pixels added on each side of the frame.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -53,6 +56,16 @@ impl Insets {
         )
     }
 
+    /// Where a `width` x `height` input sits in the grown frame.
+    pub(super) fn content(self, width: u32, height: u32) -> ContentBox {
+        ContentBox {
+            x: self.left,
+            y: self.top,
+            width,
+            height,
+        }
+    }
+
     /// Where the input's top-left sits in the grown frame.
     pub(super) fn origin(self) -> (i32, i32) {
         (self.left as i32, self.top as i32)
@@ -69,6 +82,11 @@ mod tests {
         assert_eq!((i.left, i.top, i.right, i.bottom), (0, 6, 10, 2));
         assert_eq!(i.grow(20, 10), (30, 18));
         assert_eq!(i.origin(), (0, 6));
+        let content = i.content(20, 10);
+        assert_eq!(
+            (content.x, content.y, content.width, content.height),
+            (0, 6, 20, 10)
+        );
         // Fractions round up: the blur first, then the offset.
         let i = Insets::shadow(2.5, 0.5, 0.0);
         assert_eq!((i.left, i.top, i.right, i.bottom), (3, 3, 4, 3));

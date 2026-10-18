@@ -27,9 +27,9 @@ use transform::{
 };
 
 /// The colour of the selection and its handles.
-const ACCENT: &str = "#3b6ef5";
+const ACCENT: &str = "#4c8dff";
 /// The colour of snap guides.
-const GUIDE: &str = "#ff3ea5";
+const GUIDE: &str = "#ff4fd8";
 
 /// A drag in progress.
 #[derive(Clone, Debug, PartialEq)]
@@ -370,7 +370,7 @@ pub fn Canvas() -> impl IntoView {
             .map(|(id, name, geometry, visible)| {
                 let points = outline(&geometry);
                 let is_selected = chosen.as_ref() == Some(&id);
-                let stroke = if is_selected { ACCENT } else { "#d0d0d8" };
+                let stroke = if is_selected { ACCENT } else { "#9aa1ac" };
                 let dash = if visible { "none" } else { "6 4" };
                 // The label sits in the top-left of the box's bounds, whatever its rotation.
                 let bounds = snap::Bounds::of(&geometry);
@@ -544,14 +544,14 @@ pub fn Canvas() -> impl IntoView {
                         y="0"
                         width=move || canvas_size().0
                         height=move || canvas_size().1
-                        fill="#1d1d21"
+                        fill="#141a22"
                     />
                     <text
                         x=move || canvas_size().0 / 2
                         y=move || canvas_size().1 / 2
                         text-anchor="middle"
                         font-size=move || px(13.0)
-                        fill="#77777f"
+                        fill="#5a606b"
                     >
                         "Preview stream not connected yet"
                     </text>

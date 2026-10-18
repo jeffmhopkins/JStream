@@ -426,12 +426,16 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         name: "B".into(),
                         role: SceneRole::Group,
                         item_count: 1,
+                        folder: None,
+                        meta: Default::default(),
                     },
                     SceneSummary {
                         scene_id: scene("a"),
                         name: "A".into(),
                         role: SceneRole::Scene,
                         item_count: 3,
+                        folder: None,
+                        meta: Default::default(),
                     },
                 ],
             }),
@@ -487,6 +491,8 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         transition_in: None,
                         transition_out: None,
                         items: items_of_b(),
+                        folder: None,
+                        meta: Default::default(),
                     },
                     SceneInfo {
                         scene_id: scene("a"),
@@ -495,20 +501,24 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         transition_in: None,
                         transition_out: None,
                         items: items_of_a(),
+                        folder: None,
+                        meta: Default::default(),
                     },
                 ],
                 outputs: outputs(),
-                master: MasterInfo {
+                master: Box::new(MasterInfo {
                     filters: audio_chain(vec![FilterInfo {
                         filter_id: FilterId::new("m1"),
                         kind: "gain".into(),
                         enabled: true,
                         settings: gain_db(-1.0),
                     }]),
-                },
+                }),
                 encoders: encoders(),
-                transitions: TransitionsInfo::default(),
+                transitions: Box::new(TransitionsInfo::default()),
                 video_mixes: video_mixes(),
+                folders: Vec::new(),
+                labels: Vec::new(),
                 buses: buses(),
                 sends: sends(),
                 hotkeys: hotkeys(),
@@ -1890,6 +1900,7 @@ fn mic() -> SourceInfo {
         duplicated_from: None,
         audio: Some(SourceAudio::new(AudioFollow::Always)),
         filters: Default::default(),
+        meta: Default::default(),
     }
 }
 
@@ -1913,6 +1924,7 @@ fn cam() -> SourceInfo {
         settings: crate::Settings::new(),
         duplicated_from: None,
         filters: Default::default(),
+        meta: Default::default(),
         audio: None,
     }
 }
@@ -1928,6 +1940,7 @@ fn nested_b() -> SourceInfo {
         settings: crate::Settings::new(),
         duplicated_from: None,
         filters: Default::default(),
+        meta: Default::default(),
         audio: Some(SourceAudio::new(AudioFollow::WhenShown)),
     }
 }
@@ -1956,7 +1969,8 @@ pub const CANVAS: Canvas = Canvas {
     height: 720,
 };
 
-/// Item `i4`'s geometry: a 320×180 box centred at (640, 360), filled.
+/// Item `i4`'s geometry: a 320×180 box centred at (640, 360), filled and mirrored left
+/// to right.
 const BOXED: ItemGeometry = ItemGeometry {
     center: Vec2 {
         x: finite(640.0),
@@ -1972,6 +1986,8 @@ const BOXED: ItemGeometry = ItemGeometry {
     turn_deg: Finite32::ZERO,
     depth_px: Finite32::ZERO,
     perspective_px: None,
+    flip_h: true,
+    flip_v: false,
 };
 
 /// `ItemInfo.transform` for [`BOXED`]: its unrotated top-left corner at scale (1, 1).

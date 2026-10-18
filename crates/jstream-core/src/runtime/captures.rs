@@ -404,10 +404,11 @@ fn add(total: &mut CaptureStats, stats: CaptureStats) {
     total.frames_skipped = total.frames_skipped.saturating_add(stats.frames_skipped);
 }
 
-/// Converts a CPU capture into `out` as RGBA8, reusing its allocation, and returns its
-/// size. RGBA8 is copied, BGRA8 swizzled and NV12 (what Windows' display capture
-/// delivers) converted with its frame's matrix and range. `None`, leaving `out` as it
-/// was, when the frame is not one of those.
+/// Converts a CPU capture into `out` as opaque RGBA8, reusing its allocation, and returns
+/// its size. RGBA8 is copied, BGRA8 swizzled and NV12 (what Windows' display capture
+/// delivers) converted with its frame's matrix and range. A capture's alpha means
+/// nothing, so every pixel's is 255, as the GPU path reads it (#451). `None`, leaving
+/// `out` as it was, when the frame is not one of those.
 pub(crate) fn rgba_from_surface(surface: &VideoSurface, out: &mut Vec<u8>) -> Option<FrameSize> {
     let VideoSurface::Cpu(frame) = surface else {
         return None;
@@ -425,12 +426,14 @@ pub(crate) fn rgba_from_surface(surface: &VideoSurface, out: &mut Vec<u8>) -> Op
             out.resize(len, 0);
             for (y, dst) in (0..height).zip(out.chunks_exact_mut(row_len)) {
                 let row = &frame.row(0, y)?[..row_len];
-                if info.format == PixelFormat::Rgba8 {
-                    dst.copy_from_slice(row);
-                } else {
-                    for (d, s) in dst.chunks_exact_mut(4).zip(row.chunks_exact(4)) {
-                        d.copy_from_slice(&[s[2], s[1], s[0], s[3]]);
-                    }
+                let rgba = info.format == PixelFormat::Rgba8;
+                for (d, s) in dst.chunks_exact_mut(4).zip(row.chunks_exact(4)) {
+                    let pixel = if rgba {
+                        [s[0], s[1], s[2], 255]
+                    } else {
+                        [s[2], s[1], s[0], 255]
+                    };
+                    d.copy_from_slice(&pixel);
                 }
             }
         }

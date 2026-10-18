@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -354,7 +354,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     they are released.
 
 - **`WindowsVcam`** (`VcamSink`), the virtual camera's engine side
-  ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). It is the producer of
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). It is the producer of
   the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract that the
   [`jstream-vcam-windows`](../jstream-vcam-windows/README.md#purpose) media source reads
   inside Frame Server:
