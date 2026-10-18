@@ -1175,7 +1175,7 @@ impl Nv12Passes {
         self.passes.retain(|(sync, _, _)| sync.strong_count() > 0);
         let converter = self
             .converter
-            .get_or_insert_with(|| Nv12Converter::new(compositor.device()));
+            .get_or_insert_with(|| Nv12Converter::for_compositor(compositor));
         let sync = frame.sync();
         let at = match self
             .passes

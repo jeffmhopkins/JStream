@@ -114,7 +114,9 @@ and calls this crate.
   `jstream-media`'s `ColorInfo`: BT.709 only, limited range (the default) or full.
   `Nv12Converter::submit` runs a pass into a platform `GpuFrame` in a submit of its
   own, which is how `jstream-core`'s render thread feeds an encoder that takes GPU
-  frames.
+  frames. A converter made with `Nv12Converter::for_compositor` shares the
+  compositor's `SubmitLock` (`Compositor::submit_lock`) and holds it from the stage
+  through that submit.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's, and so is the choice of encode target each tick. Also
@@ -227,8 +229,11 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    dimensions, and dropping a row or column is the caller's choice to make. The caller
    records the pass into its own encoder, after the composite, and stages a shared
    target's `FrameSync` before that submit. `Nv12Converter::submit` does that for a
-   platform `GpuFrame`: it stages the frame, records the pass, transitions the frame's
-   texture to `PRESENT` as the composite does with the frames it samples, and submits.
+   platform `GpuFrame`: it records the pass, transitions the frame's texture to
+   `PRESENT` as the composite does with the frames it samples, then stages the frame
+   and submits with its `SubmitLock` held. `Nv12Converter::for_compositor` takes the
+   compositor's lock, which on a platform context is the context's (#667);
+   `Nv12Converter::new` makes one of its own, for a queue nothing else submits on.
 
 The composite and resolve passes are one command buffer and one `queue.submit`. `FrameSync::stage` runs
 before that submit, for every distinct hold the scene samples, and the command buffer
@@ -660,7 +665,8 @@ encodes as black, and a single red column shows up in the two blocks whose `[1 2
 taps reach it, which centre-sited chroma would not do. Odd sizes, a size mismatch,
 BT.601 and a non-sRGB source are refused. `submit` stages its frame once and leaves
 the conversion in the planes, with a plane texture standing in for the platform's
-target. The native path (plane views of an `NV12`
+target. A converter made for a compositor stages with the compositor's `SubmitLock`
+held, and lets it go after the submit. The native path (plane views of an `NV12`
 texture, compared with the planes path) runs where the adapter has
 `TEXTURE_FORMAT_NV12`. It skips on lavapipe, which offers the feature but writes its
 plane-1 render into plane 0's memory (the Y plane's first rows came back holding the

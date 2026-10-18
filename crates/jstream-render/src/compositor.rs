@@ -399,6 +399,14 @@ impl Compositor {
         &self.gpu.queue
     }
 
+    /// The lock that orders submits on [`Self::queue`] around frame staging: the
+    /// platform context's on [`Self::on_context`], else one of the compositor's own.
+    /// Code that stages a frame and submits on this queue holds it from the staging
+    /// through the submit, as render does.
+    pub fn submit_lock(&self) -> &jstream_platform::SubmitLock {
+        &self.gpu.submit
+    }
+
     /// The adapter the device was opened on.
     pub fn adapter(&self) -> &wgpu::Adapter {
         &self.gpu.adapter
