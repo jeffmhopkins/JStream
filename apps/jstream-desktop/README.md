@@ -30,7 +30,7 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   its server and the UI bundle. Anything that fails becomes the page the window shows.
 - **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
   is, plus the virtual camera) and its server on a free port, with a token made fresh
-  at each start; `vcam_status`, whether the camera is registered.
+  at each start; `vcam_status`, whether the camera is registered and current.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
@@ -52,7 +52,7 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
 
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
-virtual camera's registration mode (`jstream.exe --register-vcam`, which
+virtual camera's optional registration and unregistration modes (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
 dumps (only a panic writes a report, as in the daemon), MCP and the token for outside clients, and browser sources in a default build
 (the `cef` feature is off). `cargo xtask dist` builds the portable folder
@@ -154,15 +154,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   its subprotocol, as in a browser ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
   The strings are written as escaped JavaScript literals. The global also carries
   `vcam`, the virtual camera's status as the app read it at start: `registered`,
-  `not_registered`, `moved`, `off` (`--no-vcam`) or `unavailable` (not Windows). The UI
+  `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable` (not Windows). The UI
   uses it only to say whether the camera can start (its outputs panel); the engine
   still decides.
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no
-  elevation (`vcam_registration`, for the `jstream_vcam_windows.dll` beside the exe)
-  and logs a registration that names another folder. Registering stays the daemon's
-  `--register-vcam` for now, and so does the hardware check. The build script also
+  elevation (`vcam_registration`, which compares the registered administrators-only
+  copy with the `jstream_vcam_windows.dll` beside the exe by content) and logs a
+  warning when it is outdated; it never registers or prompts
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). Registering,
+  which is optional, stays the daemon's `--register-vcam` for now, and so does the
+  hardware check. The build script also
   delay-loads `mfsensorgroup.dll`, which `WindowsVcam` imports `MFCreateVirtualCamera`
   from, as the daemon's does, so a Windows without it still starts the app; on a
   Windows without that export (Windows 10), `WindowsVcam::start` probes for it first,
