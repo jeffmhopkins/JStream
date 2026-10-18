@@ -131,8 +131,8 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     let mut report = Merge::default();
     if out.status.success() {
         report.committed = true;
-        report.migrated = migrate_inline(root)?;
-        report.inputs = stale_report(root)?;
+        report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
+        report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
         return Ok(report);
     }
@@ -200,18 +200,22 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     if report.refused.is_empty() {
         git_ok(root, &["commit", "-q", "--no-edit"])?;
         report.committed = true;
-        report.migrated = migrate_inline(root)?;
-        report.inputs = stale_report(root)?;
+        report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
+        report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
     }
     Ok(report)
 }
 
-/// The ledger as it was at `rev`; empty when the file is missing or doesn't parse there.
-fn ledger_at(root: &Path, rev: &str) -> Result<ledger::Ledger> {
-    Ok(ledger_text_at(root, rev)?
-        .and_then(|text| ledger::Ledger::parse(&text).ok())
-        .unwrap_or_default())
+/// The ledger as it was at `rev`; empty when the file is missing there, and an error naming
+/// `rev` as `what` (as in "the ledger `what` (`rev`) doesn't parse") when it doesn't parse,
+/// since an empty ledger would change which entries look like this branch's own.
+fn ledger_at(root: &Path, rev: &str, what: &str) -> Result<ledger::Ledger> {
+    match ledger_text_at(root, rev)? {
+        None => Ok(ledger::Ledger::default()),
+        Some(text) => ledger::Ledger::parse(&text)
+            .map_err(|e| anyhow::anyhow!("{} {what} ({rev}) doesn't parse: {e}", ledger::PATH)),
+    }
 }
 
 /// The ledger's text at `rev`; `None` when the file is missing there.
@@ -319,15 +323,7 @@ pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
     let base = git_ok(root, &["merge-base", "HEAD", &upstream])
         .with_context(|| format!("finding where this branch left `{upstream}`"))?;
     let base = String::from_utf8_lossy(&base).trim().to_owned();
-    match ledger_text_at(root, &base)? {
-        None => Ok(ledger::Ledger::default()),
-        Some(text) => ledger::Ledger::parse(&text).map_err(|e| {
-            anyhow::anyhow!(
-                "{} where this branch left `{upstream}` ({base}) doesn't parse: {e}",
-                ledger::PATH
-            )
-        }),
-    }
+    ledger_at(root, &base, &format!("where this branch left `{upstream}`"))
 }
 
 /// Refuses any branch but `main` and `wave/<name>`; `refusal` says what the caller does
@@ -340,12 +336,16 @@ fn check_branch(branch: &str, refusal: &str) -> Result<()> {
 }
 
 /// The ledger entries this branch had written itself before `point`'s merge: those of
-/// the merge's first parent that differ from the merge base's, by section.
+/// the merge's first parent that differ from the merge base's, by section. A missing
+/// ledger counts as empty; one that doesn't parse at either commit is an error, since an
+/// empty base would make every entry look like this branch's own and an empty first
+/// parent would drop the branch's entries.
 pub(crate) fn branch_entries(
     root: &Path,
     point: &MergePoint,
 ) -> Result<BTreeMap<String, ledger::Stamp>> {
-    let (branch, base) = (ledger_at(root, &point.ours)?, ledger_at(root, &point.base)?);
+    let branch = ledger_at(root, &point.ours, "on this branch before its merge")?;
+    let base = ledger_at(root, &point.base, "at the merge's base")?;
     Ok(branch
         .sections
         .into_iter()
@@ -359,6 +359,19 @@ pub(crate) fn branch_entries(
         })
         .collect())
 }
+
+/// The ledger on the side `point` merged in (its second parent): an input whose hash still
+/// equals that side's entry is one this branch changes nothing in. One that doesn't parse
+/// is an error, since an empty one would hand every input back to the branch's notes.
+pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::Ledger> {
+    ledger_at(root, &point.theirs, "on the merged side")
+}
+
+/// Added to an error from the steps after the merge commit (moving inline stamps, listing
+/// stale sections), so the error doesn't read as if the merge failed.
+const AFTER_COMMIT: &str = "the merge is committed, but the steps after it failed; fix what \
+     the error names, then run `cargo xtask docs check` and verify each stale section with \
+     `--note`";
 
 /// Each stale section after a merge commit with its stale inputs, each with this branch's
 /// earlier note and the merged commits that changed it (none listed when the branch has no

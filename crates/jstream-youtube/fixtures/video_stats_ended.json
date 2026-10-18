@@ -1,0 +1,24 @@
+{
+  "kind": "youtube#videoListResponse",
+  "etag": "fixture-etag-stats-ended",
+  "items": [
+    {
+      "kind": "youtube#video",
+      "etag": "fixture-etag-video-ended",
+      "id": "fixturebroadcast02",
+      "statistics": {
+        "viewCount": "9001",
+        "favoriteCount": "0"
+      },
+      "liveStreamingDetails": {
+        "actualStartTime": "2026-10-16T18:00:04Z",
+        "actualEndTime": "2026-10-16T19:30:41Z",
+        "scheduledStartTime": "2026-10-16T18:00:00Z"
+      }
+    }
+  ],
+  "pageInfo": {
+    "totalResults": 1,
+    "resultsPerPage": 1
+  }
+}

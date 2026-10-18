@@ -1,4 +1,4 @@
-//! The audio the `waveform` and `spectrum` sources draw (ADR-0031's audio → render data
+//! The audio the `waveform` and `spectrum` sources draw (ADR-0061's audio → render data
 //! path): [`AudioScope`], a lock-free ring of the latest samples of one mix,
 //! [`AudioScopes`], the lookup that finds a source's scope (the program mix's, a bus's,
 //! or another source's), and what both kinds share.

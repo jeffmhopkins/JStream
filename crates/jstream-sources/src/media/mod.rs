@@ -1,5 +1,5 @@
 //! The `media` source: a local video file, demuxed and decoded by the platform
-//! (ADR-0031: OS media APIs, the Media Foundation Source Reader on Windows), played on
+//! (ADR-0061: OS media APIs, the Media Foundation Source Reader on Windows), played on
 //! the media clock.
 //!
 //! A decode thread reads frames and audio ahead ([`player`]); the source maps its clock
