@@ -984,7 +984,7 @@ fn recording_audio_sources_are_routed_and_metered() {
 /// #716: a `webcam` source records its device's paired audio input, alongside the
 /// defaults (a webcam's microphone isn't an audio source for that rule). A device with
 /// no paired input, or one that isn't connected, is unavailable; turning the source's
-/// audio off closes its input.
+/// audio off, removing its last send or deleting it closes its input.
 #[test]
 fn a_webcam_records_its_paired_audio_input() {
     use jstream_platform::fake::{FAKE_CAPTURE_CARD, FAKE_MIC, FAKE_WEBCAM};
@@ -1055,6 +1055,46 @@ fn a_webcam_records_its_paired_audio_input() {
     assert!(eventually(
         || status(&engine, "named") == Some(AudioStatus::Recording)
     ));
+
+    // The microphone opens only while the source has a send: without its master send it
+    // closes, whatever its audio settings say, and a send opens it again.
+    let mics = || audio.input_targets().iter().filter(|t| **t == mic).count();
+    batch(
+        &control,
+        Batch::single(Edit::SendRemove {
+            source_id: SourceId::new("named"),
+            bus_id: jstream_protocol::BusId::master(),
+        }),
+    )
+    .expect("send.remove");
+    assert!(eventually(
+        || status(&engine, "named").is_none() && mics() == 1
+    ));
+    batch(
+        &control,
+        Batch::single(Edit::SendSet {
+            source_id: SourceId::new("named"),
+            bus_id: jstream_protocol::BusId::master(),
+            gain_db: jstream_protocol::Finite32::ZERO,
+        }),
+    )
+    .expect("send.set");
+    assert!(eventually(|| status(&engine, "named")
+        == Some(AudioStatus::Recording)
+        && mics() == 2));
+
+    // Deleting the webcam closes its microphone.
+    batch(
+        &control,
+        Batch::single(Edit::SourceDelete {
+            source_id: SourceId::new("named"),
+        }),
+    )
+    .expect("source.delete");
+    assert!(eventually(
+        || status(&engine, "named").is_none() && mics() == 1
+    ));
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(eventually(|| audio.open_streams() == 0));

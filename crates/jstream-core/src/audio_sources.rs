@@ -30,6 +30,9 @@
 //! ([`jstream_sources::webcam_device`]). A device the platform pairs with no input, or
 //! that isn't connected, leaves the source unavailable, tried again on every tick. A
 //! webcam made before webcams had audio has no audio settings and records nothing.
+//! The microphone opens only while the source has at least one send (#716), whatever
+//! its visibility or follow mode: removing its last send closes it, so a webcam no bus
+//! hears never records, and its channel meter then reads silence.
 //!
 //! While the collection has no audio source, the program records the default
 //! microphone and desktop audio, as it did before audio sources existed, so a
@@ -199,9 +202,17 @@ impl AudioSources {
                 let on = source.audio().is_none_or(|audio| audio.enabled);
                 let recorded = match AudioTarget::of(kind, source.settings()) {
                     Some(target) => Recorded::Device(target),
-                    // A webcam made before webcams had audio has no audio settings.
+                    // A webcam made before webcams had audio has no audio settings. Its
+                    // microphone opens only while the source has a send (#716): a
+                    // collection file leaves default audio out, so an older webcam
+                    // can come back with its audio on, and one that no bus hears
+                    // must not record.
                     None if source.audio().is_some() => {
-                        Recorded::Paired(webcam_device(kind, source.settings())?)
+                        let device = webcam_device(kind, source.settings())?;
+                        if !state.sends().any(|(id, _, _)| id == source.id()) {
+                            return None;
+                        }
+                        Recorded::Paired(device)
                     }
                     None => return None,
                 };

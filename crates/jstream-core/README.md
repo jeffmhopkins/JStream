@@ -125,8 +125,9 @@ state machine. Contents:
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
   turned off; one for each running source with audio of its own whose audio is on, a
-  `browser` page's; one for each `webcam` source with audio settings whose audio is on,
-  recording its device's paired audio input (#716); and one for each live source with
+  `browser` page's; one for each `webcam` source with audio settings whose audio is on
+  and that has at least one send, recording its device's paired audio input (#716); and
+  one for each live source with
   sound of its own whose audio is on, a `media` file's, fed while the program shows it.
   Each runs the source's enabled
   audio filters and is listed for the audio routing, which sets its fader, mute and
@@ -292,8 +293,9 @@ state machine. Contents:
   process ID, a settings change reopening its input, a `browser` page recorded beside
   the defaults and its presets opening once the backend arrives, a `webcam` recording
   its device's paired input beside the defaults (the first device, or by ID), a device
-  with no paired input and one not connected unavailable with their reasons, and its
-  input closed while its audio is off
+  with no paired input and one not connected unavailable with their reasons, the
+  output staying active, and its input closed while its audio is off, closed when its
+  last send is removed and opened again by a send, and closed when it is deleted
   (`a_webcam_records_its_paired_audio_input`), a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, quieted
   by a `gain` filter on its source and loud again once it is removed, closed while its
@@ -696,6 +698,11 @@ CPU stand-in draws covered frames black. `video.snapshot` and the preview stream
 the editing view and are never covered. Only the default blur exists: the look setting, the slate and muting
 sources come later.
 
+The privacy screen covers video only; audio keeps playing. What a microphone records is
+decided by the collection: a webcam's paired microphone opens only while its audio is
+on and the source has at least one send (see *Audio sources* below), so a webcam no bus
+hears never records.
+
 ### Snapshots
 
 `video.snapshot` returns the program mix as a PNG
@@ -958,6 +965,14 @@ input (a capture card without audio, a camera built into the computer), is unava
 with that reason and tried again on the next pass. A webcam source with no audio
 settings records nothing. Like a page's audio, a webcam's doesn't count as an audio
 source for the defaults below.
+
+A webcam's paired input opens only while the source has at least one send, whatever
+its visibility or `follow` (#716). The collection file leaves a source's audio out
+when it is the kind's default, so a webcam saved before webcams had audio can load with
+its audio on; without the rule its microphone would record whenever the program stage
+runs, heard by no bus. A new webcam gets its master send and records at once; removing
+its last send closes the input, and a send opens it again. The trade-off: a webcam
+with no send records nothing, so its channel meter reads silence.
 
 While the collection has no audio source, the
 program records the default microphone and desktop audio, as it did before audio
