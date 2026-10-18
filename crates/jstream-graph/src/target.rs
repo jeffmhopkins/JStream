@@ -12,10 +12,10 @@
 //! key.
 //!
 //! A recording path is checked for its shape only, the same on every platform:
-//! absolute in either Unix or Windows form, with no `..` segment, and ending in a file
-//! name. Whether it is absolute on the engine's own machine, whether its directory
-//! exists, and whether a file is already there, is checked by `output.start`, when the
-//! recording is opened.
+//! absolute in either Unix or Windows form, not a UNC or device path, with no `..`
+//! segment, and ending in a file name that is not a DOS device name. Whether it is
+//! absolute on the engine's own machine, whether its directory exists, and whether a
+//! file is already there, is checked by `output.start`, when the recording is opened.
 
 /// The longest URL accepted, in bytes.
 pub(crate) const MAX_URL_LEN: usize = 2048;
@@ -25,7 +25,12 @@ pub(crate) const MAX_PATH_LEN: usize = 4096;
 /// Why `path` is not an acceptable recording path, or `None` when it is.
 ///
 /// The check is the same on every platform: `/…`, `\…`, `C:/…` or `C:\…`, with `/` or
-/// `\` separators, no `..` segment, and a file name last. The engine checks again, when
+/// `\` separators, no `..` segment, and a file name last. Two leading separators are
+/// refused, since on Windows they name a UNC share (`\\host\share\…`) or a device
+/// (`\\.\…`, `\\?\…`), and so are any `:` but a drive letter's and any `?` or `*`,
+/// which name an NT object path (`\??\UNC\host\…`). The file name must not be a DOS
+/// device name (`NUL`, `CON`, `nul.mp4`, `COM1.mkv`, …; see `is_dos_device_name`),
+/// which Win32 opens in place of a file in any folder. The engine checks again, when
 /// it opens the file, that the path is absolute on its own machine.
 pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
@@ -45,13 +50,54 @@ pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
     if !(path.starts_with(['/', '\\']) || drive) {
         return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
     }
+    // The rules of `jstream_protocol::check_asset_path` for an `absolute` path (#345).
+    let rest = if drive { &path[2..] } else { path };
+    if rest[1..].starts_with(['/', '\\']) {
+        // On Windows `\\host\share\…` opens an SMB share and sends the user's NTLM
+        // hash to that host; `\\.\…` and `\\?\…` are device paths.
+        return Some("must not start with two separators");
+    }
+    if rest.contains(':') {
+        // On Windows `C:\a.mp4:s` names an NTFS alternate data stream of `a.mp4`.
+        return Some("must not contain `:` but a drive letter's");
+    }
+    if rest.contains(['?', '*']) {
+        // Win32 never allows `?` or `*` in a file name; `\??\…` is an NT object path
+        // (`\??\UNC\host\…`, `\??\GLOBALROOT\Device\…`).
+        return Some("must not contain `?` or `*`");
+    }
     let mut segments = path.split(['/', '\\']);
     if segments.clone().any(|segment| segment == "..") {
         return Some("must not contain a `..` segment");
     }
     match segments.next_back() {
         Some("" | ".") | None => Some("must end in a file name"),
+        // On Windows `C:\x\NUL.mp4` writes to the null device and `COM1.mp4` to a
+        // serial port, in any folder (#503).
+        Some(name) if is_dos_device_name(name) => Some("must not end in a DOS device name"),
         Some(_) => None,
+    }
+}
+
+/// Whether Win32 opens the path component `name` as a DOS device rather than a file:
+/// the rule of `jstream_protocol::check_asset_path` (#384), mirrored here because the
+/// recording reasons are this crate's own.
+///
+/// The stem (the name before its first `.`, without trailing spaces, compared without
+/// regard to ASCII case) is `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`,
+/// `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`. So `nul`, `NUL `, `nul.`,
+/// `nul.mp4` and `CON .mkv` are devices, and `CONSOLE.mp4`, `nul1.mp4` and `COM10.mp4`
+/// are not.
+fn is_dos_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    match upper.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        _ => ["COM", "LPT"].iter().any(|port| {
+            upper.strip_prefix(port).is_some_and(|n| {
+                matches!(n.as_bytes(), [b'0'..=b'9']) || matches!(n, "\u{b9}" | "\u{b2}" | "\u{b3}")
+            })
+        }),
     }
 }
 
@@ -154,8 +200,10 @@ mod tests {
             "/home/me/My Videos/show 2.mp4",
             "C:\\Users\\me\\Videos\\show.mp4",
             "C:/Users/me/Videos/show.mp4",
-            "\\\\server\\share\\show.mp4",
+            "c:\\show.mp4",
+            "\\Videos\\show.mp4",
             "/home/me/.hidden.mp4",
+            "/home/me/show.2024.mp4",
         ] {
             assert_eq!(record_path_problem(path), None, "{path}");
         }
@@ -180,6 +228,82 @@ mod tests {
             "/home/me/../other/show.mp4",
         ] {
             assert!(record_path_problem(path).is_some(), "{path:?} was accepted");
+        }
+    }
+
+    /// #374: on Windows these open an SMB share (sending the user's NTLM hash to the
+    /// host), a device, an NT object path, or an NTFS alternate data stream.
+    #[test]
+    fn unc_device_and_stream_paths_are_rejected() {
+        let two = Some("must not start with two separators");
+        let colon = Some("must not contain `:` but a drive letter's");
+        let ask = Some("must not contain `?` or `*`");
+        for (path, want) in [
+            ("\\\\host\\share\\x.mp4", two),
+            ("//host/share/x.mp4", two),
+            ("\\/host/share/x.mp4", two),
+            ("/\\host\\share\\x.mp4", two),
+            ("\\\\.\\C:\\x.mp4", two),
+            ("\\\\?\\C:\\x.mp4", two),
+            ("//./pipe/x.mp4", two),
+            ("C:\\\\host\\share\\x.mp4", two),
+            ("C://host/share/x.mp4", two),
+            ("C:\\x.mp4:stream", colon),
+            ("/home/me/x.mp4:stream", colon),
+            ("\\C:\\x.mp4", colon),
+            ("C:\\a:b\\x.mp4", colon),
+            ("\\??\\UNC\\host\\share\\x.mp4", ask),
+            ("\\??\\GLOBALROOT\\Device\\NamedPipe\\x", ask),
+            ("/home/me/sh?w.mp4", ask),
+            ("C:\\Videos\\*.mp4", ask),
+        ] {
+            assert_eq!(record_path_problem(path), want, "{path:?}");
+        }
+    }
+
+    /// #503: on Windows a file name that is a DOS device name opens that device, in any
+    /// folder, whatever its extension.
+    #[test]
+    fn dos_device_file_names_are_rejected() {
+        for path in [
+            "C:\\Videos\\NUL",
+            "C:\\Videos\\nul.mp4",
+            "/home/me/Con.mkv",
+            "\\CON",
+            "C:/Videos/prn.mp4",
+            "C:\\Videos\\aux.tar.gz",
+            "C:\\Videos\\nul.",
+            "C:\\Videos\\NUL ",
+            "C:\\Videos\\CON .mp4",
+            "C:\\Videos\\com1.mp4",
+            "C:\\Videos\\COM9",
+            "C:\\Videos\\com0.mp4",
+            "C:\\Videos\\LPT1.mkv",
+            "/home/me/lpt9",
+            "C:\\Videos\\COM\u{b9}.mp4",
+            "C:\\Videos\\LPT\u{b3}",
+            "C:\\Videos\\CONIN$",
+            "C:\\Videos\\conout$.mp4",
+        ] {
+            assert_eq!(
+                record_path_problem(path),
+                Some("must not end in a DOS device name"),
+                "{path:?}"
+            );
+        }
+        // Near misses, and device names before the last component.
+        for path in [
+            "C:\\Videos\\CONSOLE.mp4",
+            "C:\\Videos\\nul1.mp4",
+            "C:\\Videos\\COM10.mp4",
+            "C:\\Videos\\LPT.mp4",
+            "C:\\Videos\\COM\u{b9}0.mp4",
+            "C:\\Videos\\show.con",
+            "C:\\CON\\show.mp4",
+            "/mnt/aux/show.mp4",
+            "/home/me/null.mp4",
+        ] {
+            assert_eq!(record_path_problem(path), None, "{path:?}");
         }
     }
 

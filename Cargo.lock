@@ -715,6 +715,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a76abbdb2907f6fd97fb6bc0b7be96b77d328f2dd9669d1075cc03369ed22154"
+
+[[package]]
 name = "clap_builder"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2868,6 +2874,7 @@ dependencies = [
  "jstream-outputs",
  "jstream-platform",
  "jstream-platform-windows",
+ "jstream-plugin-proto",
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
@@ -2895,6 +2902,8 @@ dependencies = [
  "jstream-platform-windows",
  "jstream-protocol",
  "jstream-server",
+ "jstream-youtube",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2925,7 +2934,9 @@ dependencies = [
 name = "jstream-effects"
 version = "0.0.0"
 dependencies = [
+ "jstream-media",
  "jstream-protocol",
+ "jstream-render",
  "naga",
  "serde",
  "serde_json",
@@ -3002,6 +3013,7 @@ version = "0.0.0"
 dependencies = [
  "crossbeam-utils",
  "jstream-media",
+ "jstream-plugin-proto",
  "thiserror 2.0.21",
  "wgpu",
 ]
@@ -3048,10 +3060,32 @@ name = "jstream-platform-windows"
 version = "0.0.0"
 dependencies = [
  "jstream-platform",
+ "jstream-plugin-proto",
  "jstream-vcam-proto",
  "wgpu",
  "windows",
  "windows-core",
+]
+
+[[package]]
+name = "jstream-plugin-clap"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
+ "clap-sys",
+ "jstream-plugin-proto",
+ "libloading 0.9.0",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "jstream-plugin-host"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
+ "jstream-platform-windows",
+ "jstream-plugin-clap",
+ "jstream-plugin-proto",
 ]
 
 [[package]]
@@ -3089,6 +3123,7 @@ dependencies = [
  "jstream-media",
  "jstream-platform",
  "jstream-protocol",
+ "serde_json",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",
