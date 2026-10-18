@@ -41,11 +41,6 @@ engine and MCP come before the GUI ([ADR-0010](docs/adr/0010-headless-first-mile
 Generated from [`docs/progress.toml`](docs/progress.toml) by `cargo xtask docs generate`
 and drift-checked by `docs check`, so it changes in the same PR as the work.
 
-JStream is done when every item below is merged and has passed its Windows run, where it
-needs one.
-[ROADMAP › Endgame](ROADMAP.md#endgame) defines that and gives the order the rest lands
-in, and **What's left** lists each unfinished item with the steps it still needs.
-
 <!-- @generated begin progress -->
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
@@ -54,13 +49,13 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 94% | 33 | 2 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `███████░░░` 71% | 17 | 4 | 3 |
+| [M2: UI](ROADMAP.md#m2) | `███████░░░` 68% | 17 | 5 | 3 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 2 | 5 |
 
-97 of 114 items are merged; 7 of those still wait on a run on Windows hardware.
+97 of 115 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 24 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 2</summary>
+<summary><b>What's left</b>: 25 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 7, 👤 maintainer 2, ❔ not set 3</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -79,6 +74,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
 | T1u | Studio-mode UI | M2 | 🔨 build | draft #304, on T1 |  |
 | E2 | Video mixes | M2 | 🌊 its wave lands | #259 merged into wave/m1-2 | #259 |
+| E2b | Privacy screen and encoder sharing key | M2 | ❔ not set |  | #317 |
 | D8p | Audio chain protocol fields | M2 | 🌊 its wave lands | #303 merged into wave/m1-2 | #303 |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
 | B11 | Folders and labels | M2 | ❔ not set |  | #323 |
@@ -214,7 +210,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M2</b> UI: 17 of 24 merged</summary>
+<summary><b>M2</b> UI: 17 of 25 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -235,6 +231,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
 | T1u | Studio-mode UI | ⏳ planned: draft #304, on T1 |  |
 | E2 | Video mixes | 🔍 in review: #259 merged into wave/m1-2 | #259 |
+| E2b | Privacy screen and encoder sharing key | 🔍 in review | #317 |
 | D8 | Master and output audio chains | ✅ merged | #249 |
 | D8p | Audio chain protocol fields | 🔍 in review: #303 merged into wave/m1-2 | #303 |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
