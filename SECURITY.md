@@ -46,8 +46,10 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002", "docs/RULES.
 
 A report is in scope when it breaks one of these. The rules they cite are the authority.
 
-- **Secrets:** stream keys and OAuth tokens stay in the OS credential store and are
-  redacted everywhere else ([R-SEC-001](docs/RULES.md#R-SEC-001)).
+- **Secrets:** stream keys and OAuth tokens stay in the OS credential store (on Linux
+  without a reachable Secret Service, a `0600` file in the config folder, per
+  [ADR-0071](docs/adr/0071-linux-secret-store.md)) and are redacted everywhere else
+  ([R-SEC-001](docs/RULES.md#R-SEC-001)).
 - **The control API:** every connection needs the control token or a paired device's
   token (the pairing exchange aside, which needs an open one-time code, and the fixed
   pairing page on a TLS listener; a browser may hold a device token as a cookie, never the
