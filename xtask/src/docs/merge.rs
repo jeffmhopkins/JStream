@@ -352,17 +352,53 @@ pub(crate) fn changed_after(
     Ok(out)
 }
 
-/// The ledger at the merge base of `HEAD` and `origin/<branch>` (`main`, or the `wave/*`
-/// branch a PR targets): the entries this branch didn't write are the ones equal to it.
-/// Empty when the ledger doesn't exist there; an error when it doesn't parse, since an
-/// empty base would make every entry look like this branch's own.
+/// The ledger where this branch left `origin/<branch>`: the entries this branch didn't
+/// write are the ones equal to it. For `main` or a `wave/*` branch that is their merge
+/// base with `HEAD`. Any other branch is a stacked PR's base (#715), which must be an
+/// ancestor of `HEAD`, so that every entry differing from its ledger was written above it;
+/// the ledger is then the one at `origin/<branch>` itself. Empty when the ledger doesn't
+/// exist there; an error when it doesn't parse, since an empty base would make every entry
+/// look like this branch's own.
 pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
-    check_branch(branch, "can only compare against")?;
     let upstream = format!("{REMOTE}/{branch}");
+    if check_branch(branch, "").is_err() {
+        check_stacked_base(root, branch, &upstream)?;
+    }
     let base = git_ok(root, &["merge-base", "HEAD", &upstream])
         .with_context(|| format!("finding where this branch left `{upstream}`"))?;
     let base = String::from_utf8_lossy(&base).trim().to_owned();
     ledger_at(root, &base, &format!("where this branch left `{upstream}`"))
+}
+
+/// Refuses a stacked base `branch` that isn't a valid branch name, isn't on the remote, or
+/// isn't an ancestor of `HEAD` (merge its newer commits first).
+fn check_stacked_base(root: &Path, branch: &str, upstream: &str) -> Result<()> {
+    let named = git(root, &["check-ref-format", "--branch", branch])?;
+    if branch.starts_with('-') || !named.status.success() {
+        bail!(
+            "can only compare against `{BRANCH}`, a `wave/<name>` branch or a stacked PR's \
+             base branch, not `{branch}`"
+        );
+    }
+    let commit = format!("refs/remotes/{upstream}^{{commit}}");
+    if !git(root, &["rev-parse", "--verify", "--quiet", &commit])?
+        .status
+        .success()
+    {
+        bail!("`{upstream}` doesn't exist: fetch it, or name the branch this PR is stacked on");
+    }
+    let ancestor = git(root, &["merge-base", "--is-ancestor", upstream, "HEAD"])?;
+    match ancestor.status.code() {
+        Some(0) => Ok(()),
+        Some(1) => bail!(
+            "`{upstream}` isn't an ancestor of this branch: merge it first, so that every \
+             entry differing from its ledger is this branch's own"
+        ),
+        _ => bail!(
+            "`git merge-base --is-ancestor {upstream} HEAD` failed: {}",
+            String::from_utf8_lossy(&ancestor.stderr).trim()
+        ),
+    }
 }
 
 /// Refuses any branch but `main` and `wave/<name>`; `refusal` says what the caller does

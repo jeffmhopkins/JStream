@@ -372,7 +372,9 @@ lists the branch's notes, after it has committed the merge.
 section that is already fresh, as when a reviewer asks for a better note, without touching
 any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
 at the merge base of `HEAD` and `origin/main`, or of the wave named with
-`--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
+`--from wave/<name>`. A PR stacked on another PR's branch names that branch instead,
+`--from <base branch>`, which must be an ancestor of `HEAD` (merge it first), so the base
+PR's entries keep their notes. It refuses a stale section, which needs a re-read and `--note` or
 `--merge`, and a section this branch never stamped. It fails when the ledger at that merge
 base doesn't parse, rather than taking every entry for this branch's own.
 

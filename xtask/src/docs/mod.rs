@@ -321,10 +321,11 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
     })
 }
 
-/// `docs verify <DOC#anchor> --by <who> --renote <text> [--from wave/<name>]`: replaces the
+/// `docs verify <DOC#anchor> --by <who> --renote <text> [--from <branch>]`: replaces the
 /// `by` and `note` of the entries this branch wrote on a section that is already fresh,
 /// keeping their hashes, as when a reviewer asks for a better note. The branch's entries are
-/// those that differ from the ledger where it left `origin/main` (or the wave it targets).
+/// those that differ from the ledger where it left `origin/main`, the wave it targets, or
+/// the PR branch it is stacked on (#715).
 /// A stale section is refused: re-read it and verify with `--note` or `--merge`.
 fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) -> Result<()> {
     let note = check_stamp(by, note)?;
@@ -623,7 +624,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                 _ => bail!(
                     "usage: cargo xtask docs verify <DOC#anchor> --by <human:..|agent:..> \
                      (--note \"<what you checked>\" | --merge \"<what the merge changed>\" \
-                     | --renote \"<the better note>\" [--from wave/<name>])"
+                     | --renote \"<the better note>\" [--from <base branch>])"
                 ),
             }
             Ok(true)
@@ -1697,13 +1698,72 @@ mod tests {
         assert_eq!(after["body"], before["body"]);
         assert!(work.diags("is stale").is_empty());
         // The refusal fits --renote, which merges nothing (#534).
-        let err = verify_renote(&work.0, "S#a", "agent:work", better, "dev").expect_err("branch");
+        let err = verify_renote(&work.0, "S#a", "agent:work", better, "-x").expect_err("branch");
         let err = format!("{err:#}");
         assert!(
-            err.contains("can only compare against `main` or a `wave/<name>` branch, not `dev`"),
+            err.contains("can only compare against `main`, a `wave/<name>` branch or a stacked"),
             "{err}"
         );
         assert!(!err.contains("merge"), "{err}");
+    }
+
+    /// #715: `docs verify --renote --from <base>` on a PR stacked on another PR's branch
+    /// rewrites only the entries written above that base, keeping the base's own; it
+    /// refuses a base that isn't on the remote or isn't an ancestor of `HEAD`.
+    #[test]
+    fn verify_renote_takes_a_stacked_base() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([("S.md", s), ("src/a.rs", "a\n"), ("src/b.rs", "b\n")]);
+        let (origin, work) = origin_and_clone("verify-renote-stacked", &files);
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        // The base PR changes a.rs; the stacked PR above it changes b.rs.
+        work.git(&["checkout", "-q", "-b", "base-pr"]);
+        work.write("src/a.rs", "a base\n");
+        verify(&work.0, "S#a", "agent:base", "the base PR's a.rs edit").expect("verifies");
+        commit_all(&work, "base PR");
+        work.git(&["push", "-q", "origin", "base-pr"]);
+        work.git(&["checkout", "-q", "-b", "stacked-pr"]);
+        work.write("src/b.rs", "b stacked\n");
+        verify(
+            &work.0,
+            "S#a",
+            "agent:stacked",
+            "the stacked PR's b.rs edit",
+        )
+        .expect("verifies");
+        commit_all(&work, "stacked PR");
+        let better = "b.rs now returns early; the section's sentence on b.rs still says so";
+        verify_renote(&work.0, "S#a", "agent:review", better, "base-pr").expect("renotes");
+        let after = ledger::Ledger::read(&work.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        assert_eq!(after["file:src/b.rs"].note.as_deref(), Some(better));
+        assert_eq!(
+            after["file:src/a.rs"].note.as_deref(),
+            Some("the base PR's a.rs edit"),
+            "the base PR's entry keeps its note"
+        );
+
+        let err = verify_renote(&work.0, "S#a", "agent:review", better, "gone")
+            .expect_err("not on the remote");
+        assert!(
+            format!("{err:#}").contains("`origin/gone` doesn't exist"),
+            "{err:#}"
+        );
+        // The base PR moves on; until the stacked PR merges it, it isn't an ancestor.
+        commit_all(&work, "stacked PR: renoted");
+        work.git(&["checkout", "-q", "base-pr"]);
+        work.write("src/a.rs", "a base 2\n");
+        commit_all(&work, "base PR, round 2");
+        work.git(&["push", "-q", "origin", "base-pr"]);
+        work.git(&["checkout", "-q", "stacked-pr"]);
+        let err = verify_renote(&work.0, "S#a", "agent:review", better, "base-pr")
+            .expect_err("not an ancestor");
+        assert!(format!("{err:#}").contains("isn't an ancestor"), "{err:#}");
     }
 
     /// `docs verify --renote` fails when the ledger where the branch left main doesn't
