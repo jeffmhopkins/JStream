@@ -77,9 +77,10 @@ limits only lower; through a fake `Control`, a granted call arrives intact, and 
 and malformed calls never arrive; time a slow `Control` takes to answer doesn't count
 against the deadline; with fuel unmetered, an endless loop and a spinning `start`
 function miss the default and a lowered deadline, even after the host is dropped, and a
-host call in `start` re-arms the load's deadline, not an invocation's; an endless loop runs out of fuel under the default and
-a lowered budget, in an invocation and in `start`; memory can't grow past the default or
-a lowered cap, nor start above it; a result read outside memory traps.
+host call in `start` re-arms the load's deadline, not an invocation's; an endless loop
+runs out of fuel under the default and a lowered budget, in an invocation and in
+`start`; memory can't grow past the default or a lowered cap, nor start above it; a
+result read outside memory traps.
 
 **Not here:** finding, installing and listing plugins, the manifest that declares what a
 plugin asks for, the user's grant, delivering engine events to plugins, and reporting a
