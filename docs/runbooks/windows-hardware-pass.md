@@ -50,6 +50,12 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
   all of these and skips every question.
 - **Questions.** A check only a person can judge (the Camera app shows the frames, Studio
   goes live) asks pass, fail or skip where it happens.
+- **When you act.** Every line that needs you starts with a magenta `>>> YOU:` and a beep.
+  A timed step (a recording, the producer, a GPU reset, the unplug test) first says what
+  is coming and waits for Enter; its timer starts only then, with a yellow `>>> NOW:` line
+  saying what to do. Recordings open in VLC when it is installed.
+- **One run at a time.** A lock file in the work folder stops a second run from starting
+  while one is going, since two runs fight over the webcam and the worktrees.
 - **Daemons.** Each daemon it starts has its own token file and log folder in the run
   folder, drives its checks over MCP as the smoke script does, and is stopped at the end
   of its check. The graceful stop sends Ctrl-C from a helper process that attaches to the
@@ -58,7 +64,9 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
   `-OutDir`) gets `report.md`, `results.json`, every step's log and the recordings. The zip
   beside it holds the text files only, with the run's tokens replaced by `***`; token
   files, key files and recordings stay out. The script ends by printing the zip's path
-  and a summary, one line per check, to paste back with it.
+  and a summary, one line per check, to paste back with it. If the run left something on
+  the machine (a virtual camera still registered, the Camera app open), the report and
+  the last lines say what and how to undo it.
 - **Not checked by the script:** what isn't visible outside the engine, such as
   `OutputStats::readbacks` and `gpu_fallbacks` (it checks the log lines that report the
   same events), and the items the report lists under "Not in this pass".

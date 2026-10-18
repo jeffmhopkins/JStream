@@ -147,6 +147,16 @@ if ($YouTubeKeyFile) {
 if (-not $OutDir) { $OutDir = Join-Path $WorkDir ('runs\' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
+# One run at a time per -WorkDir: two runs fight over the webcam and the worktrees.
+New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
+$Lock = Join-Path $WorkDir 'windows-pass.lock'
+if (Test-Path -LiteralPath $Lock) {
+    $other = (Get-Content -LiteralPath $Lock -Raw).Trim()
+    if ($other -match '^\d+$' -and [int]$other -ne $PID -and (Get-Process -Id ([int]$other) -ErrorAction SilentlyContinue)) {
+        Write-Error "another windows-pass run (process $other) is using $WorkDir; wait for it to finish"; exit 2
+    }
+}
+[IO.File]::WriteAllText($Lock, "$PID")
 $Transcript = Join-Path $OutDir 'console.log'
 try { Start-Transcript -LiteralPath $Transcript -Append | Out-Null } catch {}
 
@@ -174,11 +184,52 @@ function Check([bool]$Ok, [string]$Check, [string]$Detail) {
     if ($Ok) { Pass $Check $Detail } else { Fail $Check $Detail }
 }
 
+# Every line that needs the person starts with ">>> YOU" in magenta, with a beep, so it
+# stands out from build and test output.
+function You([string]$Text) {
+    Write-Host ''
+    try { [Console]::Beep(880, 150) } catch {}
+    Write-Host ">>> YOU: $Text" -ForegroundColor Magenta
+}
+
+# A timed step that needs the person: says what is coming and waits for Enter, so no timer
+# starts before they are ready. True to go ahead; false when they type s. -Unattended goes
+# ahead without asking, for steps whose automatic checks still hold without a person.
+function Ready([string]$What) {
+    if ($Unattended) { return $true }
+    You "$What"
+    $a = Read-Host '    Press Enter to start, or type s to skip'
+    $a.Trim().ToLower() -ne 's'
+}
+
+# The moment a timed step starts: what to do now.
+function Go([string]$Text) { Write-Host ">>> NOW: $Text" -ForegroundColor Yellow }
+
+# A yes or no question about what the person did.
+function YesNo([string]$Question) {
+    if ($Unattended) { return $false }
+    You $Question
+    while ($true) {
+        $a = (Read-Host '    [y]es or [n]o').Trim().ToLower()
+        if ($a -in @('y', 'yes')) { return $true }
+        if ($a -in @('n', 'no')) { return $false }
+    }
+}
+
+# Opens a recording for the person to look at, in VLC when it is installed: Media Player
+# can't open JStream's MP4s yet (#746).
+function Open-Video([string]$File) {
+    if ($Unattended) { return }
+    $vlc = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ } |
+        ForEach-Object { Join-Path $_ 'VideoLAN\VLC\vlc.exe' } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if ($vlc) { Start-Process -FilePath $vlc -ArgumentList "`"$File`"" | Out-Null; Say "Opened $File in VLC." }
+    else { Invoke-Item -LiteralPath $File; Say "Opened $File. If Media Player can't play it (#746), open it in VLC." }
+}
+
 # A check only a person can judge: asks pass, fail or skip, and records the answer.
 function Ask([string]$Check, [string]$Question) {
     if ($Unattended) { Skip $Check 'needs a person (-Unattended)'; return }
-    Write-Host ''
-    Write-Host "  ? $Question" -ForegroundColor White
+    You $Question
     while ($true) {
         $a = (Read-Host '    [p]ass, [f]ail or [s]kip').Trim().ToLower()
         if ($a -in @('p', 'pass')) { Pass $Check "you: $Question"; return }
@@ -193,8 +244,7 @@ function Ask([string]$Check, [string]$Question) {
 # A step that changes something on this machine: runs only on a yes.
 function Confirm([string]$What) {
     if ($Unattended) { return $false }
-    Write-Host ''
-    Write-Host "  ! $What" -ForegroundColor Yellow
+    You $What
     $a = (Read-Host '    Go ahead? [y/N]').Trim().ToLower()
     $a -in @('y', 'yes')
 }
@@ -202,8 +252,7 @@ function Confirm([string]$What) {
 # Something you do by hand, then press Enter.
 function Prompt-Do([string]$What) {
     if ($Unattended) { return $false }
-    Write-Host ''
-    Write-Host "  > $What" -ForegroundColor White
+    You $What
     $a = Read-Host '    Press Enter when done, or type s to skip'
     $a.Trim().ToLower() -ne 's'
 }
@@ -676,7 +725,8 @@ function Test-Nv12 {
     With-Daemon $d {
         New-ProgramScene $d @{ type = 'builtin'; kind = 'display' } @{ target = '' }
         $file = Join-Path $OutDir 'nv12.mp4'
-        Say 'Recording the primary display for 15 s; move some windows around.'
+        if (-not (Ready 'Next: a 15 s recording of your primary display. Move some windows around while it records.')) { Skip 'recording output' 'skipped by you'; return }
+        Go 'Recording the primary display (15 s): move some windows around.'
         $r = Invoke-Recording $d $file 15
         Check ($r -eq 'ok') 'recording output' $r
         $hits = Search-Logs $d.LogDir 'the video encoder takes (GPU|CPU) frames'
@@ -694,7 +744,7 @@ function Test-Nv12 {
             Check ($pts.Count -gt 100 -and $back -eq 0) 'frames in order' "$($pts.Count) frames, $back out of order or repeated timestamps"
         } else { Skip 'recorded file' 'no ffprobe, or no file' }
         if (Test-Path -LiteralPath $file) {
-            if (-not $Unattended) { Invoke-Item -LiteralPath $file }
+            Open-Video $file
             Ask 'picture' "nv12.mp4 is open: does it play, with right colours and no stale or out-of-order frames?"
         }
     }
@@ -813,6 +863,8 @@ function Test-Browser {
         $code = Invoke-Cargo 'main' @('build', '--release', '-p', 'jstream-browser-helper', '--features', 'cef') 'browser-helper-build'
         if ($code -ne 0) { Fail 'build' "jstream-browser-helper exited $code"; return }
         $log = Join-Path $OutDir 'page-check.log'
+        $watch = Prompt-Do 'Optional: open Process Explorer with the Integrity column showing. page_check runs next, for under a minute; watch the renderer processes under jstream-browser-helper. Type s to not watch.'
+        if ($watch) { Go 'page_check is running: look at the renderer processes'' integrity now.' }
         $code = Invoke-Cargo 'main' @('run', '--release', '-p', 'jstream-browser', '--features', 'cef,helper', '--example', 'page_check') 'page-check'
         $text = Get-Content -LiteralPath $log -Raw
         if ($code -ne 0) { Fail 'page_check' "exit $code; see $log"; return }
@@ -836,7 +888,8 @@ function Test-Browser {
             $n = [int]$Matches[1]
             if ($n -eq 1) { Pass 'requests refused: 1' 'closes #341' } else { Warn "requests refused: $n" 'the built-in page expects 1; leave #341 open' }
         } else { Fail 'requests refused' 'no line' }
-        Ask 'renderer integrity' 'Optional, in Process Explorer while page_check ran: did the CEF renderer processes run at Low, Untrusted or AppContainer integrity?'
+        if ($watch) { Ask 'renderer integrity' 'In Process Explorer while page_check ran: did the CEF renderer processes run at Low, Untrusted or AppContainer integrity?' }
+        else { Skip 'renderer integrity' 'not watched' }
     } finally {
         foreach ($k in @([Environment]::GetEnvironmentVariables().Keys)) { if (-not $saved.Contains($k)) { [Environment]::SetEnvironmentVariable($k, $null) } }
         foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
@@ -857,7 +910,8 @@ function Test-YouTube {
     $src = Get-Source 'main'
     $dir = Join-Path $OutDir 'youtube'
     $log = Join-Path $OutDir 'youtube.log'
-    Say 'Going live for 90 s. Watch Studio.'
+    if (-not (Ready 'Next: JStream goes live to YouTube for 90 s. Keep Studio in view.')) { Skip 'youtube' 'skipped by you'; return }
+    Go 'Live for 90 s: watch Studio.'
     $code = Invoke-Logged (Get-PowerShellExe) @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $src 'scripts\smoke.ps1'),
         '-Release', '-NoBuild', '-Seconds', '90', '-RtmpUrl', $YouTubeUrl, '-KeyFile', $keyFile, '-OutDir', $dir) $log $src 600
     Check ($code -eq 0) 'smoke.ps1 to YouTube' "exit $code; see $log"
@@ -891,7 +945,7 @@ function Test-Preview {
     if (-not (Build 'main' @('jstream-desktop'))) { return }
     $app = Start-Native (Bin 'main' 'jstream') @('--ui-dir', (Join-Path $ui 'dist'))
     try {
-        Say 'The desktop app is open. Add a display source to a scene so the canvas has something to preview.'
+        if (-not (Prompt-Do 'The desktop app is open. Add a display source to a scene so the canvas has something to preview.')) { Skip 'preview' 'skipped by you'; return }
         Ask 'preview shows' 'Does the live preview show under the canvas boxes (WebView2), with H.264 in the frames?'
         Ask 'follows edits' 'Does it follow committed edits and scene switches?'
         Ask 'backlog recovers' 'After a slow moment (drag a big window around), does it recover at the next keyframe, within 2 s?'
@@ -917,17 +971,22 @@ regsvr32 /s '$test\jstream_vcam_windows.dll'
 "@ $log
     if ($null -eq $code) { Skip 'vcam_smoke' 'the administrator prompt was declined'; return }
     try {
-        Say 'Starting the producer for 60 s. Open the Camera app and pick "JStream Virtual Camera".'
+        if (-not (Prompt-Do 'Open the Camera app now, and leave it open until this check says otherwise.')) { Skip 'vcam_smoke' 'skipped by you'; return }
+        if (-not (Ready 'Next: the test camera''s producer runs for 60 s. When it starts, pick "JStream Virtual Camera" in the Camera app.')) { Skip 'vcam_smoke' 'skipped by you'; return }
+        Go 'Producer running (60 s): pick "JStream Virtual Camera" in the Camera app.'
         $r = Invoke-Native $smoke @('--seconds', '60') 120
         Write-Text (Join-Path $OutDir 'vcam-smoke-1.txt') ($r.Out + $r.Err)
         $verdict = ($r.Out -split "`n" | Where-Object { $_ -match 'verdict' } | Select-Object -First 1)
         Check ($r.Code -eq 0 -and $verdict -match 'reached|pass|ok') 'vcam_smoke' "exit $($r.Code); $verdict"
         Ask 'producer frames' 'Did the Camera app show dark teal with a moving white bar (not the colour bars)?'
-        Say 'Restarting the producer while Frame Server still holds the old control block. Keep the Camera app open on "JStream Virtual Camera"; if its picture froze or went away, pick the camera again within 15 s.'
-        $r = Invoke-Native $smoke @('--seconds', '15') 60
-        Write-Text (Join-Path $OutDir 'vcam-smoke-2.txt') ($r.Out + $r.Err)
-        $verdict = ($r.Out -split "`n" | Where-Object { $_ -match 'verdict' } | Select-Object -First 1)
-        Check ($r.Code -eq 0 -and $verdict -match 'PASS') 'producer restarts' "exit $($r.Code); $verdict"
+        if (Ready 'Next: the producer restarts for 15 s while Frame Server still holds the old control block. Keep the Camera app on "JStream Virtual Camera".') {
+            Go 'Producer restarted (15 s): if the Camera app''s picture froze or went away, pick "JStream Virtual Camera" again now.'
+            $r = Invoke-Native $smoke @('--seconds', '15') 60
+            Write-Text (Join-Path $OutDir 'vcam-smoke-2.txt') ($r.Out + $r.Err)
+            $verdict = ($r.Out -split "`n" | Where-Object { $_ -match 'verdict' } | Select-Object -First 1)
+            Check ($r.Code -eq 0 -and $verdict -match 'PASS') 'producer restarts' "exit $($r.Code); $verdict"
+        } else { Skip 'producer restarts' 'skipped by you' }
+        Prompt-Do 'You can close the Camera app now.' | Out-Null
         $code = Invoke-Cargo 'm1-3' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--',
             '--ignored', 'frame_server_serves_the_published_frames') 'vcam-hw-test'
         Check ($code -eq 0) 'virtual-camera hw-test' "exit $code (frame_server_serves_the_published_frames)"
@@ -1020,9 +1079,12 @@ function Test-VcamRegister {
             Invoke-Op $d 'output' @{ type = 'output.start'; output_id = 'vcam' } | Out-Null
             $s = Wait-OutputState $d 'vcam' 'active' 30
             Check ($s -eq 'active') 'virtual_cam output' "state: $s"
-            Ask 'camera shows the program' 'Open the Camera app and pick "JStream Virtual Camera". Does it show your screen?'
+            if (Prompt-Do 'Open the Camera app and pick "JStream Virtual Camera".') {
+                Ask 'camera shows the program' 'Does the Camera app show your screen?'
+            } else { Skip 'camera shows the program' 'skipped by you' }
             Ask 'Frame Server loads the copy' "Optional, in Process Explorer: does Frame Server's svchost have $pf\jstream_vcam_windows.dll loaded, not the portable folder's DLL?"
         }
+        Prompt-Do 'Close the Camera app now: the next steps change the registration.' | Out-Null
     }
 
     if (Confirm 'Replace the portable folder''s DLL with a different build (a copy with 16 extra bytes), check the warning, and register again (one UAC prompt)?') {
@@ -1055,7 +1117,7 @@ function Test-VcamRegister {
     $reg = (& reg query 'HKLM\SOFTWARE\Classes\CLSID' /s /f 'jstream_vcam_windows.dll' /d 2>&1) -join "`n"
     Check ($r.Code -eq 0 -and -not (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'JStream')) -and $reg -notmatch 'jstream_vcam_windows') 'unregister' "exit $($r.Code): $($r.Out.Trim()) $($r.Err.Trim())"
 
-    if (Prompt-Do 'Next, --register-vcam runs once more: click No on its UAC prompt.') {
+    if (Prompt-Do 'Next, --register-vcam runs once more to check a declined prompt. Click NO on the UAC prompt that appears after you press Enter.') {
         $r = Invoke-Native $exe @('--register-vcam') 300
         Check ($r.Code -eq 1 -and ($r.Out + $r.Err) -match 'the administrator prompt was declined') 'declined prompt' "exit $($r.Code): $(($r.Out + $r.Err).Trim())"
         if ($r.Code -eq 0) {
@@ -1081,8 +1143,9 @@ function Test-GpuReset {
     $file = Join-Path $OutDir 'gpu-reset.mp4'
     With-Daemon $d {
         New-ProgramScene $d @{ type = 'builtin'; kind = 'display' } @{ target = '' }
+        if (-not (Ready 'Next: a recording with one forced GPU reset 8 s in. Click Yes on its UAC prompt; the screen goes black for a moment.')) { Skip 'forced TDR' 'skipped by you'; return }
         $r = Invoke-Recording $d $file 0 {
-            Say 'Recording; keep something moving on screen.'
+            Go 'Recording: keep something moving on screen. The UAC prompt for the reset comes in 8 s.'
             Start-Sleep -Seconds 8
             $c = Invoke-Elevated "& '$dxcap' -forcetdr" (Join-Path $OutDir 'tdr-1.log')
             if ($null -eq $c) { Skip 'forced TDR' 'the administrator prompt was declined'; return }
@@ -1100,11 +1163,13 @@ function Test-GpuReset {
         Check (-not $removed) 'no device-removed errors after the switch' "$($removed.Count) lines"
 
         Invoke-Op $d 'output' @{ type = 'output.delete'; output_id = 'rec' } | Out-Null
+        if (-not (Ready 'Next: three GPU resets 8 s apart, each with a UAC prompt: click Yes each time.')) { Skip 'third loss in a minute fails the output' 'skipped by you'; return }
         $file3 = Join-Path $OutDir 'gpu-reset-3.mp4'
         Invoke-Op $d 'output' @{ type = 'output.create'; output_id = 'rec3'; kind = @{ type = 'record'; path = $file3; container = 'mp4' } } | Out-Null
         Invoke-Op $d 'output' @{ type = 'output.start'; output_id = 'rec3' } | Out-Null
         if ((Wait-OutputState $d 'rec3' 'active' 30) -eq 'active') {
             for ($i = 1; $i -le 3; $i++) {
+                Go "GPU reset $i of 3 in 8 s: click Yes on its UAC prompt."
                 Start-Sleep -Seconds 8
                 [void](Invoke-Elevated "& '$dxcap' -forcetdr" (Join-Path $OutDir "tdr-3-$i.log"))
             }
@@ -1161,7 +1226,8 @@ function Test-Webcam {
     $seen = @{ NoMic = $false }
     With-Daemon $d {
         New-ProgramScene $d @{ type = 'builtin'; kind = 'webcam' } @{ device = '' }
-        Say 'Recording the first webcam for 10 s. Say something into its microphone.'
+        if (-not (Ready 'Next: a 10 s recording from the first webcam. Look at it and talk while it records.')) { Skip 'webcam recording' 'skipped by you'; return }
+        Go 'Recording the webcam (10 s): look at it and talk.'
         $r = Invoke-Recording $d $file 10
         Check ($r -eq 'ok') 'webcam recording' $r
         $fmt = @(Search-Logs $d.LogDir 'opening the video device.*encoding=' | Select-Object -First 1)
@@ -1176,20 +1242,24 @@ function Test-Webcam {
         $v = @($probe.streams | Where-Object { $_.codec_type -eq 'video' })
         $a = @($probe.streams | Where-Object { $_.codec_type -eq 'audio' })
         Check ($v.Count -eq 1) 'webcam video recorded' "$($v.Count) video streams"
-        if (-not $Unattended) { Invoke-Item -LiteralPath $file }
-        Ask 'webcam colours' 'webcam.mp4 is open: is the picture right, with natural colours? (Media Player cannot open it yet, #746: use VLC. A black first second or two is the camera starting.)'
+        Open-Video $file
+        Ask 'webcam colours' 'webcam.mp4 is open: is the picture right, with natural colours? (A black first second or two is the camera starting.)'
         Ask 'paired microphone (#726)' 'Is your voice in the recording, from the webcam''s own microphone?'
         if ($seen.NoMic) { Warn 'audio stream' "$($a.Count) audio streams, but the daemon logged that the webcam has no paired audio input" }
         else { Check ($a.Count -ge 1) 'audio stream' "$($a.Count) audio streams in the recording" }
     }
     if (Confirm 'Run the interactive unplug test? It asks you to unplug the webcam mid-stream.') {
+        # Built first, so the test's 30 s window doesn't start during a build.
         [void](Invoke-Cargo 'pr726' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--no-run') 'webcam-unplug-build')
-        Prompt-Do 'When you press Enter, the test opens the webcam and waits 30 s: unplug it then, and plug it back in after.' | Out-Null
-        Write-Host '  UNPLUG THE WEBCAM NOW (30 s)' -ForegroundColor Yellow
-        $env:JSTREAM_UNPLUG_TEST = '1'
-        try { $code = Invoke-Cargo 'pr726' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--', '--ignored', 'unplug', '--nocapture') 'webcam-unplug' }
-        finally { Remove-Item Env:\JSTREAM_UNPLUG_TEST }
-        Check ($code -eq 0) 'unplug mid-stream' "exit $code"
+        if (Ready 'Next: the unplug test opens the webcam and waits up to 30 s for it to disappear. Unplug the webcam''s cable when it says NOW.') {
+            Go 'UNPLUG THE WEBCAM NOW (30 s).'
+            $env:JSTREAM_UNPLUG_TEST = '1'
+            try { $code = Invoke-Cargo 'pr726' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--', '--ignored', 'unplug', '--test-threads=1', '--nocapture') 'webcam-unplug' }
+            finally { Remove-Item Env:\JSTREAM_UNPLUG_TEST }
+            if (YesNo 'Did you unplug the webcam during the test?') { Check ($code -eq 0) 'unplug mid-stream' "exit $code" }
+            else { Skip 'unplug mid-stream' "not unplugged (exit $code)" }
+            Prompt-Do 'Plug the webcam back in.' | Out-Null
+        } else { Skip 'unplug mid-stream' 'skipped by you' }
     } else { Skip 'unplug mid-stream' 'declined' }
     Skip 'corrupt or truncated MJPEG frame' 'needs a camera that sends one; not forced here'
 }
@@ -1252,6 +1322,24 @@ function Test-Clap {
 
 # --- Run ---------------------------------------------------------------------------------------
 
+# What a run can leave on the machine, for the person to undo.
+function Get-Leftovers {
+    $left = @()
+    $reg = (& reg query 'HKLM\SOFTWARE\Classes\CLSID' /s /f 'jstream_vcam_windows.dll' /d 2>&1) -join "`n"
+    foreach ($m in [regex]::Matches($reg, 'REG_SZ\s+(.*jstream_vcam_windows\.dll)')) {
+        $dll = $m.Groups[1].Value.Trim()
+        if ($dll -like "$env:ProgramFiles*") {
+            $exe = Join-Path $OutDir 'portable\jstream-daemon.exe'
+            if (-not (Test-Path -LiteralPath $exe)) { $exe = 'jstream-daemon.exe (from the run that registered it)' }
+            $left += "A JStream virtual camera is still registered ($dll). To remove it, run `"$exe`" --unregister-vcam and click Yes."
+        } else {
+            $left += "A JStream virtual camera DLL is still registered ($dll). To remove it, run regsvr32 /u `"$dll`" as administrator."
+        }
+    }
+    if (Get-Process -Name 'WindowsCamera' -ErrorAction SilentlyContinue) { $left += 'The Camera app is still open.' }
+    $left
+}
+
 function Get-MachineInfo {
     $os = Get-CimInstance Win32_OperatingSystem
     $gpus = @(Get-CimInstance Win32_VideoController | ForEach-Object { "$($_.Name) (driver $($_.DriverVersion))" })
@@ -1311,6 +1399,13 @@ try {
         foreach ($r in $rs) { [void]$md.AppendLine("| $($r.Status) | $($r.Check) | $(($r.Detail -replace '\|', '/') -replace '[\r\n]+', ' ') |") }
     }
     [void]$md.AppendLine('')
+    $Left = @(Get-Leftovers)
+    if ($Left) {
+        [void]$md.AppendLine('## Left on this machine')
+        [void]$md.AppendLine('')
+        foreach ($l in $Left) { [void]$md.AppendLine("- $l") }
+        [void]$md.AppendLine('')
+    }
     [void]$md.AppendLine('## Not in this pass')
     [void]$md.AppendLine('')
     foreach ($n in $NotRun) { [void]$md.AppendLine("- $n") }
@@ -1357,6 +1452,8 @@ try {
         Write-Host ("  {0,-14} {1,-4} {2}" -f $t.Id, $state, ($bad -join '; '))
     }
     Write-Host '================================================' -ForegroundColor Cyan
+    foreach ($l in $Left) { Write-Host ">>> YOU: $l" -ForegroundColor Magenta }
+    Remove-Item -Force -LiteralPath $Lock -ErrorAction SilentlyContinue
 }
 if ($fails) { exit 1 }
 exit 0

@@ -4560,13 +4560,13 @@ stamp = { hash = "b3:1a6aeaec37c5f24f", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."body"]
-stamp = { hash = "b3:2a6f8f601d4598b2", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
+stamp = { hash = "b3:f91b5746e6a6baaf", by = "agent:windows-pass", note = "Re-read after the human-step gating: added the When-you-act, one-run-at-a-time and leftovers text, and checked them against You/Ready/Go/YesNo, the WorkDir lock and Get-Leftovers in the script; the rest of the section still holds." }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.bat"]
 stamp = { hash = "b3:9e3a9ddf79167120", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.ps1"]
-stamp = { hash = "b3:eb75dc07db575ef6", by = "agent:windows-pass", note = "Re-read after the unplug test builds first and cues the person before its 30 s window, and the colour question points at VLC (#746); the usage, sources and check table still hold." }
+stamp = { hash = "b3:74d72c06d55f721c", by = "agent:windows-pass", note = "Re-read after the human-step gating: added the When-you-act, one-run-at-a-time and leftovers text, and checked them against You/Ready/Go/YesNo, the WorkDir lock and Get-Leftovers in the script; the rest of the section still holds." }
 
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:4fabbaa71adf77ab", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
