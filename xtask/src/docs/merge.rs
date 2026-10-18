@@ -360,6 +360,13 @@ pub(crate) fn branch_entries(
         .collect())
 }
 
+/// The ledger on the side `point` merged in (its second parent): an input whose hash still
+/// equals that side's entry is one this branch changes nothing in. One that doesn't parse
+/// is an error, since an empty one would hand every input back to the branch's notes.
+pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::Ledger> {
+    ledger_at(root, &point.theirs, "on the merged side")
+}
+
 /// Added to an error from the steps after the merge commit (moving inline stamps, listing
 /// stale sections), so the error doesn't read as if the merge failed.
 const AFTER_COMMIT: &str = "the merge is committed, but the steps after it failed; fix what \
