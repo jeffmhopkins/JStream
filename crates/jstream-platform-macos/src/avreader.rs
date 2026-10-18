@@ -138,7 +138,19 @@ impl MediaDecoders for AvMediaDecoders {
             },
             peeked: None,
         };
-        decoder.start(None)?;
+        if let Err(error) = decoder.start(None) {
+            // A file whose sound AVFoundation won't decode still plays its picture, with
+            // no audio (`MediaInfo::audio` is `None`), as on Windows. The caller sees
+            // that in `info`; this crate has no logger.
+            if !matches!(error, PlatformError::Unsupported { .. })
+                || decoder.audio.is_none()
+                || decoder.video_track.is_none()
+            {
+                return Err(error);
+            }
+            decoder.audio = None;
+            decoder.start(None)?;
+        }
         let first = decoder.read_video()?;
         decoder.info = MediaInfo {
             video: first.as_ref().map(|f| MediaVideoInfo {

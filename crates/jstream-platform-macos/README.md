@@ -100,8 +100,11 @@ It has:
   (**`audio_layout`**). Seeking starts a new reader from the seek target to the end. A
   missing file is `NotFound`, a container or codec AVFoundation doesn't play is
   `Unsupported` (**`av_error_is_unsupported`**), and so is a hardware preference other
-  than `Prefer`, since AVFoundation picks the decoder itself. A file of sound alone,
-  opened without audio, has nothing to play and is `Unsupported` too.
+  than `Prefer`, since AVFoundation picks the decoder itself. A file whose sound
+  AVFoundation won't read in that format (its reader refuses the audio output, or won't
+  start with it, as `Unsupported`) opens again without it and plays its picture alone,
+  with no audio in its `MediaInfo`, as on Windows. A file of sound alone, opened without
+  audio, has nothing to play and is `Unsupported` too.
 - **`AacFramer`**: the AAC encoder's input and packet timing, as on Linux and Windows.
   The converter pulls the queued input through its input proc (which catches any panic)
   one raw access unit at a time, with no ADTS. The last unit is padded with silence. Each
