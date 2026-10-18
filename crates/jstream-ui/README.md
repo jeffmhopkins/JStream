@@ -63,7 +63,9 @@ Contents ([Design](#design) explains the choices):
   stream keys, start and stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (faders, mutes, routing and buses, with meters and the
-  master's loudness), also tested natively against `MockEngine`.
+  master's loudness), also tested natively against `MockEngine`; and `studio.rs`:
+  `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
+  transition presets and each scene's overrides; [Design](#design)).
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
@@ -160,9 +162,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
-  shows one panel with its title, or tabs. Panels are the five the UI has: Scenes,
+  shows one panel with its title, or tabs. Panels are the six the UI has: Scenes,
   Scene objects (`Sources`), the Inspector (`Properties`, with `Pairing` under it), the
-  Audio mixer and Outputs; `panel_view` maps each to its component, and a new panel
+  Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. The panels' own `h2` headings are hidden, since
   the tab is the title. Narrow windows stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
@@ -226,6 +228,35 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   name and its paired and last-used dates (UTC), with a button that calls
   `device.revoke` and re-reads the list. The code is never logged or stored by the page,
   and `OpenCode`'s `Debug` form hides it.
+- **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
+  The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
+  in Live) reads the scenes (groups left out) and presets with
+  `state.get` and the studio state with `studio.get` into a copy of its own, since
+  `Studio` keeps neither the presets nor preview, re-reads them on `state.changed` and
+  `events.dropped`, and takes `studio.changed` in place. The engine has no
+  studio-mode switch, so the panel always shows preview and program. Picking a scene sends
+  `studio.set_preview`. "Transition" sends `scene.switch` for the preview scene, naming
+  the preset picked beside it, or none so the engine resolves it; a line under the
+  button names the preset the engine will use and why, in the engine's order (the
+  switch's, the new scene's `transition_in`, the old scene's `transition_out`, the
+  default). "Cut" names a `cut` preset (the default if it is one), and is off when the
+  collection has none. With "Swap" on (the default), the scene that was on program
+  then goes on preview with a second `studio.set_preview`, as in other studio tools;
+  the engine itself never moves preview on a switch. While a transition runs, the bar
+  shows an indeterminate progress bar for the `duration_ms` `studio.changed` reported;
+  a cut, or program moving without a transition, clears it at once. A preview scene
+  the list doesn't show (a group) reads "Choose a scene".
+  The presets section lists each preset, adds one (ID from its name, `-2`, `-3`… when
+  taken; a 300 ms ease-in-out fade by default), edits one with a `transition.update`
+  naming only what changed (after a kind change, the patch is against the new kind's
+  defaults, as the engine applies it), makes one the default and deletes any other.
+  The kind's parameters come from `kind.list` and `kind.describe` (category
+  `transition`), or the built-in `cut`, `fade` and `move` when the engine can't list
+  them; enum, boolean, number and text parameters are editable, others read-only. A
+  value the form refuses keeps the preset from being saved until it is fixed.
+  Each scene's `transition_in` and `transition_out` are set with
+  `scene.set_transitions`. Items' own transition settings (`item.set_transition`) are
+  not edited here; they belong to the properties panel, which doesn't edit them yet.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
   password field is not bound to a signal: the panel reads it only on save, wraps it in
   a `SecretString` at once (trimming a pasted newline), empties the field and sends
