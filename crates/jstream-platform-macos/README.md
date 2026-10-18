@@ -78,7 +78,23 @@ It has:
   constant bit rate, at the rate it offers nearest the configured one
   (`nearest_bit_rate`). Its magic cookie must carry the `AudioSpecificConfig` the muxers
   write from the format (`aac_lc_config`, read with `asc_from_magic_cookie`), or opening
-  fails. Decoding reports `Unsupported`.
+  fails. It also opens a **VideoToolbox H.264 or HEVC decoder** for a configuration
+  **`vt_decoder_settings`** accepts (NV12 or BGRA output, P010 from HEVC; the hardware
+  decoder enabled, required, or avoided as the preference says). Decoders aren't listed:
+  VideoToolbox has no list of them. The `VTDecompressionSession` opens on the first
+  packet with a complete set of parameter sets, and again whenever a keyframe brings
+  different ones; packets before that are dropped. Each packet is decoded synchronously,
+  and the output callback, which catches any panic, copies each frame into a **CPU
+  frame** in the configured format. Frames come out in presentation order, and `poll`
+  never blocks. A packet of another codec is refused, and so is use after `finish`. A
+  `finish` that fails still releases the frames already decoded, so a second `finish`
+  hands them out.
+- **`split_access_unit`**: an Annex B packet as its parameter sets (VPS, SPS, then PPS,
+  as Core Media takes them) and a sample of 4-byte length-prefixed NAL units, without
+  access unit delimiters (**`annexb_units`** finds the units, and **`sets_complete`**
+  says whether the sets make a format description). **`Reorder`** holds decoded frames
+  until no later packet can present earlier: up to the newest packet's `dts`, and all of
+  them at the end.
 - **`AacFramer`**: the AAC encoder's input and packet timing, as on Linux and Windows.
   The converter pulls the queued input through its input proc (which catches any panic)
   one raw access unit at a time, with no ADTS. The last unit is padded with silence. Each
@@ -224,7 +240,9 @@ Not here yet, in roughly the order they follow:
   proves the synchronisation;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
-- video decode and the media-file source.
+- GPU frames (IOSurface pixel buffers imported into Metal) from the VideoToolbox decoder,
+  once the Metal spike lands;
+- the media-file source.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until its own
 ADR.
@@ -233,7 +251,8 @@ Tests run on every platform where they can: the capture's target IDs, names, siz
 layouts and statuses, permission steps, process names and parents, the keychain item
 names and the error mapping are platform independent. The macOS ones (the clock, reading the release, encoding with
 VideoToolbox, which falls back to Apple's software encoder on a Mac without a hardware
-one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
+one, decoding what the VideoToolbox encoder produced, from the start and from a later
+keyframe, encoding AAC with AudioToolbox, opening the capture backend, round trips through
 the login keychain with uniquely named items, deleted afterwards, listing audio
 devices and their input formats, refusing an unknown output, reading the Microphone
 status without prompting, listing processes, refusing to tap an unknown output or
