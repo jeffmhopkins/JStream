@@ -142,6 +142,8 @@ The statuses, and the result each leaves:
 | `STATUS_FAILED` | 3 | The engine's wire error, as JSON, or `{"message": …}` when the transport failed. |
 | `STATUS_LIMITED` | 4 | `{"limited": {"per_second": <cap>}}`: the call was granted, but the plugin already sent its cap of calls in the last second. `Control` was not called, and the call doesn't count against the cap. |
 
-An entry point is any exported function of type `() -> ()`, run by `Plugin::invoke`.
+An entry point is any exported function of type `() -> ()`, run by `Plugin::invoke`, or
+by `Plugin::deliver_event` with one protocol `Event` as JSON for its input (an
+`events.dropped` notice among them after an overflow).
 The host never calls `hello` for a plugin: it lends the plugin a session the host opened,
 and a plugin can't subscribe to events or open the binary channel.
