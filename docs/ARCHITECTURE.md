@@ -151,7 +151,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling; draws an effect through `jstream-render`'s filter harness. No GPU device of its own | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, feature `cef`), which drives the sandboxed browser helper over pipes and copies its shared-texture frames onto the engine's device; and the CEF code the helper runs (feature `helper`) | **yes** |
-| 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default); fuel and memory limits; no WASI | no |
+| 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default); fuel, wall-time and memory limits; no WASI | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
@@ -1040,7 +1040,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   from 1 and `normal`, a disabled filter's `enabled` only when false, and the reserved
   `effects[]` must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.
-- **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
+- **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
+  Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file
+  in the config directory instead ([ADR-0071](adr/0071-linux-secret-store.md)).
 - **Control token:** a random token in a user-only file in the config directory
   (Windows ACL restricted to the user). It is rotated on demand.
 - **Logs and crash dumps:** rotating logs and local minidumps in the data directory
