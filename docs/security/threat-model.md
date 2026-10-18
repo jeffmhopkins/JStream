@@ -115,7 +115,8 @@ a stolen token, local denial of service.
 - Limits: 4 MiB messages and MCP bodies, 128 open TCP connections of any kind
   (authenticated or not), 32 WebSocket connections, 64 calls in flight per connection,
   16 MCP sessions, 10 s to send headers and finish the handshake, a bounded event
-  outbox.
+  outbox, and 45 s for a WebSocket client to answer the server's pings (sent every
+  15 s), so a connection that died without a close doesn't keep its slot and session.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
