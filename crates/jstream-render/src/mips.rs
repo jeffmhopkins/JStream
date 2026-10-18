@@ -5,9 +5,10 @@
 //! with trilinear filtering and 16× anisotropy, clamped to what the adapter offers. The
 //! chain lives on the [`Image`] and goes with it, so a source never placed in 3D has none.
 //!
-//! It is rebuilt on the GPU at most once per frame: an upload when it was rewritten
-//! since the last build, and a layer or an import every frame it is drawn in 3D, since
-//! a filter, a nested scene or the platform can change those without this crate seeing it.
+//! It is rebuilt on the GPU at most once per `render` or `render_into` call: an upload
+//! when it was rewritten since the last build, and a layer or an import every call that
+//! draws it in 3D, since a filter, a nested scene or the platform can change those
+//! without this crate seeing it.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
