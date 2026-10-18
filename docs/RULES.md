@@ -547,8 +547,10 @@ status = "active"
 enforced_by = ["test:jstream_core::secrets_are_redacted", "review"]
 applies_to = ["crates/**"]
 -->
-Stream keys and OAuth tokens live only in the OS credential store. They never appear in
-collection files, logs, events, snapshots or MCP responses (they are redacted as `"***"`).
+Stream keys and OAuth tokens live only in the OS credential store. The one exception:
+on Linux, where no Secret Service is reachable, they live in a `0600` file in the config
+folder ([ADR-0071](adr/0071-linux-secret-store.md)). They never appear in collection
+files, logs, events, snapshots or MCP responses (they are redacted as `"***"`).
 
 <a id="R-SEC-002"></a>
 ### R-SEC-002: Every listener authenticates and checks Origin
