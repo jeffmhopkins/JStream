@@ -1671,7 +1671,7 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:227d6b118e5f59c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents lists live.rs in the new lib target (lib.rs) as the live engine wiring moved out of serve.rs, and Serving says serve.rs makes the Windows engine live through it. Tests moves the opener and live-engine unit tests to live.rs. tests/e2e.rs now drives the library's jstream_daemon::live::{live, rtmp} instead of its deleted copy of live, the opener and Connect. It makes the engine live first, then sets the CPU compositor on a clone (B1), so 'on the platform fakes with the CPU compositor' holds: e2e passes with no Vulkan ICD and failed so before. Merge of wave/m1-2 (#312 YouTube, #482, #311): the YouTube Contents bullet and Not-here-yet text sit beside #278's live.rs and Serving bullets. Merged serve.rs calls with_youtube on the engine and then live(...) on Windows, so Serving still holds. cargo test -p jstream-daemon passes (lib 3, bin 30, daemon 9, e2e 1)" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:ecf08899be5d781e", by = "agent:claude", note = "Merged #548's head f0be10b, which carries wave/m1-3 (CLAP plugin scanning, #317's privacy screen, #321 flips, #592, #540's vcam DACL, ADR-0066 citations) and #548's private files for the daemon and server. This PR (#547): the Audit log bullet says both audit files and each collection save are user-only, and that on Windows an existing audit.jsonl with a foreign owner or DACL entry is a startup failure (exit 1, the exit-code table's audit-log row); token.rs's write_private fixture creates its file user-only on Windows. The merge only swaps the ADR-0020 citations for ADR-0066 here, beside #548's token, devices and log-file text; all hold" }
+stamp = { hash = "b3:f277ac534dd41778", by = "agent:claude", note = "Merged #548 at 1691cad. #548 review B1: the log-directory bullet now says only the log files get the Windows protected DACL, and that crash reports still get their folder's ACL (#656). Since #567 they are written by jstream_crash::write_report through the crate's own create_new, which is user-only on Unix only. The token, devices and log-file text matches token.rs, devices.rs and logs.rs::create_new. This PR (#547): the Audit log bullet (both audit files and each collection save user-only, a loose existing audit.jsonl refused on Windows) still holds" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube bullet links ADR-0058 (N6) and keeps B4's signed_out then sign_in order; exit 1 row has both the wave's device file and the YouTube client file; matches args.rs help" }
@@ -2298,7 +2298,7 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:6848e6f5f6bc4057", by = "agent:claude", note = "#548 (#344): private_file.rs adds create_private_file (CREATE_NEW with sddl_user_only) and check_private_file (the security rule), exported from lib.rs, with the README bullet. Merging #540's branch combined lib.rs's module list and doc with the wave's plugin_block and plugin_hosts and #540's security module; #540's vcam bullets still hold | merge: merged wave/m1-3 after #540 landed (03954f2, the squash of the branch this PR sat on): the wave's security.rs, vcam/shared.rs and sink.rs and the control-mapping paragraph are identical to what this branch had merged; lib.rs keeps both mod security and mod private_file; the create_private_file and check_private_file paragraph still matches private_file.rs, which applies security's rule with no extra trustees" }
+stamp = { hash = "b3:4a170bf697507c86", by = "agent:claude", note = "Merged #548 at 1691cad. #548 review B1: the create_private_file bullet lists the daemon's token, devices and log files, no longer crash files, which jstream-crash writes without it (#656). The rest of the bullet matches private_file.rs" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:54d72e265b128a7b", by = "agent:vcam-optin-561", note = "depends_on and the WindowsVcam citation now point at ADR-0066; the engine-side VcamSink design is unchanged by ADR-0066, which only changes where the DLL is registered from; jstream-platform#purpose dep changed only by citation swaps | merge: re-read: the merge changed only its jstream-platform#purpose dep (ContextKey); the WindowsVcam ADR-0066 citation still holds" }
@@ -4236,7 +4236,7 @@ stamp = { hash = "b3:8b7bc73f164ea9f6", by = "agent:claude@session_01KvbMUfF6qWH
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:ecf08899be5d781e", by = "agent:claude", note = "Merged #548's head f0be10b, which carries wave/m1-3 (CLAP plugin scanning, #317's privacy screen, #321 flips, #592, #540's vcam DACL, ADR-0066 citations) and #548's private files for the daemon and server. Via daemon usage: this PR's audit and collection file ACL text and the merge's ADR-0066 citations; the prerequisites are unchanged" }
+stamp = { hash = "b3:f277ac534dd41778", by = "agent:claude", note = "Merged #548 at 1691cad. Via daemon usage: this PR keeps its audit and collection ACL text, and #548 changed only the crash-report ACL wording changed (Windows reports still inherit their folder's ACL, #656); the prerequisites are unchanged" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -4245,7 +4245,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:74434a6df2a7edd9", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via cli#usage (privacy rows); smoke steps unchanged; hold | merge: merged wave/m1-3 at f23611b7 (V1b geometry flips at 0.32 (#321), UI dockable workspace (#496), ADR-0069 proposed), and set this PR's assigned protocol 0.33: CLI usage dep changed by V1b; smoke unaffected" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:ecf08899be5d781e", by = "agent:claude", note = "Merged #548's head f0be10b, which carries wave/m1-3 (CLAP plugin scanning, #317's privacy screen, #321 flips, #592, #540's vcam DACL, ADR-0066 citations) and #548's private files for the daemon and server. Via daemon usage: smoke.ps1 uses a fresh log directory per run, so the audit-file refusal cannot trip it, and the merge changed only citations; steps unchanged" }
+stamp = { hash = "b3:f277ac534dd41778", by = "agent:claude", note = "Merged #548 at 1691cad. Via daemon usage: this PR keeps its audit and collection ACL text, and #548 changed only the crash-report ACL wording changed (#656); the smoke steps don't read crash reports and still hold" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -4257,7 +4257,7 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:74434a6df2a7edd9", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via cli#usage (privacy rows) and server#design (privacy.changed mapping); go-live steps don't use privacy; hold | merge: merged wave/m1-3 at f23611b7 (V1b geometry flips at 0.32 (#321), UI dockable workspace (#496), ADR-0069 proposed), and set this PR's assigned protocol 0.33: CLI usage dep changed by V1b; steps unaffected" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:ecf08899be5d781e", by = "agent:claude", note = "Merged #548's head f0be10b, which carries wave/m1-3 (CLAP plugin scanning, #317's privacy screen, #321 flips, #592, #540's vcam DACL, ADR-0066 citations) and #548's private files for the daemon and server. Via daemon usage: the steps never pre-create an audit log or collection file, and the daemon creates them user-only; the merge's ADR-0066 citations change nothing here; the steps hold" }
+stamp = { hash = "b3:f277ac534dd41778", by = "agent:claude", note = "Merged #548 at 1691cad. Via daemon usage: this PR keeps its audit and collection ACL text, and #548 changed only the crash-report ACL wording changed (#656); the steps never rely on crash reports and still hold" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:e9a0f83c66d65124", by = "agent:claude", note = "daemon usage and server design now say the token and devices files are user-only on Windows with reuse refused on a loose DACL (#548); the go-live steps run the daemon the same way and still hold" }
@@ -4353,7 +4353,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:3d3001bba844d9a7", by = "agent:threat-model-covers", note = "#346 fixed on wave/m1-2 (#370, #482, ADR-0059): RTMP rejection text redacted, cut to 512 chars, control chars replaced (publisher.rs remote_text); server instructions mark remote_* fields and the action_failed reason as data; tools carry readOnly/destructive/openWorld hints. Gap removed, per-tool limit moved to Accepted. Added ADR-0059 dep." }
 
 ["THREAT-MODEL#pairing"."body"]
-stamp = { hash = "b3:5f7aff4740007416", by = "agent:claude", note = "#548 (#344): the devices-file Windows ACL gap is marked fix in flight, matching devices.rs; controls and accepted risks unchanged" }
+stamp = { hash = "b3:a9772e40b9cc3b06", by = "agent:claude", note = "Merged #548 at 1691cad. #548 review N1: the devices-file gap now names #548 as the fix in flight for #344; it matches jstream-server's devices.rs, which creates the file user-only and refuses a loose one on Windows" }
 
 ["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
 stamp = { hash = "b3:5670e6a5758601b2" }
@@ -4395,7 +4395,7 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:1ba8b45c33668bc5", by = "agent:claude", note = "#548 (#344): the in-flight control says the Windows token, devices and log files are created with a protected DACL and reuse is refused on a foreign owner or loose DACL (token.rs), and the token-file gap is marked fix in flight; the wave's server text from #539 (covers) is unchanged" }
+stamp = { hash = "b3:a45757be9d861ef3", by = "agent:claude", note = "Merged #548 at 1691cad. #548 review N1: the in-flight control and the gap now name #548 as the fix for #344; what they say (token, devices and log files user-only on Windows, a loose token or devices file refused) matches token.rs, devices.rs and logs.rs, and crash reports are not claimed" }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
