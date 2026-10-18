@@ -18,14 +18,14 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
 ADR is **accepted**; this crate has its first three parts (the platform basics, screen
-capture, then VA-API H.264 encoding) and the capture's DMA-BUF import into Vulkan, and
-the rest follows in later PRs. Layer 2, and one
+capture, then VA-API H.264 encoding), ALSA audio input and output, and the capture's
+DMA-BUF import into Vulkan, and the rest follows in later PRs. Layer 2, and one
 of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
 
-**System libraries are loaded at run time** (ADR-0060 §8). libpipewire and libva are
-opened with `dlopen` through `libloading` when a backend first needs them, and only the
+**System libraries are loaded at run time** (ADR-0060 §8). libpipewire, libva and
+libasound are opened with `dlopen` through `libloading` when a backend first needs them, and only the
 functions the crate calls are declared, each with its C signature in a `SAFETY` comment.
 Nothing is linked, so the crate builds and tests on any machine, CI included, without
 their headers. The Vulkan loader is loaded the same way, by wgpu-hal through `ash`. This departs from [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)'s
@@ -109,6 +109,30 @@ It has:
 - **`PipeWire`** loads `libpipewire-0.3.so.0` and checks it is at least ADR-0060's floor
   (1.0). **`PipeWireAudio`** (`AudioIo`) is built on it; listing devices and opening
   streams report `Unsupported` for now.
+- **`AlsaAudio`** (`AudioIo`): audio input and output through ALSA, the fallback
+  ADR-0060 §4 names for a machine without a PipeWire daemon, on `libasound.so.2` loaded
+  at run time. `devices` lists the PCMs in ALSA's name hints (`default`, `sysdefault:`,
+  `hw:`, `plughw:`, a sound server's own PCM), each in the directions its hint gives, with
+  `default` as the default; it leaves out `null` and the speaker-position and S/PDIF
+  aliases (`front:`, `surround51:`, `iec958:` and the like), which can still be opened by
+  name. A stream asks for stereo at 48 kHz and takes the device's nearest channel count
+  and rate with ALSA's resampling off, so a `hw:` device runs at a rate it has (a plugin
+  PCM such as `default` may still convert below the API). Samples are `FLOAT_LE`, else
+  `S32_LE` or `S16_LE` converted to and from `f32`; 1, 2 and 6 channels map to mono,
+  stereo and 5.1, and any other count is `Unsupported`. Each stream runs on its own thread
+  with 10 ms periods and a 40 ms buffer, non-blocking, waking at least every 100 ms, so
+  dropping it stops it promptly; its buffers are allocated before its loop. A packet's
+  time is the media clock at the read less the frames still queued and its own; a render
+  buffer's is the clock plus the frames queued ahead. An overrun or underrun is
+  recovered (a capture stream is then started again, since recovery only prepares it;
+  playback restarts with its next write, dropping the rest of that period) and flags the
+  next packet as a discontinuity (ALSA doesn't say how many frames were lost, so the
+  device position doesn't jump); a device that can't be recovered ends the stream with
+  `DeviceLost`. A short write is finished before the next period is rendered. An unknown
+  PCM is `NotFound`. Desktop and application audio (`*Loopback`, `processes`) are `Unsupported`: ALSA has no loopback,
+  and ADR-0060 §4 leaves them to PipeWire. alsa-lib prints its own error lines to stderr
+  (such as for an unknown PCM); silencing them needs a variadic C callback, which stable
+  Rust can't define.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
@@ -178,7 +202,8 @@ Not here yet, in roughly the order they follow:
   "show cursor" setting (it is drawn into the frames for now);
 - restore tokens kept per source rather than per kind of pick, once the engine names
   the source when it starts a capture;
-- PipeWire audio streams, and the ALSA fallback through libasound (ADR-0060 §4, §8);
+- PipeWire audio streams (ADR-0060 §4), including desktop and application audio, and
+  choosing between PipeWire and ALSA where both are present;
 - DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
 - V4L2 webcams;
 - the stream-key store.
@@ -193,13 +218,17 @@ adapter where there is no GPU, and skip without one: the frame copy (crop, opaqu
 padding, slots reused only once free) and the context checks. DMA-BUF import needs a
 GPU driver, so it is tested only in the `hw-tests` portal capture on the GPU. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
-libva probes) pass with or without those libraries installed and need no GPU, session
-or daemon. The OpenH264 tests use a fake download and a fake encoder behind the
-library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
+libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
+stopping on drop, a capture stream running again after an overrun, loopback refused, an
+unknown PCM and the listing) pass with or without those libraries installed and need no
+GPU, session or daemon. ALSA's sample conversion, channel layouts, listed names and frame
+times are platform-independent. The OpenH264 tests use a fake download and a fake
+encoder behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
 GNOME or KDE session with PipeWire (on the CPU path, and on the GPU path with a Vulkan
-driver that imports DMA-BUFs), and VA-API H.264 encodes on a GPU with an encode
-driver.
+driver that imports DMA-BUFs), VA-API H.264 encodes on a GPU with an encode driver, and
+a second of ALSA's default input on a sound card (`null` isn't paced, so only a real
+device shows real-time recording).
