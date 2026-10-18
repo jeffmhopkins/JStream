@@ -119,7 +119,7 @@ a stolen token, local denial of service.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
-  **In flight** (#344's fix): on Windows the token, devices and log files are created
+  **In flight** (#548, the fix for #344): on Windows the token, devices and log files are created
   with a protected DACL for SYSTEM and the user, and an existing token or devices file
   is refused unless its owner is the user, SYSTEM or Administrators and its DACL lets
   no one else in.
@@ -131,7 +131,7 @@ ambient credential until it is closed. Failed tokens are not delayed or locked o
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
-**Gaps:** the Windows token file only inherits its folder's ACL (#344, fix in flight).
+**Gaps:** the Windows token file only inherits its folder's ACL (#344, fix in flight in #548).
 
 <a id="pairing"></a>
 ## Pairing and remote browsers
@@ -169,7 +169,7 @@ its device token, and the cookie is never compared with the control token.
 **Accepted:** a device token has the control token's full power ("no tiers").
 
 **Gaps:** the devices file has the same Windows ACL gap as the token file (#344, fix
-in flight).
+in flight in #548).
 
 <a id="browser"></a>
 ## Browser source
