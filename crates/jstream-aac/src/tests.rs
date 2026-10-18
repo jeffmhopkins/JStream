@@ -311,7 +311,7 @@ impl Rng {
 
 /// Hostile input: NaN, infinities, values far past full scale, DC, full-scale square
 /// waves, clicks, silence and noise, pushed in buffers of random sizes, at every rate and
-/// layout. The encoder must not panic, every unit must fit the decoder's buffer (6144
+/// layout, with TNS on and off. The encoder must not panic, every unit must fit the decoder's buffer (6144
 /// bits per channel), and the stream must decode.
 #[test]
 fn hostile_input_never_panics_and_stays_in_bounds() {
@@ -326,6 +326,8 @@ fn hostile_input_never_panics_and_stays_in_bounds() {
             } else {
                 WindowShape::Sine
             },
+            // A quarter of the rounds without TNS, the rest with it.
+            tns: round % 4 != 3,
             ..Config::new(rate, channels, per_channel * u32::from(channels))
         };
         let mut enc = Encoder::new(config).expect("valid");

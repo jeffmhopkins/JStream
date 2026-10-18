@@ -101,7 +101,7 @@ limits, and `tns_data`'s written bits against counted bits. Through the referenc
 decoder: **every codeword of every codebook** (signs and escapes too) decodes to the standard's synthesis of the values written. The output also
 lags by exactly `DELAY`, and planar and interleaved input give the same stream. Hostile
 input (NaN, infinities, huge values, DC, square waves, clicks) in random buffer sizes, at
-every rate, layout and window shape, never panics, keeps every unit within the decoder's
+every rate, layout and window shape, with TNS on and off, never panics, keeps every unit within the decoder's
 buffer, and decodes. Four seconds of full-scale noise at 64, 128 and 192 kbps stay at or
 under the target rate and within 10 % of it. The quality tests check waveform SNR floors on
 tones and a synthetic music signal at 128 and 192 kbps, the spectral envelope of noise
