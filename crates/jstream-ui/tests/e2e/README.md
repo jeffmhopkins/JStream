@@ -72,7 +72,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
-- **Docking** (`docking.spec.js`): the Editing layout's zones, with empty zones hidden;
+- **Docking** (`docking.spec.js`): the Editing layout's zones (Transitions as a tab
+  beside Outputs), with empty zones hidden;
   the View menu hiding and adding a panel, and the layout marked "(modified)"; dragging
   a tab onto a tab strip groups it, and onto an empty zone, which shows while dragging,
   docks it there; a lone panel collapses by its title, and closes on a second click of
@@ -85,6 +86,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   and shows the top-left readout meanwhile, then one edit that Ctrl+Z and Ctrl+Shift+Z
   reverse; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
   (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
+- **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
+  preview goes to program with Transition, and the old program scene comes back on
+  preview; Transition and Cut are off while preview is the program scene; a value the
+  preset form refused keeps the preset from being added. The mock engine refuses
+  preset edits, so the edits the preset form sends are tested natively.
 
 <a id="running"></a>
 ## Running them
