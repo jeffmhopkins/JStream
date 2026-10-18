@@ -199,3 +199,66 @@ pub(super) fn pre_echo(input: &[f32], output: &[f32]) -> f64 {
     }
     worst
 }
+
+#[test]
+#[ignore]
+fn tns_experiment() {
+    let clicks = |period: usize, seconds: f32| -> Vec<f32> {
+        let n = (RATE as f32 * seconds) as usize;
+        let mut v = Vec::with_capacity(2 * n);
+        let mut rng = Rng(3);
+        for i in 0..n {
+            let p = i % period;
+            let s = if p < 24 {
+                (-(p as f32) / 4.0).exp() * 0.7 * if p % 2 == 0 { 1.0 } else { -0.6 }
+            } else {
+                0.0
+            } + 0.002 * rng.unit();
+            v.push(s);
+            v.push(s * 0.9);
+        }
+        v
+    };
+    let gap_noise = |input: &[f32], output: &[f32], period: usize| -> f64 {
+        let (mut e, mut s) = (0.0f64, 0.0f64);
+        for i in 4800..input.len() / 2 {
+            let p = i % period;
+            s += f64::from(input[2 * i]).powi(2);
+            if p > 64 && p < period - 64 {
+                e += f64::from(output[2 * i] - input[2 * i]).powi(2);
+            }
+        }
+        10.0 * (e / s).log10()
+    };
+    for kbps in [64u32, 128] {
+        for kind in ["tone", "two-tone", "music", "noise", "castanets", "clicks480", "clicks1200"] {
+            let input = match kind {
+                "clicks480" => clicks(480, 3.0),
+                "clicks1200" => clicks(1200, 3.0),
+                k => signal(k, 3.0),
+            };
+            let mut res = Vec::new();
+            for tns in [false, true] {
+                let mut c = Config::new(RATE, 2, kbps * 1000);
+                c.tns = tns;
+                let units = encode(c, &input);
+                let pcm = decode([0x11, 0x90], &units).expect("decodes");
+                let out = &pcm[2 * DELAY..2 * DELAY + input.len()];
+                let bytes: usize = units.iter().map(Vec::len).sum();
+                let seq = sequences(&units).iter().filter(|&&s| s != 0).count();
+                let extra = match kind {
+                    "clicks480" => gap_noise(&input, out, 480),
+                    "clicks1200" => gap_noise(&input, out, 1200),
+                    "castanets" => pre_echo(&input, out),
+                    _ => 0.0,
+                };
+                res.push(format!(
+                    "tns={tns} snr={:.1} extra={:.1} bytes={bytes} nonlong={seq}",
+                    snr_db(&input, out),
+                    extra
+                ));
+            }
+            println!("{kbps} {kind}: {}", res.join(" | "));
+        }
+    }
+}
