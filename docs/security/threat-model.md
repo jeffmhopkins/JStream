@@ -215,7 +215,7 @@ depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-proc
 | Kind | Trust | On main | Boundary |
 |---|---|---|---|
 | CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`) and the mixer's side; the host process is not built (#281 in flight) | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
-| WASM automation plugins | Untrusted | The `jstream-plugin-wasm` host (#486, #623): a fixed set of five imports and no WASI, an empty capability list by default, a fuel budget, a wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB of memory, 10,000 table elements, a 512 KiB stack and 50 calls to `Control` a second. No app loads plugins yet | wasmtime with no ambient imports, so no filesystem, network or clock; a call reaches `Control` only when every command it names is granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
+| WASM automation plugins | Untrusted | The `jstream-plugin-wasm` host (#486, #623, #722): a fixed set of five imports and no WASI, an empty capability list by default, a fuel budget, a wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB of memory, 10,000 table elements, a 512 KiB stack and 50 commands to `Control` a second, each edit of a batch counted. No app loads plugins yet | wasmtime with no ambient imports, so no filesystem, network or clock; a call reaches `Control` only when every command it names is granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
 | WGSL effect packs | Untrusted GPU code | Nothing (X1); only built-in shaders | naga validation ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)) |
 
 What the engine reads back from a CLAP host is already checked: the block's magic,
@@ -228,7 +228,7 @@ non-finite samples turned to silence.
   the UI and agents; the host can reset the mixer's miss counters.
 - WASM (#348): ADR-0069 (accepted on `wave/m1-3`, #584) decided the limits. The host
   builds its CPU and memory limits (the 100 ms and 1 s deadlines, 64 MiB and 10,000
-  table elements) and the cap of 50 calls a second (answered with the ABI's
+  table elements) and the cap of 50 commands a second (answered with the ABI's
   `STATUS_LIMITED`), and adds a fuel budget of its own. Not built yet: the capability
   classes checked against the protocol's table and grants made only by people, the
   1,000-event queue, the `forbidden` error,
