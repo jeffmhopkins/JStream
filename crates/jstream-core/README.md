@@ -163,7 +163,8 @@ state machine. Contents:
   polls the media clock. The render thread composites on the platform's GPU context
   when the interop opens one, and samples the captured textures there with no CPU copy
   when the capture backend can deliver them; otherwise it uses CPU frames, and its own
-  device without a context (see *Runtime*). Encode threads live in the encoder
+  device without a context. If compositing keeps failing on the context mid-run, it
+  moves to CPU frames on its own device (see *Runtime*). Encode threads live in the encoder
   sessions: one video session per video mix and encoder profile in use, shared by the
   outputs on that pair, one audio session of the master bus per such pair, shared by
   its outputs with no audio chain, and one per output with an audio chain. Each
@@ -243,9 +244,11 @@ state machine. Contents:
   (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in and its frames
   read as RGBA (`runtime/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames (opaque, whatever alpha the
-  texture holds), and a browser page painting on
+  texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
-  the stage stops, on a software device that stands in for the platform's
+  the stage stops, and an output leaving the GPU path mid-run when every GPU frame
+  fails to import or the context breaks (taking the context from browser pages, and
+  failing when that fallback fails), on a software device that stands in for the platform's
   (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -829,7 +832,8 @@ open through it (`browser` and its `youtube_chat` preset,
 `jstream_sources::opens_browser`). Its page's picture is a GPU frame (`Source::gpu_frame`): while a program stage runs on
 a platform GPU context, the stage hands that context to the live sources
 (`Engine::use_gpu`, `LiveSources::use_gpu`), which pass it to the browser engine
-(`BrowserBackend::use_device`), and takes it back first when the stage stops. The plan
+(`BrowserBackend::use_device`), and takes it back first when the stage stops, or
+when its render thread leaves the GPU path mid-run (see [Runtime](#runtime)). The plan
 then shows the page's newest texture in place of its transparent stand-in, as a
 `Frame` that carries the context's `ContextKey`. `compose` imports it, premultiplied
 sRGB (`ResourceCache::import_premultiplied`), only on a compositor of that context;
@@ -1450,14 +1454,20 @@ or a fatal error stops its drawing, so `RenderHub::caught_up` treats it as caugh
 threads have dropped their senders, and the program stage (`Program`) joins it right
 after them. While the stage has no encoder session and no virtual camera it draws nothing but still adopts
 each new snapshot, so it never holds a gesture up. The compositor
-and its cache drop on the render thread when it exits, after the tick loop. What it rides out
+and its cache drop on the render thread when it exits, after the tick loop, or when it
+leaves the GPU path, and its video chains with them, so after a fallback a stateful
+filter (a video delay) starts empty, as on `video.snapshot`'s compositor. What it rides out
 and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 - **Recoverable:** a capture error or a missing frame repeats that capture's last
   frame (a missing source frame,
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)), and a capture that doesn't
   start or whose target is lost is started again 2 s later; a
-  composite error repeats the last composited frame, up to 30 in a row.
-- **Fatal, reported:** a 31st composite error in a row, a panic inside a tick (the
+  composite error repeats the last composited frame, up to 30 in a row. On the
+  platform's GPU context, the 10th in a row leaves the GPU path once instead, for CPU
+  capture on a device of the thread's own (see [Runtime](#runtime)).
+- **Fatal, reported:** a 31st composite error in a row (counted again after a
+  fallback), a fallback from the GPU path whose compositor does not open, a panic
+  inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
   does not freeze before the teardown. A virtual camera's publish error is not
@@ -1747,9 +1757,25 @@ backend with no GPU path or one that refuses the context, and a GPU capture that
 CPU frames). With a context, the stage also lends it to the browser engine, so
 `browser` pages paint on it and the render thread samples them there too (*Live
 sources* in Design); the stage takes it back first when it stops, and on a failed
-open. The render loop drops the held frames, the compositor and the capture
-streams before the context, so the platform's state goes first as `GpuContext`
-requires.
+open.
+
+The GPU path can also break mid-run: every GPU frame fails to import (a format the
+compositor can't take), or the context's device goes away. After 10 composite errors in
+a row on the context, a third of a second, the render thread leaves it once. It reopens
+the compositor on a device of its own, lets go of the frames it holds, and has the
+`jstream-capture` thread drop its GPU backend and start every capture again on the CPU
+path (a start asked for before is stopped when it comes back). Browser pages are told to
+stop painting on the context, on a thread of its own because that takes the collection
+lock; until the re-planned snapshot arrives their frames, carrying the context's key,
+draw nothing on the new compositor. The fallback is logged as a warning and counted
+(`OutputStats::gpu_fallbacks`). If the compositor can't open on its own device, the
+output fails at once. Errors that go on after the fallback are counted again from zero
+and fail the output as they would on the CPU path. The context itself stays until the
+render loop ends.
+
+The render loop drops the held frames, the compositor and the capture streams before
+the context, at a fallback and at the end, so the platform's state goes first as
+`GpuContext` requires.
 
 **Captures** (`runtime/captures.rs`). Opening the program stage starts no capture. Each tick the
 render thread compares what the snapshot captures (`Shot::captures`) with what it runs:
