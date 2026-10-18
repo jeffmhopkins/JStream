@@ -1,5 +1,6 @@
 //! One-scene GPU compositor. It owns a wgpu device (or borrows the platform's), draws a
-//! stack of images in linear light, and can read the result back as straight sRGB RGBA8.
+//! stack of images in linear light, and can read the result back as straight sRGB RGBA8
+//! or convert it to NV12 for the encoders.
 //! Layer 2: no `unsafe`. The scene graph is the same layer, so the engine builds the
 //! [`Scene`] snapshot and calls in.
 //!
@@ -10,6 +11,7 @@
 mod cache;
 mod color;
 mod compositor;
+mod convert;
 mod error;
 mod filter;
 mod gpu;
@@ -19,6 +21,7 @@ mod scene;
 
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
+pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
 pub use error::RenderError;
 pub use filter::{
     ExternalFilter, FilterClock, PRELUDE as FILTER_PRELUDE, VideoFilter,

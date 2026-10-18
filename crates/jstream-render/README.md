@@ -104,11 +104,22 @@ and calls this crate.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
+- `Nv12Converter` turns that sRGB output into NV12 for the encoders
+  ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline) step 4). The target
+  is either the plane views of a native `NV12` texture (`Nv12Target::nv12_texture`,
+  for the platform's `encode_target`) or `Nv12Planes`, an `R8Unorm` Y texture and an
+  `Rg8Unorm` CbCr texture at half size, which every adapter can render to and which
+  `Nv12Planes::read` copies back as packed NV12 for the CPU fallback. The colour is
+  `jstream-media`'s `ColorInfo`: BT.709 only, limited range (the default) or full.
+  `Nv12Converter::submit` runs a pass into a platform `GpuFrame` in a submit of its
+  own, which is how `jstream-core`'s render thread feeds an encoder that takes GPU
+  frames.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
-(`runtime/`), not this crate's. Also not here: NV12 or
-P010 conversion, encode-target export, loading WGSL effect packs
-(`jstream-effects`; this crate only draws them), the video filter chain runtime (the built-in filters' passes are here, see
+(`runtime/`), not this crate's, and so is the choice of encode target each tick. Also
+not here: P010 conversion, BT.601 and BT.2020 matrices, encode-target allocation,
+loading WGSL effect packs (`jstream-effects`; this crate only draws them), the video
+filter chain runtime (the built-in filters' passes are here, see
 [Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
@@ -196,7 +207,29 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    waits on the GPU. The tick that feeds an encoder does not call it. Snapshots and
    tests do.
 
-Both passes are one command buffer and one `queue.submit`. `FrameSync::stage` runs
+5. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
+   source (`Rgba8UnormSrgb` or `Bgra8UnormSrgb`, the compositor's output) to a target
+   once: it makes the bind group and a 16-byte uniform with the range constants, so
+   `Nv12Pass::encode` allocates nothing per frame. Bind again when either texture is
+   replaced. `encode` records two fullscreen passes. The Y pass `textureLoad`s each
+   texel, which the sRGB view decodes to linear; multiplies RGB by alpha, because NV12
+   has no alpha and a transparent canvas should encode as black; applies the sRGB
+   transfer to get R'G'B'; and writes `Y' = 0.2126 R' + 0.7152 G' + 0.0722 B'`. The
+   CbCr pass writes one texel per 2x2 block, `Cb = (B' − Y') / 1.8556` and
+   `Cr = (R' − Y') / 1.5748`. Its chroma is **left-sited**, the H.264 default and the
+   same as Windows capture's CPU path: a `[1 2 1]` tap across the block's left column
+   and its neighbours on each side, averaged over the block's two rows, with the
+   border texel repeated at the edges. Values are quantised as in ITU-T H.273, in
+   8-bit codes: limited `16 + 219 Y'` and `128 + 224 C`, full `255 Y'` and
+   `128 + 255 C`. The shader rounds to the code and writes `code / 255`, so the unorm
+   store is exact everywhere. Odd sizes are `RenderError::Invalid`: NV12 needs even
+   dimensions, and dropping a row or column is the caller's choice to make. The caller
+   records the pass into its own encoder, after the composite, and stages a shared
+   target's `FrameSync` before that submit. `Nv12Converter::submit` does that for a
+   platform `GpuFrame`: it stages the frame, records the pass, transitions the frame's
+   texture to `PRESENT` as the composite does with the frames it samples, and submits.
+
+The composite and resolve passes are one command buffer and one `queue.submit`. `FrameSync::stage` runs
 before that submit, for every distinct hold the scene samples, and the command buffer
 ends by transitioning each of those textures to `PRESENT` (on D3D12 the `COMMON` state
 the platform's other APIs read a shared texture in), which `stage` requires of the
@@ -204,7 +237,8 @@ submit. `render_into` does the same. Staging comes after every other step that c
 fail (targets, vertex buffer, readback buffer), so a refused canvas or readback stages
 nothing. The compositor lets go of the holds after the submit, so it keeps no platform
 texture busy between frames. The output texture is the
-compositor's own, not a shared encode target, so nothing transitions it.
+compositor's own, not a shared encode target, so nothing transitions it; an encode
+target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 
 ### Resources kept across frames
 
@@ -218,6 +252,9 @@ compositor's own, not a shared encode target, so nothing transitions it.
 | Per-image texture and bind group | `Image`, dropped with it |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
+| `Nv12Converter` pipelines and layout | The converter |
+| `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
+| `Nv12Planes` textures | The planes value |
 | A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
 | `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
 
@@ -608,6 +645,23 @@ so the missing adapter panics and the job fails. The `macos` job is
 Editing the workflow is a governance change because `.github/**` is protected; it
 adds a package so tests can render, and it does not weaken a check.
 
+**NV12** (`convert/tests.rs`) is checked against a CPU reference
+(`convert/reference.rs`): the same formulas in `f64`, written separately from the
+shader. Every Y, Cb and Cr byte is within one code of it, for a pattern of primaries,
+greys, gradients and partial alpha at a width that is not a multiple of four, in both
+ranges, and for a compositor output with an item at 0.75 opacity. Black, white and
+50% grey land on their codes in both ranges with neutral chroma, transparent white
+encodes as black, and a single red column shows up in the two blocks whose `[1 2 1]`
+taps reach it, which centre-sited chroma would not do. Odd sizes, a size mismatch,
+BT.601 and a non-sRGB source are refused. `submit` stages its frame once and leaves
+the conversion in the planes, with a plane texture standing in for the platform's
+target. The native path (plane views of an `NV12`
+texture, compared with the planes path) runs where the adapter has
+`TEXTURE_FORMAT_NV12`. It skips on lavapipe, which offers the feature but writes its
+plane-1 render into plane 0's memory (the Y plane's first rows came back holding the
+CbCr values), so the native path is checked on WARP if WARP has the feature, and on
+real hardware.
+
 **Benchmarks** (`benches/composite.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
 A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
 (`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
@@ -615,7 +669,8 @@ and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the
-compositor submits, and say nothing about GPU frame time. **Not measured:** frame time on
+compositor submits, and say nothing about GPU frame time. **Not measured:** the NV12
+pass, and frame time on
 a hardware GPU.
 
 <a id="open-questions"></a>
@@ -627,9 +682,11 @@ a hardware GPU.
   `ItemGeometry` and default to neutral. `is_neutral_3d` is the check an engine uses
   to reject a non-neutral value until M3 draws it. No 3D uniforms here.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
-  ends the submit in `PRESENT`. Software adapters often lack `TEXTURE_FORMAT_NV12`,
-  so that pass cannot be the CI path. Proposed default: keep this RGBA output, and
-  let a later pass sample it into the platform `encode_target` on the real device.
+  ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
+  platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and
+  `submit` ends its submit in `PRESENT`. Open: P010, and whether an adapter that rejects planar render
+  targets copies `Nv12Planes` into the shared texture through hal or uses a D3D11
+  video processor (ARCH's fallback).
 - **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are opaque
   `Bgra8UnormSrgb`, which `import` takes as is, so they need no conversion pass. A
   browser page's frames are premultiplied `Bgra8Unorm`, which `import_premultiplied`

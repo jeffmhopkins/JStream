@@ -1,0 +1,55 @@
+[package]
+name = "jstream-platform-macos"
+version = "0.0.0"
+description = "macOS platform backends: the mach_absolute_time media clock, ScreenCaptureKit capture, Core Audio, VideoToolbox/AudioToolbox codecs and the Keychain secret store (ADR-0063). Built in parts."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "First part of ADR-0063: mach_absolute_time media clock, macOS version and support-tier detection, four-character codes and OSStatus errors, VideoToolbox and AudioToolbox configuration checks, the VideoToolbox H.264 and HEVC encoder on CPU frames with Annex B output, the AudioToolbox AAC-LC encoder with raw access units, ScreenCaptureKit display and window capture on CPU frames behind the Screen Recording permission, the Keychain store for stream keys and OAuth tokens, and Core Audio device listing, input recording behind the Microphone permission and output playback through the HAL; process taps and decode report Unsupported"
+unsafe_allowed = true
+
+# Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
+# one of the crates R-UNSAFE-001 allows to use it. Every other workspace lint is copied
+# unchanged; keep the two tables in step.
+[lints.rust]
+missing_docs = "warn"    # R-RS-006 (blocking under -D warnings)
+
+[lints.clippy]
+unwrap_used = "deny"                      # R-RS-004
+print_stdout = "deny"                     # R-RS-005
+print_stderr = "deny"                     # R-RS-005
+allow_attributes_without_reason = "deny"  # R-RS-009
+undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
+
+[features]
+# Platform tests against a real Mac (docs/RULES.md#testing): the Screen Recording, Camera,
+# Microphone and system audio recording permissions, and the hardware encoders (the
+# software-encoder tests run without it). Additive,
+# off by default, and the tests are also `#[ignore]`d. Run them on such a Mac with
+# `cargo test -p jstream-platform-macos --features hw-tests -- --ignored`.
+hw-tests = []
+
+[dependencies]
+jstream-platform.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+dispatch2.workspace = true
+mach2.workspace = true
+objc2.workspace = true
+objc2-audio-toolbox.workspace = true
+objc2-av-foundation.workspace = true
+objc2-core-audio.workspace = true
+objc2-core-audio-types.workspace = true
+objc2-core-foundation.workspace = true
+objc2-core-graphics.workspace = true
+objc2-core-media.workspace = true
+objc2-core-video.workspace = true
+objc2-foundation.workspace = true
+objc2-screen-capture-kit.workspace = true
+objc2-security.workspace = true
+objc2-video-toolbox.workspace = true

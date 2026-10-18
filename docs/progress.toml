@@ -816,6 +816,15 @@ status = "done"
 prs = [325]
 
 [[item]]
+id = "E3d"
+milestone = "M3"
+title = "Composite to NV12 on the GPU"
+status = "review"
+prs = [280]
+note = "#280 merged into wave/m3-2; lands with that wave"
+needs = ["wave"]
+
+[[item]]
 id = "F6"
 milestone = "M3"
 title = "HEVC and AV1 encode"
@@ -843,10 +852,10 @@ prs = [360]
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
-status = "planned"
-prs = [363, 375]
-note = "#363 landed with wave/m1-2 (#545), #375 with wave/m1; signed-in features need the OAuth client (ADR-0058)"
-needs = ["maintainer"]
+status = "review"
+prs = [363, 375, 594]
+note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come"
+needs = ["wave", "maintainer"]
 
 [[item]]
 id = "CL1"
@@ -861,21 +870,43 @@ needs = ["build", "hardware"]
 id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
-status = "planned"
-needs = ["build"]
+status = "review"
+prs = [486]
+note = "#486 merged into wave/m3-2; lands with that wave"
+needs = ["wave"]
 
 [[item]]
 id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
-status = "planned"
-note = "the maintainer decides whether it stays in M3; then the macOS ADR"
-needs = ["maintainer", "build"]
+status = "review"
+prs = [511, 513, 533, 543, 554, 566, 570, 583, 586]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586)"
+needs = ["wave", "build"]
 
 [[item]]
 id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
-status = "planned"
-note = "the maintainer decides platform support; then the Linux codec-path ADR"
-needs = ["maintainer", "build"]
+status = "review"
+prs = [481, 490, 509, 510]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; the rest of the codec path to build"
+needs = ["wave", "build"]
+
+[[item]]
+id = "LNX2"
+milestone = "M3"
+title = "Linux OpenH264 download (ADR-0061)"
+status = "review"
+prs = [536]
+note = "store, check, loader and encoder (#536); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come"
+needs = ["wave", "build"]
+
+[[item]]
+id = "LNX3"
+milestone = "M3"
+title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
+status = "review"
+prs = [508, 518]
+note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
+needs = ["wave", "build"]
