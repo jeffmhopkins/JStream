@@ -1265,7 +1265,10 @@ fn organise_script() -> Vec<Call> {
                 kind: SourceKind::Builtin {
                     kind: "webcam".into(),
                 },
-                settings: Default::default(),
+                // Complete settings, as `webcam()` sends: the mock stores them as sent.
+                settings: [("device".to_owned(), serde_json::Value::from(""))]
+                    .into_iter()
+                    .collect(),
                 duplicated_from: None,
             },
             add("z", "iz2", "tagged"),
