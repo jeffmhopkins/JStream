@@ -32,6 +32,8 @@ mod clock;
 mod codec;
 mod fourcc;
 mod keychain;
+#[cfg(target_os = "macos")]
+mod pixel_buffer;
 mod version;
 mod video_device;
 #[cfg(target_os = "macos")]

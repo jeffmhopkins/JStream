@@ -7,8 +7,6 @@
 //! connected and the session still running.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::ptr::NonNull;
-use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -18,7 +16,7 @@ use std::time::Duration;
 use dispatch2::{DispatchQueue, DispatchRetained};
 use jstream_platform::mailbox::Mailbox;
 use jstream_platform::media::{
-    ColorInfo, FrameSize, MediaTime, PixelFormat, Plane, VideoFrame, VideoFrameInfo,
+    ColorInfo, FrameSize, PixelFormat, Plane, VideoFrame, VideoFrameInfo,
 };
 use jstream_platform::{
     CaptureDecoder, CaptureStats, CaptureStream, DeviceId, PlatformError, VideoDeviceFormat,
@@ -39,19 +37,20 @@ use objc2_core_media::{
     CMSampleBuffer, CMTime, CMTimeFlags, CMVideoFormatDescriptionGetDimensions,
 };
 use objc2_core_video::{
-    CVPixelBuffer, CVPixelBufferGetBaseAddressOfPlane, CVPixelBufferGetBytesPerRowOfPlane,
-    CVPixelBufferGetHeight, CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType,
-    CVPixelBufferGetWidth, CVPixelBufferIsPlanar, CVPixelBufferLockBaseAddress,
-    CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress, kCVPixelBufferPixelFormatTypeKey,
-    kCVReturnSuccess,
+    CVPixelBufferGetHeight, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
+    CVPixelBufferIsPlanar, kCVPixelBufferPixelFormatTypeKey,
 };
 use objc2_foundation::{NSArray, NSDictionary, NSError, NSNumber, NSString};
 
 use super::policy::{self, RawFormat};
-use crate::annexb::{copy_rows, media_time_from_cm};
+use crate::annexb::copy_rows;
 use crate::audio::permission::{self, Media, MicStep};
-use crate::fourcc::{CV_420V, os_status};
-use crate::{MacosVersion, check_floor, timebase};
+use crate::fourcc::CV_420V;
+use crate::pixel_buffer::{ReadLocked, presentation_time};
+use crate::{MacosVersion, check_floor};
+
+/// A camera frame, as errors name it.
+const FRAME: &str = "a camera frame";
 
 /// How often a stream's watcher checks the camera.
 const WATCH: Duration = Duration::from_millis(500);
@@ -361,7 +360,7 @@ impl Ivars {
             return Ok(None);
         };
         // SAFETY: the sample is live for the callback.
-        let pts = presentation_time(unsafe { sample.presentation_time_stamp() })?;
+        let pts = presentation_time(unsafe { sample.presentation_time_stamp() }, FRAME)?;
         self.shared.captured.fetch_add(1, Ordering::Relaxed);
         if CVPixelBufferGetPixelFormatType(&image) != CV_420V || !CVPixelBufferIsPlanar(&image) {
             return Err(PlatformError::Unsupported {
@@ -382,7 +381,7 @@ impl Ivars {
             pts,
         };
         let mut planes = self.planes(info)?;
-        let locked = ReadLocked::lock(&image)?;
+        let locked = ReadLocked::lock(&image, FRAME)?;
         for (index, plane) in planes.iter_mut().enumerate() {
             let Some(geometry) = info.plane(index)? else {
                 break;
@@ -419,63 +418,6 @@ impl Ivars {
                 *spare = Some(old);
             }
         }
-    }
-}
-
-/// A presentation time on the host clock (the Mach time line) as a media-clock time.
-fn presentation_time(time: CMTime) -> Result<MediaTime, PlatformError> {
-    if !time.flags.contains(CMTimeFlags::Valid) {
-        return Err(PlatformError::Os {
-            call: "CMSampleBufferGetPresentationTimeStamp",
-            code: None,
-            message: "a camera frame had no valid presentation time".into(),
-        });
-    }
-    media_time_from_cm(time.value, time.timescale, timebase())
-}
-
-/// A pixel buffer locked for reading, unlocked when dropped.
-struct ReadLocked<'a>(&'a CVPixelBuffer);
-
-impl<'a> ReadLocked<'a> {
-    fn lock(buffer: &'a CVPixelBuffer) -> Result<Self, PlatformError> {
-        // SAFETY: the buffer is live; a read-only lock maps it for reading.
-        let status =
-            unsafe { CVPixelBufferLockBaseAddress(buffer, CVPixelBufferLockFlags::ReadOnly) };
-        if status != kCVReturnSuccess {
-            return Err(os_status(
-                "CVPixelBufferLockBaseAddress",
-                status,
-                "locking a camera frame",
-            ));
-        }
-        Ok(Self(buffer))
-    }
-
-    /// Plane `index`'s first `rows` rows and its stride.
-    fn plane(&self, index: usize, rows: usize) -> Result<(&[u8], usize), PlatformError> {
-        let short = || PlatformError::Unsupported {
-            what: format!("plane {index} of a camera frame, shorter than its format"),
-        };
-        if CVPixelBufferGetHeightOfPlane(self.0, index) < rows {
-            return Err(short());
-        }
-        let base = NonNull::new(CVPixelBufferGetBaseAddressOfPlane(self.0, index).cast::<u8>())
-            .ok_or_else(short)?;
-        let stride = CVPixelBufferGetBytesPerRowOfPlane(self.0, index);
-        let len = stride.checked_mul(rows).ok_or_else(short)?;
-        // SAFETY: while the buffer is locked, Core Video's base address for the plane
-        // points at its rows (at least `rows`, checked above) of `stride` bytes, which it
-        // owns. The borrow is tied to `&self`, so it ends before the unlock, and nothing
-        // writes to a buffer locked read-only.
-        Ok((unsafe { slice::from_raw_parts(base.as_ptr(), len) }, stride))
-    }
-}
-
-impl Drop for ReadLocked<'_> {
-    fn drop(&mut self) {
-        // SAFETY: this buffer was locked with the same (read-only) flags in `lock`.
-        let _ = unsafe { CVPixelBufferUnlockBaseAddress(self.0, CVPixelBufferLockFlags::ReadOnly) };
     }
 }
 
