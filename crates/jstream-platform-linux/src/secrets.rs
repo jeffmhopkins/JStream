@@ -37,6 +37,7 @@ pub use store::LinuxSecrets;
 const APPLICATION: &str = "jstream";
 
 /// The fallback file's name, in the config folder.
+#[cfg(target_os = "linux")]
 pub(crate) const FILE_NAME: &str = "secrets";
 
 /// The first lines of the fallback file, so whoever opens it knows what it is.
@@ -280,6 +281,7 @@ pub(crate) mod service {
     /// The prompt interface, whose `Completed` signal ends a prompt.
     pub(crate) const PROMPT: &str = "org.freedesktop.Secret.Prompt";
     /// The path a method returns for "no object" (no prompt, no collection).
+    #[cfg(target_os = "linux")]
     pub(crate) const NONE: &str = "/";
     /// The content type of every secret JStream stores.
     const CONTENT_TYPE: &str = "text/plain; charset=utf8";
@@ -445,6 +447,7 @@ pub(crate) mod service {
     }
 
     /// The object path in an `o` (or a variant holding one).
+    #[cfg(target_os = "linux")]
     pub(crate) fn object_path(
         v: Option<&Value>,
         what: &'static str,
