@@ -369,6 +369,10 @@ fn a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus() {
     batch(&control, edits(plan)).expect("the plan applies");
     let fed: Vec<_> = taps.current().iter().map(|tap| tap.feed).collect();
     assert_eq!(fed, [TapFeed::Bus(jstream_audio::BusId::MASTER)]);
+    // A build of the waveform queued before the plan can run after it on the
+    // `jstream-sources` thread and ask for vod's scope, which makes it again: the engine
+    // drops it when it throws that build away (#701), so wait for the builds.
+    assert!(engine.settle_sources(), "the sources were built");
     let drawn: Vec<_> = scopes.buses().into_iter().map(|(bus, _)| bus).collect();
     assert_eq!(drawn, [BusId::master()]);
 }
@@ -536,6 +540,9 @@ fn a_drawn_source_gets_a_scope_fed_from_its_mixer_input() {
     };
     batch(&control, edits(plan)).expect("the plan applies");
     assert!(feeds().is_empty());
+    // As for a drawn bus, a build queued before the plan can make the clip's scope
+    // again, until the engine throws that build away (#701).
+    assert!(engine.settle_sources(), "the sources were built");
     assert!(scopes.sources().is_empty());
 }
 

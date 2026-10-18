@@ -437,6 +437,18 @@ impl AudioRouting {
         }
     }
 
+    /// Drops the scopes that no source in `state` draws, as [`sync`](Self::sync) does.
+    /// A build that the `jstream-sources` thread made for settings that have changed
+    /// since asks for the scope those settings drew, which makes it again after `sync`
+    /// dropped it (#701). Does nothing while no mixer runs.
+    pub(crate) fn retain_scopes(&self, state: &State) {
+        let Some(attached) = &self.attached else {
+            return;
+        };
+        attached.scopes.retain(&drawn_buses(state));
+        attached.scopes.retain_sources(&drawn_sources(state));
+    }
+
     /// Every routed source's and bus's levels since the last call, or `None` while no
     /// mixer runs. A source whose audio is off in `state` has no meter.
     pub(crate) fn meters(

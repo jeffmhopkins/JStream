@@ -2926,6 +2926,10 @@ impl LiveHost for Shared {
             // A source built with audio of its own is recorded from now on.
             state.audio.sync(state.graph.state(), state.live.audio());
             state.publish_render();
+        } else {
+            // A stale build may have made a scope again that its settings drew and the
+            // collection's no longer do.
+            state.routing.retain_scopes(state.graph.state());
         }
     }
 
