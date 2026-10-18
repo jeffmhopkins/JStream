@@ -307,8 +307,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   inside it, and a debug build names each function with those types: most of its
   `_bg.wasm` is that name section. The server refuses a file over its size limit
   ([jstream-server › Design](../jstream-server/README.md#design)), so the mixer's strips, rows, meters, faders and mute buttons return `AnyView` rather than
-  `impl IntoView`, which keeps a nested view's type out of its parents' names. A
-  component that grows as large does the same.
+  `impl IntoView`, which keeps a nested view's type out of its parents' names. That
+  stopped being enough as the UI grew (#674): the debug build now uses the workspace's
+  `ui-dev` Cargo profile (`data-cargo-profile-dev` in `index.html`), which strips the
+  symbols, so its `_bg.wasm` has no name section at all ([Build](#build)).
 
 <a id="canvas"></a>
 ## Canvas
@@ -380,7 +382,7 @@ The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
 
 ```sh
 cd crates/jstream-ui
-trunk build            # debug, into dist/
+trunk build            # debug (the `ui-dev` profile), into dist/
 trunk build --release  # what the daemon and the desktop app ship
 trunk serve            # rebuilds on change and serves dist/ locally
 ```
@@ -392,6 +394,14 @@ and the stylesheet, with content hashes in their names. It is not committed. tru
 inline loader script carries a `{{__TRUNK NONCE__}}` placeholder (`create_nonce` in
 `Trunk.toml`), which the serving engine replaces with each response's
 Content-Security-Policy nonce.
+
+A debug build uses the workspace's `ui-dev` Cargo profile, which `index.html` picks with
+`data-cargo-profile-dev`: `dev` without debug info and with the symbols stripped. With
+`dev` itself, wasm-bindgen's `_bg.wasm` is around 78 MiB, nearly all of it the name
+section. That is over the 64 MiB the server serves a UI file at, so every load would get
+a 500 (#674). Stripped, it is around 8 MiB. A panic's message and source location still
+reach the browser console, but its stack has no function names. A release build keeps
+its own profile.
 
 CI's `wasm` job builds the UI this way on every PR, with trunk and the `wasm-bindgen`
 CLI downloaded at pinned versions and checked against pinned SHA-256 sums, and runs
