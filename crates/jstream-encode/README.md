@@ -71,7 +71,10 @@ next regular one when the encoder can't force it; keyframe requests coalesce; `f
 drains; an encoder error and a panic reach every subscriber; dropping a session closes
 the streams and joins the thread; dropped audio blocks become silence, also when that
 silence is first refused as busy; the fan-out's
-keyframe resync; and the registry. `src/gpu_tests.rs` covers `open_on` on every
+keyframe resync; the registry; and one invariant, checked by snapshotting a video
+session while another thread pushes, that must hold on every interleaving: a snapshot
+never shows more encoded, busy-dropped or published frames than received ones, nor
+more keyframes than packets (#709). `src/gpu_tests.rs` covers `open_on` on every
 platform, with GPU frames that are textures on a software adapter: CPU frames without a
 context, the CPU fallback (opened as configured, with its reason) for a backend with no
 GPU path, one that refuses the context and one whose GPU encoder fails to open, and a
@@ -83,7 +86,7 @@ wgpu adapter skips the ones that need a context, except on CI.
 ## Design
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
-depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md"]
 -->
 
 ### Threads and pacing
@@ -205,8 +208,16 @@ lives while an output holds its `Arc`; the output that lets go last should `fini
 
 `SessionStats`: inputs `received`, `dropped_queue_full`, `dropped_encoder_busy`,
 `encoded`, `packets`, `keyframes`, `keyframes_requested` (requests the encoder
-accepted), current `subscribers`, `subscriber_drops` and `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are relaxed atomic
-counters read without stopping the thread. The engine maps a video session's input
+accepted), current `subscribers`, `subscriber_drops` and `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are atomic counters
+read without stopping the thread, so a snapshot can be mid-update, but never ahead of
+itself: an input is counted `received` before it is queued, the later stages count it
+with release ordering, and the snapshot reads them in reverse with acquire. So a
+snapshot never shows more `encoded` plus `dropped_encoder_busy` than `received`, nor
+more `keyframes` than `packets`; in a video session, which publishes one packet per
+frame encoded, nor more `packets` than `received` either. An audio session can: a block
+may give several packets, and gap-fill silence gives packets for blocks never received.
+A push that is refused counts its input `received` and takes it back, so a snapshot
+taken in between may briefly count an input that is then dropped. The engine maps a video session's input
 drops to `encode_frames` and an audio session's to `encode_blocks`, and both sessions'
 `subscriber_drops` to `output_packets`, in `stats.tick`
 ([R-RT-004](../../docs/RULES.md#R-RT-004)). `silence_frames` is gap-fill, not a drop.
@@ -234,9 +245,6 @@ it writes a target again only when it holds the frame's only clone.
 
 - **Rate control** beyond what the platform encoder does with the configured
   `RateControl`: no bitrate adaptation or reconfiguration of a running session.
-- **GPU frames in the engine.** The engine does not open sessions with `open_on` yet:
-  that needs its render thread to write NV12 encode targets
-  ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 4).
 - `tracing` spans ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing` is a workspace
   dependency now, but this crate doesn't use it yet; it reports through its counters
   and `StreamEnd`. Spans would go on the control side (session start and end), not in

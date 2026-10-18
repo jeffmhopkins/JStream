@@ -425,6 +425,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .canvas-view .preview { width: min(100cqw, 100cqh * 16 / 9); }
 .inline-check { width: auto; }
 .stage { position: relative; touch-action: none; user-select: none; outline-offset: 2px; }
+/* The preview picture under the overlay; its box is set from the canvas's fit. */
+.stage-screen { position: absolute; pointer-events: none; }
 .stage-overlay {
   position: absolute;
   inset: 0;

@@ -128,7 +128,7 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
   decision is not a blocking finding: it gets `escalate` (see the verdict table);
 - a security problem;
 - a red required CI check caused by this PR. On a PR into a `wave/*` branch, a red `fmt`,
-  `clippy (ubuntu-latest)`, `docs` or `pr-title` counts as required too.
+  `clippy (ubuntu-latest)`, `test (ubuntu-latest)`, `docs` or `pr-title` counts as required too.
 
 **Non-blocking** (doesn't prevent `pass`): style, naming, suggestions, questions, and
 **pre-existing problems** the PR didn't introduce. List those as follow-ups, which the

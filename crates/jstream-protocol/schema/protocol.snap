@@ -4314,7 +4314,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "oneOf": [
         {
           "const": "prefer",
-          "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
+          "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0061: hardware first).",
           "type": "string"
         },
         {

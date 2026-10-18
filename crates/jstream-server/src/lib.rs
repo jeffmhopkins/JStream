@@ -95,6 +95,8 @@ struct App {
     slots: Arc<Semaphore>,
     /// `ServerConfig::handshake_timeout`.
     handshake_timeout: Duration,
+    /// `ServerConfig::ping_interval` and `ServerConfig::liveness_timeout`.
+    liveness: session::Liveness,
     /// The MCP sessions, when `ServerConfig::mcp` is on.
     mcp: Option<Mcp>,
     /// The web UI's files, when `ServerConfig::ui_dir` is set.
@@ -153,6 +155,10 @@ impl Server {
                 config.max_connections.min(Semaphore::MAX_PERMITS),
             )),
             handshake_timeout: config.handshake_timeout,
+            liveness: session::Liveness {
+                ping_every: config.ping_interval,
+                timeout: config.liveness_timeout,
+            },
             mcp,
             ui,
             devices,
@@ -327,6 +333,7 @@ async fn upgrade(
         app.open(credential)
     });
     let shutdown = app.shutdown.clone();
+    let liveness = app.liveness;
     // A browser client offers `jstream` beside the token's subprotocol and fails the
     // connection unless one is selected; the token's is never echoed.
     let mut response = upgrade
@@ -334,7 +341,7 @@ async fn upgrade(
         .max_message_size(MAX_MESSAGE_BYTES)
         .on_upgrade(move |socket| {
             async move {
-                session::run(socket, control, shutdown, revoked, hello_by).await;
+                session::run(socket, control, shutdown, revoked, hello_by, liveness).await;
                 drop(slot);
             }
             .instrument(span)

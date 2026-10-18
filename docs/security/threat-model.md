@@ -115,7 +115,8 @@ a stolen token, local denial of service.
 - Limits: 4 MiB messages and MCP bodies, 128 open TCP connections of any kind
   (authenticated or not), 32 WebSocket connections, 64 calls in flight per connection,
   16 MCP sessions, 10 s to send headers and finish the handshake, a bounded event
-  outbox.
+  outbox, and 45 s for a WebSocket client to answer the server's pings (sent every
+  15 s), so a connection that died without a close doesn't keep its slot and session.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
@@ -204,14 +205,18 @@ private, link-local and local-name targets, redirects to them included, unless i
 source sets `local_network`.
 
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
-camera, microphone and screen request and denies every permission prompt
-(`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
+camera, microphone and screen request and denies every permission prompt except
+Chromium's local network access one, which it grants only to a page its request policy
+already lets make local requests (`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
 a focused page's clipboard writes, never reaches that handler; the helper never focuses a
 page or sends it input (#347).
 The local-network refusal reads only the URL's host: a public name that resolves to a
-local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes until Chromium's
-Private Network Access checks are on, and so does any request the helper's request
-handler doesn't see, such as a service worker's (#347). ADR-0021's per-source
+local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes it, and so does any
+request the helper's request handler doesn't see, such as a service worker's. Chromium's
+Local Network Access checks see both at the network layer and ask that permission
+handler first, so for a page that didn't opt in they are refused there; that Chromium
+enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run
+(#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
 <a id="files"></a>
