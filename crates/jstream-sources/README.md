@@ -262,7 +262,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
   background transparent) is the one live setting: `update` replaces the page's custom
   CSS without reloading it. Through the engine a `css` edit still reloads the page, until
-  the engine updates live settings in place (core's README › Open items). The page's picture is only on the GPU (`gpu_frame`), so
+  the engine updates live settings in place (core's README › Open items).
+  `local_network` (advanced, default off) lets a page from the internet make requests
+  to this computer and the local network, for widgets that talk to an app running here;
+  off, `jstream-browser`'s request policy refuses them (#347). `youtube_chat` never sets
+  it. The page's picture is only on the GPU (`gpu_frame`), so
   `frame` is a transparent frame of the page's size, and the page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
   backend's failure is `SourceError::Browser`. Dropping the source closes the page.
@@ -415,7 +419,8 @@ continuous across the block seam. `player.rs`'s own tests loop a stream that sta
 in the file one frame period apart, and cut a block at a rate where 10 ms isn't a whole
 number of frames, keeping every frame and the pieces contiguous. `tests/browser.rs` runs
 the `browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
-over URL, setting and backend errors, live CSS, closing on drop and the audio hand-off.
+over URL, setting and backend errors, live CSS, the `local_network` opt-in, closing on
+drop and the audio hand-off.
 `tests/youtube_chat.rs` runs the `youtube_chat` preset the same way: the popout chat
 page a video or link opens, a blank page for an empty setting, refused links, the
 default CSS and live CSS.

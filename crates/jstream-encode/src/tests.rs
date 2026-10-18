@@ -104,6 +104,9 @@ struct Script {
     open: Arc<AtomicBool>,
     fail_at: Option<u64>,
     panic_at: Option<u64>,
+    /// The encoder falls back to software when it is given this frame, as a hardware
+    /// encoder that refuses its first frame does (#443).
+    software_at: Option<u64>,
     /// Set when the encoder is dropped.
     dropped: Arc<AtomicBool>,
 }
@@ -151,6 +154,10 @@ impl VideoEncoder for ScriptedVideo {
     fn encode(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
         if self.script.panic_at == Some(self.frames) {
             panic!("scripted panic at frame {}", self.frames);
+        }
+        if self.script.software_at == Some(self.frames) {
+            self.info.name = "Scripted software H.264".into();
+            self.info.hardware = false;
         }
         if self.script.fail_at == Some(self.frames) {
             return Err(PlatformError::Os {
@@ -238,6 +245,26 @@ fn video_packets_keep_order_and_pts_and_finish_drains() {
     // Finishing is idempotent, and a finished session refuses input.
     assert_eq!(session.finish(), Ok(stats));
     assert_eq!(session.input().push(frame(20)), Err(PushError::Closed));
+}
+
+/// #443: a hardware encoder that falls back to software after it opened is reported as
+/// software from then on, while `info` keeps what was opened.
+#[test]
+fn the_codec_follows_an_encoder_that_falls_back() {
+    let mut script = open_script();
+    script.software_at = Some(0);
+    let session = scripted_session(&script, 64);
+    assert!(session.codec().hardware);
+    push_all(&session.input(), 0..3);
+    session.finish().unwrap();
+    assert!(!session.codec().hardware);
+    assert_eq!(session.codec().name, "Scripted software H.264");
+    assert!(session.info().codec.hardware);
+    // An encoder that never changes keeps its codec.
+    let session = scripted_session(&open_script(), 64);
+    push_all(&session.input(), 0..3);
+    session.finish().unwrap();
+    assert_eq!(session.codec(), &session.info().codec);
 }
 
 #[test]

@@ -7,7 +7,12 @@
 //! could publish a block there and have the DLL serve their frames to a camera someone
 //! else created, whenever the console session has none.
 //!
-//! The rule, applied to every `Session\` block before the DLL writes to it:
+//! The rule, applied to every `Session\` block before the DLL writes to it, and again
+//! every few seconds while the block is in use:
+//! - the session must be the **console** session, or else the only active session
+//!   ([`check_session_choice`], #204): where several sessions are active at once
+//!   (Windows Server, several remote sessions), only the console's block is used, so
+//!   another active user's engine can't feed the camera when the console has none;
 //! - the session must be **active** now (connected to the console, or an active remote
 //!   connection), so a disconnected user's engine can't feed the person at the machine;
 //! - the mapping's **owner** must be that session's logged-on user, or SYSTEM or
@@ -38,6 +43,9 @@ pub enum Distrust {
     NoUser,
     /// The mapping's owner is neither the session's user nor SYSTEM or Administrators.
     ForeignOwner,
+    /// The session isn't the console's, and another session is active too (or the active
+    /// sessions couldn't be listed).
+    NotConsole,
 }
 
 impl Distrust {
@@ -47,6 +55,9 @@ impl Distrust {
             Distrust::Inactive => "the session is not active",
             Distrust::NoUser => "the session's user is unknown",
             Distrust::ForeignOwner => "the block's owner is not the session's user",
+            Distrust::NotConsole => {
+                "another session is active, so only the console session's block is used"
+            }
         }
     }
 }
@@ -59,6 +70,25 @@ pub fn session_of(name: &str) -> Option<u32> {
         return None;
     }
     id.parse().ok()
+}
+
+/// Whether the block of session `session` may be used at all, given the console session
+/// (`None` if no session is attached to it) and every active session (`None` if they
+/// couldn't be listed). The console's block always may. Another session's may only when
+/// no other session is active, as when one remote session has taken over a workstation
+/// and the console sits at the sign-in screen.
+pub fn check_session_choice(
+    session: u32,
+    console: Option<u32>,
+    active: Option<&[u32]>,
+) -> Result<(), Distrust> {
+    if console == Some(session) {
+        return Ok(());
+    }
+    match active {
+        Some(active) if active.iter().all(|&id| id == session) => Ok(()),
+        _ => Err(Distrust::NotConsole),
+    }
 }
 
 /// Whether a block found in a session's namespace may be used, given its owner's SID, the
@@ -118,6 +148,38 @@ mod tests {
             check_session_block(ADMINISTRATORS_SID, Some(ALICE), true),
             Ok(())
         );
+    }
+
+    /// #204: while several sessions are active, only the console's block is used.
+    #[test]
+    fn only_the_console_block_is_used_while_several_sessions_are_active() {
+        // The console's block, whoever else is active.
+        assert_eq!(check_session_choice(1, Some(1), Some(&[1, 2, 3])), Ok(()));
+        assert_eq!(check_session_choice(1, Some(1), None), Ok(()));
+        // Another active session's block, while the console session is active too.
+        assert_eq!(
+            check_session_choice(2, Some(1), Some(&[1, 2])),
+            Err(Distrust::NotConsole)
+        );
+        // Two remote sessions and nobody at the console: neither is chosen.
+        assert_eq!(
+            check_session_choice(2, Some(1), Some(&[2, 3])),
+            Err(Distrust::NotConsole)
+        );
+        // The sessions couldn't be listed: only the console's.
+        assert_eq!(
+            check_session_choice(2, Some(1), None),
+            Err(Distrust::NotConsole)
+        );
+        assert_eq!(
+            check_session_choice(2, None, None),
+            Err(Distrust::NotConsole)
+        );
+        // One remote session that took over a workstation (the console sits at the
+        // sign-in screen, not active): its block is used.
+        assert_eq!(check_session_choice(2, Some(1), Some(&[2])), Ok(()));
+        assert_eq!(check_session_choice(2, None, Some(&[2])), Ok(()));
+        assert_eq!(check_session_choice(2, Some(1), Some(&[])), Ok(()));
     }
 
     /// #180: another user's block must not feed this camera.

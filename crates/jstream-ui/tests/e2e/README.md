@@ -72,15 +72,30 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
-- **Docking** (`docking.spec.js`): the Editing layout's zones, with empty zones hidden;
+- **Docking** (`docking.spec.js`): the Editing layout's zones (Transitions as a tab
+  beside Outputs), with empty zones hidden;
   the View menu hiding and adding a panel, and the layout marked "(modified)"; dragging
   a tab onto a tab strip groups it, and onto an empty zone, which shows while dragging,
   docks it there; a lone panel collapses by its title, and closes on a second click of
   its ×; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live and resets to Editing.
-- **Canvas** (`canvas.spec.js`): the program scene's box is drawn where the seed put it;
-  a drag sends nothing until the drop, then one edit that undo and redo reverse; arrow
-  keys nudge (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
+- **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
+  it, under the scene's caption; a click on the box selects its row in the sources list
+  and shows the size readout, a click on empty canvas clears both, and selecting another
+  scene in the list switches the canvas to it; a Ctrl drag sends nothing until the drop
+  and shows the top-left readout meanwhile, then one edit that Ctrl+Z and Ctrl+Shift+Z
+  reverse; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
+  (Shift by 10) and Ctrl+Z undoes; a second client sees a move; a marquee started on
+  the margin selects the box it touches and Escape clears it; with a second item
+  placed, Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
+  canvas takes one out and Shift-click on its row in the sources list adds it back; a
+  double click brings the closed Inspector back showing the item, and a double click
+  on the canvas tools over an item leaves the selection alone.
+- **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
+  preview goes to program with Transition, and the old program scene comes back on
+  preview; Transition and Cut are off while preview is the program scene; a value the
+  preset form refused keeps the preset from being added. The mock engine refuses
+  preset edits, so the edits the preset form sends are tested natively.
 
 <a id="running"></a>
 ## Running them
