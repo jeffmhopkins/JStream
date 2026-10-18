@@ -73,9 +73,21 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
     let tests = test_list(repo);
     let lints = workspace_lints(repo.root);
     let deny = deny_sections(repo.root);
+    // Crate-map crates that don't exist yet, by crate name (#739 review N2): `known`
+    // also holds every existing crate directory, whose name may differ from its package.
+    let existing: BTreeSet<&str> = super::backrefs::crates(repo.files.paths())
+        .into_iter()
+        .map(|(d, _)| d)
+        .collect();
+    let planned: BTreeSet<String> = known
+        .iter()
+        .filter(|d| !existing.contains(d.as_str()))
+        .filter_map(|d| d.rsplit('/').next().map(|n| n.replace('-', "_")))
+        .collect();
     let refs = RuleRefs {
         ci_checks: &ci_checks,
         known_crates: &known,
+        planned: &planned,
         tests: &tests,
         lints: &lints,
         deny_sections: &deny,
@@ -431,6 +443,8 @@ fn check_section_meta(
 struct RuleRefs<'a> {
     ci_checks: &'a BTreeSet<String>,
     known_crates: &'a BTreeSet<String>,
+    /// Crates on the crate map that don't exist yet, by crate name (`-` written `_`).
+    planned: &'a BTreeSet<String>,
     tests: &'a TestList,
     /// Lints the root `[workspace.lints]` sets above `allow`: rustc's by name, clippy's
     /// as `clippy::<name>`.
@@ -497,6 +511,7 @@ fn check_rule_meta(
     let RuleRefs {
         ci_checks,
         known_crates,
+        planned,
         tests,
         lints,
         deny_sections,
@@ -574,7 +589,7 @@ fn check_rule_meta(
                 true
             }
             Some(("test", path)) => {
-                if let Some(msg) = check_test_entry(path, known_crates, tests) {
+                if let Some(msg) = check_test_entry(path, planned, tests) {
                     out.push(diag(&doc.path, line, format!("rule `{id}`: {msg}")));
                 }
                 true
@@ -609,11 +624,7 @@ fn test_list(repo: &Repo<'_>) -> TestList {
 /// Checks a `test:<path>` entry: `<path>` must name a test, or a module holding one, in
 /// the crate or integration test target its first segment names. A crate on the crate map
 /// that doesn't exist yet makes the entry pending, which passes.
-fn check_test_entry(
-    path: &str,
-    known_crates: &BTreeSet<String>,
-    tests: &TestList,
-) -> Option<String> {
+fn check_test_entry(path: &str, planned: &BTreeSet<String>, tests: &TestList) -> Option<String> {
     match tests.resolve(path) {
         Resolved::Found => None,
         Resolved::NoTest => Some(format!(
@@ -622,15 +633,11 @@ fn check_test_entry(
         )),
         Resolved::NoTarget => {
             let first = path.split("::").next().unwrap_or(path);
-            let planned = known_crates.iter().any(|d| {
-                d.rsplit('/')
-                    .next()
-                    .is_some_and(|n| n.replace('-', "_") == first)
-            });
-            (!planned).then(|| {
+            (!planned.contains(first)).then(|| {
                 format!(
-                    "`enforced_by` entry `test:{path}`: `{first}` is neither a crate (existing \
-                     or on the crate map) nor an integration test target"
+                    "`enforced_by` entry `test:{path}`: `{first}` is neither an existing crate \
+                     (by package name), a crate on the crate map that doesn't exist yet, nor \
+                     an integration test target"
                 )
             })
         }

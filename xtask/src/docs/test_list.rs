@@ -2,8 +2,9 @@
 //! without building, so that `docs check` can resolve `test:` entries in `enforced_by`
 //! (docs/DOCS.md#rules).
 //!
-//! A test is a `fn` with an attribute whose path ends in `test` (`#[test]`,
-//! `#[tokio::test]`), declared directly in a module, named by its module path from its
+//! A test is a `fn` with an attribute whose path ends in `test`, with or without
+//! arguments (`#[test]`, `#[tokio::test(flavor = "…")]`), declared directly in a module,
+//! named by its module path from its
 //! target's root: `src/lib.rs`, `src/main.rs`, `src/bin/*`, or `tests/*`. Modules are
 //! followed through `mod x;` (to `x.rs` or `x/mod.rs`, or a `#[path]`) and `mod x { … }`.
 //! Tests that a macro generates aren't seen.
@@ -191,7 +192,9 @@ fn walk(
                             let found = match attrs.path.take() {
                                 Some(p) => {
                                     let from = if inline.is_empty() { parent } else { &dir };
-                                    Some((from.join(p), false))
+                                    // rustc treats a `#[path]` file as a `mod.rs`: its
+                                    // own `mod x;` files are its siblings.
+                                    Some((from.join(p), true))
                                 }
                                 None => [
                                     (dir.join(format!("{name}.rs")), false),
@@ -273,7 +276,10 @@ impl Attrs {
                 }
             }
             match last {
-                Some("test") if j == end => self.test = true,
+                // `#[test]`, or one with arguments: `#[tokio::test(flavor = "…")]`.
+                Some("test") if j == end || closes_at(toks, j) == Some(end) => {
+                    self.test = true;
+                }
                 Some("path") => {
                     if let (Some(Tok::Punct('=')), Some(Tok::Str(s))) =
                         (toks.get(j), toks.get(j + 1))
@@ -286,6 +292,27 @@ impl Attrs {
         }
         end + 1
     }
+}
+
+/// The index just past the `( … )` group that opens at `j`, if one does.
+fn closes_at(toks: &[Tok], j: usize) -> Option<usize> {
+    if toks.get(j) != Some(&Tok::Punct('(')) {
+        return None;
+    }
+    let mut depth = 0usize;
+    for (k, t) in toks.iter().enumerate().skip(j) {
+        match t {
+            Tok::Punct('(' | '[' | '{') => depth += 1,
+            Tok::Punct(')' | ']' | '}') => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(k + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -347,7 +374,8 @@ fn tokens(src: &str) -> Vec<Tok> {
         } else if ch == '\'' {
             // A char literal ('x', '\n', '\u{..}') or a lifetime ('a).
             if c.get(i + 1) == Some(&'\\') {
-                i += 2;
+                // Past the backslash and the escaped char, so `'\''` ends at its own quote.
+                i += 3;
                 while i < c.len() && c[i] != '\'' {
                     i += 1;
                 }
@@ -453,7 +481,7 @@ mod tests {
                 ),
                 (
                     "crates/jstream-a/src/engine.rs",
-                    "mod rt;\n// #[test] fn commented() {}\nconst S: &str = \"#[test] fn in_a_string() {}\";\n#[tokio::test]\nasync fn asyncly() {}\n",
+                    "mod rt;\n// #[test] fn commented() {}\nconst S: &str = \"#[test] fn in_a_string() {}\";\n#[tokio::test]\nasync fn asyncly() {}\nconst Q: char = '\\'';\n#[tokio::test(flavor = \"multi_thread\", worker_threads = 2)]\nasync fn with_arguments() {}\n#[test_case(1)]\nfn not_a_test_attribute(_: u8) {}\n",
                 ),
                 (
                     "crates/jstream-a/src/engine/rt/mod.rs",
@@ -469,6 +497,8 @@ mod tests {
         assert!(found("jstream_a::top"));
         assert!(found("jstream_a::tests::inline"));
         assert!(found("jstream_a::engine::asyncly"));
+        // A test attribute with arguments (#739 review B1).
+        assert!(found("jstream_a::engine::with_arguments"));
         assert!(found("jstream_a::engine::rt::deep"));
         // Integration tests count toward their crate and their own target.
         assert!(found("jstream_a::rt::overload"));
@@ -482,6 +512,7 @@ mod tests {
             "jstream_a::tests::helper",
             "jstream_a::engine::commented",
             "jstream_a::engine::in_a_string",
+            "jstream_a::engine::not_a_test_attribute",
             "jstream_a::engine::rt::nested",
             "jstream_a::inline",
             "jstream_a::engine::r",
@@ -503,7 +534,12 @@ mod tests {
                 ),
                 (
                     "crates/jstream-a/src/elsewhere/odd.rs",
-                    "#[test]\nfn there() {}\n",
+                    "mod sib;\n#[test]\nfn there() {}\n",
+                ),
+                // A `#[path]` file is a `mod.rs`: its submodule is a sibling (review N1).
+                (
+                    "crates/jstream-a/src/elsewhere/sib.rs",
+                    "#[test]\nfn beside() {}\n",
                 ),
                 (
                     "crates/jstream-a/src/bin/tool.rs",
@@ -512,6 +548,7 @@ mod tests {
             ],
         );
         assert_eq!(l.resolve("jstream_a::odd::there"), Resolved::Found);
+        assert_eq!(l.resolve("jstream_a::odd::sib::beside"), Resolved::Found);
         assert_eq!(l.resolve("jstream_a::tooled"), Resolved::Found);
     }
 }
