@@ -140,8 +140,8 @@ impl FanOut {
             return;
         }
         for packet in packets.drain(..) {
-            // Release, so a snapshot that sees the packet also sees its input received
-            // (`Counters::snapshot`).
+            // Release, so a snapshot that sees the packet also sees every input received
+            // before it (`Counters::snapshot`).
             counters.packets.fetch_add(1, Ordering::Release);
             if packet.is_keyframe() {
                 counters.keyframes.fetch_add(1, Ordering::Release);

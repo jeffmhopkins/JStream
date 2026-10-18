@@ -247,10 +247,9 @@ fn video_packets_keep_order_and_pts_and_finish_drains() {
     assert_eq!(session.input().push(frame(20)), Err(PushError::Closed));
 }
 
-/// #443: a hardware encoder that falls back to software after it opened is reported as
-/// software from then on, while `info` keeps what was opened.
-/// A snapshot taken while frames flow never counts a frame encoded, refused or
-/// published that it doesn't count received, nor more keyframes than packets. The
+/// A snapshot of a video session taken while frames flow never counts a frame encoded,
+/// refused or published (one packet per frame) that it doesn't count received, nor more
+/// keyframes than packets. The
 /// push used to count a frame received only after sending it, so the encode thread
 /// could encode and publish it first (#709's `encoded: 1, received: 0`).
 #[test]
@@ -287,6 +286,8 @@ fn stats_never_count_more_encoded_than_received() {
     assert_eq!(stats.received + stats.dropped_queue_full, 20_000);
 }
 
+/// #443: a hardware encoder that falls back to software after it opened is reported as
+/// software from then on, while `info` keeps what was opened.
 #[test]
 fn the_codec_follows_an_encoder_that_falls_back() {
     let mut script = open_script();
