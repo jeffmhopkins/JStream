@@ -11,6 +11,10 @@
 // fragment multiplies by its coverage, clamp(d + 0.5, 0, 1) for the distance d to the
 // nearest edge (ADR-0050 decision 6); a 3D item's polygon is drawn pushed out by a pixel so
 // those fringe pixels rasterize. A 2D item's lines are never crossed, so its coverage is 1.
+// `uv_bounds` (u_min, v_min, u_max, v_max) clamps a fringe pixel's texture coordinate to
+// the content, so it never samples a cropped-away texel or one `fill` clips; the
+// gradients come from the unclamped coordinate, so the filter footprint stays right.
+// A 2D item's bounds never clamp.
 //
 // `mode` says what a filtered sample holds. 0: an uploaded or rendered image, stored
 // premultiplied linear, so the linear filter never mixes in the colour of a transparent
@@ -29,6 +33,7 @@ struct VsOut {
     @location(5) @interpolate(flat) e2: vec3<f32>,
     @location(6) @interpolate(flat) e3: vec3<f32>,
     @location(7) @interpolate(flat) e4: vec3<f32>,
+    @location(8) @interpolate(flat) uv_bounds: vec4<f32>,
 }
 
 @vertex
@@ -43,6 +48,7 @@ fn vs(
     @location(7) e2: vec3<f32>,
     @location(8) e3: vec3<f32>,
     @location(9) e4: vec3<f32>,
+    @location(10) uv_bounds: vec4<f32>,
 ) -> VsOut {
     var out: VsOut;
     out.clip = vec4<f32>(pos * w, 0.0, w);
@@ -54,6 +60,7 @@ fn vs(
     out.e2 = e2;
     out.e3 = e3;
     out.e4 = e4;
+    out.uv_bounds = uv_bounds;
     return out;
 }
 
@@ -73,7 +80,8 @@ fn edge(e: vec3<f32>, at: vec2<f32>) -> f32 {
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    let c = textureSample(tex, samp, in.uv);
+    let uv = clamp(in.uv, in.uv_bounds.xy, in.uv_bounds.zw);
+    let c = textureSampleGrad(tex, samp, uv, dpdx(in.uv), dpdy(in.uv));
     var rgb = c.rgb;
     if in.mode > 1.5 {
         // Premultiplied code values: a filtered texel keeps rgb <= a, up to rounding.

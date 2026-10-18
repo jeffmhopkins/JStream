@@ -109,9 +109,15 @@ impl Texels {
     }
 }
 
-fn content(geometry: ItemGeometry) -> ContentRect {
+fn content(geometry: ItemGeometry, crop: Crop) -> ContentRect {
+    let crop = ProtocolCrop {
+        left: crop.left,
+        top: crop.top,
+        right: crop.right,
+        bottom: crop.bottom,
+    };
     geometry
-        .content(SOURCE, SOURCE, ProtocolCrop::default())
+        .content(SOURCE, SOURCE, crop)
         .expect("valid")
         .expect("pixels")
 }
@@ -141,8 +147,8 @@ fn sample(
     Some(texels.bilinear(vertex.uv[0], vertex.uv[1]))
 }
 
-fn reference(items: &[ItemGeometry], texels: &Texels, n: u32) -> Reference {
-    let contents: Vec<ContentRect> = items.iter().map(|g| content(*g)).collect();
+fn reference(items: &[ItemGeometry], texels: &Texels, n: u32, crop: Crop) -> Reference {
+    let contents: Vec<ContentRect> = items.iter().map(|g| content(*g, crop)).collect();
     let background = BACKGROUND.map(|c| srgb_channel_to_linear(f32::from(c) / 255.0));
     let mut out = Reference {
         rgb: Vec::with_capacity((WIDTH * HEIGHT) as usize),
@@ -192,13 +198,18 @@ fn encode(linear: f32) -> f32 {
     srgb * 255.0
 }
 
-fn gpu(compositor: &mut crate::Compositor, items: &[ItemGeometry], rgba: &[u8]) -> Snapshot {
+fn gpu(
+    compositor: &mut crate::Compositor,
+    items: &[ItemGeometry],
+    rgba: &[u8],
+    crop: Crop,
+) -> Snapshot {
     let image = compositor
         .upload_rgba8(SOURCE, SOURCE, rgba)
         .expect("the pattern uploads");
     let scene_items: Vec<_> = items
         .iter()
-        .map(|g| item(&image, Placement::Geometry(*g), Crop::NONE, 1.0))
+        .map(|g| item(&image, Placement::Geometry(*g), crop, 1.0))
         .collect();
     let [r, g, b] = BACKGROUND.map(|c| f32::from(c) / 255.0);
     let scene = Scene {
@@ -276,8 +287,8 @@ fn golden_3d_a_turned_item_is_perspective_correct() {
         0.0,
         Some(175.0),
     )];
-    let got = gpu(&mut opened.compositor, &items, &rgba);
-    let want = reference(&items, &Texels::new(&rgba), 8);
+    let got = gpu(&mut opened.compositor, &items, &rgba, Crop::NONE);
+    let want = reference(&items, &Texels::new(&rgba), 8, Crop::NONE);
     check("A interior", error(&got, &want, interior), 3.0, 40.0);
 }
 
@@ -306,8 +317,8 @@ fn golden_3d_b_an_item_reaching_behind_the_viewer_draws_its_front() {
         .filter(|corner| matches!(corner, Placed::BehindViewer))
         .count();
     assert!(behind > 0, "the scenario has a corner behind the viewer");
-    let got = gpu(&mut opened.compositor, &items, &rgba);
-    let want = reference(&items, &Texels::new(&rgba), 8);
+    let got = gpu(&mut opened.compositor, &items, &rgba, Crop::NONE);
+    let want = reference(&items, &Texels::new(&rgba), 8, Crop::NONE);
     check("B all", error(&got, &want, all), 2.0, 40.0);
 }
 
@@ -328,9 +339,39 @@ fn golden_3d_d_edges_are_antialiased() {
         0.0,
         Some(225.0),
     )];
-    let got = gpu(&mut opened.compositor, &items, &rgba);
-    let want = reference(&items, &Texels::new(&rgba), 16);
+    let got = gpu(&mut opened.compositor, &items, &rgba, Crop::NONE);
+    let want = reference(&items, &Texels::new(&rgba), 16, Crop::NONE);
     check("D edge", error(&got, &want, edge), 6.0, 40.0);
+}
+
+/// D cropped: a smaller item showing only part of its source, cropped just past a texel
+/// ring. Its pushed-out fringe samples are clamped to the crop, so the cropped-away ring
+/// doesn't show at its edges. On lavapipe the edge mean is about 7.4 with the clamp and
+/// 9.3 without it. Minification of the one-texel rings accounts for the rest.
+#[test]
+fn golden_3d_d_a_cropped_item_shows_nothing_past_its_crop() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let rgba = pattern();
+    let items = [geometry(
+        (120.0, 68.0),
+        (45.0, 30.0),
+        17.0,
+        0.0,
+        35.0,
+        0.0,
+        Some(225.0),
+    )];
+    let crop = Crop {
+        left: 17,
+        top: 17,
+        right: 12,
+        bottom: 12,
+    };
+    let got = gpu(&mut opened.compositor, &items, &rgba, crop);
+    let want = reference(&items, &Texels::new(&rgba), 16, crop);
+    check("D cropped edge", error(&got, &want, edge), 8.0, 40.0);
 }
 
 /// E: two items through each other, turned 45° each way. They draw in stacking order
@@ -361,7 +402,7 @@ fn golden_3d_e_items_through_each_other_draw_in_stacking_order() {
             Some(200.0),
         ),
     ];
-    let got = gpu(&mut opened.compositor, &items, &rgba);
-    let want = reference(&items, &Texels::new(&rgba), 8);
+    let got = gpu(&mut opened.compositor, &items, &rgba, Crop::NONE);
+    let want = reference(&items, &Texels::new(&rgba), 8, Crop::NONE);
     check("E all", error(&got, &want, all), 2.0, 40.0);
 }

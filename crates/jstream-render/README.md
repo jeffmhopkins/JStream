@@ -178,10 +178,13 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
    is its quad (two triangles), a 3D item three to five vertices (up to three
    triangles). The vertex buffer holds clip-space positions, UVs, opacity, the image's
-   alpha mode, ADR-0050's `w`, and the item's five edge lines (22 `f32`s, 88 bytes).
+   alpha mode, ADR-0050's `w`, the item's five edge lines and its UV bounds (26
+   `f32`s, 104 bytes).
    The vertex shader writes `(pos · w, 0, w)`, so the GPU interpolates UVs
    perspective-correctly; a 2D item has `w = 1`, the plain affine path. The fragment
-   shader samples; for a straight import it multiplies RGB by the sampled
+   shader clamps its UV to the item's bounds (a 3D item's content before the one-pixel
+   push, so a fringe pixel never samples past the crop or what `fill` clips; a 2D item's
+   bounds never clamp) and samples with the unclamped UV's gradients; for a straight import it multiplies RGB by the sampled
    alpha, and for a premultiplied import it divides RGB by alpha (zero where alpha is
    0), decodes sRGB and multiplies by alpha; then it multiplies all four channels by
    opacity and by its edge coverage, `clamp(d + 0.5, 0, 1)` for the distance `d` in
@@ -613,7 +616,9 @@ averages 8×8 (16×16 for D) point samples per pixel, each mapped back with `unp
 sampled bilinearly. The tests assert a mean and a p99 error per channel in sRGB 8-bit
 steps. A, an item turned 50° with perspective, interior pixels: mean ≤ 3, about 1.3 on
 lavapipe. B, tilted toward the viewer with a corner behind it, all pixels: ≤ 2, about
-0.65. D, a small rotated and turned item, edge pixels: ≤ 6, about 3.5. E, two items
+0.65. D, a small rotated and turned item, edge pixels: ≤ 6, about 3.5. D cropped, a
+smaller item cropped just past a texel ring, edge pixels: ≤ 8, about 7.4, and 9.3
+without the UV clamp. E, two items
 turned through each other, in stacking order, all pixels: ≤ 2, about 0.7. Drawn
 affinely (`w = 1`), A, B, D and E measure 67, 78, 13 and 15. With coverage replaced by
 a hard edge, D measures 53. Scenario C, minification, waits for mips.
