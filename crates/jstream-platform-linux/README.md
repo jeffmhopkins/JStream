@@ -105,8 +105,8 @@ It has:
   removed is `DeviceLost`; a default follows the session manager. The callbacks catch
   panics (R-UNSAFE-005): a panicking handler is told once, with `InvalidState`, and
   isn't called again. Dropping the stream stops its callbacks before it returns,
-  without telling the handler it failed. Choosing between PipeWire and the ALSA
-  fallback (ADR-0060 §8) isn't wired yet.
+  without telling the handler it failed. Each input node's ALSA card (from its info's
+  `api.alsa.pcm.card`) is kept for pairing webcams.
 - **`V4l2Devices`** (`VideoDevices`): webcams and capture cards through V4L2, the
   "plain V4L2 backend" ADR-0060 §9 keeps in scope. There is no library: the nodes are
   driven with `ioctl`s declared by hand from `<linux/videodev2.h>` (`v4l2/abi.rs`, the
@@ -115,8 +115,13 @@ It has:
   streaming I/O (a UVC webcam's metadata node doesn't), named by its card name, with
   udev's `/dev/v4l/by-id/` link as the ID where there is one (it survives replugging and
   renumbering), else the node's path. Only such paths are ever opened, since an ID can
-  come from a saved collection. Nodes the user can't open are left out, and no
-  microphone is paired yet. `formats` lists every enumerated size and frame interval of
+  come from a saved collection. Nodes the user can't open are left out. Built with an
+  audio backend (`with_audio`), it pairs each device with its microphone
+  (`pairing.rs`): the node's device in sysfs (the USB device, for a USB interface)
+  holds its sound cards, and the backend names its input on the first of them that has
+  one, PipeWire by card index and ALSA by the card's id (`sysdefault:CARD=<id>`, else
+  `plughw:`, `dsnoop:` or `hw:`). A capture card whose audio is another PCI function
+  isn't paired, and a backend that can't list its inputs pairs nothing. `formats` lists every enumerated size and frame interval of
   the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12), NV12 and I420 as
   they are, and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. A stepwise size range
   offers its largest size and the common sizes its steps reach, a stepwise interval its
@@ -155,6 +160,15 @@ It has:
   and ADR-0060 §4 leaves them to PipeWire. alsa-lib prints its own error lines to stderr
   (such as for an unknown PCM); silencing them needs a variadic C callback, which stable
   Rust can't define.
+- **`LinuxBackends`**: the backend set, ADR-0060 §4's choice made once when it is
+  built (`backends.rs`). Audio is `PipeWireAudio` when libpipewire loads and the daemon
+  answers a device listing, else `AlsaAudio`; `audio_backend` says which and
+  `pipewire_unavailable` why PipeWire wasn't used, and with neither it is a missing
+  component naming both reasons. The same audio backend is handed to `V4l2Devices` for
+  pairing, so a paired microphone is one the engine can open. It holds the clock,
+  portal capture (with a restore-token folder when given), the paired video devices,
+  the audio backend and `VaapiCodecs`; `into_backends` adds the host's GPU interop and
+  media decoders, which this crate doesn't have yet, for the engine's `Backends`.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
@@ -226,10 +240,9 @@ Not here yet, in roughly the order they follow:
   "show cursor" setting (it is drawn into the frames for now);
 - restore tokens kept per source rather than per kind of pick, once the engine names
   the source when it starts a capture;
-- choosing between PipeWire and ALSA where both are present (ADR-0060 §4);
 - DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
-- multi-planar V4L2 capture (some capture cards and SoC cameras), and pairing a webcam
-  with its microphone;
+- multi-planar V4L2 capture (some capture cards and SoC cameras);
+- GPU interop and media-file decoders, which `LinuxBackends` leaves to the host;
 - the stream-key store.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
@@ -246,7 +259,9 @@ overrun, loopback refused, an unknown PCM and the listing) pass with or without 
 libraries installed and need no GPU, session or daemon; a missing PipeWire daemon is
 tried on a socket name nothing listens on. ALSA's sample conversion, channel layouts,
 listed names and frame times, PipeWire's registry reading and stream planning
-(`pipewire/graph.rs`) and its audio format pods are platform-independent too. The
+(`pipewire/graph.rs`) and its audio format pods, the audio backend choice, and
+pairing (finding a node's sound cards in a sysfs tree laid out in a temporary folder,
+and each backend's preferred input on a card) are platform-independent too. The
 OpenH264 tests use a fake download and a fake encoder behind the library's vtable, and
 the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
@@ -258,4 +273,5 @@ driver, V4L2 capture from a webcam or capture card (the `vivid` test driver will
 do), a second of ALSA's default input on a sound card (`null` isn't paced, so
 only a real device shows real-time recording), and `PipeWireAudio` recording, playing
 and looping back on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes are
-enough, no sound card).
+enough, no sound card, and one says it is on ALSA card 7 for the pairing test), and
+`LinuxBackends` picking PipeWire with a daemon and ALSA without.

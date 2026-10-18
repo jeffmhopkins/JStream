@@ -7,7 +7,8 @@
 //! sizes and frame intervals the driver enumerates for the pixel formats the backend
 //! delivers (`format`): YUYV converted to NV12, NV12 and I420 as they are, and MJPEG
 //! handed to the engine's decoder. An open stream maps four driver buffers and runs its
-//! own capture thread (`stream`).
+//! own capture thread (`stream`). Given an audio backend, a device is paired with the
+//! microphone on its own hardware (`crate::pairing`).
 
 #[cfg(any(target_os = "linux", test))]
 mod abi;
@@ -24,6 +25,7 @@ pub use backend::V4l2Devices;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod backend {
     use std::path::{Path, PathBuf};
+    use std::sync::Arc;
 
     use jstream_platform::{
         CaptureDecoder, CaptureEncoding, CaptureStream, DeviceId, PlatformError, VideoDeviceFormat,
@@ -35,10 +37,13 @@ mod backend {
         c_name, color, formats, fourcc_for, is_capture, is_device_path, min_stride, node_number,
     };
     use super::stream::{Capture, Deliver, V4l2Stream};
-    use crate::MonotonicClock;
+    use crate::pairing::sound_cards_for;
+    use crate::{MonotonicClock, PairedAudio};
 
     /// The directory of udev's stable links to video nodes, by the device's identity.
     const BY_ID: &str = "/dev/v4l/by-id";
+    /// Where sysfs is mounted, for pairing a node with its sound card.
+    const SYS: &str = "/sys";
 
     /// Video capture devices (webcams and capture cards) through V4L2.
     ///
@@ -46,13 +51,22 @@ mod backend {
     /// keeps its own node open. `Send + Sync`, callable from any thread.
     #[derive(Debug, Default)]
     pub struct V4l2Devices {
-        _private: (),
+        /// The audio backend whose inputs devices are paired with, if any.
+        audio: Option<Arc<dyn PairedAudio>>,
     }
 
     impl V4l2Devices {
-        /// The backend. Opening nothing yet, it can't fail.
+        /// The backend, pairing no microphones. Opening nothing yet, it can't fail.
         pub fn new() -> Self {
             Self::default()
+        }
+
+        /// The backend, pairing each device with its microphone among `audio`'s inputs
+        /// (see [`PairedAudio`]): the backend the engine records audio through, so the
+        /// paired ID is one it opens. [`LinuxBackends`](crate::LinuxBackends) passes the
+        /// audio backend it chose.
+        pub fn with_audio(audio: Arc<dyn PairedAudio>) -> Self {
+            Self { audio: Some(audio) }
         }
     }
 
@@ -108,9 +122,13 @@ mod backend {
     impl VideoDevices for V4l2Devices {
         /// IDs are udev's `/dev/v4l/by-id/` links where there is one, else the node's
         /// path. Nodes that can't be opened (another user's, or without permission) are
-        /// left out. No microphone is paired yet.
+        /// left out. With an audio backend ([`with_audio`](V4l2Devices::with_audio)), a
+        /// device is paired with the backend's input on a sound card of the same
+        /// hardware; when the backend can't list its inputs, nothing is paired and the
+        /// devices are still listed.
         fn devices(&self) -> Result<Vec<VideoDeviceInfo>, PlatformError> {
             let mut out = Vec::new();
+            let mut inputs = None;
             for node in nodes() {
                 let Some(path) = node.to_str() else { continue };
                 let Ok(device) = Device::open(path) else {
@@ -123,6 +141,16 @@ mod backend {
                     continue;
                 }
                 let name = c_name(&cap.card);
+                let audio = self.audio.as_ref().and_then(|audio| {
+                    let cards = sound_cards_for(Path::new(SYS), node.file_name()?.to_str()?);
+                    if cards.is_empty() {
+                        return None;
+                    }
+                    // Read once, and only once a device has a card to pair.
+                    inputs
+                        .get_or_insert_with(|| audio.card_inputs().unwrap_or_default())
+                        .input_for(&cards)
+                });
                 out.push(VideoDeviceInfo {
                     id: DeviceId::new(stable_id(&node)),
                     name: if name.is_empty() {
@@ -130,7 +158,7 @@ mod backend {
                     } else {
                         name
                     },
-                    audio: None,
+                    audio,
                 });
             }
             Ok(out)

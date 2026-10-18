@@ -10,8 +10,10 @@
 //! encoder, downloaded only on the user's request and checked against its pin
 //! (`OpenH264Store`, `OpenH264Encoder`, ADR-0061), and AAC encoding on JStream's own
 //! AAC-LC encoder (`RustAacEncoder`, feature `aac-encoder`), which `VaapiCodecs` opens.
-//! Layer 2, and one of the crates allowed `unsafe` (R-UNSAFE-001): every system call is
-//! wrapped here behind safe APIs.
+//! `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
+//! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and one
+//! of the crates allowed `unsafe` (R-UNSAFE-001): every system call is wrapped here
+//! behind safe APIs.
 //!
 //! System libraries are loaded with `dlopen` when first needed, never linked, so the
 //! crate builds and tests on any machine without their headers. The backends exist only
@@ -24,6 +26,7 @@
 mod aac;
 #[cfg(any(target_os = "linux", test))]
 mod alsa;
+mod backends;
 mod clock;
 mod codec;
 #[cfg(any(target_os = "linux", test))]
@@ -32,6 +35,8 @@ mod dbus;
 mod dl;
 #[cfg(target_os = "linux")]
 mod openh264;
+#[cfg(any(target_os = "linux", test))]
+mod pairing;
 mod pipewire;
 mod portal;
 mod session;
@@ -44,6 +49,9 @@ mod vaapi;
 pub use aac::{AAC_ENCODER_NAME, RustAacEncoder, aac_config, aac_encoder_info};
 #[cfg(target_os = "linux")]
 pub use alsa::AlsaAudio;
+pub use backends::AudioBackend;
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+pub use backends::LinuxBackends;
 #[cfg(target_os = "linux")]
 pub use clock::MonotonicClock;
 pub use clock::{hns_from_timespec, timebase};
@@ -56,6 +64,10 @@ pub use openh264::{
     OPENH264_LICENSE_URL, OPENH264_NOTICE, OPENH264_PIN, OpenH264Encoder, OpenH264Pin,
     OpenH264Store, openh264_encoder_info, wants_software,
 };
+#[cfg(target_os = "linux")]
+pub use pairing::PairedAudio;
+#[cfg(any(target_os = "linux", test))]
+pub use pairing::{CardInputs, SoundCard};
 pub use pipewire::{PIPEWIRE_FLOOR, pipewire_version_supported};
 #[cfg(target_os = "linux")]
 pub use pipewire::{PipeWire, PipeWireAudio};
