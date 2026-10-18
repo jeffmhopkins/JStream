@@ -204,7 +204,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   the way `Engine::with_output` does: it can be started, stopped and read with
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
   don't report it and `output.set_key` answers `not_found` for it. It runs no
-  encoders, so `output.status` reports no encoder session and zero sessions;
+  encoders, so `output.status` reports no encoder session and zero sessions; its
+  `cleartext` follows the output's kind by the engine's rule;
 - the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
   `unsupported`, as the in-process engine answers them: only a server in front of a
   session serves them

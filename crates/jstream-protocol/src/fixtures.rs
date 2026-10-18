@@ -1282,6 +1282,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
+            cleartext: false,
         },
         QueryResult::OutputStatus {
             output_id: OutputId::new("out_rec"),
@@ -1295,6 +1296,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
+            cleartext: false,
         },
         QueryResult::SourceList {
             rev: Rev(12),

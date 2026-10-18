@@ -75,7 +75,10 @@ pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use organise::{
     FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon,
 };
-pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
+pub use output::{
+    OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
+    rtmp_url_sends_key_in_cleartext,
+};
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
     PreviewCodec, PreviewSettings, StreamKind,
