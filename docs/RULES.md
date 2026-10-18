@@ -324,7 +324,7 @@ running unless the error is fatal and reported.
 <a id="dependencies"></a>
 ## Dependencies
 <!-- @section
-depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
+depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md"]
 -->
 
 <a id="R-DEP-001"></a>
@@ -346,13 +346,16 @@ status = "active"
 enforced_by = ["deny:bans", "ci:lint-deps"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
-Per [ADR-0031](adr/0031-source-types-and-decoding-scope.md). Known binding crates are banned in
+Per [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
-allowed only through that allowlist. The one media exception is the prebuilt CEF runtime, whose
-internal media stack decodes in-page audio and video only; no JStream crate calls its
-codecs ([ADR-0021](adr/0021-browser-source.md)). Pure-Rust image and font crates are not
-banned codec libraries.
+allowed only through that allowlist. The media exceptions are two. The prebuilt CEF
+runtime's internal media stack decodes in-page audio and video only; no JStream crate calls
+its codecs ([ADR-0021](adr/0021-browser-source.md)). On Linux, Cisco's prebuilt OpenH264
+binary is a software H.264 encoder that JStream downloads from Cisco on the user's request
+and loads at run time; JStream never ships or builds it, so the `openh264` crates stay
+banned ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). Pure-Rust image and
+font crates are not banned codec libraries, and neither is JStream's own AAC-LC encoder.
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions
@@ -626,7 +629,7 @@ The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md
 | Check | Runs | Required | From |
 |---|---|---|---|
 | `fmt` | `cargo fmt --check` | yes | M0 |
-| `clippy` | clippy `-D warnings` on Windows and Linux; `cargo hack` feature check | yes | M0 |
+| `clippy` | clippy `-D warnings` on Windows and Linux; `cargo hack` feature check; on Linux, also `jstream-platform-macos` for `aarch64-apple-darwin` ([ADR-0063](adr/0063-macos-platform-support.md)) | yes | M0 |
 | `test` | unit, snapshot, golden (Windows WARP), scenario tests | yes | M0 |
 | `doc` | `cargo doc` with `-D warnings` | yes | M0 |
 | `deny` | `cargo deny check` | yes | M0 |
@@ -638,7 +641,7 @@ The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0020](adr/0020-portable-windows-distribution.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
-| `macos` | build and unit tests on macOS | no until M3 | M0 |
+| `macos` | clippy on `jstream-platform-macos`, then build and unit tests on macOS | yes, from M3 ([ADR-0063](adr/0063-macos-platform-support.md)) | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 | `fuzz` | nightly scheduled run of every fuzz target for a few minutes; a crashing input opens or updates an issue for its target ([Fuzz targets › In CI](../fuzz/README.md#ci)) | n/a | now |

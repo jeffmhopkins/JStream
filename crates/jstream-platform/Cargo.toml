@@ -22,6 +22,7 @@ workspace = true
 fake = []
 
 [dependencies]
+crossbeam-utils.workspace = true
 jstream-media.workspace = true
 # The out-of-process CLAP plugin hosts' block and control messages (`PluginHosts`).
 jstream-plugin-proto.workspace = true

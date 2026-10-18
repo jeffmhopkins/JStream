@@ -123,7 +123,7 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
                 None,
                 live,
                 &snapshot::NoCaptures,
-                size,
+                snapshot::DrawAt::read(size),
             );
             drop(cache.end_frame(&compositor));
             let output = output.map_err(|err| err.to_string())?;
