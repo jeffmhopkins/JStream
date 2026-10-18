@@ -300,9 +300,8 @@ fn an_output_captures_what_its_program_shows() {
     assert_eq!(setup.live(), 0, "stopping the output stops every capture");
 }
 
-/// A source whose `show_cursor` is off asks for the pointer apart from the picture, which
-/// the engine doesn't draw; turning it on starts that source's capture again with the
-/// pointer drawn in.
+/// A source whose `show_cursor` is off asks for the pointer to be left out; turning it on
+/// starts that source's capture again with the pointer drawn in.
 #[test]
 fn a_capture_asks_for_the_pointer_as_its_source_says() {
     let setup = Setup::new();
@@ -342,7 +341,7 @@ fn a_capture_asks_for_the_pointer_as_its_source_says() {
     };
     assert_eq!(
         cursor(&display("d2")),
-        vec![CursorCapture::Metadata],
+        vec![CursorCapture::Hidden],
         "left out"
     );
     assert_eq!(
@@ -369,7 +368,7 @@ fn a_capture_asks_for_the_pointer_as_its_source_says() {
     );
     assert_eq!(
         cursor(&display("d2")),
-        vec![CursorCapture::Metadata, CursorCapture::Drawn]
+        vec![CursorCapture::Hidden, CursorCapture::Drawn]
     );
     assert_eq!(
         setup.starts(&window("w1")),

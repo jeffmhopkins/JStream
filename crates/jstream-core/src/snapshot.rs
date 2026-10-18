@@ -1025,8 +1025,8 @@ pub(crate) struct CaptureKey {
     /// The source it is captured for: `None` for the primary display that fills an
     /// output without a program scene, which no source owns.
     pub(crate) source: Option<SourceId>,
-    /// The source's `show_cursor` setting. Off, the capture asks for the pointer apart
-    /// from the picture and the engine doesn't draw it.
+    /// The source's `show_cursor` setting. Off, the capture asks for the pointer to be
+    /// left out.
     pub(crate) show_cursor: bool,
 }
 

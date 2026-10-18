@@ -714,16 +714,16 @@ fn a_sources_capture_is_started_for_that_source() {
         .expect("the primary display starts");
     crate::runtime::start_capture(&backends, &key.clone().with_cursor(false))
         .expect("the capture without the pointer starts");
-    use jstream_platform::CursorCapture::{Drawn, Metadata};
+    use jstream_platform::CursorCapture::{Drawn, Hidden};
     assert_eq!(
         *crate::lock(&capture.started),
         vec![
             (Some("screen".to_owned()), Drawn),
             (None, Drawn),
-            (Some("screen".to_owned()), Metadata)
+            (Some("screen".to_owned()), Hidden)
         ],
         "a source's capture names it, the primary display without a scene names none, \
-         and a capture without the pointer asks for it apart from the picture"
+         and a capture without the pointer asks for it to be left out"
     );
 }
 

@@ -2,8 +2,8 @@
 //! ([`Shot::captures`]), started and stopped as the program mix changes. That is one per
 //! source ([`CaptureKey`]), started with the source's [`CaptureOptions`], so two sources
 //! showing the same target run two captures of it. A source whose `show_cursor` is off
-//! asks for the pointer apart from the picture ([`CursorCapture::Metadata`]) and the
-//! engine doesn't draw it.
+//! asks for the pointer to be left out ([`CursorCapture::Hidden`]); the engine never
+//! draws it.
 //!
 //! The render thread reads each capture's mailbox every tick and keeps its latest frame,
 //! a texture on the compositor's device or CPU RGBA8. Starting and stopping a capture
@@ -166,14 +166,13 @@ fn target(capture: &dyn Capture, spec: &CaptureSpec) -> Result<CaptureTarget, St
     }
 }
 
-/// How `spec`'s capture asks for the pointer: drawn into the frames when it shows, or
-/// else apart from them ([`CursorCapture::Metadata`]), which the engine doesn't draw, so
-/// the pointer is left out. A backend that can't send it apart draws it in all the same.
+/// How `spec`'s capture asks for the pointer: drawn into the frames by the OS when it
+/// shows, else left out ([`CursorCapture::Hidden`]). The engine never draws it.
 fn cursor(spec: &CaptureKey) -> CursorCapture {
     if spec.show_cursor {
         CursorCapture::Drawn
     } else {
-        CursorCapture::Metadata
+        CursorCapture::Hidden
     }
 }
 

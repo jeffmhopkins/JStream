@@ -108,8 +108,11 @@ The code is ported from spikes S1 to S3. This first cut has:
     at most 100 ms after it. It can be ahead: on a 29 Hz display the GPU path, which
     delivers a frame within milliseconds, saw frames stamped about 15 ms after `now`, so
     the time is the composition's target rather than when the frame was ready.
-  - **Settings:** the yellow capture border is turned off and the cursor is captured,
-    best effort: builds without these settings keep their defaults.
+  - **Settings:** the yellow capture border is turned off, and the cursor is captured
+    unless `start_with` asks for `CursorCapture::Hidden`, which turns
+    `IsCursorCaptureEnabled` off (`Metadata` draws it in: WGC can't send it apart). Both
+    are best effort: builds without these settings keep their defaults, so the pointer
+    stays drawn in there.
   - **End of a capture:** when the window closes or the display goes away, `latest`
     returns `DeviceLost` from then on. A failure in the frame handler ends the capture
     the same way, with its error. A panic there is caught and reported as `InvalidState`

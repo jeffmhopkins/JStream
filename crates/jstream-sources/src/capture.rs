@@ -65,12 +65,7 @@ impl CaptureKind {
                 .into()
         });
         let mut show_cursor = param("show_cursor", "Show cursor", ParamType::Bool, json!(true));
-        show_cursor.description = Some(
-            "Whether the pointer shows in the capture. Off leaves it out where the platform \
-             sends it apart from the picture (the Linux ScreenCast portal); elsewhere it \
-             stays drawn in."
-                .into(),
-        );
+        show_cursor.description = Some("Whether the pointer shows in the capture.".into());
         Self {
             descriptor: KindDescriptor {
                 params: vec![target, show_cursor],

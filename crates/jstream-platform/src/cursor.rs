@@ -18,6 +18,9 @@ pub enum CursorCapture {
     /// ([`draw_cursor`]) or leaves it out. A backend that can't send it draws it into the
     /// frames instead, and its streams' `cursor` stays [`CaptureCursor::NotSent`].
     Metadata,
+    /// Left out: neither drawn into the frames nor sent. A backend that can't leave it
+    /// out (an OS build without the setting) draws it in, as for [`Drawn`](Self::Drawn).
+    Hidden,
 }
 
 /// A pointer's picture: RGBA with straight (not premultiplied) alpha, tightly packed,

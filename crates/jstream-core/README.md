@@ -1624,9 +1624,9 @@ source, so two sources showing the same target run two captures; see *Snapshots*
 Design) with what it runs: it asks the pipeline's `jstream-capture` thread to start
 each new one, with `Capture::start_with` and the source's `CaptureOptions::for_source`
 (the defaults for the primary display that fills an output with no scene). A source
-whose `show_cursor` is off asks for the pointer as `CursorCapture::Metadata`, which the
-engine doesn't draw, so the pointer is left out where the backend sends it apart from
-the picture and stays drawn in where it can't; on, it asks for `Drawn`. A changed
+whose `show_cursor` is on asks for the pointer as `CursorCapture::Drawn`, drawn in by
+the OS; off, as `Hidden`, left out (WGC's `IsCursorCaptureEnabled`). The engine never
+draws the pointer itself. A changed
 `show_cursor` is a new key, so that source's capture starts again. The render thread
 hands that thread the stream of each one no longer shown, which it drops, so starting and
 stopping a capture (OS calls that can block) never run on the render thread. Both go

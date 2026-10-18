@@ -165,10 +165,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `capture.targets` query lists the IDs a `target` can take. `show_cursor` (on by
   default, which is what the kinds did before it, so they keep version 1) says whether
   the pointer shows; `Source::show_cursor` reports it, and the engine asks the capture
-  backend for the pointer apart from the picture when it is off and doesn't draw it, so
-  it is left out where the backend can send it that way (the Linux ScreenCast portal)
-  and stays drawn in elsewhere. Changing it needs a new source, so the capture starts
-  again.
+  backend to draw the pointer in when it is on and to leave it out when it is off.
+  Changing it needs a new source, so the capture starts again.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), so it plays the
