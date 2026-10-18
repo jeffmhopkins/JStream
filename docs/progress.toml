@@ -890,7 +890,7 @@ milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
 prs = [481, 490, 509, 510, 572, 598, 606, 610]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36) follows (#682), with the OS drawing the pointer when it's on and leaving it out when it's off; the engine doesn't draw the pointer; the rest of the codec path to build"
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36) follows (#682), with the OS drawing the pointer when it's on and leaving it out when it's off (WGC and ScreenCaptureKit leave it out too, #685); the engine doesn't draw the pointer; the rest of the codec path to build"
 needs = ["wave", "build"]
 
 [[item]]

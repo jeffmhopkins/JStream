@@ -95,7 +95,9 @@ It has:
   `Display <id>`, the main one primary) and the on-screen windows of other applications
   at layer 0 as `window:<CGWindowID>` (named by title, else application), each with its
   size in pixels (the content's points times its scale). `start` captures one through an
-  `SCStream` in BGRA, sRGB, with the cursor, at that size; a resized window is scaled to
+  `SCStream` in BGRA, sRGB, with the cursor, at that size (`start_with` and
+  `CursorCapture::Hidden` turn `showsCursor` off; `Metadata` draws the pointer in, as
+  this backend doesn't send it apart yet); a resized window is scaled to
   fit, keeping its aspect ratio. Frames arrive on the stream's serial dispatch queue,
   whose callbacks catch panics. Each complete frame (`SCStreamFrameInfoStatus`; idle,
   blank and suspended frames are skipped) is converted to NV12, BT.709 limited range,
