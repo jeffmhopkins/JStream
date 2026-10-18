@@ -8,6 +8,7 @@ use std::path::{Component, Path, PathBuf};
 use super::hash::{self, Files};
 use super::ledger::{self, Ledger};
 use super::parse::{Diag, Doc};
+use super::test_list::{Resolved, TestList};
 
 const DOC_KEYS: &[&str] = &[
     "id",
@@ -69,6 +70,12 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
     }
 
     let known = super::backrefs::known_crates(repo.docs, repo.files.paths());
+    let tests = test_list(repo);
+    let refs = RuleRefs {
+        ci_checks: &ci_checks,
+        known_crates: &known,
+        tests: &tests,
+    };
     let mut ids: BTreeMap<&str, &str> = BTreeMap::new();
     for doc in repo.docs {
         check_doc_meta(doc, &mut out);
@@ -95,7 +102,7 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
         }
         for r in &doc.rules {
             if let Some(meta) = &r.meta {
-                check_rule_meta(doc, r.line, &r.id, meta, &ci_checks, &known, &mut out);
+                check_rule_meta(doc, r.line, &r.id, meta, &refs, &mut out);
             }
         }
         for link in &doc.links {
@@ -416,15 +423,26 @@ fn check_section_meta(
     }
 }
 
+/// What a rule's `applies_to` and `enforced_by` entries are checked against.
+struct RuleRefs<'a> {
+    ci_checks: &'a BTreeSet<String>,
+    known_crates: &'a BTreeSet<String>,
+    tests: &'a TestList,
+}
+
 fn check_rule_meta(
     doc: &Doc,
     line: usize,
     id: &str,
     meta: &toml::Table,
-    ci_checks: &BTreeSet<String>,
-    known_crates: &BTreeSet<String>,
+    refs: &RuleRefs<'_>,
     out: &mut Vec<Diag>,
 ) {
+    let RuleRefs {
+        ci_checks,
+        known_crates,
+        tests,
+    } = refs;
     for k in meta.keys() {
         if !RULE_KEYS.contains(&k.as_str()) {
             out.push(diag(
@@ -471,7 +489,13 @@ fn check_rule_meta(
     for e in string_array(meta, "enforced_by", doc, line, out) {
         let ok = match e.split_once(':') {
             Some(("ci", name)) => ci_checks.contains(name),
-            Some(("lint" | "deny" | "test", rest)) => !rest.is_empty(),
+            Some(("lint" | "deny", rest)) => !rest.is_empty(),
+            Some(("test", path)) => {
+                if let Some(msg) = check_test_entry(path, known_crates, tests) {
+                    out.push(diag(&doc.path, line, format!("rule `{id}`: {msg}")));
+                }
+                true
+            }
             None => e == "review" || e == "human",
             _ => false,
         };
@@ -481,6 +505,53 @@ fn check_rule_meta(
                 line,
                 format!("rule `{id}`: invalid `enforced_by` entry `{e}`"),
             ));
+        }
+    }
+}
+
+/// The workspace's tests, read from every crate's source (docs/DOCS.md#rules).
+fn test_list(repo: &Repo<'_>) -> TestList {
+    let crates: Vec<(String, String)> = super::backrefs::crates(repo.files.paths())
+        .into_iter()
+        .map(|(dir, _)| {
+            let name = std::fs::read_to_string(repo.root.join(dir).join("Cargo.toml"))
+                .ok()
+                .and_then(|t| t.parse::<toml::Table>().ok())
+                .and_then(|t| t.get("package")?.get("name")?.as_str().map(str::to_owned))
+                .unwrap_or_else(|| dir.rsplit('/').next().unwrap_or(dir).to_owned());
+            (dir.to_owned(), name)
+        })
+        .collect();
+    TestList::read(repo.root, &crates, repo.files.paths())
+}
+
+/// Checks a `test:<path>` entry: `<path>` must name a test, or a module holding one, in
+/// the crate or integration test target its first segment names. A crate on the crate map
+/// that doesn't exist yet makes the entry pending, which passes.
+fn check_test_entry(
+    path: &str,
+    known_crates: &BTreeSet<String>,
+    tests: &TestList,
+) -> Option<String> {
+    match tests.resolve(path) {
+        Resolved::Found => None,
+        Resolved::NoTest => Some(format!(
+            "`enforced_by` entry `test:{path}` names no test, or module of tests, in its \
+             crate or target"
+        )),
+        Resolved::NoTarget => {
+            let first = path.split("::").next().unwrap_or(path);
+            let planned = known_crates.iter().any(|d| {
+                d.rsplit('/')
+                    .next()
+                    .is_some_and(|n| n.replace('-', "_") == first)
+            });
+            (!planned).then(|| {
+                format!(
+                    "`enforced_by` entry `test:{path}`: `{first}` is neither a crate (existing \
+                     or on the crate map) nor an integration test target"
+                )
+            })
         }
     }
 }
