@@ -49,6 +49,11 @@ impl Shape {
         &self.vertices[..self.len]
     }
 
+    /// Whether this is a 3D item's shape, which has edge lines and samples mips.
+    pub(crate) fn is_3d(&self) -> bool {
+        self.edges[0] != NO_EDGE
+    }
+
     /// A 2D quad: `w = 1` and no edge coverage.
     fn flat(corners: [[f32; 2]; 4], uvs: [[f32; 2]; 4]) -> Self {
         let mut vertices = [UNUSED; MAX_VERTICES];

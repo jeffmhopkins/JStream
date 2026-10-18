@@ -4,8 +4,9 @@
 //! Each scene is drawn on the GPU and by a CPU reference that averages N×N point samples
 //! per pixel, each mapped back into every item's plane with
 //! [`jstream_protocol::ItemGeometry::unplace`] and sampled bilinearly from the same
-//! texels. The errors are per channel, in sRGB 8-bit steps, over the pixels the scenario
-//! is about. Scenario C (minification, which needs mips) is not here yet.
+//! texels at full resolution, so it is the box-filtered image mips approximate. The errors
+//! are per channel, in sRGB 8-bit steps, over the pixels the scenario is about. Scenario
+//! C, minification, draws a 512² source; the rest a 64² one.
 
 use std::io::Write;
 
@@ -17,20 +18,22 @@ use jstream_protocol::{
 
 use super::{item, open};
 use crate::color::srgb_channel_to_linear;
-use crate::{Color, Crop, Placement, Scene, Snapshot};
+use crate::{Color, Crop, Image, Placement, Scene, Snapshot};
 
 const WIDTH: u32 = 240;
 const HEIGHT: u32 = 136;
 const SOURCE: u32 = 64;
+/// Scenario C's source: big enough that the floor is minified several times over.
+const LARGE_SOURCE: u32 = 512;
 /// The background, dark grey so an item's edge has contrast against it.
 const BACKGROUND: [u8; 3] = [20, 20, 20];
 
-/// A 64² pattern: an 8-texel checkerboard of two colours, with a brighter texel ring every
-/// 16, so a bent or shifted texture shows.
-fn pattern() -> Vec<u8> {
-    let mut rgba = Vec::with_capacity((SOURCE * SOURCE * 4) as usize);
-    for y in 0..SOURCE {
-        for x in 0..SOURCE {
+/// A `size`² pattern: an 8-texel checkerboard of two colours, with a brighter texel ring
+/// every 16, so a bent or shifted texture shows, and a minified one aliases.
+fn pattern(size: u32) -> Vec<u8> {
+    let mut rgba = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size {
+        for x in 0..size {
             let pixel = if x % 16 == 0 || y % 16 == 0 {
                 [240, 230, 120, 255]
             } else if ((x / 8) + (y / 8)) % 2 == 0 {
@@ -76,28 +79,33 @@ struct Reference {
 }
 
 /// The pattern's texels in linear light.
-struct Texels(Vec<[f32; 3]>);
+struct Texels {
+    size: u32,
+    linear: Vec<[f32; 3]>,
+}
 
 impl Texels {
-    fn new(rgba: &[u8]) -> Self {
-        Self(
-            rgba.chunks_exact(4)
+    fn new(rgba: &[u8], size: u32) -> Self {
+        Self {
+            size,
+            linear: rgba
+                .chunks_exact(4)
                 .map(|p| [0, 1, 2].map(|c| srgb_channel_to_linear(f32::from(p[c]) / 255.0)))
                 .collect(),
-        )
+        }
     }
 
     /// Bilinear, clamped to the edge, with texel centres at `(i + 0.5) / size`, as the
     /// compositor's sampler.
     fn bilinear(&self, u: f32, v: f32) -> [f32; 3] {
-        let size = SOURCE as f32;
+        let size = self.size as f32;
         let x = (u * size - 0.5).clamp(0.0, size - 1.0);
         let y = (v * size - 0.5).clamp(0.0, size - 1.0);
         let (x0, y0) = (x.floor(), y.floor());
         let (fx, fy) = (x - x0, y - y0);
         let at = |x: f32, y: f32| {
             let (x, y) = (x.min(size - 1.0) as usize, y.min(size - 1.0) as usize);
-            self.0[y * SOURCE as usize + x]
+            self.linear[y * self.size as usize + x]
         };
         let (a, b) = (at(x0, y0), at(x0 + 1.0, y0));
         let (c, d) = (at(x0, y0 + 1.0), at(x0 + 1.0, y0 + 1.0));
@@ -109,9 +117,9 @@ impl Texels {
     }
 }
 
-fn content(geometry: ItemGeometry) -> ContentRect {
+fn content(geometry: ItemGeometry, size: u32) -> ContentRect {
     geometry
-        .content(SOURCE, SOURCE, ProtocolCrop::default())
+        .content(size, size, ProtocolCrop::default())
         .expect("valid")
         .expect("pixels")
 }
@@ -142,7 +150,7 @@ fn sample(
 }
 
 fn reference(items: &[ItemGeometry], texels: &Texels, n: u32) -> Reference {
-    let contents: Vec<ContentRect> = items.iter().map(|g| content(*g)).collect();
+    let contents: Vec<ContentRect> = items.iter().map(|g| content(*g, texels.size)).collect();
     let background = BACKGROUND.map(|c| srgb_channel_to_linear(f32::from(c) / 255.0));
     let mut out = Reference {
         rgb: Vec::with_capacity((WIDTH * HEIGHT) as usize),
@@ -192,13 +200,22 @@ fn encode(linear: f32) -> f32 {
     srgb * 255.0
 }
 
-fn gpu(compositor: &mut crate::Compositor, items: &[ItemGeometry], rgba: &[u8]) -> Snapshot {
+fn gpu(
+    compositor: &mut crate::Compositor,
+    items: &[ItemGeometry],
+    rgba: &[u8],
+    size: u32,
+) -> Snapshot {
     let image = compositor
-        .upload_rgba8(SOURCE, SOURCE, rgba)
+        .upload_rgba8(size, size, rgba)
         .expect("the pattern uploads");
+    draw(compositor, items, &image)
+}
+
+fn draw(compositor: &mut crate::Compositor, items: &[ItemGeometry], image: &Image) -> Snapshot {
     let scene_items: Vec<_> = items
         .iter()
-        .map(|g| item(&image, Placement::Geometry(*g), Crop::NONE, 1.0))
+        .map(|g| item(image, Placement::Geometry(*g), Crop::NONE, 1.0))
         .collect();
     let [r, g, b] = BACKGROUND.map(|c| f32::from(c) / 255.0);
     let scene = Scene {
@@ -266,7 +283,7 @@ fn golden_3d_a_turned_item_is_perspective_correct() {
     let Some(mut opened) = open() else {
         return;
     };
-    let rgba = pattern();
+    let rgba = pattern(SOURCE);
     let items = [geometry(
         (120.0, 68.0),
         (140.0, 105.0),
@@ -276,8 +293,8 @@ fn golden_3d_a_turned_item_is_perspective_correct() {
         0.0,
         Some(175.0),
     )];
-    let got = gpu(&mut opened.compositor, &items, &rgba);
-    let want = reference(&items, &Texels::new(&rgba), 8);
+    let got = gpu(&mut opened.compositor, &items, &rgba, SOURCE);
+    let want = reference(&items, &Texels::new(&rgba, SOURCE), 8);
     check("A interior", error(&got, &want, interior), 3.0, 40.0);
 }
 
@@ -288,7 +305,7 @@ fn golden_3d_b_an_item_reaching_behind_the_viewer_draws_its_front() {
     let Some(mut opened) = open() else {
         return;
     };
-    let rgba = pattern();
+    let rgba = pattern(SOURCE);
     let items = [geometry(
         (120.0, 83.0),
         (175.0, 130.0),
@@ -306,8 +323,8 @@ fn golden_3d_b_an_item_reaching_behind_the_viewer_draws_its_front() {
         .filter(|corner| matches!(corner, Placed::BehindViewer))
         .count();
     assert!(behind > 0, "the scenario has a corner behind the viewer");
-    let got = gpu(&mut opened.compositor, &items, &rgba);
-    let want = reference(&items, &Texels::new(&rgba), 8);
+    let got = gpu(&mut opened.compositor, &items, &rgba, SOURCE);
+    let want = reference(&items, &Texels::new(&rgba, SOURCE), 8);
     check("B all", error(&got, &want, all), 2.0, 40.0);
 }
 
@@ -318,7 +335,7 @@ fn golden_3d_d_edges_are_antialiased() {
     let Some(mut opened) = open() else {
         return;
     };
-    let rgba = pattern();
+    let rgba = pattern(SOURCE);
     let items = [geometry(
         (120.0, 68.0),
         (90.0, 60.0),
@@ -328,9 +345,71 @@ fn golden_3d_d_edges_are_antialiased() {
         0.0,
         Some(225.0),
     )];
-    let got = gpu(&mut opened.compositor, &items, &rgba);
-    let want = reference(&items, &Texels::new(&rgba), 16);
+    let got = gpu(&mut opened.compositor, &items, &rgba, SOURCE);
+    let want = reference(&items, &Texels::new(&rgba, SOURCE), 16);
     check("D edge", error(&got, &want, edge), 6.0, 40.0);
+}
+
+/// C: a floor tilted 75°, minified about twice across and eight times along its depth.
+/// Mips with anisotropic filtering keep the texel grid from aliasing. On lavapipe the
+/// mean is about 6 with them, 18 with trilinear mips alone and 29 with one level, so the
+/// limit fails without anisotropy. The pattern's one-texel rings are much finer than the
+/// spike's 32-texel checkerboard, which measured 1.16, 3.22 and 4.80.
+#[test]
+fn golden_3d_c_a_minified_floor_samples_mips_anisotropically() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let rgba = pattern(LARGE_SOURCE);
+    let items = [geometry(
+        (120.0, 75.0),
+        (225.0, 225.0),
+        0.0,
+        75.0,
+        0.0,
+        0.0,
+        Some(250.0),
+    )];
+    let got = gpu(&mut opened.compositor, &items, &rgba, LARGE_SOURCE);
+    let want = reference(&items, &Texels::new(&rgba, LARGE_SOURCE), 16);
+    check("C interior", error(&got, &want, interior), 8.0, 40.0);
+}
+
+/// An upload's chain is rebuilt after the upload is rewritten.
+#[test]
+fn a_rewritten_upload_rebuilds_its_mips() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let solid = |rgb: [u8; 3]| -> Vec<u8> {
+        std::iter::repeat_n([rgb[0], rgb[1], rgb[2], 255], 64 * 64)
+            .flatten()
+            .collect()
+    };
+    let image = opened
+        .compositor
+        .upload_rgba8(64, 64, &solid([255, 0, 0]))
+        .expect("uploads");
+    let floor = [geometry(
+        (120.0, 75.0),
+        (225.0, 225.0),
+        0.0,
+        75.0,
+        0.0,
+        0.0,
+        Some(250.0),
+    )];
+    let centre = |snapshot: &Snapshot| snapshot.pixel(120, 75).expect("inside");
+    let red = draw(&mut opened.compositor, &floor, &image);
+    assert_eq!(centre(&red)[..3], [255, 0, 0]);
+    opened
+        .compositor
+        .rewrite_rgba8(&image, &solid([0, 255, 0]))
+        .expect("rewrites");
+    let green = draw(&mut opened.compositor, &floor, &image);
+    assert_eq!(centre(&green)[..3], [0, 255, 0]);
+    let again = draw(&mut opened.compositor, &floor, &image);
+    assert_eq!(centre(&again)[..3], [0, 255, 0]);
 }
 
 /// E: two items through each other, turned 45° each way. They draw in stacking order
@@ -340,7 +419,7 @@ fn golden_3d_e_items_through_each_other_draw_in_stacking_order() {
     let Some(mut opened) = open() else {
         return;
     };
-    let rgba = pattern();
+    let rgba = pattern(SOURCE);
     let items = [
         geometry(
             (120.0, 68.0),
@@ -361,7 +440,7 @@ fn golden_3d_e_items_through_each_other_draw_in_stacking_order() {
             Some(200.0),
         ),
     ];
-    let got = gpu(&mut opened.compositor, &items, &rgba);
-    let want = reference(&items, &Texels::new(&rgba), 8);
+    let got = gpu(&mut opened.compositor, &items, &rgba, SOURCE);
+    let want = reference(&items, &Texels::new(&rgba, SOURCE), 8);
     check("E all", error(&got, &want, all), 2.0, 40.0);
 }

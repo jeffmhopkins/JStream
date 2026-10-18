@@ -101,8 +101,9 @@ and calls this crate.
   engine's mapping is field by field, and `place` evaluates both with the protocol's
   shared functions ([Placement math](#design)). A geometry with non-neutral 3D draws
   [ADR-0050](../../docs/adr/0050-3d-transforms-rendering.md)'s drawn polygon,
-  perspective-correct and with antialiased edges. Mips and anisotropic sampling for it
-  aren't built yet, and the engine still refuses non-neutral 3D before it reaches here.
+  perspective-correct, with antialiased edges, and sampled from a mip chain of its
+  source with 16× anisotropic filtering. The engine still refuses non-neutral 3D before
+  it reaches here.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
@@ -122,8 +123,7 @@ and calls this crate.
 not here: P010 conversion, BT.601 and BT.2020 matrices, encode-target allocation,
 loading WGSL effect packs (`jstream-effects`; this crate only draws them), the video
 filter chain runtime (the built-in filters' passes are here, see
-[Filters](#filters)), per-source mips and anisotropic sampling for 3D items (ADR-0050
-decision 5), transitions, the master chain and the privacy
+[Filters](#filters)), transitions, the master chain and the privacy
 stage. The GPU pipeline's encode
 steps stay in
 [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline).
@@ -173,7 +173,18 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    the shader then divides by alpha, decodes sRGB and multiplies by alpha again.
    Averaging code values rather than linear light differs from an upload only where
    the filter mixes texels of different colour.
-2. **Composite.** One render pass clears the FP16 target to the background converted
+2. **Mips** (ADR-0050 decision 5). Before the composite pass, each source a visible 3D
+   item draws gets its mip chain rebuilt: an `Rgba16Float` texture with every level down
+   to 1×1, premultiplied linear. Level 0 copies the source texel for texel, converting
+   an import as the composite shader would. Each further level is one pass that samples
+   the level above at its own texel centres, so the linear filter averages 2×2 texels.
+   A chain is rebuilt at most once per `render` or `render_into` call. An upload is
+   rebuilt only after `rewrite_rgba8`. A layer or an import is rebuilt every call that
+   draws it in 3D, since a nested scene, a filter or the platform changes it out of
+   sight. A 3D item samples its chain, which is always premultiplied linear (mode 0),
+   with trilinear filtering and `anisotropy_clamp` 16; wgpu clamps that to 1 on an
+   adapter without anisotropic filtering. A source with no 3D placement gets no chain.
+3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
    is its quad (two triangles), a 3D item three to five vertices (up to three
@@ -181,7 +192,7 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    alpha mode, ADR-0050's `w`, and the item's five edge lines (22 `f32`s, 88 bytes).
    The vertex shader writes `(pos · w, 0, w)`, so the GPU interpolates UVs
    perspective-correctly; a 2D item has `w = 1`, the plain affine path. The fragment
-   shader samples; for a straight import it multiplies RGB by the sampled
+   shader samples (a 3D item from its source's mip chain, step 2); for a straight import it multiplies RGB by the sampled
    alpha, and for a premultiplied import it divides RGB by alpha (zero where alpha is
    0), decodes sRGB and multiplies by alpha; then it multiplies all four channels by
    opacity and by its edge coverage, `clamp(d + 0.5, 0, 1)` for the distance `d` in
@@ -190,7 +201,7 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    are drawn as before. Blend is `One, OneMinusSrcAlpha` on colour and alpha. No depth buffer:
    stacking order is draw order. No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
-3. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
+4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
    alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
    alpha is stored as-is. The output usage is `RENDER_ATTACHMENT | COPY_SRC |
@@ -210,12 +221,12 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    layer earlier are ordered before the redraw, so they keep the old contents.
    **`rewrite_rgba8`** refills an upload in place the same way (pass 1 into the
    existing texture).
-4. **Readback**, only when asked. `copy_texture_to_buffer` into a map-read buffer,
+5. **Readback**, only when asked. `copy_texture_to_buffer` into a map-read buffer,
    rows padded to 256 bytes, then a map and a pack into tightly packed RGBA8. This
    waits on the GPU. The tick that feeds an encoder does not call it. Snapshots and
    tests do.
 
-5. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
+6. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
    source (`Rgba8UnormSrgb` or `Bgra8UnormSrgb`, the compositor's output) to a target
    once: it makes the bind group and a 16-byte uniform with the range constants, so
    `Nv12Pass::encode` allocates nothing per frame. Bind again when either texture is
@@ -258,6 +269,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, dropped with it |
+| Mip chain, its level views and bind groups | Made the first time the `Image` is drawn in 3D; dropped with it |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -608,15 +620,22 @@ rotated 90° about the box centre, crop before fitting, a legacy item beside the
 a non-axis-aligned box turning about its centre.
 
 **3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a
-240×136 canvas from a 64² checkerboard with a texel grid, against a CPU reference that
-averages 8×8 (16×16 for D) point samples per pixel, each mapped back with `unplace` and
-sampled bilinearly. The tests assert a mean and a p99 error per channel in sRGB 8-bit
-steps. A, an item turned 50° with perspective, interior pixels: mean ≤ 3, about 1.3 on
-lavapipe. B, tilted toward the viewer with a corner behind it, all pixels: ≤ 2, about
-0.65. D, a small rotated and turned item, edge pixels: ≤ 6, about 3.5. E, two items
-turned through each other, in stacking order, all pixels: ≤ 2, about 0.7. Drawn
-affinely (`w = 1`), A, B, D and E measure 67, 78, 13 and 15. With coverage replaced by
-a hard edge, D measures 53. Scenario C, minification, waits for mips.
+240×136 canvas from a 64² checkerboard with a texel grid (512² for C), against a CPU
+reference that averages 8×8 (16×16 for C and D) point samples per pixel, each mapped
+back with `unplace` and sampled bilinearly from level 0. The tests assert a mean and a
+p99 error per channel in sRGB 8-bit steps. On lavapipe:
+
+| Scenario | Pixels | Limit (mean) | Measured | Without the feature |
+|---|---|---|---|---|
+| A, an item turned 50° with perspective | interior | 3 | 1.1 | 67 drawn affinely (`w = 1`) |
+| B, tilted toward the viewer, a corner behind it | all | 2 | 0.24 | 78 affinely |
+| C, a floor tilted 75°, minified | interior | 8 | 6.1 | 18 with trilinear mips alone, 29 with one level |
+| D, a small rotated and turned item | edge | 6 | 3.1 | 53 with a hard edge, 13 affinely |
+| E, two items turned through each other | all | 2 | 0.53 | 15 affinely |
+
+The p99 limit is 40 throughout. C's pattern is much finer than the spike's (one-texel
+rings every 16 texels), which is why its mean is higher than the spike's 1.16. A
+further test checks that an upload's chain is rebuilt after `rewrite_rgba8`.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
@@ -706,10 +725,11 @@ a hardware GPU.
 <!-- @section
 -->
 
-- **3D.** The compositor draws ADR-0050 decisions 1, 2, 4 and 6. Open: decision 5
-  (trilinear mips and 16× anisotropic filtering for 3D items, with mips rebuilt once
-  per changed source and frame) and its scenario C golden. Also open: whether rotated
-  2D items should get edge coverage too, which changes their goldens.
+- **3D.** The compositor draws ADR-0050 decisions 1, 2, 4, 5 and 6. Open: whether
+  rotated 2D items should get edge coverage too, which changes their goldens; whether
+  strongly minified 2D items should get mips; and whether a layer or an import should
+  carry a change count, so its chain is rebuilt only when it changed rather than each
+  call that draws it in 3D.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and
