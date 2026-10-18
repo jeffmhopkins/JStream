@@ -1,13 +1,13 @@
 //! `glow`: soft light around the shape. It is a drop shadow with no offset, a colour
-//! and a strength that scales the blurred alpha (clamped to 1), drawn under the input;
-//! the frame grows by the radius on every side.
+//! and a strength that scales the blurred alpha (clamped to 1), drawn under the input,
+//! within the input's frame (ADR-0065 §5).
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 
 use super::drop_shadow::Under;
 use crate::error::RenderError;
 use crate::filter::params::{Read, color, filter, float};
-use crate::filter::{ContentBox, Ctx, Pass};
+use crate::filter::{Ctx, Pass};
 use crate::image::Image;
 
 pub(super) const KIND: &str = "glow";
@@ -57,14 +57,6 @@ impl Pass for Glow {
         self.0 = read(settings);
     }
 
-    fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
-        self.0.insets().grow(width, height)
-    }
-
-    fn content_box(&self, width: u32, height: u32) -> ContentBox {
-        self.0.insets().content(width, height)
-    }
-
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
@@ -77,26 +69,44 @@ impl Pass for Glow {
 
 #[cfg(test)]
 mod tests {
-    use crate::filter::testing::{filter, run};
-    use crate::tests::{near, open, solid};
+    use crate::filter::testing::{filter, image, run};
+    use crate::image::Image;
+    use crate::tests::{Opened, near, open};
     use serde_json::json;
+
+    const CLEAR: [u8; 4] = [0, 0, 0, 0];
+
+    /// A `size` x `size` transparent frame with an opaque `colour` square at
+    /// `at..at + side` on both axes.
+    fn square(opened: &Opened, size: u32, at: u32, side: u32, colour: [u8; 4]) -> Image {
+        let pixels: Vec<[u8; 4]> = (0..size)
+            .flat_map(|y| {
+                (0..size).map(move |x| {
+                    let inside = |v: u32| (at..at + side).contains(&v);
+                    if inside(x) && inside(y) {
+                        colour
+                    } else {
+                        CLEAR
+                    }
+                })
+            })
+            .collect();
+        image(opened, size, &pixels)
+    }
 
     #[test]
     fn the_glow_surrounds_the_shape_evenly_and_strength_brightens_it() {
         let Some(mut opened) = open() else {
             return;
         };
-        let input = solid(&opened.compositor, 8, 8, [0, 0, 255, 255]);
+        // An 8x8 blue square at (6..14, 6..14) in a transparent 20x20 frame.
+        let input = square(&opened, 20, 6, 8, [0, 0, 255, 255]);
         let mut glow = filter("glow", json!({"color": "#ffff00", "radius": 6.0}));
-        assert_eq!(glow.output_size(8, 8), (20, 20));
-        let content = glow.content_box(8, 8);
-        assert_eq!(
-            (content.x, content.y, content.width, content.height),
-            (6, 6, 8, 8)
-        );
+        // ADR-0065 §5: the frame keeps its size.
+        assert_eq!(glow.output_size(20, 20), (20, 20));
         let out = run(&mut opened, &mut glow, &input, 0.0);
+        assert_eq!((out.width(), out.height()), (20, 20));
         near(&out, 10, 10, [0, 0, 255, 255], 0);
-        // The box's corners are the input's.
         near(&out, 6, 6, [0, 0, 255, 255], 0);
         near(&out, 13, 13, [0, 0, 255, 255], 0);
         let a = |x, y| out.pixel(x, y).expect("inside")[3];
