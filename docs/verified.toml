@@ -447,13 +447,13 @@ stamp = { hash = "b3:61cf92f665e234af", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:712aa0a6f80c3dea", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers adds xtask/src/dist.rs and .cargo/config.toml (declared); State bullet names the data folder via paths; new Building-the-zip bullet matches dist.rs (trunk UI or --ui-dir, four binaries, vcruntime/msvcp refused, UCRT and msvcrt.dll allowed, deterministic deflate zip, git describe or --revision naming) and config.toml's crt-static flag; CI dist job as described" }
 
 ["ARCH#persistence"."body"]
-stamp = { hash = "b3:e65cfd20a6ffa5eb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: a field added for new collection state (encoder profiles, hotkey bindings) is omitted when empty, so no schema_version bump; checked against persist/mod.rs (hotkeys skip_serializing_if empty, rebuilt last and validated as hotkey.set) and persist/tests.rs (round trip, missing-scene binding refused, v1 fixture still loads)." }
+stamp = { hash = "b3:566a952e1bc69397", by = "agent:a2656", note = "Re-read persistence: secrets stay in the OS credential store, and the new sentence names the accepted ADR-0071 Linux 0600 file fallback; collections, assets, settings, token and logs text unchanged and still true. | merge: merged wave/m3-3 (now carrying wave/m3-2 and main, #680): the wave's body changes (master and output filters {video, audio} under ADR-0027, effects[] reserved and in v1 per ADR-0068, video mixes among what a deleted scene refers to) sit beside this PR's Secrets bullet (Linux 0600 secrets file where no Secret Service is reachable, ADR-0071), which still matches ADR-0071 and is the only line this PR changes" }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-API-003"]
 stamp = { hash = "b3:f17cde9b0d3da07c" }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read persistence: secrets stay in the OS credential store, and the new sentence names the accepted ADR-0071 Linux 0600 file fallback; collections, assets, settings, token and logs text unchanged and still true." }
 
 ["ARCH#persistence"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -1608,7 +1608,7 @@ stamp = { hash = "b3:3a547350721a469e", by = "agent:claude-e3d", note = "main in
 stamp = { hash = "b3:e4fcf2ed3578b445", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against core#design and server#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the daemon's live.rs (engine wiring, not live values), crash redaction and the server's TCP cap and in-flight bound don't touch gestures; sessions per connection still give each client its own gestures, which expire with the session. Holds." }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:e65cfd20a6ffa5eb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "serve.rs: this PR changes only a test assertion (CallResult::batch); #312's OAuth client selection and developer override are the wave's and already described here. dep jstream-core#design gained removed_hotkeys in the batch result, and dep ARCH#persistence gained the rule that a new optional collection field (hotkeys) needs no schema_version bump; the daemon still just names the collection file and serves the engine, so neither changes this section. Merges since: serve.rs: this PR changes only that test assertion (CallResult::batch). The merge brings #485's shared engine wiring and #487's crash-report redaction, already described here by the wave. dep core#design: this PR adds removed_hotkeys to the batch result; the merge adds #491's key removal on output.delete and on a server change. The daemon still names the collection file and serves the engine, so neither changes this section." }
+stamp = { hash = "b3:566a952e1bc69397", by = "agent:a2656", note = "Re-read design against the persistence edit: the daemon uses WindowsCredentials on Windows and wires no Linux store yet, so the new ADR-0071 fallback sentence changes nothing it claims. | merge: merged wave/m3-3 (now carrying wave/m3-2 and main, #680): ARCH persistence gains the wave's filter, effects and video-mix text beside this PR's Linux secrets-file line; the daemon design names neither; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:8699127a64ebe169", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1-2: the YouTube design (built_in else the developer's client) sits beside the wave's browser and device-file bullets; dependencies list both fake dev-deps; matches serve.rs and Cargo.toml" }
@@ -1722,7 +1722,7 @@ stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:edfaa81bd9f74a08", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): edited the Browser sources bullet: pages paint on the app's media-adapter device until a program stage runs, then on the stage's context the engine lends (Engine::use_gpu), so the mix draws them, taken back at stop; browser.rs comment matches; holds" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Cascade from R-SEC-002 gaining "a device token is accepted only over loopback or TLS": the desktop binds loopback with ServerConfig::new and sets no device_file, so the sentence doesn't change what it says; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
@@ -4215,7 +4215,7 @@ stamp = { hash = "b3:311cefe9eebe1f9a", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:8efb19c99c8be969" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read purpose against the R-SEC-001 exception: tokens and keys are Secret values and the refresh token goes through the key store trait, so the Linux file fallback behind that trait leaves the text true." }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/adr/0058-youtube-sign-in-with-a-jstream-client.md"]
 stamp = { hash = "b3:32c488609c43c2cd", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
@@ -4518,7 +4518,7 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:7c0a5283f684f83d", by = "agent:youtube-sign-in", note = "Re-read: R-ARCH-001 and R-API-002 now carry the youtube exception ADR-0058 §3 requires; the other rules in the section are unchanged and consistent with it" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:e65cfd20a6ffa5eb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "dep ARCH#protocol gained hotkey.set/clear and new result fields, all minor additions under R-API-001 (0.25); dep ARCH#persistence gained the optional hotkeys field with no schema_version bump, consistent with R-API-003 since no bump means no migration is owed. Rules unchanged. Merges since: dep ARCH#protocol: this PR's hotkey.set/clear and new result fields are minor additions at 0.25 under R-API-001; the merge's #491 output.delete key removal is the wave's. Rules unchanged." }
+stamp = { hash = "b3:566a952e1bc69397", by = "agent:a2656", note = "Re-read compatibility against the persistence edit: the Linux secrets file is not built and holds no versioned format today; collection and protocol compatibility text unchanged. | merge: merged wave/m3-3 (now carrying wave/m3-2 and main, #680): ARCH persistence gains the wave's master and output filter chains and effects[] wording (ADR-0027, ADR-0068) beside this PR's secrets line; the compatibility rules' collection-format promises are unaffected by this PR; holds" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d6ccac4e141c6220", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: ARCH protocol's change is additive, the master and output filter owners at protocol 0.29 (one minor past E2's 0.28), consistent with R-API-001." }
@@ -4614,10 +4614,10 @@ stamp = { hash = "b3:1a6aeaec37c5f24f", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
 ["SECURITY#scope"."body"]
-stamp = { hash = "b3:4fabbaa71adf77ab", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:a7d08d8dbb13095d", by = "agent:acc756d9", note = "Re-read the scope list: the secrets promise now names the ADR-0071 Linux file fallback, matching the amended R-SEC-001; the other promises are unchanged." }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read the scope list: the secrets promise now names the ADR-0071 Linux file fallback, matching the amended R-SEC-001; the other promises are unchanged." }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -4629,10 +4629,10 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#assets"."body"]
-stamp = { hash = "b3:ac2d20dd201b9d41", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the paired-device-tokens row is no longer in flight; it now says the digest lives in the devices file beside the token file and the device keeps its own copy, with only the browser cookie still in flight (#288); matches devices.rs and token.rs::device_file; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:0b1c3557b54f1eb0", by = "agent:acc756d9", note = "Re-read the assets table: the stream keys row says Windows Credential Manager today, the macOS Keychain store is built but wired into no app, and the Linux store is accepted (ADR-0071) but not built; the other rows are untouched." }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read the assets table: the stream keys row says Windows Credential Manager today, the macOS Keychain store is built but wired into no app, and the Linux store is accepted (ADR-0071) but not built; the other rows are untouched." }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d" }
@@ -4662,7 +4662,10 @@ stamp = { hash = "b3:5670e6a5758601b2" }
 stamp = { hash = "b3:8042c8d8d5117226" }
 
 ["THREAT-MODEL#plugins"."body"]
-stamp = { hash = "b3:0d4613df179815ac", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343: reworded the WASM gap: a plugin could still retarget an output but can no longer take the old key along, since the engine removes it on a new server (a_stream_key_never_follows_its_output_to_another_server). Other plugin gaps untouched." }
+stamp = { hash = "b3:ae9b53c24d58df35", by = "agent:claude", note = "Whole PR (#640): the WASM row's 'On main' moves from 'Nothing (W1)' to the jstream-plugin-wasm host (#486, #623): five fixed imports and no WASI, empty capability list by default, fuel budget, wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB memory, 10,000 table elements, 512 KiB stack, no app loads plugins yet; its Boundary now says no ambient imports (no filesystem, network or clock) and a call reaches Control only when every command it names is granted, replacing 'unless declared and granted'. The WASM gap now cites ADR-0069 (accepted on wave/m1-3, #584): built are its deadlines, 64 MiB and 10,000 table elements, with fuel the host's own extra budget (the ADR chose epochs, C1); not built are the capability classes and people-only grants, the 1,000-event queue, the 50 commands/s cap with forbidden, disabling a failing plugin and U1's untrusted-output handling; until grants exist a plugin is granted nothing, and the output-retarget risk is conditional on a grant (#343 wording kept from the wave). The stale 'R-SEC-003 names a test in a crate that doesn't exist' line is dropped, since jstream_plugin_wasm::no_ambient_capabilities exists. New depends_on edge to crates/jstream-plugin-wasm/README.md#purpose, whose figures each match the row. Merge of wave/m3-3 (911c320) kept the CLAP row and gap from the wave. All checked against the host README, its source and ADR-0069" }
+
+["THREAT-MODEL#plugins"."dep:crates/jstream-plugin-wasm/README.md#purpose"]
+stamp = { hash = "b3:9e6d5020ea9e590d", by = "agent:claude", note = "Whole PR (#640): the WASM row's 'On main' moves from 'Nothing (W1)' to the jstream-plugin-wasm host (#486, #623): five fixed imports and no WASI, empty capability list by default, fuel budget, wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB memory, 10,000 table elements, 512 KiB stack, no app loads plugins yet; its Boundary now says no ambient imports (no filesystem, network or clock) and a call reaches Control only when every command it names is granted, replacing 'unless declared and granted'. The WASM gap now cites ADR-0069 (accepted on wave/m1-3, #584): built are its deadlines, 64 MiB and 10,000 table elements, with fuel the host's own extra budget (the ADR chose epochs, C1); not built are the capability classes and people-only grants, the 1,000-event queue, the 50 commands/s cap with forbidden, disabling a failing plugin and U1's untrusted-output handling; until grants exist a plugin is granted nothing, and the output-retarget risk is conditional on a grant (#343 wording kept from the wave). The stale 'R-SEC-003 names a test in a crate that doesn't exist' line is dropped, since jstream_plugin_wasm::no_ambient_capabilities exists. New depends_on edge to crates/jstream-plugin-wasm/README.md#purpose, whose figures each match the row. Merge of wave/m3-3 (911c320) kept the CLAP row and gap from the wave. All checked against the host README, its source and ADR-0069" }
 
 ["THREAT-MODEL#plugins"."dep:docs/RULES.md#R-SEC-003"]
 stamp = { hash = "b3:e62d5f1a75c6baa0" }
@@ -4671,13 +4674,16 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:56b6301e2e6a132b" }
 
 ["THREAT-MODEL#secrets"."body"]
-stamp = { hash = "b3:8e272680a60de088", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343 whole change to the body against wave/m1-2: added the control 'a key is bound to its server' (scheme, host or port change, or delete, removes it; start refused until removed; a start already past the check opens the target it checked; set_key refused while that start opens), and removed 'retargeting keeps the key (#343)' from the gaps list and the #343 row from Known gaps. Matches engine.rs (execute_and_unbind_keys, remove_stale_keys, Pending.kind via output_kind, set_key refusal) and the three jstream-core regression tests." }
+stamp = { hash = "b3:1750dfb08770b4bf", by = "agent:a2656", note = "Re-read secrets: controls on main say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph is accepted, nothing built, with the same risk and mitigations as the accepted ADR (plaintext fallback file 0600 in a 0700 folder, UI warning and startup log, migration into the keyring, a later keyring-only setting; a locked or dismissed keyring fails and never falls back). After merging wave/m3-3 (with m3-2 and main, #680) the Gaps line drops the fixed #343, and (review B1) no longer says crash reports redact only the control token: crash.rs redacts the control token and every stream key and refresh token passing through a Redacting store, which serve.rs wires for the daemon's stores, so the line now says that, keeps rtmp:// cleartext and the engine-only redaction test under #353, and notes that a native crash writes no report (crash.rs, daemon README)" }
 
 ["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-001"]
-stamp = { hash = "b3:69c6131f3f1bd0fd" }
+stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read secrets: controls on main now say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph moved from proposed to accepted, nothing built, with the same risk and mitigations as the accepted ADR." }
 
 ["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d" }
+
+["THREAT-MODEL#secrets"."dep:docs/adr/0071-linux-secret-store.md"]
+stamp = { hash = "b3:18c6a50ca7ccdbf6", by = "agent:acc756d9", note = "Re-read secrets: controls on main now say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph moved from proposed to accepted, nothing built, with the same risk and mitigations as the accepted ADR." }
 
 ["THREAT-MODEL#server"."body"]
 stamp = { hash = "b3:4d6a2bb6c807b38b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Controls list the failed-token log limit, Accepted says why attempts are not delayed, #354 gap sentence and table row removed as the issue's last item lands" }

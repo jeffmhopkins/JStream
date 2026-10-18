@@ -1045,7 +1045,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   from 1 and `normal`, a disabled filter's `enabled` only when false, and the reserved
   `effects[]` must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.
-- **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
+- **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
+  Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file
+  in the config directory instead ([ADR-0071](adr/0071-linux-secret-store.md)).
 - **Control token:** a random token in a user-only file in the config directory
   (Windows ACL restricted to the user). It is rotated on demand.
 - **Logs and crash dumps:** rotating logs and local minidumps in the data directory
