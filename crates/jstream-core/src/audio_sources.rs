@@ -25,7 +25,7 @@
 //! until it is deleted or built again, and not while its audio is turned off.
 //!
 //! A `webcam` source with audio settings records its device's paired audio input (a
-//! webcam's microphone, a capture card's HDMI audio; ADR-0031), which the thread looks
+//! webcam's microphone, a capture card's HDMI audio; ADR-0061), which the thread looks
 //! up on the backends' video devices when it opens the input
 //! ([`jstream_sources::webcam_device`]). A device the platform pairs with no input, or
 //! that isn't connected, leaves the source unavailable, tried again on every tick. A

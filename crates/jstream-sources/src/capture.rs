@@ -5,7 +5,7 @@
 //! render thread, as CPU frames or as textures shared with the compositor. A capture source only says what to capture
 //! ([`Source::capture`]); the engine starts and reads the capture.
 //!
-//! A `webcam` source has audio too (ADR-0031: a video capture device comes with its
+//! A `webcam` source has audio too (ADR-0061: a video capture device comes with its
 //! paired audio stream): the input the platform pairs with its device, a webcam's
 //! microphone or a capture card's HDMI audio. The engine records it as it records an
 //! audio input ([`webcam_device`] says which device's pair).
