@@ -2077,6 +2077,19 @@ fn output_start_returns_after_a_panicking_teardown() {
         thread::sleep(Duration::from_millis(20));
     }
     assert!(failed, "publish failure left the output running");
+    // `failed` settles before the watcher drops the pipeline, and the program stage,
+    // which holds the audio stream, is the last thing that drop lets go. A start in
+    // between shares that stage, by design (`Gate::must_wait`), so the panicking drop
+    // would never run. Wait for it, so the start below is the one after the panic.
+    let mut dropped = false;
+    for _ in 0..100 {
+        if !armed.load(Ordering::Acquire) {
+            dropped = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(dropped, "the first pipeline never dropped its audio stream");
 
     let engine = engine.with_publish(Box::new(RecordingPublish::new()));
     let restart = connected(&engine);
@@ -2091,10 +2104,6 @@ fn output_start_returns_after_a_panicking_teardown() {
     let restarted = restart_thread.join().expect("restart thread");
     restarted.expect("second output.start");
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
-    assert!(
-        !armed.load(Ordering::Acquire),
-        "the first pipeline never dropped its audio stream"
-    );
 }
 
 /// Dropping the last engine handle stops a running pipeline. The publish watcher
