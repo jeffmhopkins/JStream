@@ -908,5 +908,5 @@ milestone = "M3"
 title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
 status = "review"
 prs = [508, 518]
-note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS (#713); intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
+note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS (#723); intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
 needs = ["wave", "build"]
