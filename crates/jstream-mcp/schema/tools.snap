@@ -2141,7 +2141,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "prefer",
-                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
+                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0061: hardware first).",
                 "type": "string"
               },
               {
@@ -3339,7 +3339,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "prefer",
-                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
+                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0061: hardware first).",
                 "type": "string"
               },
               {
@@ -6091,7 +6091,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "prefer",
-                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
+                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0061: hardware first).",
                 "type": "string"
               },
               {
@@ -9590,7 +9590,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "prefer",
-                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
+                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0061: hardware first).",
                 "type": "string"
               },
               {

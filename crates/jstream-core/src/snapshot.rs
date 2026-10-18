@@ -963,7 +963,7 @@ fn draw(
         None,
         live,
         &NoCaptures,
-        shot.canvas().map_err(from_render)?,
+        DrawAt::read(shot.canvas().map_err(from_render)?),
     );
     drop(cache.end_frame(compositor));
     let full = output
@@ -1030,8 +1030,27 @@ impl Captures for NoCaptures {
     }
 }
 
-/// Draws `mix` of `shot` (the program mix for `None`) at `output`, over opaque black,
-/// and reads it back,
+/// What [`compose`] draws into: the output's size, and whether the output carries a CPU
+/// readback ([`Output::pixels`]). Without, only its texture is drawn, for a GPU consumer
+/// such as an encode target's conversion.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DrawAt {
+    pub(crate) size: FrameSize,
+    pub(crate) readback: bool,
+}
+
+impl DrawAt {
+    /// `size`, read back.
+    pub(crate) fn read(size: FrameSize) -> Self {
+        Self {
+            size,
+            readback: true,
+        }
+    }
+}
+
+/// Draws `mix` of `shot` (the program mix for `None`) at `to`'s size, over opaque black,
+/// and reads it back when `to` asks for that,
 /// between the caller's [`ResourceCache::begin_frame`] and
 /// [`ResourceCache::end_frame`]. Several mixes may be drawn between the two, so their
 /// shared uploads and layers are kept for all of them.
@@ -1057,8 +1076,12 @@ pub(crate) fn compose(
     mix: Option<&VideoMixId>,
     live: &LiveParams,
     captures: &dyn Captures,
-    output: FrameSize,
+    to: DrawAt,
 ) -> Result<Output, RenderError> {
+    let DrawAt {
+        size: output,
+        readback,
+    } = to;
     let canvas = shot.canvas()?;
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
@@ -1127,7 +1150,7 @@ pub(crate) fn compose(
                 }
             })
             .collect();
-        return compositor.render(&scene(output, Color::BLACK, &items), true);
+        return compositor.render(&scene(output, Color::BLACK, &items), readback);
     };
     let direct = output == canvas;
     claim_layers(compositor, cache, shot, mix, output)?;
@@ -1148,12 +1171,12 @@ pub(crate) fn compose(
     }
     fill_items(&mut items, cache, root, live);
     if direct {
-        return compositor.render(&scene(output, Color::BLACK, &items), true);
+        return compositor.render(&scene(output, Color::BLACK, &items), readback);
     }
     let layer = image(&GpuKey::Program)?;
     compositor.render_into(&scene(canvas, Color::BLACK, &items), layer)?;
     let placed = [fitted(layer, canvas, output)];
-    compositor.render(&scene(output, Color::BLACK, &placed), true)
+    compositor.render(&scene(output, Color::BLACK, &placed), readback)
 }
 
 /// Marks the layers [`compose`] draws `mix` at `output` through as used in the cache's
@@ -1933,8 +1956,16 @@ pub(crate) mod tests {
     ) -> jstream_render::Snapshot {
         cache.begin_frame();
         let captures = Every(capture.copied());
-        let output =
-            compose(compositor, cache, shot, None, live, &captures, size).expect("compose");
+        let output = compose(
+            compositor,
+            cache,
+            shot,
+            None,
+            live,
+            &captures,
+            super::DrawAt::read(size),
+        )
+        .expect("compose");
         drop(cache.end_frame(compositor));
         output.pixels().expect("invariant: read back").clone()
     }
@@ -2071,7 +2102,7 @@ pub(crate) mod tests {
                 mix,
                 &LiveParams::default(),
                 &super::NoCaptures,
-                square,
+                super::DrawAt::read(square),
             )
             .expect("compose");
             drop(cache.end_frame(&compositor));
@@ -2352,7 +2383,7 @@ pub(crate) mod tests {
                 None,
                 &LiveParams::default(),
                 &super::NoCaptures,
-                canvas,
+                super::DrawAt::read(canvas),
             )
             .expect("program");
             if index.is_multiple_of(2) {
@@ -2363,7 +2394,7 @@ pub(crate) mod tests {
                     Some(&half),
                     &LiveParams::default(),
                     &super::NoCaptures,
-                    small,
+                    super::DrawAt::read(small),
                 )
                 .expect("half");
             } else {

@@ -8,6 +8,7 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::Duration;
 
+use jstream_platform::mailbox::Mailbox;
 use jstream_platform::media::{ColorInfo, FrameSize, MediaTime, VideoFrameInfo};
 use jstream_platform::{
     CaptureDecoder, CaptureEncoding, CaptureStats, CaptureStream, CompressedFrame, MediaClock,
@@ -22,7 +23,6 @@ use windows::Win32::Media::MediaFoundation::{
 use super::convert::Layout;
 use super::source::{MfStarted, Opened, VIDEO_STREAM, start_error, with_bytes};
 use crate::QpcClock;
-use crate::capture::mailbox::Mailbox;
 use crate::com::{Com, os_error};
 
 /// How long `open` waits for the device's first read, which is where a device held by
