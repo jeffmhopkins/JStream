@@ -101,7 +101,8 @@ impl Plane {
     /// The z of the plane's unit normal, `ax × ay`: 1 facing the viewer, 0 edge-on. With
     /// perspective, 0 means the plane passes through the viewer, so every point of it is
     /// seen edge-on; without, it is seen side-on. It does not depend on the item's size,
-    /// so it decides edge-on where an area would not.
+    /// so it decides edge-on where an area would not. Under [`EDGE_ON`] is a turn within
+    /// about 6e-5° of a quarter, so anything visibly turned still draws.
     fn facing(&self) -> f64 {
         f64::from(self.ax[0]) * f64::from(self.ay[1])
             - f64::from(self.ax[1]) * f64::from(self.ay[0])
