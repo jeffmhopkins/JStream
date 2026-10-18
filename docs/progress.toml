@@ -871,7 +871,7 @@ id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "review"
-prs = [486]
+prs = [486, 623]
 note = "#486 merged into wave/m3-2; lands with that wave"
 needs = ["wave"]
 

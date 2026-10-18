@@ -1,16 +1,19 @@
 //! Plugins written in the WASM text format, run against a fake `Control` that records
-//! what reaches it: fuel exhaustion, the memory limit, a denied capability and an allowed
-//! call.
+//! what reaches it: fuel exhaustion, the wall-time deadline, the memory limit, a denied
+//! capability and an allowed call.
 
 use jstream_control::protocol::{Call, CallResult, Event, Hello, RequestId, Response, Welcome};
 use jstream_control::{BoxFuture, Control, ControlError, EventStream};
 use jstream_plugin_wasm::{Capabilities, Error, Limits, Plugin, PluginConfig, PluginHost, abi};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-/// A `Control` that answers every call with an empty action result and records it.
+/// A `Control` that answers every call with an empty action result, after `delay`, and
+/// records it.
 #[derive(Default)]
 struct Fake {
     calls: Mutex<Vec<Call>>,
+    delay: std::time::Duration,
 }
 
 impl Fake {
@@ -30,6 +33,7 @@ impl Control for Fake {
 
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
         self.calls.lock().expect("not poisoned").push(call);
+        std::thread::sleep(self.delay);
         Box::pin(async {
             Ok(Response {
                 id: RequestId::from("r1"),
@@ -59,7 +63,11 @@ fn futures_none() -> impl futures_core::Stream<Item = Event> + Send {
 }
 
 fn load(wat: &str, config: PluginConfig) -> (Result<Plugin, Error>, Arc<Fake>) {
-    let fake = Arc::new(Fake::default());
+    load_with(wat, config, Fake::default())
+}
+
+fn load_with(wat: &str, config: PluginConfig, fake: Fake) -> (Result<Plugin, Error>, Arc<Fake>) {
+    let fake = Arc::new(fake);
     let host = PluginHost::new().expect("the engine configures");
     let control: Arc<dyn Control> = fake.clone();
     let wasm = wat::parse_str(wat).expect("valid WAT");
@@ -296,4 +304,41 @@ fn a_missing_entry_point_is_named() {
         Err(Error::NoEntryPoint(name)) => assert_eq!(name, "on_event"),
         other => panic!("expected NoEntryPoint, got {other:?}"),
     }
+}
+
+#[test]
+fn time_the_engine_spends_answering_is_not_the_plugins() {
+    // Each call takes 60 ms to answer against a 30 ms deadline. The deadline is re-armed
+    // when a call returns, so the loop after it, whose back edges check the deadline,
+    // still runs to the end.
+    let call = r#"{"kind":"action","action":{"type":"output.stop","output_id":"main"}}"#;
+    let wat = format!(
+        r#"(module
+            (import "jstream" "call" (func $call (param i32 i32) (result i32)))
+            (memory (export "memory") 1)
+            (data (i32.const 1024) "{data}")
+            (func (export "run")
+                (local $n i32)
+                (drop (call $call (i32.const 1024) (i32.const {len})))
+                (drop (call $call (i32.const 1024) (i32.const {len})))
+                (loop $again
+                    (local.set $n (i32.add (local.get $n) (i32.const 1)))
+                    (br_if $again (i32.lt_u (local.get $n) (i32.const 1000))))))"#,
+        data = call.replace('"', "\\\""),
+        len = call.len(),
+    );
+    let config = PluginConfig {
+        capabilities: Capabilities::from_names(["output.stop"]),
+        limits: Limits::default().with_call_deadline(Duration::from_millis(30)),
+    };
+    let slow = Fake {
+        delay: Duration::from_millis(60),
+        ..Fake::default()
+    };
+    let (plugin, fake) = load_with(&wat, config, slow);
+    let mut plugin = plugin.expect("the plugin loads");
+    plugin
+        .invoke("run", &[])
+        .expect("the engine's time isn't charged");
+    assert_eq!(fake.calls().len(), 2);
 }
