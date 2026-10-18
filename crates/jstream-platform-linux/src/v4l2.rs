@@ -162,10 +162,7 @@ mod backend {
             };
             let clock = MonotonicClock::new()?;
             let opened = open_capture(device)?;
-            if !formats(&opened.enumerate()).contains(format) {
-                return Err(unsupported());
-            }
-            let fourcc = fourcc_for(format, &opened.pixel_formats()).ok_or_else(unsupported)?;
+            let fourcc = fourcc_for(format, &opened.enumerate()).ok_or_else(unsupported)?;
             let (width, height) = (format.size.width(), format.size.height());
             let settled = opened.set_format(fourcc, width, height)?;
             let pix = settled.pix;

@@ -89,17 +89,17 @@ It has:
   targets). `devices` lists each `/dev/videoN` that captures video with streaming I/O
   through the single-planar API or, failing that, the multi-planar one (SoC cameras and
   HDMI capture bridges; a UVC webcam's metadata node captures neither), named by its
-  card name, with
-  udev's `/dev/v4l/by-id/` link as the ID where there is one (it survives replugging and
-  renumbering), else the node's path. Only such paths are ever opened, since an ID can
+  card name, with udev's `/dev/v4l/by-id/` link as the ID where there is one (it
+  survives replugging and renumbering), else the node's path. Only such paths are ever opened, since an ID can
   come from a saved collection. Nodes the user can't open are left out, and no
   microphone is paired yet. `formats` lists every enumerated size and frame interval of
   the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12), NV12 and I420 as
   they are (also the multi-planar `NV12M` and `YUV420M`, each image plane in its own
   buffer plane, mapped on its own and copied with `jstream_platform::yuv::copy_planes`
   at that plane's stride, refused as `Unsupported` if the driver settles on another
-  plane count), and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. A stepwise size range
-  offers its largest size and the common sizes its steps reach, a stepwise interval its
+  plane count), and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. Where two
+  FourCCs deliver the same encoding, `open` asks for one whose own sizes list the
+  format. A stepwise size range offers its largest size and the common sizes its steps reach, a stepwise interval its
   shortest, and a driver that enumerates no sizes or no intervals its current ones. `open` sets the
   format (refused as `Unsupported` if the driver settles on another) and frame interval,
   maps four driver buffers, and starts a capture thread that waits on the node and an

@@ -163,13 +163,15 @@ pub(crate) fn formats(enumerated: &[Enumerated]) -> Vec<VideoDeviceFormat> {
     out
 }
 
-/// The FourCC to ask the driver for to capture `format`, among those it offers, or
-/// `None` when it offers none that delivers it.
-pub(crate) fn fourcc_for(format: &VideoDeviceFormat, offered: &[u32]) -> Option<u32> {
-    offered
+/// The FourCC to ask the driver for to capture `format`: the first pixel format it
+/// enumerates whose own sizes and intervals include `format`, or `None` when none does.
+/// Two FourCCs can deliver the same encoding (`MJPG` and `JPEG`, or `NV12` and `NM12`)
+/// with different sizes, so the one asked for must be one that lists the size.
+pub(crate) fn fourcc_for(format: &VideoDeviceFormat, enumerated: &[Enumerated]) -> Option<u32> {
+    enumerated
         .iter()
-        .copied()
-        .find(|&f| encoding(f) == Some(format.encoding))
+        .find(|e| formats(std::slice::from_ref(e)).contains(format))
+        .map(|e| e.fourcc)
 }
 
 /// The colour of a raw format's frames, from what the driver says. The encoding falls
@@ -439,12 +441,54 @@ mod tests {
                 (640, 480, tb(1001, 30000), CaptureEncoding::Yuy2),
             ]
         );
+        assert_eq!(period(fract(1, 0)), None);
+    }
+
+    /// The FourCC asked for is one whose own sizes list the format: here 1920x1080 at
+    /// 1/30 is offered by `MJPG` and `JPEG` both, and 1280x720 by `JPEG` only. A format
+    /// no FourCC lists has none.
+    #[test]
+    fn the_fourcc_asked_for_lists_the_formats_size() {
+        let enumerated = [
+            Enumerated {
+                fourcc: PIX_FMT_YUYV,
+                sizes: vec![((1280, 720), vec![fract(1, 30)])],
+            },
+            Enumerated {
+                fourcc: PIX_FMT_MJPEG,
+                sizes: vec![((1920, 1080), vec![fract(1, 30)])],
+            },
+            Enumerated {
+                fourcc: PIX_FMT_JPEG,
+                sizes: vec![
+                    ((1920, 1080), vec![fract(1, 30)]),
+                    ((1280, 720), vec![fract(1, 30)]),
+                ],
+            },
+        ];
+        let list = formats(&enumerated);
+        let find = |w, h, encoding| {
+            list.iter()
+                .find(|f| (f.size.width(), f.size.height(), f.encoding) == (w, h, encoding))
+                .expect("listed")
+        };
         assert_eq!(
-            fourcc_for(&list[0], &[PIX_FMT_YUYV, PIX_FMT_JPEG]),
+            fourcc_for(find(1920, 1080, CaptureEncoding::Mjpeg), &enumerated),
+            Some(PIX_FMT_MJPEG)
+        );
+        assert_eq!(
+            fourcc_for(find(1280, 720, CaptureEncoding::Mjpeg), &enumerated),
             Some(PIX_FMT_JPEG)
         );
-        assert_eq!(fourcc_for(&list[3], &[PIX_FMT_MJPEG]), None);
-        assert_eq!(period(fract(1, 0)), None);
+        assert_eq!(
+            fourcc_for(find(1280, 720, CaptureEncoding::Yuy2), &enumerated),
+            Some(PIX_FMT_YUYV)
+        );
+        let unlisted = jstream_platform::VideoDeviceFormat {
+            frame_period: Timebase::new(1, 60).expect("timebase"),
+            ..*find(1280, 720, CaptureEncoding::Yuy2)
+        };
+        assert_eq!(fourcc_for(&unlisted, &enumerated), None);
     }
 
     #[test]
