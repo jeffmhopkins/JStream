@@ -26,7 +26,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 
 | Asset | Why it matters | Where it lives |
 |---|---|---|
-| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager today, no store on macOS or Linux yet |
+| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager today. A macOS Keychain store is built ([ADR-0063](../adr/0063-macos-platform-support.md)) but no app uses it yet, and Linux has none yet. **Accepted** for Linux, not built ([ADR-0071](../adr/0071-linux-secret-store.md)): the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)) |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
 | Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie (**in flight**, #288) |
@@ -265,15 +265,16 @@ the agent unbounded (#346).
 <a id="secrets"></a>
 ## Secrets and the network
 <!-- @section
-depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
+depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004", "docs/adr/0071-linux-secret-store.md"]
 -->
 
 **Threats:** a key in a file, log, event or reply; a key sent to the wrong host; an
 intercepted connection.
 
 **Controls on main:**
-- Keys and refresh tokens live in Windows Credential Manager; with no store (macOS,
-  Linux) `set_key` fails rather than fall back to a file. Secret types print `***` and
+- Keys and refresh tokens live in Windows Credential Manager. Where an app has no
+  store (the macOS Keychain store is built but not wired into an app yet; Linux has
+  none) `set_key` fails rather than fall back to a file. Secret types print `***` and
   are zeroed on drop. The collection never holds a key, and target URLs that could carry
   one (user info, query, fragment) are refused.
 - RTMPS and the YouTube API use rustls with the OS roots and hostname checks; nothing
@@ -290,8 +291,24 @@ intercepted connection.
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
 the URL, as the target documentation warns.
 
-**Gaps:** `rtmp://` sends the key in cleartext with no warning, crash reports redact
-only the control token, and the redaction test covers the engine only (#353).
+**Accepted** ([ADR-0071](../adr/0071-linux-secret-store.md), nothing built): on Linux,
+keys and refresh tokens go to the Secret Service, and only where none is reachable to
+`secrets` in `~/.config/jstream`. That file is **plaintext at rest**: anyone with read
+access to the user's account or its files, or to a backup or sync of that folder, can
+read the keys in it, and use them to broadcast as the user's channel. The mitigations:
+- the file is `0600` in a `0700` folder, and refused if group or others can read it;
+- the UI shows a lasting warning while the fallback holds any secret, and the daemon
+  logs one at startup;
+- secrets move into the keyring, and the file is deleted, once a keyring is reachable;
+- a later setting turns the fallback off, so a machine can be keyring-only.
+
+A keyring that is locked, or whose unlock prompt is dismissed, fails the call and
+never sends the secret to the file.
+
+**Gaps:** `rtmp://` sends the key in cleartext with no warning, and the redaction test
+covers the engine only (#353). The daemon's crash reports already redact the control
+token and every stream key and refresh token that passes through its `Redacting`
+stores; a native crash writes no report.
 
 <a id="vcam"></a>
 ## Virtual camera
