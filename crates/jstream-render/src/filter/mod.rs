@@ -21,7 +21,7 @@ pub(crate) mod testing;
 pub use assets::{Lut, LutError, lut_image};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
-pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Shader};
+pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Scratch, Shader};
 
 use jstream_protocol::{KindDescriptor, Settings};
 
@@ -52,10 +52,12 @@ fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
 }
 
 /// One built-in video filter with its settings read, ready to draw. It keeps whatever
-/// state its kind needs between frames (a video delay's ring of frames).
+/// state its kind needs between frames (a video delay's ring of frames), and a
+/// multi-pass kind's intermediate layers ([`Scratch`]).
 pub struct VideoFilter {
     kind: String,
     pass: Box<dyn Pass>,
+    scratch: Scratch,
 }
 
 impl VideoFilter {
@@ -63,10 +65,16 @@ impl VideoFilter {
     /// missing or mistyped setting reads as its default. `None` when `kind_id` is not a
     /// built-in video filter kind.
     pub fn new(kind_id: &str, settings: &Settings) -> Option<Self> {
-        build(kind_id, settings).map(|pass| Self {
-            kind: kind_id.to_owned(),
+        build(kind_id, settings).map(|pass| Self::of(kind_id, pass))
+    }
+
+    /// A filter of `kind` drawn by `pass`, with no layers kept yet.
+    pub(crate) fn of(kind: &str, pass: Box<dyn Pass>) -> Self {
+        Self {
+            kind: kind.to_owned(),
             pass,
-        })
+            scratch: Scratch::default(),
+        }
     }
 
     /// A filter of a kind defined outside this crate (an effect pack), with `settings`
@@ -76,10 +84,7 @@ impl VideoFilter {
         filter: std::sync::Arc<dyn ExternalFilter>,
         settings: &Settings,
     ) -> Self {
-        Self {
-            kind: kind_id.to_owned(),
-            pass: Box::new(external::External::new(filter, settings)),
-        }
+        Self::of(kind_id, Box::new(external::External::new(filter, settings)))
     }
 
     /// The filter's kind ID.
@@ -109,8 +114,15 @@ impl VideoFilter {
         self.pass.set_reference(image);
     }
 
-    pub(crate) fn pass_mut(&mut self) -> &mut dyn Pass {
-        self.pass.as_mut()
+    /// Its pass and the pool its scratch layers come from, to draw it.
+    pub(crate) fn parts(&mut self) -> (&mut dyn Pass, &mut Scratch) {
+        (self.pass.as_mut(), &mut self.scratch)
+    }
+
+    /// The scratch layers it keeps, for tests.
+    #[cfg(test)]
+    pub(crate) fn scratch(&self) -> &Scratch {
+        &self.scratch
     }
 }
 
