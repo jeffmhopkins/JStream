@@ -28,10 +28,10 @@ use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 pub const COLLECTION_REV: Rev = Rev(1);
 
 /// The kinds an implementation must describe for [`collection`] to apply: the source
-/// kinds `webcam`, a video kind, and `desktop_audio` and `mic`, audio kinds with no
-/// video, all without parameters, so every implementation reports their settings as an
-/// empty map; and the audio filter kind `gain`, whose one parameter the collection
-/// always sets, so its settings read back as given.
+/// kind `webcam`, described as the engine's built-in kind is, whose one parameter
+/// `device` the collection leaves at its default; `desktop_audio` and `mic`, audio kinds
+/// with no video and no parameters; and the audio filter kind `gain`, whose one
+/// parameter the collection always sets, so its settings read back as given.
 pub fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -41,7 +41,24 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
-            params: vec![],
+            params: vec![ParamDescriptor {
+                id: "device".into(),
+                ty: ParamType::String {
+                    multiline: false,
+                    max_len: 1024,
+                },
+                default: serde_json::Value::from(""),
+                label: "Device".into(),
+                description: Some(
+                    "The ID of the webcam or capture card, as the platform lists it. Empty \
+                     captures the first device listed."
+                        .into(),
+                ),
+                group: None,
+                advanced: false,
+                visible_if: None,
+                live: false,
+            }],
         },
         KindDescriptor {
             kind_id: "desktop_audio".into(),
@@ -1871,6 +1888,7 @@ fn desk() -> SourceInfo {
         kind: SourceKind::Builtin {
             kind: "desktop_audio".into(),
         },
+        settings: crate::Settings::new(),
         audio: Some(SourceAudio::new(AudioFollow::Always)),
         ..cam()
     }
@@ -1921,7 +1939,9 @@ fn cam() -> SourceInfo {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
-        settings: crate::Settings::new(),
+        settings: [("device".to_owned(), serde_json::Value::from(""))]
+            .into_iter()
+            .collect(),
         duplicated_from: None,
         filters: Default::default(),
         meta: Default::default(),

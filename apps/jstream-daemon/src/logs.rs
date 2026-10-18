@@ -9,7 +9,7 @@
 //!
 //! Docs: apps/jstream-daemon/README.md#design
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
@@ -44,14 +44,19 @@ pub fn create_dir(dir: &Path) -> io::Result<()> {
     builder.create(dir)
 }
 
-/// Opens a new file at `path` for writing, failing if anything is there; user-only on
-/// Unix (mode 0600), and with its directory's ACL on Windows.
+/// Opens a new file at `path` for writing, failing if anything is there; user-only:
+/// mode 0600 on Unix, a protected DACL for SYSTEM and the user on Windows (#344).
 pub fn create_new(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(path)
+    #[cfg(windows)]
+    return jstream_platform_windows::create_private_file(path);
+    #[cfg(not(windows))]
+    {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        options.open(path)
+    }
 }
 
 /// Deletes the oldest files in `dir` whose names start with `prefix` and end with

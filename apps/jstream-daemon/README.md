@@ -119,17 +119,20 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 - **The token file.** If it exists, its token (the file's text without surrounding
   whitespace) is reused, so clients keep working across restarts. If it doesn't, it is
   created with a new random token and a newline. An existing file that is empty, holds
-  no valid token (visible ASCII, no spaces), is not a regular file, or (on Unix) gives
-  group or others any permission (mode bits `077`), is refused with exit code 1, and
-  left as it is.
+  no valid token (visible ASCII, no spaces), is not a regular file, or that other users
+  may access (on Unix, any group or other permission, mode bits `077`; on Windows, an
+  owner other than you, SYSTEM or Administrators, or a DACL letting anyone else in), is
+  refused with exit code 1, and left as it is. A new file is user-only on both.
   The parent directory must exist. The token itself is never printed.
 - **Paired devices.** Devices paired with `jstream-cli pair`
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) are kept in
   `<token file>.devices` beside the token file (for example `token.devices`): their
-  names and token digests, never a token, user-only on Unix. It is created at the first
-  pairing, so devices stay paired across restarts; deleting it unpairs them all. A
-  device file that can't be read or parsed, or (on Unix) that group or others can read,
-  is a startup failure (exit 1). A device token works only while the daemon listens on
+  names and token digests, never a token, user-only (mode `0600` on Unix, a protected
+  DACL for SYSTEM and the user on Windows). It is created at the first pairing, so
+  devices stay paired across restarts; deleting it unpairs them all. A device file that
+  can't be read or parsed, or that other users may access (on Unix, any group or other
+  permission; on Windows, another owner or a DACL entry letting anyone but the user,
+  SYSTEM or Administrators in), is a startup failure (exit 1). A device token works only while the daemon listens on
   `127.0.0.1`, which it always does for now.
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
@@ -159,7 +162,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   names the file. A log directory that can't be created, or a data directory that can't
   be found (no portable marker, and no `HOME` or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
-  `0600`.
+  `0600`; on Windows the log files are created with a protected DACL for SYSTEM and the
+  user, and the directories keep what they inherit. Crash reports on Windows still get
+  their folder's ACL (#656).
 - **Crash reports.** A panic writes `crash-<UTC time>-<pid>-<n>.txt` into the log
   directory and prints `crash report: <path>` to stderr; the newest 10 are kept.
   Nothing is uploaded ([R-SEC-004](../../docs/RULES.md#R-SEC-004)): attach the report
@@ -412,8 +417,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`
-  header unchanged. The file is created with `create_new`, so a file that appears
-  meanwhile is never replaced, and on Unix with mode `0600`. The random bytes are drawn
+  header unchanged. The file is created new (`CREATE_NEW` on Windows), so a file that
+  appears meanwhile is never replaced, and user-only: mode `0600` on Unix, and on
+  Windows a protected DACL for SYSTEM and the user set by the same `CreateFileW` call
+  (`jstream_platform_windows::create_private_file`, #344), so it never has a shared
+  folder's inherited entries. An existing file is refused, with "delete it to get a new
+  token", if other users may access it: on Unix any group or other permission; on
+  Windows (`check_private_file`) an owner other than the user, SYSTEM or Administrators,
+  a missing or null DACL, or an allow entry giving anyone else more than reading its
+  descriptor or attributes. Administrators are trusted as root is on Unix. The random bytes are drawn
   before the file is created, and a failed write removes the file, so no empty or
   partial token is left to be reused. Reusing an existing token keeps configured
   clients working; rotating it means deleting the file and restarting.
@@ -490,7 +502,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `jstream-platform` (`Backends`, the key store trait, the data directory),
   `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
-  (the backends, the key store and the Media Foundation check),
+  (the backends, the key store, the Media Foundation check and the user-only token
+  and log files),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
   OAuth client file), `anyhow` and `tracing` (the startup line), all already in the
@@ -522,10 +535,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    or the portable folder per [ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)),
    once the engine's settings code locates it. Until then the path is required, and the
    same variable serves the daemon and the CLI.
-3. **Windows ACL.** On Windows the new file gets its directory's ACL, which is
-   user-only under `%APPDATA%` but not everywhere, and an existing file's ACL is not
-   checked. Restricting it explicitly needs the Windows security API, so it belongs in
-   `jstream-platform-windows`, the crate allowed `unsafe`.
+3. **Windows ACL on real hardware.** The token, devices and log files are now created
+   with a user-only DACL and an existing token or devices file's DACL is checked (#344),
+   but that has only run in CI's `windows-latest` job, never on a machine with a token
+   in a shared folder, a domain account or a synced folder.
 4. **Native crash dumps.** Only panics write a report. A native crash (an access
    violation in a driver or FFI code, an abort) writes nothing yet, though
    [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence) plans local minidumps.
