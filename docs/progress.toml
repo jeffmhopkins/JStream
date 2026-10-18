@@ -8,6 +8,13 @@
 #
 # status: done (merged) | hardware (merged; a run on Windows hardware is still pending,
 #         named by `note`) | review (a PR is open) | planned
+# needs:  the steps an unfinished item still needs before it is `done`, in order, for the
+#         README's "What's left" table: build (code to write or finish through review),
+#         wave (merged into a wave that hasn't landed), hardware (a Windows run),
+#         maintainer (a decision or an action only the maintainer can take). Set it on
+#         every `planned` and `review` item (`docs progress` lists the ones without); a
+#         `hardware` item without it needs its run. Drop it when the item is `done`.
+#         ROADMAP.md#endgame has the order they land in.
 # Item IDs are the roadmap board's; PR titles name them in parentheses, e.g. "(A5)".
 
 [[milestone]]
@@ -186,8 +193,9 @@ prs = [166]
 id = "A3"
 milestone = "M1a"
 title = "Daemon goes live on Windows"
-status = "done"
+status = "hardware"
 prs = [226]
+note = "Windows 11 Pro N run (#333)"
 
 [[item]]
 id = "A6"
@@ -250,7 +258,10 @@ prs = [223]
 id = "A6b"
 milestone = "M1a"
 title = "Daemon YouTube wiring"
-status = "planned"
+status = "hardware"
+prs = [312]
+note = "#312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337"
+needs = ["maintainer", "hardware"]
 
 # M1b
 
@@ -392,15 +403,17 @@ note = "audio hardware tests"
 id = "C3"
 milestone = "M1b"
 title = "Display and window capture sources"
-status = "planned"
+status = "hardware"
+prs = [365]
+note = "#365 landed with wave/m1-2 (#545); Windows run #378"
 
 [[item]]
 id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
-prs = [283, 289, 298]
-note = "#341"
+prs = [283, 289, 298, 326]
+note = "#341, #335, #336"
 
 [[item]]
 id = "D1"
@@ -497,7 +510,7 @@ prs = [208]
 id = "I2"
 milestone = "M1b"
 title = "Live values"
-status = "review"
+status = "done"
 prs = [244]
 
 # M1c
@@ -542,8 +555,9 @@ prs = [235]
 id = "G3d"
 milestone = "M1c"
 title = "Virtual camera in the UI and the desktop app"
-status = "done"
+status = "hardware"
 prs = [316]
+note = "Windows run (#390)"
 
 [[item]]
 id = "P1"
@@ -645,13 +659,13 @@ id = "U2b"
 milestone = "M2"
 title = "Device pairing"
 status = "done"
-prs = [265]
+prs = [265, 288]
 
 [[item]]
 id = "U3a"
 milestone = "M2"
 title = "Scenes, sources, properties"
-status = "review"
+status = "done"
 prs = [256]
 
 [[item]]
@@ -665,7 +679,7 @@ prs = [254]
 id = "U3c"
 milestone = "M2"
 title = "Mixer panel"
-status = "review"
+status = "done"
 prs = [308]
 
 [[item]]
@@ -679,7 +693,8 @@ prs = [255]
 id = "U4p"
 milestone = "M2"
 title = "Live preview on canvas"
-status = "planned"
+status = "done"
+prs = [302]
 
 [[item]]
 id = "U1"
@@ -722,18 +737,21 @@ milestone = "M2"
 title = "Studio mode and transitions"
 status = "review"
 prs = [260]
+needs = ["build"]
 
 [[item]]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
 status = "planned"
+note = "draft #304, on T1"
+needs = ["build"]
 
 [[item]]
 id = "E2"
 milestone = "M2"
 title = "Video mixes"
-status = "review"
+status = "done"
 prs = [259]
 
 [[item]]
@@ -747,7 +765,8 @@ prs = [249]
 id = "D8p"
 milestone = "M2"
 title = "Audio chain protocol fields"
-status = "planned"
+status = "done"
+prs = [303]
 
 [[item]]
 id = "C9"
@@ -761,14 +780,17 @@ note = "media file hardware tests (#382)"
 id = "W1"
 milestone = "M2"
 title = "Audio waveform and spectrum sources"
-status = "review"
-prs = [460, 463, 466]
+status = "done"
+prs = [315, 460, 463, 466]
 
 [[item]]
 id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "planned"
+prs = [319]
+note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 in review into wave/m1-3"
+needs = ["build"]
 
 [[item]]
 id = "K2"
@@ -799,13 +821,25 @@ milestone = "M3"
 title = "Composite to NV12 on the GPU"
 status = "review"
 prs = [280]
+note = "#280 merged into wave/m3-2; lands with that wave"
+needs = ["wave"]
+
+[[item]]
+id = "F6"
+milestone = "M3"
+title = "HEVC and AV1 encode"
+status = "hardware"
+prs = [364]
+note = "#364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b"
 
 [[item]]
 id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
-prs = [359]
+prs = [359, 368]
+note = "effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build"
+needs = ["build"]
 
 [[item]]
 id = "3D1"
@@ -819,15 +853,18 @@ id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
 status = "review"
-prs = [363, 375]
+prs = [363, 375, 594]
+note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come"
+needs = ["wave", "maintainer"]
 
 [[item]]
 id = "CL1"
 milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
-prs = [272]
-note = "part 1 merged"
+prs = [272, 281, 407]
+note = "parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run)"
+needs = ["build", "hardware"]
 
 [[item]]
 id = "WA1"
@@ -835,14 +872,17 @@ milestone = "M3"
 title = "WASM automation plugins"
 status = "review"
 prs = [486]
+note = "#486 merged into wave/m3-2; lands with that wave"
+needs = ["wave"]
 
 [[item]]
 id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
 status = "review"
-prs = [511, 513, 533, 543, 554, 566, 570, 583]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583)"
+prs = [511, 513, 533, 543, 554, 566, 570, 583, 586]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586)"
+needs = ["wave", "build"]
 
 [[item]]
 id = "LNX1"
@@ -850,7 +890,8 @@ milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
 prs = [481, 490, 509, 510, 572]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); ALSA audio input and output (#572)"
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; ALSA audio input and output (#572); the rest of the codec path to build"
+needs = ["wave", "build"]
 
 [[item]]
 id = "LNX2"
@@ -859,6 +900,7 @@ title = "Linux OpenH264 download (ADR-0061)"
 status = "review"
 prs = [536]
 note = "store, check, loader and encoder (#536); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come"
+needs = ["wave", "build"]
 
 [[item]]
 id = "LNX3"
@@ -867,3 +909,4 @@ title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
 status = "review"
 prs = [508, 518]
 note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
+needs = ["wave", "build"]

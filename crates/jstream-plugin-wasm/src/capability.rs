@@ -123,6 +123,7 @@ mod tests {
             edits: vec![edit("a"), delete],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         });
         let caps = Capabilities::from_names(["scene.rename"]);
         assert_eq!(caps.check(&batch), Err(vec!["scene.delete"]));
@@ -137,6 +138,7 @@ mod tests {
             edits: Vec::new(),
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         });
         assert_eq!(caps.check(&empty), Err(Vec::new()));
     }

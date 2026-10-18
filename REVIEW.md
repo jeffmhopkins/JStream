@@ -47,7 +47,11 @@ depends_on = ["docs/adr/0019-review-gate-v2.md"]
 
 1. The PR description, the full diff against the base, the commit list with trailers, CI
    status on the head commit, and every earlier review round (your comments and the
-   builder's replies).
+   builder's replies). On a draft PR every `ci` job is skipped
+   ([R-GIT-003](docs/RULES.md#R-GIT-003)), so the head has no CI results yet, and a
+   skipped check is not a passing one. Say in your review that CI hasn't run. CI runs on
+   that head when the PR is marked ready for review, and its required checks still gate
+   the merge after your verdict.
 2. **The rules and docs that govern each changed path:**
    - Run `cargo xtask docs for <path>` for every changed file. It returns the applicable
      rules (by `applies_to`), the doc sections that cover the file, and its ADRs.
@@ -124,7 +128,7 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
   decision is not a blocking finding: it gets `escalate` (see the verdict table);
 - a security problem;
 - a red required CI check caused by this PR. On a PR into a `wave/*` branch, a red `fmt`,
-  `clippy (ubuntu-latest)`, `docs` or `pr-title` counts as required too.
+  `clippy (ubuntu-latest)`, `test (ubuntu-latest)`, `docs` or `pr-title` counts as required too.
 
 **Non-blocking** (doesn't prevent `pass`): style, naming, suggestions, questions, and
 **pre-existing problems** the PR didn't introduce. List those as follow-ups, which the
