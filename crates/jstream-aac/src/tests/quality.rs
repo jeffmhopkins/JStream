@@ -258,3 +258,96 @@ fn temporal_noise_shaping_keeps_noise_by_the_clicks() {
         );
     }
 }
+
+/// Clicks every `period` samples over a quiet tone: each a 4 ms burst of decaying noise.
+/// At 512 samples apart (about 94 a second) the attack detector sees a steady signal and
+/// keeps long windows, with four clicks in each.
+fn clicks(seconds: f32, period: usize) -> Vec<f32> {
+    let n = (RATE as f32 * seconds) as usize;
+    let mut rng = Rng(11);
+    let mut out = Vec::with_capacity(2 * n);
+    for i in 0..n {
+        let t = i as f32 / RATE as f32;
+        let phase = i % period;
+        let click = if phase < 192 {
+            (-(phase as f32) / 24.0).exp() * rng.unit() * 0.7
+        } else {
+            0.0
+        };
+        let bed = 0.01 * (TAU * 300.0 * t).sin();
+        out.push(click + bed);
+        out.push(0.9 * click + bed);
+    }
+    out
+}
+
+/// The temporal envelope's error, in dB: the mean absolute difference, over 64-sample
+/// blocks of the left channel after the first 100 ms, between the input's and the
+/// output's block energies.
+fn envelope_error_db(input: &[f32], output: &[f32]) -> f64 {
+    let block = 64;
+    let n = input.len() / 2;
+    let energy = |x: &[f32], b: usize| -> f64 {
+        (b..b + block)
+            .map(|i| f64::from(x[2 * i]).powi(2))
+            .sum::<f64>()
+            .max(1e-12)
+    };
+    let (mut total, mut count) = (0.0, 0u32);
+    let mut b = 4800;
+    while b + block <= n {
+        total += (10.0 * (energy(output, b) / energy(input, b)).log10()).abs();
+        count += 1;
+        b += block;
+    }
+    total / f64::from(count)
+}
+
+/// TNS engages on clicks inside long windows (in nine units of ten at least, and in none
+/// with it off), and keeps the decoded temporal envelope closer to the input's than the
+/// same stream without it.
+#[test]
+fn tns_keeps_the_temporal_envelope_of_clicks_in_long_windows() {
+    let input = clicks(2.0, 512);
+    for kbps in [96, 128] {
+        let mut errors = [0.0; 2];
+        for (tns, error) in [false, true].into_iter().zip(&mut errors) {
+            let config = Config {
+                tns,
+                ..Config::new(RATE, 2, kbps * 1000)
+            };
+            let mut enc = crate::Encoder::new(config).expect("valid config");
+            enc.push_interleaved(&input).expect("whole frames");
+            enc.finish();
+            let (mut units, mut au, mut with_tns) = (Vec::new(), Vec::new(), 0);
+            while enc.encode_frame(&mut au) {
+                with_tns += usize::from(enc.used_tns());
+                units.push(std::mem::take(&mut au));
+            }
+            let seqs = sequences(&units);
+            assert!(
+                seqs.iter().all(|&s| s == 0),
+                "clicks at {kbps} kbps: short windows {seqs:?}"
+            );
+            let pcm = decode([0x11, 0x90], &units).expect("decodes");
+            let output = &pcm[2 * DELAY..2 * DELAY + input.len()];
+            *error = envelope_error_db(&input, output);
+            if tns {
+                assert!(
+                    with_tns * 10 >= units.len() * 9,
+                    "clicks at {kbps} kbps: TNS in {with_tns} of {} units",
+                    units.len()
+                );
+            } else {
+                assert_eq!(with_tns, 0, "TNS off sends none");
+            }
+        }
+        // Measured: 5.49 dB without TNS and 3.12 with it at 96 kbps, 5.41 and 2.90 at
+        // 128 kbps; TNS in 94 and 95 of 95 units.
+        let [without, with] = errors;
+        assert!(
+            with < 3.6 && without - with > 1.8,
+            "clicks at {kbps} kbps: envelope error {with:.2} dB with TNS, {without:.2} without"
+        );
+    }
+}
