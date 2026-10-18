@@ -299,8 +299,10 @@ read the keys in it, and use them to broadcast as the user's channel. The mitiga
 A keyring that is locked, or whose unlock prompt is dismissed, fails the call and
 never sends the secret to the file.
 
-**Gaps:** `rtmp://` sends the key in cleartext with no warning, crash reports redact
-only the control token, and the redaction test covers the engine only (#353).
+**Gaps:** `rtmp://` sends the key in cleartext with no warning, and the redaction test
+covers the engine only (#353). The daemon's crash reports already redact the control
+token and every stream key and refresh token that passes through its `Redacting`
+stores; a native crash writes no report.
 
 <a id="vcam"></a>
 ## Virtual camera
