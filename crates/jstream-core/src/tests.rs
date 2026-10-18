@@ -2308,6 +2308,86 @@ fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
     assert_eq!(at(480, 180), [0, 0, 0, 255]);
 }
 
+/// A geometry's `flip_h` reaches the compositor through the snapshot: a red|green frame
+/// stretched over the whole 64×32 canvas and flipped draws green|red.
+#[test]
+fn video_snapshot_draws_a_flipped_geometry() {
+    let _gpu = one_gpu_test_at_a_time();
+    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
+    use jstream_protocol::{FitMode, ItemGeometry};
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let geometry = ItemGeometry {
+        fit_mode: FitMode::Stretch,
+        flip_h: true,
+        ..ItemGeometry::covering_canvas(64, 32).expect("positive")
+    };
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::CanvasSetSize {
+                    width: 64,
+                    height: 32,
+                },
+                create("main"),
+                webcam(),
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("mirrored"),
+                    source_id: SourceId::new("webcam"),
+                    transform: None,
+                    geometry: Some(geometry),
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("scene");
+    let frame: Vec<u8> = (0..16 * 8)
+        .flat_map(|i| {
+            if i % 16 < 8 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 255, 0, 255]
+            }
+        })
+        .collect();
+    engine
+        .set_source_frame(&SourceId::new("webcam"), 16, 8, &frame)
+        .expect("frame");
+    let shot = match query(&control, Query::VideoSnapshot) {
+        Ok(shot) => shot,
+        Err(error) if error.protocol().is_some_and(is_no_adapter) => {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "CI has no wgpu adapter: {error}"
+            );
+            return;
+        }
+        Err(error) => panic!("video.snapshot failed: {error}"),
+    };
+    let QueryResult::VideoSnapshot {
+        width, height, png, ..
+    } = shot
+    else {
+        panic!("not a snapshot: {shot:?}");
+    };
+    assert_eq!((width, height), (64, 32));
+    let (_, _, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+    let at = |x: usize, y: usize| {
+        let i = (y * 64 + x) * 4;
+        [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+    };
+    assert_eq!(at(8, 16), [0, 255, 0, 255]);
+    assert_eq!(at(56, 16), [255, 0, 0, 255]);
+}
+
 #[test]
 fn a_removed_drop_source_keeps_its_total() {
     let engine = Engine::new();

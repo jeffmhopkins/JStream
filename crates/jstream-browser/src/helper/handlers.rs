@@ -1,6 +1,7 @@
 //! CEF's callbacks: the app (command-line switches), and per page a client with its
 //! render, audio, life-span, load and request handlers, each forwarding to the page's
-//! [`PageShared`]. Plus a task that runs a closure on CEF's UI thread.
+//! [`PageShared`], and a permission handler that refuses everything
+//! ([`crate::permission`]). Plus a task that runs a closure on CEF's UI thread.
 
 use std::os::raw::c_int;
 use std::sync::Arc;
@@ -66,6 +67,7 @@ wrap_client! {
         life_span: LifeSpanHandler,
         load: LoadHandler,
         request: RequestHandler,
+        permission: PermissionHandler,
     }
 
     impl Client {
@@ -88,6 +90,10 @@ wrap_client! {
         fn request_handler(&self) -> Option<RequestHandler> {
             Some(self.request.clone())
         }
+
+        fn permission_handler(&self) -> Option<PermissionHandler> {
+            Some(self.permission.clone())
+        }
     }
 }
 
@@ -100,6 +106,7 @@ pub(crate) fn client(page: &Arc<PageShared>) -> Client {
         PageLifeSpan::new(page.clone()),
         PageLoad::new(page.clone()),
         PageRequests::new(PageResources::new(page)),
+        PagePermissions::new(),
     )
 }
 
@@ -340,6 +347,50 @@ wrap_resource_request_handler! {
                     ReturnValue::CANCEL
                 }
             }
+        }
+    }
+}
+
+wrap_permission_handler! {
+    pub(crate) struct PagePermissions;
+
+    impl PermissionHandler {
+        fn on_request_media_access_permission(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _requesting_origin: Option<&CefString>,
+            requested_permissions: u32,
+            callback: Option<&mut MediaAccessCallback>,
+        ) -> c_int {
+            match crate::permission::answer(requested_permissions) {
+                crate::permission::Answer::Deny => {
+                    if let Some(callback) = callback {
+                        callback.cancel();
+                    }
+                }
+            }
+            // Handled here, never by CEF's default. A request left unanswered (no
+            // callback) is never granted either.
+            1
+        }
+
+        fn on_show_permission_prompt(
+            &self,
+            _browser: Option<&mut Browser>,
+            _prompt_id: u64,
+            _requesting_origin: Option<&CefString>,
+            requested_permissions: u32,
+            callback: Option<&mut PermissionPromptCallback>,
+        ) -> c_int {
+            match crate::permission::answer(requested_permissions) {
+                crate::permission::Answer::Deny => {
+                    if let Some(callback) = callback {
+                        callback.cont(PermissionRequestResult::DENY);
+                    }
+                }
+            }
+            1
         }
     }
 }

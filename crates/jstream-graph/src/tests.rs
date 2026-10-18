@@ -1097,10 +1097,10 @@ mod property {
     use crate::Graph;
     use jstream_protocol::{
         Action, AudioFollow, BusId, Chord, Crop, DeleteTarget, Easing, Edit, EncoderProfile,
-        EncoderProfileId, Finite32, FitMode, Glide, ItemEasing, ItemGeometry, ItemId,
-        ItemTransform, ItemTransition, MixInput, MixResolution, OutputId, RateControl, Rev,
-        SceneId, SceneRole, Settings, Size, SourceId, SourceKind, TransitionEffect,
-        TransitionPresetId, Vec2, VideoMix, VideoMixId,
+        EncoderProfileId, Finite32, FitMode, FolderId, Glide, ItemEasing, ItemGeometry, ItemId,
+        ItemTransform, ItemTransition, LabelId, MixInput, MixResolution, OutputId, RateControl,
+        Rev, SceneId, SceneMeta, SceneRole, Settings, Size, SourceId, SourceKind, SourceMeta,
+        TransitionEffect, TransitionPresetId, Vec2, VideoMix, VideoMixId,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1171,6 +1171,8 @@ mod property {
         );
         let presets: Vec<String> = state.presets().map(|p| p.id().to_string()).collect();
         let buses: Vec<String> = state.buses().map(|b| b.id().to_string()).collect();
+        let folders: Vec<String> = state.folders().iter().map(|f| f.id().to_string()).collect();
+        let labels: Vec<String> = state.labels().iter().map(|l| l.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
             "rtmps://b.example:443/live",
@@ -1234,6 +1236,12 @@ mod property {
                 .expect("finite")
         };
         let maybe = |rng: &mut Rng| rng.below(2) == 0;
+        let folder = |rng: &mut Rng| rng.pick(&folders).unwrap_or_else(|| pool(rng, "f"));
+        let label = |rng: &mut Rng| rng.pick(&labels).unwrap_or_else(|| pool(rng, "l"));
+        // A folder one time in two, else none.
+        let maybe_folder = |rng: &mut Rng| (rng.below(2) == 0).then(|| FolderId::new(folder(rng)));
+        // Invalid one time in four.
+        let color = |rng: &mut Rng| ["#ff8800", "#1E1E2E", "#00aa00", "red"][rng.below(4)];
         // Out of range one time in eight.
         let profile = |rng: &mut Rng| {
             let mut profile = EncoderProfile::DEFAULT;
@@ -1290,7 +1298,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(55) {
+        match rng.below(68) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1645,6 +1653,67 @@ mod property {
                     disappear: [TransitionEffect::None, TransitionEffect::Scale][rng.below(2)],
                 },
             },
+            54 => Edit::FolderCreate {
+                folder_id: FolderId::new(pool(rng, "f")),
+                name: pool(rng, "folder "),
+                parent: maybe_folder(rng),
+            },
+            55 => Edit::FolderRename {
+                folder_id: FolderId::new(folder(rng)),
+                name: pool(rng, "folder "),
+            },
+            56 => Edit::FolderSetParent {
+                folder_id: FolderId::new(folder(rng)),
+                parent: maybe_folder(rng),
+            },
+            57 => Edit::FolderReorder {
+                folder_id: FolderId::new(folder(rng)),
+                index: index(rng),
+            },
+            58 => Edit::FolderDelete {
+                folder_id: FolderId::new(folder(rng)),
+            },
+            59 => Edit::SceneSetFolder {
+                scene_id: SceneId::new(scene(rng)),
+                folder_id: maybe_folder(rng),
+            },
+            60 => Edit::SceneSetMeta {
+                scene_id: SceneId::new(scene(rng)),
+                meta: SceneMeta {
+                    icon: (rng.below(2) == 0).then(|| "star".to_owned()),
+                    color: (rng.below(2) == 0).then(|| color(rng).to_owned()),
+                    favourite: rng.below(2) == 0,
+                    show_in_multiview: rng.below(3) != 0,
+                },
+            },
+            61 => Edit::LabelCreate {
+                label_id: LabelId::new(pool(rng, "l")),
+                name: pool(rng, "label "),
+                color: color(rng).into(),
+                icon: (rng.below(2) == 0).then(|| "tag".to_owned()),
+            },
+            62 => Edit::LabelUpdate {
+                label_id: LabelId::new(label(rng)),
+                name: pool(rng, "label "),
+                color: color(rng).into(),
+                icon: None,
+            },
+            63 => Edit::LabelReorder {
+                label_id: LabelId::new(label(rng)),
+                index: index(rng),
+            },
+            64 => Edit::LabelDelete {
+                label_id: LabelId::new(label(rng)),
+            },
+            65 | 66 => Edit::SourceSetMeta {
+                source_id: SourceId::new(source(rng)),
+                meta: SourceMeta {
+                    labels: (0..rng.below(3))
+                        .map(|_| LabelId::new(label(rng)))
+                        .collect(),
+                    favourite: rng.below(2) == 0,
+                },
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1687,6 +1756,7 @@ mod property {
                         // Every edge-adding edit is cycle checked, so no batch, whatever
                         // its edits, leaves a cycle behind.
                         assert_eq!(crate::deps::any_cycle(graph.state()), None, "{edits:?}");
+                        assert_folders_are_a_tree(graph.state());
                         let after = graph.clone();
 
                         let undo = graph
@@ -1763,6 +1833,18 @@ mod property {
             "send.remove",
             "hotkey.set",
             "hotkey.clear",
+            "folder.create",
+            "folder.rename",
+            "folder.set_parent",
+            "folder.reorder",
+            "folder.delete",
+            "scene.set_folder",
+            "scene.set_meta",
+            "label.create",
+            "label.update",
+            "label.reorder",
+            "label.delete",
+            "source.set_meta",
         ]
         .into();
         assert_eq!(applied_names, all);
@@ -1771,6 +1853,26 @@ mod property {
             "{successes} ok, {failures} failed"
         );
         assert!(plans > 1000, "only {plans} delete plans had blockers");
+    }
+
+    /// Every folder's parent exists, and walking up from any folder reaches the top level.
+    fn assert_folders_are_a_tree(state: &crate::State) {
+        for folder in state.folders() {
+            let mut at = folder.parent().cloned();
+            let mut steps = 0;
+            while let Some(id) = at {
+                let parent = state
+                    .folder(&id)
+                    .unwrap_or_else(|| panic!("folder `{}` has a missing parent", folder.id()));
+                at = parent.parent().cloned();
+                steps += 1;
+                assert!(
+                    steps <= state.folders().len(),
+                    "folder `{}` loops",
+                    folder.id()
+                );
+            }
+        }
     }
 
     /// ADR-0025: for every scene and source, a plain delete is refused exactly when it
@@ -1797,8 +1899,27 @@ mod property {
                 Edit::SourceDelete { source_id: id },
             )
         });
+        let folders = state.folders().iter().map(|f| {
+            let id = f.id().clone();
+            (
+                DeleteTarget::Folder {
+                    folder_id: id.clone(),
+                },
+                Edit::FolderDelete { folder_id: id },
+            )
+        });
+        let labels = state.labels().iter().map(|l| {
+            let id = l.id().clone();
+            (
+                DeleteTarget::Label {
+                    label_id: id.clone(),
+                },
+                Edit::LabelDelete { label_id: id },
+            )
+        });
         let mut blocked = 0;
-        for (target, delete) in scenes.chain(sources).collect::<Vec<_>>() {
+        let targets = scenes.chain(sources).chain(folders).chain(labels);
+        for (target, delete) in targets.collect::<Vec<_>>() {
             let edits = plan(graph, target);
             let mut alone = graph.clone();
             match alone.apply(std::slice::from_ref(&delete), None) {
@@ -1817,6 +1938,8 @@ mod property {
             let gone = match &delete {
                 Edit::SceneDelete { scene_id } => planned.state().scene(scene_id).is_none(),
                 Edit::SourceDelete { source_id } => planned.state().source(source_id).is_none(),
+                Edit::FolderDelete { folder_id } => planned.state().folder(folder_id).is_none(),
+                Edit::LabelDelete { label_id } => planned.state().label(label_id).is_none(),
                 _ => false,
             };
             assert!(gone, "plan {edits:?} left its target");
@@ -3017,6 +3140,39 @@ fn set_geometry_converts_a_legacy_item_and_undo_restores_the_transform() {
     );
     assert_eq!(placement(&graph, "i1"), Placement::Legacy(moved));
     assert_eq!(applied.inverse.edits, vec![set_geometry("i1", boxed())]);
+}
+
+/// A flip is part of the geometry: `item.set_geometry` stores it, its inverse puts the
+/// unflipped box back, reads report it, and the 0.3 view does not change.
+#[test]
+fn a_flip_travels_with_set_geometry_and_its_inverse() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![add("a", "i1", "cam"), set_geometry("i1", boxed())],
+    );
+    let mirrored = ItemGeometry {
+        flip_h: true,
+        flip_v: true,
+        ..boxed()
+    };
+    let applied = apply_ok(&mut graph, vec![set_geometry("i1", mirrored)]);
+    assert_eq!(placement(&graph, "i1"), Placement::Geometry(mirrored));
+    assert_eq!(applied.inverse.edits, vec![set_geometry("i1", boxed())]);
+    let Some(Ok(QueryResult::ItemList { items, .. })) = graph.query(&Query::ItemList {
+        scene_id: SceneId::new("a"),
+    }) else {
+        panic!("item.list");
+    };
+    assert_eq!(items[0].geometry, Some(mirrored));
+    assert_eq!(
+        Some(items[0].transform),
+        boxed().transform_view().ok(),
+        "the deprecated view has no flip"
+    );
+    let undone = apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(placement(&graph, "i1"), Placement::Geometry(boxed()));
+    assert_eq!(undone.inverse.edits, vec![set_geometry("i1", mirrored)]);
 }
 
 #[test]
