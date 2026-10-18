@@ -2370,7 +2370,7 @@ stamp = { hash = "b3:a962082ddbf74417" }
 stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
-stamp = { hash = "b3:7de4e10afa70b73d", by = "agent:vcam-optin-561", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds | merge: re-read: merging wave/m1-3 kept this branch's lib.rs Docs line (threat-model sections) on top of the wave's lib.rs, which adds the plugin_block and plugin_hosts exports the section already describes" }
+stamp = { hash = "b3:8e3d3bc90af527a7", by = "agent:vcam-optin-561", note = "re-read: register_vcam/unregister_vcam/vcam_registration bullet rewritten for ADR-0066 (protected COPY_DACL, staging and retire, keys last, Outdated reasons); WindowsVcam start hint says the step is optional | merge: re-read: #539 only adds threat-model sections to lib.rs's Docs line; the vcam registration bullet holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/n_edition.rs"]
 stamp = { hash = "b3:ede57dd335c2eec0" }
@@ -4350,7 +4350,7 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
 ["THREAT-MODEL#server"."file:apps/jstream-daemon/src/args.rs"]
-stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
+stamp = { hash = "b3:4d50feb4693c00d1", by = "agent:vcam-optin-561", note = "merge: re-read: #539 now covers args.rs; this PR's args.rs change adds only --unregister-vcam (Windows registration removal), no listen or bind flag, so 'binds 127.0.0.1 and has no flag to bind elsewhere' holds" }
 
 ["THREAT-MODEL#server"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
@@ -4380,7 +4380,7 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:vcam-242", note = "Maintaine
 stamp = { hash = "b3:518cf8d8efd63e59", by = "agent:vcam-optin-561", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open. | merge: re-read: the wave's only shared.rs change widens Handle and SecurityAttributes to pub(crate) for PluginBlock; the controls and gaps (#242, #356) still hold" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-platform-windows/src/vcam/sink.rs"]
-stamp = { hash = "b3:2fcb7bb950608efc", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
+stamp = { hash = "b3:dd6425b9f0e2ab1b", by = "agent:vcam-optin-561", note = "merge: re-read: #539 now covers sink.rs; this PR's sink.rs change is only the start refusal's wording (registering is optional, names --register-vcam); the Local namespace, protected DACL and owner and texture checks the section states are unchanged, and the registration controls are this PR's text" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-vcam-proto/src/names.rs"]
 stamp = { hash = "b3:5506fd7891457520", by = "agent:threat-model-covers", note = "Added covers (vcam-proto names.rs, platform-windows vcam/shared.rs and sink.rs, vcam-windows trust.rs, win/session.rs, win/frames.rs; #377). Checked: sink creates in Scope::Session (Local) with sddl_objects' protected DACL SY/BA/LS/user; frames.rs runs check_session_block and checks each texture is 1920x1080 BGRA; Global blocks unchecked per trust.rs. #242 and #356 open." }
