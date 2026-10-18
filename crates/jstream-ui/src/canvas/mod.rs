@@ -10,18 +10,22 @@
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
+pub mod group;
 pub mod model;
 pub mod snap;
 pub mod transform;
 
 use crate::app::SessionContext;
+use crate::dock::PanelId;
 use crate::store::Studio;
+use crate::workspace::DockState;
+use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
 use jstream_control::protocol::{HistoryOp, ItemGeometry, ItemId, Placed, Rev};
 use leptos::ev;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use model::{CanvasError, Layout};
-use snap::{Guide, SNAP_DISTANCE, SnapTargets};
+use snap::{Bounds, Guide, SNAP_DISTANCE, SnapTargets};
 use transform::{
     Gesture, GestureKind, HANDLE_SIZE, Handle, KNOB_SIZE, Modifiers, Point, Pointer,
     RESIZE_HANDLES, ROTATE_OFFSET, STEM_LENGTH, Viewport,
@@ -37,17 +41,66 @@ const HOVER: &str = "rgba(138,180,255,0.6)";
 /// stream isn't drawn yet, so the boxes are all there is to see.
 const IDLE: &str = "rgba(154,161,172,0.55)";
 
+/// What a drag in progress does.
+#[derive(Clone, Debug, PartialEq)]
+enum Action {
+    /// Moves, resizes or rotates one item.
+    One {
+        /// The item dragged.
+        item_id: ItemId,
+        /// What the drag does, from where.
+        gesture: Gesture,
+    },
+    /// Moves, scales or rotates every selected item.
+    Group(GroupGesture),
+    /// Draws a marquee from `from`: the items it touches are selected, with `base`.
+    Marquee {
+        /// Where the press was.
+        from: Point,
+        /// Where the pointer is.
+        to: Point,
+        /// What stays selected whatever the marquee touches: the selection when Shift
+        /// was held at the press, else nothing.
+        base: Vec<ItemId>,
+    },
+}
+
 /// A drag in progress.
 #[derive(Clone, Debug, PartialEq)]
 struct Drag {
-    /// The item dragged.
-    item_id: ItemId,
-    /// What the drag does, from where.
-    gesture: Gesture,
-    /// The pointer the gesture follows, at half speed with Shift.
+    /// What it does.
+    action: Action,
+    /// The pointer the gesture follows, at half speed with Shift. A marquee follows the
+    /// real pointer.
     pointer: Pointer,
     /// The lines it snaps to, fixed when the drag starts.
     targets: SnapTargets,
+}
+
+/// The commits the preview waits for: how many are in flight, and the latest revision
+/// one produced. The preview is dropped once none is in flight and the collection has
+/// reached that revision.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Awaiting {
+    in_flight: u32,
+    last: Option<Rev>,
+}
+
+impl Awaiting {
+    /// Whether a collection at `shown` reflects every commit sent.
+    fn caught_up(self, shown: Option<Rev>) -> bool {
+        self.in_flight == 0
+            && self
+                .last
+                .is_none_or(|last| shown.is_some_and(|r| r >= last))
+    }
+}
+
+/// What the readout under the selection shows while a drag is in progress.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Active {
+    One(GestureKind),
+    Group(GroupKind),
 }
 
 /// The preview canvas.
@@ -55,6 +108,7 @@ struct Drag {
 pub fn Canvas() -> impl IntoView {
     let session = use_context::<SessionContext>();
     let studio = expect_context::<Studio>();
+    let dock = use_context::<DockState>();
     // The selected scene, laid out from the shared collection.
     let layout = Memo::new(move |_| {
         studio.collection.with(|collection| {
@@ -63,22 +117,29 @@ pub fn Canvas() -> impl IntoView {
             Some(Layout::of(collection, scene.as_ref()))
         })
     });
-    let selected = Memo::new(move |_| studio.selection.with(|s| s.item.clone()));
-    // The geometry shown for an item while it is dragged, and until the collection
-    // catches up with the committed edit.
-    let preview = RwSignal::new(None::<(ItemId, ItemGeometry)>);
-    // The revision the last commit produced, and whether a commit is still in flight:
-    // the preview is dropped once the collection has caught up with both.
-    let awaiting = StoredValue::new((None::<Rev>, false));
+    // Every selected item, the primary one first.
+    let chosen = Memo::new(move |_| {
+        studio
+            .selection
+            .with(|s| s.items().cloned().collect::<Vec<_>>())
+    });
+    // The geometries shown for items while they are dragged, and until the collection
+    // catches up with the committed edits.
+    let preview = RwSignal::new(Vec::<(ItemId, ItemGeometry)>::new());
+    let awaiting = StoredValue::new(Awaiting::default());
     let guides = RwSignal::new(Vec::<Guide>::new());
     let snapping = RwSignal::new(true);
     let viewport = RwSignal::new(None::<Viewport>);
     let drag = StoredValue::new(None::<Drag>);
     // What the drag in progress does, for the readout.
-    let active = RwSignal::new(None::<GestureKind>);
+    let active = RwSignal::new(None::<Active>);
+    let marquee = RwSignal::new(None::<(Point, Point)>);
     let hovered = RwSignal::new(None::<ItemId>);
     let cursor = RwSignal::new("default");
     let stage = NodeRef::<leptos::html::Div>::new();
+    // The canvas area around the frame: it takes the pointer, so a marquee can start on
+    // the margin and a handle reaching past the frame can still be grabbed.
+    let area = NodeRef::<leptos::html::Div>::new();
 
     let measure = move || {
         let (Some(element), Some(canvas)) = (
@@ -97,14 +158,16 @@ pub fn Canvas() -> impl IntoView {
         }
     };
 
-    // Follow the collection: drop the preview once it shows the committed edit.
-    Effect::new(move |_| {
-        let rev = layout.with(|l| l.as_ref().map(|l| l.rev));
-        let (committed, in_flight) = awaiting.get_value();
-        let caught_up = !in_flight && committed.is_none_or(|c| rev.is_some_and(|r| r >= c));
-        if caught_up && drag.with_value(Option::is_none) {
-            preview.set(None);
+    let shown_rev = move || layout.with_untracked(|l| l.as_ref().map(|l| l.rev));
+    let drop_preview_if_caught_up = move || {
+        if awaiting.get_value().caught_up(shown_rev()) && drag.with_value(Option::is_none) {
+            preview.set(Vec::new());
         }
+    };
+    // Follow the collection: drop the preview once it shows the committed edits.
+    Effect::new(move |_| {
+        layout.track();
+        drop_preview_if_caught_up();
         measure();
     });
     let resize = window_event_listener(ev::resize, move |_| measure());
@@ -112,32 +175,34 @@ pub fn Canvas() -> impl IntoView {
 
     let problem = move |error: &CanvasError| studio.problem.set(Some(describe(error)));
 
-    let commit = move |item_id: ItemId, geometry: ItemGeometry| {
+    // Sends the items' new geometries as one batch, and shows them until the
+    // collection has them.
+    let commit = move |placed: Vec<(ItemId, ItemGeometry)>| {
         let (Some(open), Some((scene_id, _))) = (
             session.and_then(|s| s.get()),
             layout.with_untracked(|l| l.as_ref().and_then(|l| l.scene.clone())),
         ) else {
             return;
         };
-        preview.set(Some((item_id.clone(), geometry)));
-        awaiting.update_value(|a| a.1 = true);
+        if placed.is_empty() {
+            return;
+        }
+        preview.update(|shown| {
+            shown.retain(|(id, _)| !placed.iter().any(|(p, _)| p == id));
+            shown.extend(placed.iter().cloned());
+        });
+        awaiting.update_value(|a| a.in_flight += 1);
         spawn_local(async move {
-            let result = model::commit(&*open.control, scene_id, item_id, geometry).await;
+            let result = model::commit(&*open.control, scene_id, placed).await;
             drop(open);
+            awaiting.update_value(|a| a.in_flight = a.in_flight.saturating_sub(1));
             match result {
-                Ok(rev) => {
-                    awaiting.set_value((Some(rev), false));
-                    let shown = layout.with_untracked(|l| l.as_ref().map(|l| l.rev));
-                    if shown.is_some_and(|r| r >= rev) && drag.with_value(Option::is_none) {
-                        preview.set(None);
-                    }
-                }
-                Err(error) => {
-                    awaiting.set_value((None, false));
-                    preview.set(None);
-                    problem(&error);
-                }
+                Ok(rev) => awaiting.update_value(|a| a.last = a.last.max(Some(rev))),
+                Err(error) => problem(&error),
             }
+            // A failed commit's preview stays only while a later one is in flight,
+            // which will replace it.
+            drop_preview_if_caught_up();
         });
     };
 
@@ -160,19 +225,65 @@ pub fn Canvas() -> impl IntoView {
     // An item's geometry as the user last left it: the pending or dragged one if there
     // is one, so a nudge or drag started before the engine answers builds on it.
     let latest = move |current: &Layout, id: &ItemId| -> Option<ItemGeometry> {
-        match preview.get_untracked() {
-            Some((pending, geometry)) if pending == *id => Some(geometry),
-            _ => current.geometry_of(id),
-        }
+        preview
+            .with_untracked(|p| p.iter().find(|(p, _)| p == id).map(|(_, g)| *g))
+            .or_else(|| current.geometry_of(id))
+    };
+    // The selected items that have a box, with their latest geometries.
+    let selected_boxes = move |current: &Layout| -> Vec<(ItemId, ItemGeometry)> {
+        chosen
+            .get_untracked()
+            .into_iter()
+            .filter_map(|id| {
+                let geometry = latest(current, &id)?;
+                Some((id, geometry))
+            })
+            .collect()
     };
 
-    let pointer_at = move |event: &ev::PointerEvent| -> Option<(Viewport, Point)> {
+    // The canvas point under a pointer at client coordinates `x`, `y`, measured from
+    // the frame wherever the pointer is.
+    let canvas_at = move |x: i32, y: i32| -> Option<(Viewport, Point)> {
         measure();
         let fit = viewport.get_untracked()?;
+        let frame = stage.get_untracked()?.get_bounding_client_rect();
         Some((
             fit,
-            fit.to_canvas(event.offset_x() as f32, event.offset_y() as f32),
+            fit.to_canvas(
+                (f64::from(x) - frame.left()) as f32,
+                (f64::from(y) - frame.top()) as f32,
+            ),
         ))
+    };
+    let pointer_at = move |event: &ev::PointerEvent| canvas_at(event.client_x(), event.client_y());
+
+    // Starts a drag: captures the pointer and remembers what it does.
+    let start = move |event: &ev::PointerEvent, point: Point, action: Action, current: &Layout| {
+        let moving: Vec<ItemId> = match &action {
+            Action::One { item_id, .. } => vec![item_id.clone()],
+            Action::Group(gesture) => gesture.starts.iter().map(|(id, _)| id.clone()).collect(),
+            Action::Marquee { .. } => Vec::new(),
+        };
+        let targets = SnapTargets::new(
+            current.canvas,
+            current
+                .boxes()
+                .filter(|(id, _)| !moving.contains(id))
+                .map(|(_, geometry)| geometry),
+        );
+        if let Some(element) = area.get_untracked() {
+            let _captured = element.set_pointer_capture(event.pointer_id());
+        }
+        active.set(match &action {
+            Action::One { gesture, .. } => Some(Active::One(gesture.kind)),
+            Action::Group(gesture) => Some(Active::Group(gesture.kind)),
+            Action::Marquee { .. } => None,
+        });
+        drag.set_value(Some(Drag {
+            action,
+            pointer: Pointer::new(point),
+            targets,
+        }));
     };
 
     let on_down = move |event: ev::PointerEvent| {
@@ -188,45 +299,87 @@ pub fn Canvas() -> impl IntoView {
         if let Some(element) = stage.get_untracked() {
             let _focused = element.focus();
         }
-        let on_handle = selected.get_untracked().and_then(|id| {
-            let geometry = latest(&current, &id)?;
-            let handle = transform::handle_at(&geometry, point, fit)?;
-            Some((id, geometry, GestureKind::from(handle)))
-        });
-        let target = on_handle.or_else(|| {
-            let id = transform::topmost_at(current.boxes(), point)?.clone();
-            let geometry = latest(&current, &id)?;
-            Some((id, geometry, GestureKind::Move))
-        });
-        let Some((item_id, start, kind)) = target else {
-            studio.select_item(None);
+        event.prevent_default();
+        let selection = selected_boxes(&current);
+        let shift = event.shift_key();
+        // A handle of the selection: the group's when several items are selected, else
+        // the one item's.
+        if selection.len() > 1 {
+            let bounds = Bounds::around(selection.iter().map(|(_, g)| g));
+            if let Some(handle) = bounds.and_then(|b| group::handle_at(b, point, fit))
+                && let Some(gesture) = GroupGesture::new(handle.into(), selection.clone(), point)
+            {
+                start(&event, point, Action::Group(gesture), &current);
+                return;
+            }
+        } else if let Some((item_id, geometry)) = selection.first()
+            && let Some(handle) = transform::handle_at(geometry, point, fit)
+        {
+            let gesture = Gesture {
+                kind: handle.into(),
+                start: *geometry,
+                origin: point,
+            };
+            let action = Action::One {
+                item_id: item_id.clone(),
+                gesture,
+            };
+            start(&event, point, action, &current);
+            return;
+        }
+        let Some(hit) = transform::topmost_at(current.boxes(), point).cloned() else {
+            let base = if shift {
+                chosen.get_untracked()
+            } else {
+                Vec::new()
+            };
+            start(
+                &event,
+                point,
+                Action::Marquee {
+                    from: point,
+                    to: point,
+                    base,
+                },
+                &current,
+            );
             return;
         };
-        event.prevent_default();
-        if selected.get_untracked().as_ref() != Some(&item_id) {
-            studio.select_item(Some(item_id.clone()));
+        let was_selected = selection.iter().any(|(id, _)| *id == hit);
+        if shift && was_selected {
+            // Shift-click on a selected item takes it out, and drags nothing.
+            studio.toggle_item(&hit);
+            return;
         }
-        let targets = SnapTargets::new(
-            current.canvas,
-            current
-                .boxes()
-                .filter(|(id, _)| **id != item_id)
-                .map(|(_, geometry)| geometry),
-        );
-        if let Some(element) = stage.get_untracked() {
-            let _captured = element.set_pointer_capture(event.pointer_id());
-        }
-        drag.set_value(Some(Drag {
-            item_id,
-            gesture: Gesture {
-                kind,
-                start,
-                origin: point,
+        let moving: Vec<(ItemId, ItemGeometry)> = if was_selected {
+            selection
+        } else if shift {
+            studio.toggle_item(&hit);
+            let mut grown = selection;
+            grown.extend(latest(&current, &hit).map(|g| (hit.clone(), g)));
+            grown
+        } else {
+            studio.select_item(Some(hit.clone()));
+            latest(&current, &hit)
+                .map(|g| (hit.clone(), g))
+                .into_iter()
+                .collect()
+        };
+        let action = match moving.as_slice() {
+            [(item_id, geometry)] => Action::One {
+                item_id: item_id.clone(),
+                gesture: Gesture {
+                    kind: GestureKind::Move,
+                    start: *geometry,
+                    origin: point,
+                },
             },
-            pointer: Pointer::new(point),
-            targets,
-        }));
-        active.set(Some(kind));
+            _ => match GroupGesture::new(GroupKind::Move, moving, point) {
+                Some(gesture) => Action::Group(gesture),
+                None => return,
+            },
+        };
+        start(&event, point, action, &current);
     };
 
     // The cursor and the hover outline for the pointer at `point`, while nothing is
@@ -235,18 +388,28 @@ pub fn Canvas() -> impl IntoView {
         let Some(current) = layout.get_untracked() else {
             return;
         };
-        let chosen = selected.get_untracked();
-        let handle = chosen.as_ref().and_then(|id| {
-            let geometry = latest(&current, id)?;
-            transform::handle_at(&geometry, point, fit)
-        });
+        let selection = selected_boxes(&current);
+        let handle = if selection.len() > 1 {
+            Bounds::around(selection.iter().map(|(_, g)| g))
+                .and_then(|b| group::handle_at(b, point, fit))
+        } else {
+            selection
+                .first()
+                .and_then(|(_, g)| transform::handle_at(g, point, fit))
+        };
         let under = transform::topmost_at(current.boxes(), point).cloned();
-        cursor.set(match handle {
+        let on_selected = under
+            .as_ref()
+            .is_some_and(|id| selection.iter().any(|(s, _)| s == id));
+        let next = match handle {
             Some(handle) => handle_cursor(handle),
-            None if under.is_some() && under == chosen => "move",
+            None if on_selected => "move",
             None if under.is_some() => "pointer",
             None => "default",
-        });
+        };
+        if cursor.get_untracked() != next {
+            cursor.set(next);
+        }
         if hovered.get_untracked() != under {
             hovered.set(under);
         }
@@ -260,18 +423,36 @@ pub fn Canvas() -> impl IntoView {
             hover(fit, point);
             return;
         };
-        let at = current.pointer.follow(point, event.shift_key());
         let modifiers = Modifiers {
             ctrl: event.ctrl_key() || event.meta_key(),
         };
         let targets = snapping.get_untracked().then_some(&current.targets);
-        if let Some(update) =
-            current
-                .gesture
-                .update(at, modifiers, targets, fit.canvas_len(SNAP_DISTANCE))
-        {
-            preview.set(Some((current.item_id.clone(), update.geometry)));
-            guides.set(update.guides);
+        let tolerance = fit.canvas_len(SNAP_DISTANCE);
+        match &mut current.action {
+            Action::Marquee { from, to, base } => {
+                *to = point;
+                marquee.set(Some((*from, *to)));
+                let hits = layout.with_untracked(|l| {
+                    l.as_ref()
+                        .map(|l| group::marquee(l.boxes(), *from, *to))
+                        .unwrap_or_default()
+                });
+                studio.select_items(base.iter().cloned().chain(hits));
+            }
+            Action::One { item_id, gesture } => {
+                let at = current.pointer.follow(point, event.shift_key());
+                if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
+                    preview.set(vec![(item_id.clone(), update.geometry)]);
+                    guides.set(update.guides);
+                }
+            }
+            Action::Group(gesture) => {
+                let at = current.pointer.follow(point, event.shift_key());
+                if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
+                    preview.set(update.geometries);
+                    guides.set(update.guides);
+                }
+            }
         }
         drag.set_value(Some(current));
     };
@@ -283,12 +464,32 @@ pub fn Canvas() -> impl IntoView {
         drag.set_value(None);
         active.set(None);
         guides.set(Vec::new());
-        let moved = preview.get_untracked().filter(|(id, geometry)| {
-            *id == finished.item_id && *geometry != finished.gesture.start
+        marquee.set(None);
+        let starts: Vec<(ItemId, ItemGeometry)> = match finished.action {
+            Action::Marquee { from, to, base } => {
+                if !keep {
+                    studio.select_items(base);
+                } else if from == to && base.is_empty() {
+                    // A click on empty canvas clears the selection.
+                    studio.select_item(None);
+                }
+                return;
+            }
+            Action::One { item_id, gesture } => vec![(item_id, gesture.start)],
+            Action::Group(gesture) => gesture.starts,
+        };
+        let moved: Vec<(ItemId, ItemGeometry)> = preview.with_untracked(|shown| {
+            shown
+                .iter()
+                .filter(|(id, g)| starts.iter().any(|(s, start)| s == id && start != g))
+                .cloned()
+                .collect()
         });
-        match moved {
-            Some((item_id, geometry)) if keep => commit(item_id, geometry),
-            _ => preview.set(None),
+        if keep && !moved.is_empty() {
+            commit(moved);
+        } else {
+            preview.set(Vec::new());
+            drop_preview_if_caught_up();
         }
     };
 
@@ -299,13 +500,18 @@ pub fn Canvas() -> impl IntoView {
             "z" | "Z" if command && event.shift_key() => step(HistoryOp::Redo),
             "z" | "Z" if command => step(HistoryOp::Undo),
             "y" | "Y" if command => step(HistoryOp::Redo),
+            "a" | "A" if command => {
+                let all = layout.with_untracked(|l| {
+                    l.iter()
+                        .flat_map(|l| l.boxes().map(|(id, _)| id.clone()))
+                        .collect::<Vec<_>>()
+                });
+                studio.select_items(all);
+            }
             "Escape" if drag.with_value(Option::is_some) => end(false),
             "Escape" => studio.select_item(None),
             "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" => {
-                let Some(id) = selected.get_untracked() else {
-                    return;
-                };
-                let Some(start) = layout.with_untracked(|l| latest(l.as_ref()?, &id)) else {
+                let Some(current) = layout.get_untracked() else {
                     return;
                 };
                 let distance = if event.shift_key() { 10.0 } else { 1.0 };
@@ -315,26 +521,49 @@ pub fn Canvas() -> impl IntoView {
                     "ArrowUp" => (0.0, -distance),
                     _ => (0.0, distance),
                 };
-                if let Some(moved) = transform::nudge(&start, dx, dy) {
-                    commit(id, moved);
+                let moved: Vec<(ItemId, ItemGeometry)> = selected_boxes(&current)
+                    .into_iter()
+                    .filter_map(|(id, start)| Some((id, transform::nudge(&start, dx, dy)?)))
+                    .collect();
+                if moved.is_empty() {
+                    return;
                 }
+                commit(moved);
             }
             _ => return,
         }
         event.prevent_default();
     };
 
-    // The boxes to draw: the collection's, with the dragged or pending one replaced.
+    // A double click on an item selects it alone and shows its properties.
+    let on_double = move |event: ev::MouseEvent| {
+        let Some((_, point)) = canvas_at(event.client_x(), event.client_y()) else {
+            return;
+        };
+        let hit = layout.with_untracked(|l| {
+            l.as_ref()
+                .and_then(|l| transform::topmost_at(l.boxes(), point).cloned())
+        });
+        if let Some(hit) = hit {
+            studio.select_item(Some(hit));
+            if let Some(dock) = dock {
+                dock.0.update(|d| d.show(PanelId::Inspector));
+            }
+        }
+    };
+
+    // The boxes to draw: the collection's, with the dragged or pending ones replaced.
     let shown = move || -> Vec<(ItemId, String, ItemGeometry, bool)> {
         let pending = preview.get();
         layout.with(|l| {
             l.iter()
                 .flat_map(|l| l.items.iter())
                 .filter_map(|item| {
-                    let geometry = match &pending {
-                        Some((id, geometry)) if *id == item.item_id => *geometry,
-                        _ => item.geometry?,
-                    };
+                    let geometry = pending
+                        .iter()
+                        .find(|(id, _)| *id == item.item_id)
+                        .map(|(_, g)| *g)
+                        .or(item.geometry)?;
                     Some((
                         item.item_id.clone(),
                         item.name.clone(),
@@ -344,6 +573,15 @@ pub fn Canvas() -> impl IntoView {
                 })
                 .collect()
         })
+    };
+    // The selected items' shown geometries, the primary one first.
+    let shown_selection = move || -> Vec<ItemGeometry> {
+        let all = shown();
+        chosen
+            .get()
+            .iter()
+            .filter_map(|id| all.iter().find(|(i, ..)| i == id).map(|(_, _, g, _)| *g))
+            .collect()
     };
 
     let canvas_size = move || {
@@ -360,13 +598,13 @@ pub fn Canvas() -> impl IntoView {
     let px = move |screen: f32| viewport.get().map_or(screen, |v| v.canvas_len(screen));
 
     let boxes = move || {
-        let chosen = selected.get();
+        let picked = chosen.get();
         let under = hovered.get();
         shown()
             .into_iter()
             .map(|(id, name, geometry, visible)| {
                 let points = outline(&geometry);
-                let is_selected = chosen.as_ref() == Some(&id);
+                let is_selected = picked.contains(&id);
                 let (stroke, width) = if is_selected {
                     (ACCENT, "2")
                 } else if under.as_ref() == Some(&id) {
@@ -376,7 +614,7 @@ pub fn Canvas() -> impl IntoView {
                 };
                 let dash = if visible { "none" } else { "6 4" };
                 // The label sits in the top-left of the box's bounds, whatever its rotation.
-                let bounds = snap::Bounds::of(&geometry);
+                let bounds = Bounds::of(&geometry);
                 view! {
                     <g>
                         <polygon
@@ -401,24 +639,24 @@ pub fn Canvas() -> impl IntoView {
             .collect_view()
     };
 
-    let handles = move || {
-        let id = selected.get()?;
-        let fit = viewport.get()?;
-        let (_, _, geometry, _) = shown().into_iter().find(|(item, ..)| *item == id)?;
+    // Eight square handles at `points`, and a knob on a stem from `top` towards `knob`
+    // that stops `stem` short of its full length `reach`.
+    let chrome = move |fit: Viewport,
+                       squares: Vec<Point>,
+                       top: Point,
+                       knob: Point,
+                       stem: f32,
+                       reach: f32| {
         let side = fit.canvas_len(HANDLE_SIZE);
         let corner = fit.canvas_len(2.0);
-        let top = transform::handle_point(&geometry, Handle::Resize { x: 0, y: -1 }, fit);
-        let knob = transform::handle_point(&geometry, Handle::Rotate, fit);
-        // The stem runs from the top edge towards the knob, under it.
-        let reach = STEM_LENGTH / ROTATE_OFFSET;
-        let stem = Point {
-            x: top.x + (knob.x - top.x) * reach,
-            y: top.y + (knob.y - top.y) * reach,
+        let along = stem / reach;
+        let end = Point {
+            x: top.x + (knob.x - top.x) * along,
+            y: top.y + (knob.y - top.y) * along,
         };
-        let squares = RESIZE_HANDLES
-            .iter()
-            .map(|handle| {
-                let at = transform::handle_point(&geometry, *handle, fit);
+        let squares = squares
+            .into_iter()
+            .map(|at| {
                 view! {
                     <rect
                         x=at.x - side / 2.0
@@ -434,13 +672,13 @@ pub fn Canvas() -> impl IntoView {
                 }
             })
             .collect_view();
-        Some(view! {
+        view! {
             <g>
                 <line
                     x1=top.x
                     y1=top.y
-                    x2=stem.x
-                    y2=stem.y
+                    x2=end.x
+                    y2=end.y
                     stroke=ACCENT
                     vector-effect="non-scaling-stroke"
                 />
@@ -455,22 +693,16 @@ pub fn Canvas() -> impl IntoView {
                 />
                 {squares}
             </g>
-        })
+        }
     };
 
-    // The pill under the selected item: its size, or what the drag in progress changes.
-    let readout = move || {
-        let id = selected.get()?;
-        let fit = viewport.get()?;
-        let (_, _, geometry, _) = shown().into_iter().find(|(item, ..)| *item == id)?;
-        let text = readout_text(&geometry, active.get());
-        let bounds = snap::Bounds::of(&geometry);
+    // A pill of `text` centred under `bottom`, `gap` screen pixels below it.
+    let pill = move |fit: Viewport, text: String, middle: f32, bottom: f32, gap: f32| {
         // Mono 11px, padded 2px by 7px.
         let height = fit.canvas_len(17.0);
         let width = fit.canvas_len(text.chars().count() as f32 * 6.6 + 14.0);
-        let middle = (bounds.left + bounds.right) / 2.0;
-        let top = bounds.bottom + fit.canvas_len(10.0);
-        Some(view! {
+        let top = bottom + fit.canvas_len(gap);
+        view! {
             <g class="readout">
                 <rect
                     x=middle - width / 2.0
@@ -491,6 +723,96 @@ pub fn Canvas() -> impl IntoView {
                     {text}
                 </text>
             </g>
+        }
+    };
+
+    // The selection's chrome: one item's handles and readout, or the group's dashed box,
+    // handles and readout.
+    let selection_chrome = move || {
+        let fit = viewport.get()?;
+        let picked = shown_selection();
+        match picked.as_slice() {
+            [] => None,
+            [geometry] => {
+                let squares = RESIZE_HANDLES
+                    .iter()
+                    .map(|h| transform::handle_point(geometry, *h, fit))
+                    .collect();
+                let top = transform::handle_point(geometry, Handle::Resize { x: 0, y: -1 }, fit);
+                let knob = transform::handle_point(geometry, Handle::Rotate, fit);
+                let kind = match active.get() {
+                    Some(Active::One(kind)) => Some(kind),
+                    _ => None,
+                };
+                let bounds = Bounds::of(geometry);
+                let middle = (bounds.left + bounds.right) / 2.0;
+                Some(
+                    view! {
+                        {chrome(fit, squares, top, knob, STEM_LENGTH, ROTATE_OFFSET)}
+                        {pill(fit, readout_text(geometry, kind), middle, bounds.bottom, 10.0)}
+                    }
+                    .into_any(),
+                )
+            }
+            many => {
+                let bounds = Bounds::around(many)?;
+                let o = group::outline(bounds, fit);
+                let squares = RESIZE_HANDLES
+                    .iter()
+                    .map(|h| group::handle_point(bounds, *h, fit))
+                    .collect();
+                let top = Point {
+                    x: (o.left + o.right) / 2.0,
+                    y: o.top,
+                };
+                let knob = group::handle_point(bounds, Handle::Rotate, fit);
+                let turned = match (drag.with_value(|d| d.clone()), active.get()) {
+                    (
+                        Some(Drag {
+                            action: Action::Group(g),
+                            ..
+                        }),
+                        Some(Active::Group(GroupKind::Rotate)),
+                    ) => g.starts.first().and_then(|(_, start)| {
+                        Some(many.first()?.rotation_deg.get() - start.rotation_deg.get())
+                    }),
+                    _ => None,
+                };
+                let text = group_readout_text(many.len(), bounds, active.get(), turned);
+                Some(
+                    view! {
+                        <rect
+                            x=o.left
+                            y=o.top
+                            width=o.right - o.left
+                            height=o.bottom - o.top
+                            fill="none"
+                            stroke=ACCENT
+                            stroke-dasharray="4 3"
+                            vector-effect="non-scaling-stroke"
+                        />
+                        {chrome(fit, squares, top, knob, STEM_LENGTH, GROUP_ROTATE_OFFSET)}
+                        {pill(fit, text, (o.left + o.right) / 2.0, o.bottom, 12.0)}
+                    }
+                    .into_any(),
+                )
+            }
+        }
+    };
+
+    let marquee_box = move || {
+        let (a, b) = marquee.get()?;
+        Some(view! {
+            <rect
+                class="marquee"
+                x=a.x.min(b.x)
+                y=a.y.min(b.y)
+                width=(a.x - b.x).abs()
+                height=(a.y - b.y).abs()
+                fill="rgba(76,141,255,0.12)"
+                stroke=ACCENT
+                vector-effect="non-scaling-stroke"
+            />
         })
     };
 
@@ -554,23 +876,27 @@ pub fn Canvas() -> impl IntoView {
     };
 
     view! {
-        <div class="canvas-view">
+        <div
+            class="canvas-view"
+            node_ref=area
+            style:cursor=move || cursor.get()
+            on:pointerdown=on_down
+            on:pointermove=on_move
+            on:pointerleave=move |_| {
+                if drag.with_value(Option::is_none) {
+                    hovered.set(None);
+                }
+            }
+            on:pointerup=move |_| end(true)
+            on:pointercancel=move |_| end(false)
+            on:lostpointercapture=move |_| end(true)
+            on:dblclick=on_double
+        >
             <div
                 class="preview stage"
                 node_ref=stage
                 tabindex="0"
                 aria-label=move || format!("Scene canvas, {}", scene_name())
-                style:cursor=move || cursor.get()
-                on:pointerdown=on_down
-                on:pointermove=on_move
-                on:pointerleave=move |_| {
-                    if drag.with_value(Option::is_none) {
-                        hovered.set(None);
-                    }
-                }
-                on:pointerup=move |_| end(true)
-                on:pointercancel=move |_| end(false)
-                on:lostpointercapture=move |_| end(true)
                 on:keydown=on_key
             >
                 <svg
@@ -596,8 +922,8 @@ pub fn Canvas() -> impl IntoView {
                     </text>
                     {boxes}
                     {guide_lines}
-                    {handles}
-                    {readout}
+                    {selection_chrome}
+                    {marquee_box}
                 </svg>
             </div>
             <div
@@ -610,7 +936,7 @@ pub fn Canvas() -> impl IntoView {
                     class="canvas-tool"
                     aria-label="Move and resize"
                     aria-pressed="true"
-                    title="Move / resize (V) · Shift: half speed · Ctrl: no snap while moving, stretch on handles"
+                    title="Move / resize (V) · Shift: half speed or add to selection · Ctrl: no snap while moving, stretch on handles"
                 >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M5 3l13 8-6 1.5L9 19z" />
@@ -666,6 +992,30 @@ fn readout_text(geometry: &ItemGeometry, active: Option<GestureKind>) -> String 
         Some(GestureKind::Rotate) => angle,
         None if rotation != 0.0 => format!("{size}  · {angle}"),
         None => size,
+    }
+}
+
+/// The group readout: `N items · W × H` of the selection's bounds, while scaling just
+/// `W × H`, and while rotating the angle turned so far.
+fn group_readout_text(
+    count: usize,
+    bounds: Bounds,
+    active: Option<Active>,
+    turned: Option<f32>,
+) -> String {
+    let whole = |n: f32| n.round() + 0.0;
+    let size = format!(
+        "{} × {}",
+        whole(bounds.right - bounds.left),
+        whole(bounds.bottom - bounds.top)
+    );
+    match (active, turned) {
+        (Some(Active::Group(GroupKind::Scale { .. })), _) => size,
+        (Some(Active::Group(GroupKind::Rotate)), Some(turned)) => {
+            let turned = transform::normalize_deg(turned);
+            format!("{}°", (turned * 10.0).round() / 10.0 + 0.0)
+        }
+        _ => format!("{count} items · {size}"),
     }
 }
 
@@ -732,6 +1082,45 @@ mod tests {
         assert_eq!(readout_text(&turned, None), "640 × 360  · -12.3°");
         assert_eq!(readout_text(&turned, Some(GestureKind::Rotate)), "-12.3°");
         assert_eq!(readout_text(&turned, Some(GestureKind::Move)), "X 0  Y 0");
+    }
+
+    #[test]
+    fn the_group_readout_counts_and_measures() {
+        let bounds = Bounds {
+            left: 0.0,
+            top: 0.0,
+            right: 300.4,
+            bottom: 100.0,
+        };
+        assert_eq!(
+            group_readout_text(2, bounds, None, None),
+            "2 items · 300 × 100"
+        );
+        let scaling = Some(Active::Group(GroupKind::Scale { x: 1, y: 1 }));
+        assert_eq!(group_readout_text(2, bounds, scaling, None), "300 × 100");
+        let rotating = Some(Active::Group(GroupKind::Rotate));
+        assert_eq!(
+            group_readout_text(2, bounds, rotating, Some(-370.04)),
+            "-10°"
+        );
+    }
+
+    #[test]
+    fn the_preview_waits_for_every_commit() {
+        let mut waiting = Awaiting::default();
+        assert!(waiting.caught_up(None));
+        // Two commits in flight; the first answers at revision 5.
+        waiting.in_flight = 1;
+        waiting.last = Some(Rev(5));
+        assert!(
+            !waiting.caught_up(Some(Rev(5))),
+            "the second is still in flight"
+        );
+        // The second answers at 6: caught up only once the collection reaches 6.
+        waiting.in_flight = 0;
+        waiting.last = Some(Rev(6));
+        assert!(!waiting.caught_up(Some(Rev(5))));
+        assert!(waiting.caught_up(Some(Rev(6))));
     }
 
     #[test]

@@ -119,12 +119,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   holds no handle of its own, so Disconnecting drops the last one, which closes the
   socket.
 - **Selection.** `Selection` is the scene being edited (shown by the sources list) and
-  an item in it (edited by the properties form). A new session reads the program scene
+  the items selected in it: a primary item (edited by the properties form) and any
+  others the canvas selected with it. A new session reads the program scene
   before the state, so it starts on the scene on program. It is fixed up after every
   change: a
   deleted scene falls back to the program scene, then the first listed scene, and an
-  item that left the scene is dropped. The canvas edits the same scene and selects the
-  same item, so a click on a box selects its row and opens its properties.
+  item that left the scene is dropped, the next selected one becoming primary. The
+  canvas edits the same scene and selects the same items, so a click on a box selects
+  its row and opens its properties, and every selected item's row is highlighted.
 - **Scenes and sources.** The scene list shows scenes in display order and leaves out
   groups (ADR-0024), marks the program scene, and puts a scene on program with
   `scene.switch`. The sources list shows the selected scene's items with the top of the
@@ -288,9 +290,10 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
-handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
-scene and sends the edits. These three are pure and tested natively against
-`MockEngine`; `mod.rs` is the component.
+handles, and turns a drag into a new geometry; `group.rs` does the same for several
+selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scene and
+sends the edits. These are pure and tested natively, `model.rs` against `MockEngine`;
+`mod.rs` is the component.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
   `Layout::of` from the shared collection, so it follows every state change the app
@@ -301,9 +304,16 @@ scene and sends the edits. These three are pure and tested natively against
   on the source's runtime size, which the protocol doesn't report yet (ADR-0022's
   `source.sizes`), and a note top left counts such items. Hidden items are drawn
   dashed, and the box under the pointer gets a light outline.
-- **Selecting and dragging.** A press selects the topmost box under the pointer, or
-  clears the selection on empty canvas; either way the shared selection changes. The
-  cursor shows what a press would do. Dragging the box moves it. The selected box has
+- **Selecting and dragging.** A press selects the topmost box under the pointer and
+  drags it, or, on a box already selected, drags every selected box. Shift-click adds
+  a box to the selection (and drags them all) or takes a selected one out. A press on
+  empty canvas, or on the dark margin around the frame, draws a marquee that selects
+  every box whose bounds it touches (Shift keeps what was selected); a click there
+  clears the selection. Ctrl+A selects every box. The shared selection follows each of
+  these. A double click selects a box alone and shows the Inspector, in place of the
+  prototype's Properties dialog, which the UI doesn't have yet. The pointer is
+  followed over the whole canvas area, so handles reaching past the frame can be
+  grabbed. The cursor shows what a press would do. The selected box has
   a 2 px outline, eight resize handles, a rotate knob on a stem above its top edge, and
   a readout under it: its size (and rotation, if turned), or during a drag its
   top-left, size or angle. A resize keeps the box's aspect ratio (Ctrl stretches): a
@@ -313,8 +323,19 @@ scene and sends the edits. These three are pure and tested natively against
   flips. Rotation turns about the centre and snaps to the nearest multiple of 90°
   within 3°, else to 0.1°; Ctrl moves it in 45° steps. Shift drags at half speed for
   every gesture, following the pointer's movement so pressing it mid-drag doesn't
-  jump. Arrow keys nudge the selected box by 1 pixel (Shift: 10). Escape cancels a
+  jump. Arrow keys nudge the selected boxes by 1 pixel (Shift: 10). Escape cancels a
   drag, or clears the selection.
+- **Several selected.** Each selected box keeps its 2 px outline without handles, and
+  a dashed box 4 screen pixels outside their bounds gets the handles, a knob 42 pixels
+  above it, and a readout 12 pixels below (`N items · W × H`, the size while scaling,
+  the angle turned while rotating). Its handles scale every box from the far side of
+  the bounds (an edge handle scales the other axis about the centre), keeping the
+  aspect unless Ctrl is held, down to 20 pixels; the knob turns every box about the
+  bounds' centre, in 45° steps with Ctrl. A move of several boxes snaps their bounds
+  the way one box snaps, unless one of them is rotated.
+- **Crop** on the canvas (Alt on a handle, the crop tool) needs each source's size to
+  turn a dragged edge into source pixels, which the protocol doesn't report yet
+  (ADR-0022's `source.sizes`), so the canvas doesn't crop.
 - **Snapping.** A moved upright box's edges and centre snap, within 6 screen pixels,
   to the canvas's edges and centre lines and to the other boxes' edges and centres,
   using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
@@ -322,8 +343,10 @@ scene and sends the edits. These three are pure and tested natively against
   rotated box never snaps, and the Snapping button in the floating tools (top right)
   turns it off.
 - **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
-  draws the gesture locally, and on release one batch with one `item.set_geometry`
-  commits it, so each gesture (and each nudge) is one undo step. It carries no
+  draws the gesture locally, and on release one batch with an `item.set_geometry` per
+  item it changed commits it, so each gesture (and each nudge) is one undo step. The
+  local geometries stay drawn until no commit is in flight and the collection has
+  caught up with the last one's revision. It carries no
   `expected_rev`: a drag is last writer wins per field
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
   (`live.set` with `ends_gesture` on the committing batch), which would show the drag

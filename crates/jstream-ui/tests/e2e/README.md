@@ -84,7 +84,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   scene in the list switches the canvas to it; a Ctrl drag sends nothing until the drop
   and shows the top-left readout meanwhile, then one edit that Ctrl+Z and Ctrl+Shift+Z
   reverse; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
-  (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
+  (Shift by 10) and Ctrl+Z undoes; a second client sees a move; a marquee started on
+  the margin selects the box it touches and Escape clears it; with a second item
+  placed, Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
+  canvas takes one out and Shift-click on its row in the sources list adds it back; a double click brings the closed Inspector back showing the item.
 
 <a id="running"></a>
 ## Running them
