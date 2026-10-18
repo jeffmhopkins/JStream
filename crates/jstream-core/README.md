@@ -245,8 +245,9 @@ state machine. Contents:
   and starting it again after a failed start or a lost target, and opening each webcam
   on program from the fake video devices, shared between sources, closed when it leaves
   or the output stops, and closed when unplugged with the output staying up
-  (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in and its frames
-  read as RGBA (`runtime/captures.rs`), which capture path an output takes and each
+  (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in, with and
+  without an MJPEG decoder, and its frames, decoded or not, read as RGBA
+  (`runtime/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
@@ -337,11 +338,12 @@ state machine. Contents:
   source's activity gain following scene switches, shown and hidden items and undo
   (`activity.rs` checks reachability itself), and a drawn bus's scope pointed at the
   mixer bus its sends feed, none for the program mix, a missing bus refused and the
-  scope dropped with the bus's references
+  scope dropped with the bus's references, still gone once every source is built
   (`a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus`), and a drawn source's scope fed
   from its mixer input, silence while it is muted or has none, a source with no audio
   of its own (a waveform, a `scene` source) or a missing one refused, and its delete
-  refused until its `delete.plan` clears the reference and drops the scope
+  refused until its `delete.plan` clears the reference and drops the scope, which
+  stays dropped once every source is built (#701)
   (`a_drawn_source_gets_a_scope_fed_from_its_mixer_input`); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The live
@@ -812,6 +814,21 @@ image, and the old filter, which holds the old image, is retired through the cac
 file that can't be read or decoded is logged and its filter passes its input through
 until the setting changes. Moving the collection file reloads every `collection`
 asset.
+
+A `scene_mask` reads its `scene` as drawn this frame. Planning collects that scene
+like a nested one, and `Shot` holds the order a frame runs its chains in
+(`schedule_chains`): each chain after the passes of the scenes it reads, and each such
+pass after the chains of the sources it places and the scenes it nests, so a chain
+that masks with a scene of filtered sources sees them filtered this frame. The scene is
+drawn at depth 1, as a nested scene, into its own layer (`GpuKey::reference`, at the
+canvas size), and those passes run once per frame with the chains, before any mix
+draws; `claim_layers` keeps their layers too. The filter holds a clone of the layer and
+is made again only when the layer is remade, the old one retired through the cache. A
+scene pass that fails (its layer can't be made, or the draw fails) fails the frame, as
+a failed nested pass does, and the chains after it don't run that tick. The graph
+refuses a cycle through a filter's scene reference (ADR-0026). Were one there, the
+chain that closes it would find no layer on its first frame and draw nothing, logged
+once, and would read the frame before after that.
 A `display`, `window` or `webcam` source with no stored frame shows what the pipeline
 captures for it on the render thread, and nothing in `video.snapshot`, which has no
 capture; a stored frame wins. The `Shot` lists what the passes of the program, or the
@@ -1145,7 +1162,10 @@ brings the mixer in line with the collection under the collection lock:
   that moves program sync too, after program is reconciled;
 - the bus scopes (#362): every bus a source's settings refer to (a `waveform` or
   `spectrum` drawing it) keeps a scope in the engine's `AudioScopes`, and the others
-  are dropped (`AudioScopes::retain`). The list of mixer buses that feed them (the
+  are dropped (`AudioScopes::retain`). The live sources do this before they queue the
+  edit's builds, and the sync again: a source drawing a new bus then finds its scope,
+  and one still being built from settings from before the edit can't make a dropped
+  scope again (#701). The list of mixer buses that feed them (the
   master's `BusControl` for `master`, else the bus's own; a bus the mixer doesn't hold
   yet is left out) goes to the mixer thread as an immutable `ScopeTaps` list through
   `arc-swap`, stored only when it changed. The mixer thread loads it without a lock
@@ -1738,8 +1758,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
 - Blend modes other than `normal` in the compositor.
-- The rest of the video chain runtime (V0): the referenced scene `scene_mask` reads
-  (it passes its input through until then), effect-pack kinds in a chain (bypassed),
+- The rest of the video chain runtime (V0): effect-pack kinds in a chain (bypassed),
   placing a bounds-growing filter's output at the original content box, and pooling a
   multi-pass filter's scratch layers.
 - Activity gains that fade with a transition (audio follows a switch at once, so
@@ -1841,8 +1860,12 @@ capture starts. A webcam or capture card is opened on the backends' `VideoDevice
 the CPU path, in the format `device_format` picks from those it lists: frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device
-listed, looked up when it starts. MJPEG needs a decoder the engine doesn't build yet, so
-a device that offers only MJPEG doesn't start. Nothing opens its paired microphone. A
+listed, looked up when it starts. MJPEG is a candidate when the device offers it and the
+platform's codecs make a decoder (`Codecs::capture_decoder`, Media Foundation's on
+Windows): one decoder per stream, passed to `VideoDevices::open`. At the same size and
+rate an uncompressed format wins. Without a decoder (the default, and Linux and macOS
+for now), only uncompressed formats are chosen, so a device that offers only MJPEG
+doesn't start. Nothing opens its paired microphone. A
 capture that doesn't start, or whose stream reports `DeviceLost` (a
 closed window, an unplugged display or webcam), keeps its last frame and is started again 2 s
 later on the media clock. The skips of every stream the pipeline ran are added up into

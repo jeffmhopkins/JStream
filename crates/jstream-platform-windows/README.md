@@ -283,7 +283,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     A panic on the capture thread (the decoder's included) ends it with `InvalidState`.
     Dropping the stream doesn't wait: the thread stops after its current read and then
     releases the device and drops the decoder.
-  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`: the first synchronous
+  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`, which
+    `MfCodecs::capture_decoder` makes for the engine: the first synchronous
     MJPEG decoder MFT Media Foundation ranks (Microsoft's, on Windows), created on the
     capture thread at the first frame and again if the size changes. It takes NV12
     output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
@@ -434,8 +435,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
 - **`create_private_file`** and **`check_private_file`**, user-only files for a host's
-  secrets (#344: the daemon's token, devices and log files, as mode `0600` gives
-  them on Unix). `create_private_file` makes a new file (`CREATE_NEW`, never replacing
+  secrets (#344: the daemon's token, devices and log files; #656: both apps' crash
+  reports), as mode `0600` gives them on Unix. `create_private_file` makes a new file (`CREATE_NEW`, never replacing
   one) with a protected DACL for SYSTEM and the user (`jstream-vcam-proto`'s
   `sddl_user_only`, built like the vcam's `sddl_objects`) in the same `CreateFileW`
   call, so it never carries its folder's inherited entries. `check_private_file` reads

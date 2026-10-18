@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use jstream_media::{AudioBuffer, AudioFormat, Codec, FrameSize, Packet, PixelFormat, Timebase};
 
-use crate::{GpuContext, PlatformError, VideoSurface};
+use crate::{CaptureDecoder, CaptureEncoding, GpuContext, PlatformError, VideoSurface};
 
 /// What a codec does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -151,6 +151,24 @@ pub trait Codecs: Send + Sync {
         &self,
         config: &VideoDecoderConfig,
     ) -> Result<Box<dyn VideoDecoder>, PlatformError>;
+
+    /// A decoder for a capture device's compressed frames, to pass to
+    /// [`VideoDevices::open`](crate::VideoDevices::open): MJPEG is a video codec, so the
+    /// platform's codec path decodes it, never the device backend
+    /// (docs/adr/0031-source-types-and-decoding-scope.md). Each call makes a new decoder,
+    /// one per stream.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`], the default, when the platform has no decoder for
+    /// `encoding`; the engine then opens the device in an uncompressed format.
+    fn capture_decoder(
+        &self,
+        encoding: CaptureEncoding,
+    ) -> Result<Box<dyn CaptureDecoder>, PlatformError> {
+        Err(PlatformError::Unsupported {
+            what: format!("decoding {encoding:?} capture frames"),
+        })
+    }
 
     /// This backend on `context`'s device: its video encoders take `VideoSurface::Gpu`
     /// frames, the platform's encode targets on that context

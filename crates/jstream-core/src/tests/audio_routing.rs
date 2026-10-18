@@ -367,6 +367,9 @@ fn a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus() {
         other => panic!("expected a delete plan, got {other:?}"),
     };
     batch(&control, edits(plan)).expect("the plan applies");
+    // #701: the sources built from settings that drew `vod` may still be building;
+    // once they are done, `vod`'s scope must still be gone.
+    assert!(engine.settle_sources(), "the sources were built");
     let fed: Vec<_> = taps.current().iter().map(|tap| tap.feed).collect();
     assert_eq!(fed, [TapFeed::Bus(jstream_audio::BusId::MASTER)]);
     let drawn: Vec<_> = scopes.buses().into_iter().map(|(bus, _)| bus).collect();
@@ -535,6 +538,9 @@ fn a_drawn_source_gets_a_scope_fed_from_its_mixer_input() {
         other => panic!("expected a delete plan, got {other:?}"),
     };
     batch(&control, edits(plan)).expect("the plan applies");
+    // #701: as for a bus, a source still building from settings that drew the clip
+    // must not bring its scope back.
+    assert!(engine.settle_sources(), "the sources were built");
     assert!(feeds().is_empty());
     assert!(scopes.sources().is_empty());
 }
