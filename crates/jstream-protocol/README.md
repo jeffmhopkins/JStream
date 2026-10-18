@@ -119,10 +119,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Plugins** (`plugin.rs`, ADR-0069, which is on `wave/m1-3`): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
-  classes, adding a `hotkey.set`'s bound action, or the `PluginDenial` no grant
-  overrides), `PluginGrant` (the classes, hosts and folders a person grants, with
-  `check`, which returns the `forbidden` error, and `problem`), `plugin_may_bind`,
-  `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
+  classes, adding a `hotkey.set`'s bound action and a `live.set`'s edits, or the
+  `PluginDenial` no grant overrides), `PluginGrant` (the classes, hosts and folders a
+  person grants, with `check`, which returns the `forbidden` error, and `problem`),
+  `settings_reach` and `Reach` (the hosts and files a settings map names),
+  `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), and the binary
@@ -1012,11 +1013,27 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
   command can't reach plugins unreviewed.
 - **Checking a call.** `plugin_classes` collects the class of every command a call
-  carries, each edit of a batch, and for `hotkey.set` the class of the action it binds,
-  since a person's key press runs it: with `edit` alone a plugin can't bind
-  `output.start`. A call needing a class outside the grant, naming a never command, or
-  an empty batch is `forbidden` (`PluginGrant::check`), with the call's first command
-  as `call`.
+  carries: each edit of a batch, each edit a `live.set` carries, and for `hotkey.set`
+  the class of the action it binds, since a person's key press runs it: with `edit`
+  alone a plugin can't bind `output.start`. A call needing a class outside the grant,
+  naming a never command, or an empty batch is `forbidden` (`PluginGrant::check`), with
+  the call's first command as `call`.
+- **Reach.** A class never widens network or filesystem reach (ADR-0069 S2): a
+  `browser` source's URL and a media or image source's file need the grant's `hosts` or
+  `folders` beside `edit`. `PluginGrant::check` reads the settings of `source.create`,
+  `source.set_settings`, `filter.add` and `filter.set_settings` (in a batch or a
+  `live.set`) with `settings_reach`, which needs no kind descriptor:
+  - an asset reference under the `absolute` root must be inside a granted folder;
+  - a string with `://` must be an `http`, `https`, `ws` or `wss` URL whose
+    `scheme://host:port` (default port filled in, host compared without case) is
+    granted.
+  Anything else either holds is `forbidden`: a file under the collection's or the
+  app's folder, another scheme, credentials in the URL, and a path with a `.` or `..`
+  segment. A grant's folders can't have one either. A value the engine would resolve to
+  a host without `://` (a `youtube_chat` video ID) isn't found, and the host's own
+  network and filesystem checks still apply. Both path forms pass `problem`, since the
+  client may not share the engine's OS, so an engine also refuses a folder its OS
+  doesn't read as absolute (`/data` on Windows).
 - **`plugin.install {plugin_id, path, grant}`**, **`plugin.grant {plugin_id, grant}`**
   and **`plugin.enable {plugin_id}`** are actions for a person: no MCP tool carries
   them, no plugin is granted them and no hotkey binds them. `PluginGrant` is

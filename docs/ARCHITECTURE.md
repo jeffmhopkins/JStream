@@ -647,8 +647,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
-  or never); a call outside the grant fails with `forbidden` and never reaches the
-  engine. The engine and the mock answer the actions with `unsupported` until the engine
+  or never), and the hosts and files a call's settings name against the grant's hosts
+  and folders, since a class never widens network or filesystem reach; a call outside
+  the grant fails with `forbidden` and never reaches the engine. The engine and the mock answer the actions with `unsupported` until the engine
   hosts plugins.
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,

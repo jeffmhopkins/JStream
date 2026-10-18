@@ -2,15 +2,17 @@
 //! grants a plugin, the grant itself, a plugin's state, and the table that places every
 //! protocol command in one class or under "never".
 //!
-//! A plugin calls the API through a scoped `Control` that checks each call against
-//! [`plugin_classes`] before it reaches the engine, and a call outside the plugin's grant
-//! fails with `forbidden`. The table lives here, beside the commands, so a new command
+//! A plugin calls the API through a scoped `Control` that checks each call with
+//! [`PluginGrant::check`] (its classes, from [`plugin_classes`], and the hosts and files
+//! its settings name, from [`settings_reach`]) before it reaches the engine, and a call
+//! outside the plugin's grant fails with `forbidden`. The table lives here, beside the commands, so a new command
 //! can't ship unplaced: `every_command_has_a_plugin_scope` fails until a PR places it, and
 //! until then it is "never".
 
 use crate::command::{Action, Edit};
 use crate::envelope::Call;
 use crate::error::ProtocolError;
+use crate::settings::{AssetRoot, Reference, Settings};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -202,7 +204,16 @@ pub fn plugin_classes(call: &Call) -> Result<BTreeSet<PluginClass>, PluginDenial
                 }
             }
         }
-        Call::Action { action } => names.push((action.name().to_owned(), action.name())),
+        Call::Action { action } => {
+            names.push((action.name().to_owned(), action.name()));
+            // A live value is a setter edit, so it needs that edit's class too.
+            if let Action::LiveSet { values, .. } = action {
+                for edit in values {
+                    let inner = format!("live.set of {}", edit.name());
+                    names.push((inner, edit.name()));
+                }
+            }
+        }
         Call::Query { query } => names.push((query.name().to_owned(), query.name())),
         Call::History(history) => names.push((history.op.name().to_owned(), history.op.name())),
     }
@@ -222,7 +233,8 @@ pub fn plugin_classes(call: &Call) -> Result<BTreeSet<PluginClass>, PluginDenial
 }
 
 /// What a person grants one plugin (ADR-0069): its capability classes, and the network
-/// hosts and folders it may reach. A class never widens network or filesystem reach.
+/// hosts and folders it may reach. A class never widens network or filesystem reach:
+/// a call's URLs and files must be within `hosts` and `folders`.
 ///
 /// ```json
 /// {"classes": ["edit", "live"], "hosts": ["https://api.example.com:443"], "folders": []}
@@ -250,13 +262,20 @@ impl PluginGrant {
     }
 
     /// Checks a plugin's call against this grant: `Ok` when every class it needs is
-    /// granted, otherwise the `forbidden` error the plugin gets. The call never reaches
-    /// the engine either way it fails.
+    /// granted and every host and file its settings name is within [`hosts`] and
+    /// [`folders`] (see [`settings_reach`]), otherwise the `forbidden` error the plugin
+    /// gets. The call never reaches the engine either way it fails.
+    ///
+    /// [`hosts`]: PluginGrant::hosts
+    /// [`folders`]: PluginGrant::folders
     pub fn check(&self, call: &Call) -> Result<(), ProtocolError> {
         let name = call_name(call);
         match plugin_classes(call) {
             Ok(classes) => match classes.into_iter().find(|class| !self.allows(*class)) {
-                None => Ok(()),
+                None => match self.reach_problem(call) {
+                    None => Ok(()),
+                    Some(reason) => Err(ProtocolError::Forbidden { call: name, reason }),
+                },
                 Some(class) => Err(ProtocolError::Forbidden {
                     call: name,
                     reason: format!("the plugin is not granted `{class}`"),
@@ -273,9 +292,54 @@ impl PluginGrant {
         }
     }
 
+    /// Why the hosts and files `call`'s settings name aren't all within this grant, or
+    /// `None` when they are.
+    fn reach_problem(&self, call: &Call) -> Option<String> {
+        let mut edits: Vec<&Edit> = Vec::new();
+        match call {
+            Call::Batch(batch) => edits.extend(&batch.edits),
+            Call::Action {
+                action: Action::LiveSet { values, .. },
+            } => edits.extend(values),
+            _ => {}
+        }
+        for edit in edits {
+            let settings = match edit {
+                Edit::SourceCreate { settings, .. } | Edit::FilterAdd { settings, .. } => settings,
+                Edit::SourceSetSettings { patch, .. } | Edit::FilterSetSettings { patch, .. } => {
+                    patch
+                }
+                _ => continue,
+            };
+            for reach in settings_reach(settings) {
+                let allowed = match &reach {
+                    Reach::Host(host) => self
+                        .hosts
+                        .iter()
+                        .any(|granted| granted.eq_ignore_ascii_case(host)),
+                    Reach::File(path) => self.folders.iter().any(|folder| is_under(path, folder)),
+                    Reach::Unchecked(_) => false,
+                };
+                if !allowed {
+                    return Some(match reach {
+                        Reach::Host(host) => format!("the plugin is not granted the host `{host}`"),
+                        Reach::File(path) => {
+                            format!("the plugin is not granted a folder holding `{path}`")
+                        }
+                        Reach::Unchecked(what) => format!("a plugin can't name {what}"),
+                    });
+                }
+            }
+        }
+        None
+    }
+
     /// Why an engine refuses this grant, as the field and the reason, or `None`: a host
     /// that isn't `scheme://host:port` with a known scheme and a port in 1..=65535, or a
-    /// folder that isn't an absolute path.
+    /// folder that isn't an absolute path or has a `.` or `..` segment. Both path forms
+    /// pass, since the client may not share the engine's OS: an engine also refuses a
+    /// folder its own OS doesn't read as absolute (`/data` on Windows, where it is
+    /// relative to the current drive).
     pub fn problem(&self) -> Option<(String, String)> {
         for (i, host) in self.hosts.iter().enumerate() {
             if let Some(reason) = host_problem(host) {
@@ -285,6 +349,12 @@ impl PluginGrant {
         for (i, folder) in self.folders.iter().enumerate() {
             if !is_absolute(folder) {
                 return Some((format!("folders.{i}"), "must be an absolute path".into()));
+            }
+            if has_dot_segment(folder) {
+                return Some((
+                    format!("folders.{i}"),
+                    "must have no `.` or `..` segment".into(),
+                ));
             }
         }
         None
@@ -338,6 +408,122 @@ fn is_absolute(path: &str) -> bool {
             && (bytes[2] == b'\\' || bytes[2] == b'/'))
 }
 
+/// A host or file a source's or filter's settings would make the engine reach.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Reach {
+    /// A network host, as `scheme://host:port` with the host in lower case and the
+    /// scheme's default port filled in: the form [`PluginGrant::hosts`] holds.
+    Host(String),
+    /// An absolute file path.
+    File(String),
+    /// Something a grant can't name, so no plugin may reach it: a file under the
+    /// collection's or the app's folder, or a URL that isn't plainly `scheme://host:port`
+    /// with a known scheme. Says what it is.
+    Unchecked(String),
+}
+
+/// What a settings map (a create's settings or a patch) makes the engine reach, read
+/// without its kind's descriptor (ADR-0069 S2: a `browser` source's URL, and the file
+/// settings of media, image and other kinds, need the matching grant beside `edit`):
+/// - every asset reference (`{"type":"asset",…}`) is a [`Reach::File`] under the
+///   `absolute` root, and [`Reach::Unchecked`] under `collection` or `app`;
+/// - every string value with a `://` is a [`Reach::Host`] when it parses as an `http`,
+///   `https`, `ws` or `wss` URL with a host and no credentials, and [`Reach::Unchecked`]
+///   otherwise.
+///
+/// Values nested in arrays and objects count too. A value without `://` that the engine
+/// would still resolve to a host (a `youtube_chat` video ID) is not found here.
+pub fn settings_reach(settings: &Settings) -> Vec<Reach> {
+    let mut found = Vec::new();
+    for value in settings.0.values() {
+        value_reach(value, &mut found);
+    }
+    found
+}
+
+fn value_reach(value: &serde_json::Value, found: &mut Vec<Reach>) {
+    use serde_json::Value;
+    if let Some(Reference::Asset { root, path }) = Reference::from_value(value) {
+        found.push(match root {
+            AssetRoot::Absolute => Reach::File(path),
+            AssetRoot::Collection => {
+                Reach::Unchecked("a file under the collection's folder".into())
+            }
+            _ => Reach::Unchecked("a file under the app's folder".into()),
+        });
+        return;
+    }
+    match value {
+        Value::String(text) if text.contains("://") => found.push(url_reach(text)),
+        Value::Array(items) => items.iter().for_each(|item| value_reach(item, found)),
+        Value::Object(map) => {
+            if map.get("type").and_then(Value::as_str) == Some("asset") {
+                // Tagged as a file but not one: it can't be checked, so it isn't let through.
+                found.push(Reach::Unchecked("a malformed file reference".into()));
+            } else {
+                map.values().for_each(|item| value_reach(item, found));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The `scheme://host:port` a URL reaches, filling in the scheme's default port.
+fn url_reach(url: &str) -> Reach {
+    let unchecked = || Reach::Unchecked(format!("the address `{url}`"));
+    let Some((scheme, rest)) = url.trim().split_once("://") else {
+        return unchecked();
+    };
+    let scheme = scheme.to_ascii_lowercase();
+    let default_port = match scheme.as_str() {
+        "http" | "ws" => 80,
+        "https" | "wss" => 443,
+        _ => return unchecked(),
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.is_empty() || authority.contains(['@', '\\', '%']) {
+        return unchecked();
+    }
+    let (host, port) = match authority.rsplit_once(':') {
+        // An IPv6 literal's colons are inside its brackets.
+        Some((host, port)) if !port.contains(']') => match port.parse::<u16>() {
+            Ok(port @ 1..) => (host, port),
+            _ => return unchecked(),
+        },
+        _ => (authority, default_port),
+    };
+    if host.is_empty() {
+        return unchecked();
+    }
+    Reach::Host(format!("{scheme}://{}:{port}", host.to_ascii_lowercase()))
+}
+
+/// Whether the absolute `path` is `folder` or inside it, comparing `/` and `\\` alike, and
+/// letters without case when `folder` is a Windows path (a drive letter or UNC). A path
+/// with a `.` or `..` segment is never inside.
+fn is_under(path: &str, folder: &str) -> bool {
+    if has_dot_segment(path) {
+        return false;
+    }
+    let windows = !folder.starts_with('/');
+    let norm = |s: &str| {
+        let s = s.replace('\\', "/");
+        let s = s.trim_end_matches('/').to_owned();
+        if windows { s.to_ascii_lowercase() } else { s }
+    };
+    let (path, folder) = (norm(path), norm(folder));
+    path == folder
+        || path
+            .strip_prefix(&folder)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn has_dot_segment(path: &str) -> bool {
+    path.split(['/', '\\'])
+        .any(|segment| segment == "." || segment == "..")
+}
+
 /// Whether a plugin runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -377,16 +563,18 @@ pub fn plugin_may_bind(action: &Action, grant: &PluginGrant) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        PLUGIN_SCOPES, PluginClass, PluginDenial, PluginGrant, PluginScope, plugin_classes,
-        plugin_may_bind, plugin_scope,
+        PLUGIN_SCOPES, PluginClass, PluginDenial, PluginGrant, PluginScope, Reach, plugin_classes,
+        plugin_may_bind, plugin_scope, settings_reach,
     };
-    use crate::command::{Action, Batch, Edit};
+    use crate::command::{Action, Batch, Edit, SourceKind};
     use crate::envelope::Call;
     use crate::error::ProtocolError;
     use crate::history::{HistoryCall, HistoryOp};
     use crate::hotkey::Chord;
-    use crate::id::{OutputId, SceneId};
+    use crate::id::{GestureId, OutputId, SceneId, SourceId};
     use crate::query::Query;
+    use crate::settings::Settings;
+    use serde_json::json;
     use std::collections::BTreeSet;
 
     fn bind(action: Action) -> Call {
@@ -499,6 +687,150 @@ mod tests {
         assert!(all.check(&clear).is_err());
     }
 
+    fn create(kind: &str, settings: serde_json::Value) -> Call {
+        let settings: Settings = serde_json::from_value(settings).expect("a settings map");
+        Call::Batch(Batch::single(Edit::SourceCreate {
+            source_id: SourceId::new("s"),
+            name: "S".into(),
+            kind: SourceKind::Builtin { kind: kind.into() },
+            settings,
+            duplicated_from: None,
+        }))
+    }
+
+    fn set(patch: serde_json::Value) -> Call {
+        let patch: Settings = serde_json::from_value(patch).expect("a settings map");
+        Call::Batch(Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("s"),
+            patch,
+        }))
+    }
+
+    fn file(path: &str) -> serde_json::Value {
+        json!({"type": "asset", "root": "absolute", "path": path})
+    }
+
+    fn forbidden(grant: &PluginGrant, call: &Call) -> bool {
+        matches!(grant.check(call), Err(ProtocolError::Forbidden { .. }))
+    }
+
+    /// ADR-0069 S2: `edit` never widens network or filesystem reach.
+    #[test]
+    fn edit_alone_cant_reach_a_host_or_a_file() {
+        let edit = grant(&[PluginClass::Edit]);
+        let page = create("browser", json!({"url": "https://attacker.example/x"}));
+        assert!(forbidden(&edit, &page));
+        assert!(forbidden(
+            &edit,
+            &set(json!({"url": "https://attacker.example/"}))
+        ));
+        assert!(forbidden(
+            &edit,
+            &create("browser", json!({"file": file("/home/me/page.html")}))
+        ));
+        assert!(forbidden(
+            &edit,
+            &create("media", json!({"file": file("C:\\Users\\me\\a.mp4")}))
+        ));
+        assert!(forbidden(
+            &edit,
+            &set(json!({"file": file("/etc/passwd.png")}))
+        ));
+        // Through a live value too.
+        let live = Call::Action {
+            action: Action::LiveSet {
+                gesture_id: GestureId::new("g"),
+                values: vec![Edit::SourceSetSettings {
+                    source_id: SourceId::new("s"),
+                    patch: serde_json::from_value(json!({"file": file("/x.png")})).expect("map"),
+                }],
+            },
+        };
+        assert!(forbidden(&edit, &live));
+        // What reaches nothing is still an ordinary edit.
+        assert!(
+            edit.check(&create("color", json!({"color": "#112233"})))
+                .is_ok()
+        );
+        assert!(edit.check(&create("browser", json!({}))).is_ok());
+    }
+
+    #[test]
+    fn a_granted_host_or_folder_lets_the_edit_through() {
+        let reach = PluginGrant {
+            classes: BTreeSet::from([PluginClass::Edit]),
+            hosts: vec!["https://overlay.example:443".into()],
+            folders: vec!["/home/me/overlays".into(), "D:\\Media".into()],
+        };
+        let ok = |call: &Call| reach.check(call).is_ok();
+        assert!(ok(&create(
+            "browser",
+            json!({"url": "https://Overlay.example/page?x=1"})
+        )));
+        assert!(ok(&set(json!({"url": "https://overlay.example:443"}))));
+        assert!(
+            !ok(&set(json!({"url": "http://overlay.example/"}))),
+            "another port"
+        );
+        assert!(!ok(&set(json!({"url": "https://overlay.example.evil/"}))));
+        assert!(
+            !ok(&set(json!({"url": "https://me@overlay.example/"}))),
+            "credentials"
+        );
+        assert!(
+            !ok(&set(json!({"url": "file:///etc/passwd"}))),
+            "another scheme"
+        );
+        assert!(ok(&set(json!({"file": file("/home/me/overlays/a.png")}))));
+        assert!(ok(&set(json!({"file": file("d:/media/clips/a.mp4")}))));
+        assert!(!ok(&set(
+            json!({"file": file("/home/me/overlays-old/a.png")})
+        )));
+        assert!(!ok(&set(
+            json!({"file": file("/home/me/overlays/../.ssh/id.png")})
+        )));
+        // Files under the collection's or the app's folder can't be granted.
+        let relative = json!({"type": "asset", "root": "collection", "path": "a.png"});
+        assert!(!ok(&set(json!({ "file": relative }))));
+    }
+
+    #[test]
+    fn settings_reach_reads_urls_and_files_without_a_descriptor() {
+        let settings: Settings = serde_json::from_value(json!({
+            "url": "wss://[::1]:9000/socket",
+            "list": ["http://a.example", {"nested": file("/f")}],
+            "text": "no address here",
+        }))
+        .expect("a settings map");
+        assert_eq!(
+            settings_reach(&settings),
+            vec![
+                Reach::Host("http://a.example:80".into()),
+                Reach::File("/f".into()),
+                Reach::Host("wss://[::1]:9000".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_live_value_needs_its_edits_class() {
+        let live = Call::Action {
+            action: Action::LiveSet {
+                gesture_id: GestureId::new("g"),
+                values: vec![Edit::OutputSetVideoMix {
+                    output_id: OutputId::new("main"),
+                    mix_id: None,
+                }],
+            },
+        };
+        assert_eq!(
+            plugin_classes(&live),
+            Err(PluginDenial::Never {
+                command: "live.set of output.set_video_mix".into()
+            })
+        );
+    }
+
     #[test]
     fn read_is_always_granted() {
         let none = PluginGrant::default();
@@ -540,6 +872,11 @@ mod tests {
             ..PluginGrant::default()
         };
         assert_eq!(relative.problem().map(|(f, _)| f), Some("folders.0".into()));
+        let dotted = PluginGrant {
+            folders: vec!["/home/me/clips".into(), r"C:\Clips\..\Windows".into()],
+            ..PluginGrant::default()
+        };
+        assert_eq!(dotted.problem().map(|(f, _)| f), Some("folders.1".into()));
     }
 
     #[test]

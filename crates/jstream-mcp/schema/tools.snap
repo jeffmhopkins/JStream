@@ -2401,7 +2401,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PluginGrant": {
-            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach:\na call's URLs and files must be within `hosts` and `folders`.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
             "properties": {
               "classes": {
                 "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
@@ -6351,7 +6351,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PluginGrant": {
-            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach:\na call's URLs and files must be within `hosts` and `folders`.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
             "properties": {
               "classes": {
                 "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
@@ -9846,7 +9846,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PluginGrant": {
-            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach:\na call's URLs and files must be within `hosts` and `folders`.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
             "properties": {
               "classes": {
                 "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",

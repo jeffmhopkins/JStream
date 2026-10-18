@@ -74,7 +74,7 @@ pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use plugin::{
     PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginScope,
-    PluginState, plugin_classes, plugin_may_bind, plugin_scope,
+    PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope, settings_reach,
 };
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
