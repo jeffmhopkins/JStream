@@ -201,13 +201,13 @@ font decoders, and no fuzzing in CI (#352). The Media Foundation file reader (in
 <a id="plugins"></a>
 ## Plugins
 <!-- @section
-depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-process.md"]
+depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-process.md", "crates/jstream-plugin-wasm/README.md#purpose"]
 -->
 
 | Kind | Trust | On main | Boundary |
 |---|---|---|---|
 | CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`) and the mixer's side; the host process is not built (#281 in flight) | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
-| WASM automation plugins | Untrusted | Nothing (W1) | wasmtime, no filesystem or network unless declared and granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
+| WASM automation plugins | Untrusted | The `jstream-plugin-wasm` host (#486, #623): a fixed set of five imports and no WASI, an empty capability list by default, a fuel budget, a wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB of memory, 10,000 table elements and a 512 KiB stack. No app loads plugins yet | wasmtime with no ambient imports, so no filesystem, network or clock; a call reaches `Control` only when every command it names is granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
 | WGSL effect packs | Untrusted GPU code | Nothing (X1); only built-in shaders | naga validation ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)) |
 
 What the engine reads back from a CLAP host is already checked: the block's magic,
@@ -218,9 +218,13 @@ non-finite samples turned to silence.
 - CLAP (#351): the shared section's name and DACL are not specified; parameter values
   coming back are not validated (nothing reads them yet); plugin-reported names reach
   the UI and agents; the host can reset the mixer's miss counters.
-- WASM (#348): no CPU or memory limits are decided, and nothing limits which `Control`
-  calls a plugin may make, so a sandboxed plugin could still retarget an output (#343).
-  R-SEC-003 names an enforcing test in a crate that doesn't exist yet.
+- WASM (#348): ADR-0069 (accepted on `wave/m1-3`, #584) decided the limits. The host
+  builds its CPU and memory ones: fuel, the 100 ms and 1 s deadlines, and 64 MiB. Not
+  built yet: the capability classes checked against the protocol's table and grants
+  made only by people, the 1,000-event queue, the cap of 50 commands a second with its
+  `forbidden` error, and disabling a plugin that fails. Until grants exist a plugin is
+  granted nothing; a host that granted output commands would let a plugin retarget an
+  output, and the key with it (#343).
 - WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
   device loss isn't handled.
 
@@ -309,7 +313,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |
 | #347 | Browser | No permission policy; no stance on loopback and LAN requests | Medium |
-| #348 | WASM | No CPU, memory or API-scope limits decided | Medium |
+| #348 | WASM | ADR-0069's capability classes, grants, event queue and command rate are decided but not built (the CPU and memory limits are) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #352 | Files | Image and font decoders unfuzzed; no fuzzing in CI | Low |

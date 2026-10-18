@@ -3747,7 +3747,10 @@ stamp = { hash = "b3:5670e6a5758601b2" }
 stamp = { hash = "b3:8042c8d8d5117226" }
 
 ["THREAT-MODEL#plugins"."body"]
-stamp = { hash = "b3:e1e053e960486735", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+stamp = { hash = "b3:45dff963056e5e34", by = "agent:acc756d9", note = "Re-read against jstream-plugin-wasm (#486, #623) and ADR-0069: the Plugins row names the host's five imports, no WASI, empty capability list, fuel, 100 ms / 1 s deadlines, 64 MiB memory, 10,000 table elements, 512 KiB stack, and that no app loads plugins yet; the #348 gap and open-gaps row say which ADR-0069 limits are built (CPU, memory) and which are not (classes, grants, event queue, command rate, disabling); new dependency on the plugin-wasm README purpose." }
+
+["THREAT-MODEL#plugins"."dep:crates/jstream-plugin-wasm/README.md#purpose"]
+stamp = { hash = "b3:cd0e969127c1b23f", by = "agent:acc756d9", note = "Re-read against jstream-plugin-wasm (#486, #623) and ADR-0069: the Plugins row names the host's five imports, no WASI, empty capability list, fuel, 100 ms / 1 s deadlines, 64 MiB memory, 10,000 table elements, 512 KiB stack, and that no app loads plugins yet; the #348 gap and open-gaps row say which ADR-0069 limits are built (CPU, memory) and which are not (classes, grants, event queue, command rate, disabling); new dependency on the plugin-wasm README purpose." }
 
 ["THREAT-MODEL#plugins"."dep:docs/RULES.md#R-SEC-003"]
 stamp = { hash = "b3:e62d5f1a75c6baa0" }
