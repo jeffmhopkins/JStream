@@ -86,11 +86,10 @@ It has:
   fallback file, `secrets` in `$XDG_CONFIG_HOME/jstream` (`LinuxSecrets::config_dir`).
   The file is plaintext, one secret per line, written to a fresh `0600` file (named for
   the process and the write) and renamed into place, in a folder created `0700` (an
-  existing folder is left as it is). Calls on one store and its clones take turns, so a
-  host clones one store for both traits; separate stores on one file don't, and the
-  last update wins. It is
-  read only when it is a regular file the user owns that nobody else can read or write,
-  and refused, never repaired, otherwise. A keyring that refuses, is locked or fails is
+  existing folder is left as it is). The file is read only when it is a regular file the
+  user owns that nobody else can read or write, and refused, never repaired, otherwise.
+  Calls on one store and its clones take turns, so a host clones one store for both
+  traits; separate stores on one file don't, and the last update wins. A keyring that refuses, is locked or fails is
   an error, never a reason to use the file. A secret cleared while no keyring is
   reachable is recorded as cleared, so the keyring's copy is deleted later rather than
   coming back. Once the Secret Service is reachable, each call first moves the file's
