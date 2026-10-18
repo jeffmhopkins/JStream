@@ -503,8 +503,9 @@ impl Encoder {
 
     /// Filters channel `c`'s spectrum with temporal noise shaping where it pays (`tns`),
     /// and returns the perceptual entropy of the filtered spectrum, whose band energies
-    /// replace the model's; the thresholds stay the unfiltered spectrum's. `None` when
-    /// no window is filtered.
+    /// replace the model's. The thresholds are the unfiltered spectrum's, divided in the
+    /// filtered bands by the decoder filter's noise gain. `None` when no window is
+    /// filtered.
     fn shape_noise(&mut self, c: usize, frame: &Shape<'_>, short: bool) -> Option<f32> {
         let ch = &mut self.state[c];
         if !self.config.tns {

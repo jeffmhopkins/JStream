@@ -91,31 +91,31 @@ FLV and MP4.
   too, like `jstream-audio`.
 
 **Tests.** The unit tests check the MDCT against its defining sum, the FFT against the
-DFT, the windows' power complementarity, the Bessel function, every codebook as a
-complete prefix code with the standard's index layout, written bits against counted bits,
-escapes, sectioning, the bit writer, and the model's curves, pre-echo control and attack
-detector. The TNS tests check its coefficient quantizer against the decoder's (clamping
-past ±1, and rounding to the nearest angle), the step-up recursion, that the decoder's
-filter inverts the encoder's, Levinson-Durbin and the noise gain on an AR(1) process (with
-zero reflection coefficients past its order), filters on clicks and none on noise or
-silence, the range's limits, and `tns_data`'s written bits against counted bits, for
-analysed filters and for hand-made ones of every shape (the most coefficients of each
-window length, compressed or not, the most negative index, windows without a filter). Through the reference
-decoder: **every codeword of every codebook** (signs and escapes too) decodes to the standard's synthesis of the values written. The output also
-lags by exactly `DELAY`, and planar and interleaved input give the same stream. Hostile
-input (NaN, infinities, huge values, DC, square waves, clicks) in random buffer sizes, at
-every rate, layout and window shape, with TNS on and (in a quarter of the rounds) off,
-never panics, keeps every unit within the decoder's
-buffer, and decodes. Four seconds of full-scale noise at 64, 128 and 192 kbps stay at or
-under the target rate and within 10 % of it. The quality tests check waveform SNR floors on
-tones and a synthetic music signal at 128 and 192 kbps, the spectral envelope of noise
-(within 2.5 dB per third octave), the window sequences (long on steady signals, short
-around attacks, and only legal transitions), and pre-echo below an attack. With TNS, the
-noise between a click train's clicks drops by at least 2 dB at 64 and 128 kbps against
-TNS off, and tones keep their SNR within 0.5 dB. Clicks every 512 samples stay on long
-windows, get TNS in at least nine units of ten (none with it off), and keep the temporal
-envelope (64-sample block energies) within 3.6 dB of the input's, at least 1.8 dB closer
-than without TNS, at 96 and 128 kbps. `tests/no_alloc.rs`
-checks that steady-state encoding doesn't allocate.
+DFT, the windows' power complementarity, the Bessel function, every codebook as a complete
+prefix code with the standard's index layout, written bits against counted bits, escapes,
+sectioning, the bit writer, and the model's curves, pre-echo control and attack detector.
+The TNS tests check its coefficient quantizer against the decoder's (clamping past ±1, and
+rounding to the nearest angle), the step-up recursion, that the decoder's filter inverts
+the encoder's, Levinson-Durbin and the noise gain on an AR(1) process (with zero
+reflection coefficients past its order), filters on clicks and none on noise or silence,
+the range's limits, and `tns_data`'s written bits against counted bits, for analysed
+filters and for hand-made ones of every shape (the most coefficients of each window
+length, compressed or not, the most negative index, windows without a filter). Through the
+reference decoder: **every codeword of every codebook** (signs and escapes too) decodes to
+the standard's synthesis of the values written. The output also lags by exactly `DELAY`,
+and planar and interleaved input give the same stream. Hostile input (NaN, infinities,
+huge values, DC, square waves, clicks) in random buffer sizes, at every rate, layout and
+window shape, with TNS on and (in a quarter of the rounds) off, never panics, keeps every
+unit within the decoder's buffer, and decodes. Four seconds of full-scale noise at 64, 128
+and 192 kbps stay at or under the target rate and within 10 % of it. The quality tests
+check waveform SNR floors on tones and a synthetic music signal at 128 and 192 kbps, the
+spectral envelope of noise (within 2.5 dB per third octave), the window sequences (long on
+steady signals, short around attacks, and only legal transitions), and pre-echo below an
+attack. With TNS, the noise between a click train's clicks drops by at least 2 dB at 64
+and 128 kbps against TNS off, and tones keep their SNR within 0.5 dB. Clicks every 512
+samples stay on long windows, get TNS in at least nine units of ten (none with it off),
+and keep the temporal envelope (64-sample block energies) within 3.6 dB of the input's, at
+least 1.8 dB closer than without TNS, at 96 and 128 kbps. `tests/no_alloc.rs` checks that
+steady-state encoding doesn't allocate.
 
 Not built yet: intensity stereo, short-window grouping, and more than two channels.
