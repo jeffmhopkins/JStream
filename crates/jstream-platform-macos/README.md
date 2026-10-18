@@ -192,13 +192,19 @@ It has:
   silence until the watcher re-plans. Desktop and application audio are refused before
   14.2 (`check_input`) and, like `processes`, report `Unsupported` for now.
 
+- **`NoVideoDevices`** (`VideoDevices`) and **`NoGpuInterop`** (`GpuInterop`) stand in
+  for the backends not built yet, so a host can build a whole `Backends` (the daemon
+  does): `NoVideoDevices` lists no devices, and `NoGpuInterop`'s `open_device` is
+  `Unsupported`, so the engine opens a device of its own and takes the CPU frame paths.
+  AVFoundation webcams (#608) and the Metal interop replace them.
+
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
-  proves the synchronisation;
+  proves the synchronisation, in place of `NoGpuInterop`;
 - process taps for desktop and application audio;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
-- AVFoundation webcams;
+- AVFoundation webcams (in place of `NoVideoDevices`);
 - GPU frames (IOSurface pixel buffers imported into Metal) from the VideoToolbox decoder
   and the media-file reader, once the Metal spike lands.
 

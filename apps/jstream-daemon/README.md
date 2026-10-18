@@ -36,7 +36,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
   file and the placeholder outputs; on Windows a live one, which with the `cef`
-  feature also opens browser sources, [Design](#design)), installs the signal
+  feature also opens browser sources, and on macOS a live one on the macOS backends
+  built so far, [Design](#design)), installs the signal
   handlers that stop it, then binds the server with MCP on and, with `--ui-dir`, the
   web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
@@ -68,7 +69,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   scene and creates an RTMP output to a local
   loopback sink and a recording, the WebSocket client sets the key and starts the
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
-  received and the recorded MP4. The binary has no backends off Windows, so it runs
+  received and the recorded MP4. The binary has no backends on Linux, so it runs
   in process; `tests/delay_load.rs`,
   Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
@@ -104,7 +105,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
-| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
+| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows and macOS it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
@@ -163,8 +164,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. Without `--collection` the
   engine's state is lost.
-- **Going live (Windows).** `output.create` with an RTMP(S) server URL, then
-  `output.set_key` (stored in Windows Credential Manager), then `output.start`
+- **Going live (Windows and macOS).** `output.create` with an RTMP(S) server URL, then
+  `output.set_key` (stored in Windows Credential Manager, or the login keychain on
+  macOS), then `output.start`
   connects and streams. A start fails with `action_failed` and a reason that says what
   to fix when the output has no target (a `--output` placeholder), no stream key, or
   the key can't be read. Elsewhere, `output.start` only steps the placeholder state
@@ -234,8 +236,22 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `WindowsCredentials` as its
   stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
-  starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
-  machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
+  starts.
+- **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
+  the `jstream-platform-macos` backends built so far (`macos_backends`):
+  - `MachClock`, `ScreenCaptureKitCapture`, `CoreAudioIo`, `VideoToolboxCodecs` and
+    `AvMediaDecoders`;
+  - the stand-ins `NoVideoDevices`, which lists no webcams until AVFoundation's land,
+    and `NoGpuInterop`, which sends the engine to its own device and CPU frames until
+    the Metal interop does;
+  - no virtual camera;
+  - `MacosKeychain` as its stream key store, and the same publish opener as on Windows.
+
+  Capture and Core Audio refuse a release below the floor when created, which fails
+  startup. Creating them asks for no permission: that happens when a pipeline first
+  uses them.
+- **Elsewhere** (Linux) there are no backends yet, so outputs stay the placeholder
+  state machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **The publish opener.** On each `output.start` it reads the output's server URL with
   `Engine::output_kind` and its key from the store, then calls `connect_rtmp`, so each
   start connects anew. It fails the start with its own reason (`PublishError::new`)

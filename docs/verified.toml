@@ -27,7 +27,7 @@ stamp = { hash = "b3:963d560e94ad3155", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:dbacb2dd7907964d" }
 
 ["ARCH#crate-map"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:00badea83615c29f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Layer-6 apps row: desktop links jstream-browser optionally with cef, daemon always links it; matches both Cargo.toml files" }
+stamp = { hash = "b3:166727f443c2a27e", by = "agent:a2656", note = "Re-read the jstream-daemon row against its Cargo.toml metadata: unchanged (layer 6, links core and server); the new macOS platform dependency is a target-specific one like Windows', which the row doesn't list" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: #298's jstream-browser row (helper over pipes, helper feature) and apps/* row (the helper's DLL, unsafe for its one export) sit beside P1's jstream-platform paths row and main's jstream-effects and jstream-anim rows; lint-deps passes; holds" }
@@ -510,7 +510,7 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:fe92cdacb6278716" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:00badea83615c29f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Daemon row combines wave/m1's --ui-dir and vcam text with browser sources under cef; matches the daemon README" }
+stamp = { hash = "b3:166727f443c2a27e", by = "agent:a2656", note = "Re-read against the daemon's Cargo.toml: only a macOS-only dependency on jstream-platform-macos was added, mirroring the Windows one; its layer-6 metadata and summary are unchanged, so the shape holds" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/src/main.rs"]
 stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon row is unchanged, and main.rs only adds the device-file path; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -1368,7 +1368,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:c65c43538952c785", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
+stamp = { hash = "b3:ddfbe3f78df55e75", by = "agent:a2656", note = "Added the Live on macOS bullet against serve.rs and Cargo.toml: jstream-platform-macos as a macOS-only dependency; MachClock, ScreenCaptureKitCapture, CoreAudioIo, VideoToolboxCodecs, AvMediaDecoders, the NoVideoDevices and NoGpuInterop stand-ins, no vcam, MacosKeychain and the shared publish opener; capture and Core Audio check the floor at creation and ask for permissions only on first use; Linux keeps the placeholder state machine. The Windows, opener, Media Foundation and browser bullets are unchanged" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:66b28773c491abf0", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "Upstream changed only by moving ADR-0031 citations to ADR-0061 and the crate map's Linux row; the wave/m3-2 merge (E3d NV12, WA1) changed nothing this section relies on about ADR-0031; holds" }
@@ -1380,7 +1380,7 @@ stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade fro
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
-stamp = { hash = "b3:31adea4c41afd5dd", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
+stamp = { hash = "b3:4117c57a0b76c116", by = "agent:a2656", note = "Added the Live on macOS bullet against serve.rs and Cargo.toml: jstream-platform-macos as a macOS-only dependency; MachClock, ScreenCaptureKitCapture, CoreAudioIo, VideoToolboxCodecs, AvMediaDecoders, the NoVideoDevices and NoGpuInterop stand-ins, no vcam, MacosKeychain and the shared publish opener; capture and Core Audio check the floor at creation and ask for permissions only on first use; Linux keeps the placeholder state machine. The Windows, opener, Media Foundation and browser bullets are unchanged" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/build.rs"]
 stamp = { hash = "b3:921cf5fc80e14748", by = "agent:mac1-audio", note = "This PR's change to build.rs: a macOS-only block passing -Wl,-sectcreate,__TEXT,__info_plist,Info.plist to the binary with rerun-if-changed, plus a comment saying Purpose describes it. Design needn't: it covers the Windows Media Foundation delay-load, whose bullet (link-arg-bins scope, DLL list, delayimp.lib) still matches the file; Purpose's build-script bullet describes the embedding" }
@@ -1404,13 +1404,13 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2c25e12aa4a88f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
+stamp = { hash = "b3:b15343ac05164610", by = "agent:a2656", note = "Added the Live on macOS bullet against serve.rs and Cargo.toml: jstream-platform-macos as a macOS-only dependency; MachClock, ScreenCaptureKitCapture, CoreAudioIo, VideoToolboxCodecs, AvMediaDecoders, the NoVideoDevices and NoGpuInterop stand-ins, no vcam, MacosKeychain and the shared publish opener; capture and Core Audio check the floor at creation and ask for permissions only on first use; Linux keeps the placeholder state machine. The Windows, opener, Media Foundation and browser bullets are unchanged" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:60b96005efc147fa", by = "agent:mac1-audio", note = "This PR's whole change to Purpose: the build-script bullet describes build.rs embedding Info.plist in the binary's __TEXT,__info_plist section on macOS targets (ADR-0063 §11), so the microphone, camera and system audio recording prompts have their usage strings without an app bundle; it names the bundle identifier io.github.jeffmhopkins.jstream.daemon under the app ID io.github.jeffmhopkins.jstream (fact markers), and says a daemon started from a terminal is attributed to the terminal app. The tests list adds the new tests/info_plist.rs: on every OS each usage key has a non-empty string and CFBundleIdentifier equals the pinned fact under the app ID, and on macOS the built binary contains the plist. covers now includes Info.plist and build.rs. Re-read against build.rs's -sectcreate block (with its new comment pointing here), Info.plist and tests/info_plist.rs (whose doc now names the bundle identifier); the bullet was only rewrapped" }
+stamp = { hash = "b3:44449c257b18e567", by = "agent:a2656", note = "Re-read the Serving bullet and the tests paragraph against serve.rs: on macOS the engine is now live on the macOS backends built so far (macos_backends, live, rtmp and the opener now also cfg macOS); the in-process e2e note now says the binary has no backends on Linux rather than off Windows; the rest of the contents is unchanged" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
@@ -1440,7 +1440,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2c25e12aa4a88f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
+stamp = { hash = "b3:b15343ac05164610", by = "agent:a2656", note = "Re-read the Serving bullet and the tests paragraph against serve.rs: on macOS the engine is now live on the macOS backends built so far (macos_backends, live, rtmp and the opener now also cfg macOS); the in-process e2e note now says the binary has no backends on Linux rather than off Windows; the rest of the contents is unchanged" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -1458,7 +1458,7 @@ stamp = { hash = "b3:16843bae45198421", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:5c2b51f837551c47", by = "agent:mac1-audio", note = "This PR's whole change to Purpose: the build-script bullet describes build.rs embedding Info.plist in the binary's __TEXT,__info_plist section on macOS targets (ADR-0063 §11), so the microphone, camera and system audio recording prompts have their usage strings without an app bundle; it names the bundle identifier io.github.jeffmhopkins.jstream.daemon under the app ID io.github.jeffmhopkins.jstream (fact markers), and says a daemon started from a terminal is attributed to the terminal app. The tests list adds the new tests/info_plist.rs: on every OS each usage key has a non-empty string and CFBundleIdentifier equals the pinned fact under the app ID, and on macOS the built binary contains the plist. covers now includes Info.plist and build.rs. Re-read against build.rs's -sectcreate block (with its new comment pointing here), Info.plist and tests/info_plist.rs (whose doc now names the bundle identifier); the bullet was only rewrapped" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: main's --ui-dir row and P1's Log files bullet (data folder, portable marker) sit beside the wave's pairing device file; #298 moves CEF into the sandboxed helper but adds no flag; the usage rows match args.rs; holds" }
+stamp = { hash = "b3:5fa0f0651ac8a4dc", by = "agent:a2656", note = "Re-read the options table and the Going live item: a --output placeholder has no target on Windows and macOS alike, and stream keys go to Credential Manager on Windows or the login keychain on macOS (MacosKeychain); args.rs, main.rs and token.rs are unchanged" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
@@ -2196,7 +2196,7 @@ stamp = { hash = "b3:8011e2a0da78cf07", by = "agent:claude-vaapi", note = "Re-re
 stamp = { hash = "b3:5c91d1782279c741", by = "agent:claude", note = "Re-read Purpose against #516: the PipeWire stream now uses jstream_platform::mailbox and the VA-API upload jstream_platform::nv12 (Nv12Image moved there); edited both bullets. write_nv12's NV12 copy and format dispatch stay here and behave as before." }
 
 ["CRATE-jstream-platform-macos#purpose"."body"]
-stamp = { hash = "b3:bc456ae26c9998e8", by = "agent:a2656", note = "Re-read the new AvMediaDecoders bullet, the Not-yet list and the tests paragraph against avreader.rs (AVURLAsset tracks loaded with loadTracksWithMediaType and waited on, one AVAssetReader output per stream, first frame read at open for the size, BGRA or NV12 with RGBA as swapped BGRA, interleaved f32 at the track rate mono or stereo, seek starts a new reader from the target, NotFound for a missing file, Unsupported for AVFoundation's format errors, non-Prefer hardware and sound-only files opened without audio), media_file.rs helpers, audio.rs re-exporting rate_hz, vtdecoder.rs's copy_image made crate-visible, and the lib.rs exports and crate doc; the media-file source leaves Not-yet; tests name the system-sound and error tests and the JSTREAM_TEST_MEDIA hw-tests" }
+stamp = { hash = "b3:f3b65536c6ae714e", by = "agent:a2656", note = "Added the NoVideoDevices/NoGpuInterop bullet against unbuilt.rs (no devices listed and NotFound for formats/open; open_device and encode_target Unsupported so the engine opens its own device and CPU frames) and the lib.rs exports and crate doc; the Not-yet webcam and GPU-frame items now say they replace the stand-ins, naming #608 for webcams; the rest (codecs, decoder, media files, tests) is unchanged" }
 
 ["CRATE-jstream-platform-macos#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:a085b9a5e185315c", by = "agent:claude", note = "Re-read Purpose after jstream-platform's Purpose gained the shared mailbox and nv12 helpers and the crossbeam-utils dependency: nothing here names them yet, and the text still holds." }
@@ -2274,10 +2274,13 @@ stamp = { hash = "b3:c1314a66435e638c", by = "agent:claude-mac1", note = "Re-rea
 stamp = { hash = "b3:2016bbbcbc77775c", by = "agent:mac1-keychain", note = "Re-read against the Keychain store: added the MacosKeychain and KeychainItem bullet (login keychain, per-kind services, update-or-add, is_set without data, error mapping), -security in the bindings list, dropped the Keychain line from the remaining list, and the tests paragraph names the keychain round trips in the macos CI job" }
 
 ["CRATE-jstream-platform-macos#purpose"."file:crates/jstream-platform-macos/src/lib.rs"]
-stamp = { hash = "b3:c646d9421fd96be9", by = "agent:a2656", note = "Re-read the new AvMediaDecoders bullet, the Not-yet list and the tests paragraph against avreader.rs (AVURLAsset tracks loaded with loadTracksWithMediaType and waited on, one AVAssetReader output per stream, first frame read at open for the size, BGRA or NV12 with RGBA as swapped BGRA, interleaved f32 at the track rate mono or stereo, seek starts a new reader from the target, NotFound for a missing file, Unsupported for AVFoundation's format errors, non-Prefer hardware and sound-only files opened without audio), media_file.rs helpers, audio.rs re-exporting rate_hz, vtdecoder.rs's copy_image made crate-visible, and the lib.rs exports and crate doc; the media-file source leaves Not-yet; tests name the system-sound and error tests and the JSTREAM_TEST_MEDIA hw-tests" }
+stamp = { hash = "b3:6f79f15f4c485c6a", by = "agent:a2656", note = "Added the NoVideoDevices/NoGpuInterop bullet against unbuilt.rs (no devices listed and NotFound for formats/open; open_device and encode_target Unsupported so the engine opens its own device and CPU frames) and the lib.rs exports and crate doc; the Not-yet webcam and GPU-frame items now say they replace the stand-ins, naming #608 for webcams; the rest (codecs, decoder, media files, tests) is unchanged" }
 
 ["CRATE-jstream-platform-macos#purpose"."file:crates/jstream-platform-macos/src/media_file.rs"]
 stamp = { hash = "b3:3d710693fc4ceb43", by = "agent:a2656", note = "Re-read the new AvMediaDecoders bullet, the Not-yet list and the tests paragraph against avreader.rs (AVURLAsset tracks loaded with loadTracksWithMediaType and waited on, one AVAssetReader output per stream, first frame read at open for the size, BGRA or NV12 with RGBA as swapped BGRA, interleaved f32 at the track rate mono or stereo, seek starts a new reader from the target, NotFound for a missing file, Unsupported for AVFoundation's format errors, non-Prefer hardware and sound-only files opened without audio), media_file.rs helpers, audio.rs re-exporting rate_hz, vtdecoder.rs's copy_image made crate-visible, and the lib.rs exports and crate doc; the media-file source leaves Not-yet; tests name the system-sound and error tests and the JSTREAM_TEST_MEDIA hw-tests" }
+
+["CRATE-jstream-platform-macos#purpose"."file:crates/jstream-platform-macos/src/unbuilt.rs"]
+stamp = { hash = "b3:34a591922ef2b8d7", by = "agent:a2656", note = "Added the NoVideoDevices/NoGpuInterop bullet against unbuilt.rs (no devices listed and NotFound for formats/open; open_device and encode_target Unsupported so the engine opens its own device and CPU frames) and the lib.rs exports and crate doc; the Not-yet webcam and GPU-frame items now say they replace the stand-ins, naming #608 for webcams; the rest (codecs, decoder, media files, tests) is unchanged" }
 
 ["CRATE-jstream-platform-macos#purpose"."file:crates/jstream-platform-macos/src/version.rs"]
 stamp = { hash = "b3:ff6c79ca816d3b4d", by = "agent:claude-mac1", note = "Re-read the whole section against the code and the accepted ADR-0063. Kept from the first stamp: MachClock in 100 ns via mach_timebase_info, MacosVersion from NSProcessInfo, the 14.0 floor and 14.2 process-tap check, fourcc/os_status and the Core Video map, vt_encoder_settings and aac_settings, the Unsupported stubs, the two SAFETY-commented mach2 calls; also checked ADR-0061, ADR-0014, the crate-map row and ARCH threading. Changed for review B1: support_tier now makes macOS 14 best effort on Apple Silicon too, with Supported only from MacosVersion::OLDEST_PATCHED (15, mirroring the macos-security-updated fact), as ADR-0063 decision 2 says; the tier sentence says so. For N2, the crate doc no longer calls ADR-0063 proposed: it is accepted" }
@@ -3651,7 +3654,7 @@ stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: daemon Usage now carries main's data-directory default (P1) beside the wave's pairing device file; the prerequisites use neither and the token folder step still holds; holds" }
+stamp = { hash = "b3:5fa0f0651ac8a4dc", by = "agent:a2656", note = "Re-read against the daemon usage change: this runbook is the Windows go-live (Media Foundation, Credential Manager), and the usage edit only adds macOS alongside Windows for placeholders and the key store, so its Windows steps still hold" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -3660,7 +3663,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage (Y3's no YouTube-bound outputs; #450's capture fit) and daemon Usage (P1's data directory, the wave's device file); smoke.ps1 uses a generic RTMP output, adds no items and passes --token-file and --log-dir in its run folder; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage (Y3's no YouTube-bound outputs; #450's capture fit) and daemon Usage (P1's data directory, the wave's device file); smoke.ps1 uses a generic RTMP output, adds no items and passes --token-file and --log-dir in its run folder; holds" }
+stamp = { hash = "b3:5fa0f0651ac8a4dc", by = "agent:a2656", note = "Re-read against the daemon usage change: smoke.ps1 options and the Windows-only real-server streaming are unchanged by it" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -3672,7 +3675,7 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
+stamp = { hash = "b3:5fa0f0651ac8a4dc", by = "agent:a2656", note = "Re-read against the daemon usage change: the steps (output.create, set_key into Credential Manager, start) are the Windows path and still match; macOS was only added beside Windows in usage" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from CLI Usage (pair/device; #440's set-key BOM and non-ASCII refusal) and server Design (pairing; Admitted's binary forward): no step pairs a device, every command uses the control token, and a key typed or piped per the steps passes #440's check; holds" }

@@ -56,6 +56,12 @@ tracing-subscriber.workspace = true
 [target.'cfg(windows)'.dependencies]
 jstream-platform-windows.workspace = true
 
+# The live engine on macOS: ScreenCaptureKit, Core Audio, VideoToolbox and AudioToolbox,
+# the Mach clock, AVFoundation media files and the Keychain key store, as far as
+# ADR-0063's parts are built.
+[target.'cfg(target_os = "macos")'.dependencies]
+jstream-platform-macos.workspace = true
+
 [dev-dependencies]
 # The tests drive the daemon through the WebSocket client, as the CLI does.
 futures-util.workspace = true

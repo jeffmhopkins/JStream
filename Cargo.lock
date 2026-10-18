@@ -2892,6 +2892,7 @@ dependencies = [
  "jstream-core",
  "jstream-media",
  "jstream-platform",
+ "jstream-platform-macos",
  "jstream-platform-windows",
  "jstream-protocol",
  "jstream-server",

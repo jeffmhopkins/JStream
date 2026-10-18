@@ -1,7 +1,7 @@
 //! The engine behind the server: one `Engine`, one `InProcessControl` session per
 //! WebSocket connection and per MCP session, and the signals that stop it. On Windows
-//! the engine is live: it runs the media pipeline on the OS backends and publishes
-//! over RTMP(S).
+//! and macOS the engine is live: it runs the media pipeline on the OS backends and
+//! publishes over RTMP(S).
 
 use crate::args::Options;
 use anyhow::Context;
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 #[cfg(any(all(windows, feature = "cef"), test))]
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 use {
     jstream_core::{LivePublish, OpenPublish, PublishError},
     jstream_platform::{Backends, Secret, StreamKeyStore},
@@ -24,7 +24,7 @@ use {
 
 /// How the publish opener connects to an RTMP(S) server URL with a stream key:
 /// `connect_rtmp` in the daemon, a recording target in tests.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 pub type Connect =
     Arc<dyn Fn(&str, &Secret) -> Result<Box<dyn LivePublish>, PublishError> + Send + Sync>;
 
@@ -32,14 +32,17 @@ pub type Connect =
 /// one that is not saved), the placeholder outputs, and `audit` recording every batch,
 /// undo, redo and action.
 ///
-/// On Windows it is live (see `live`, which is Windows and test only): the OS backends (WGC capture, WASAPI audio, Media
+/// On Windows it is live (see `live`, which is Windows, macOS and test only): the OS backends (WGC capture, WASAPI audio, Media
 /// Foundation codecs and webcams, the QPC clock), stream keys in Credential Manager, and a publish
-/// opener that connects RTMP(S) on each `output.start`. Elsewhere there are no
-/// backends yet, so output actions only step the placeholder state machine.
+/// opener that connects RTMP(S) on each `output.start`. On macOS it is live the same
+/// way on the backends built so far (`macos_backends`), with stream keys in the
+/// Keychain. Elsewhere there are no backends yet, so output actions only step the
+/// placeholder state machine.
 ///
 /// # Errors
-/// When the collection file can't be read, loaded or created, and on Windows, when a
-/// backend can't be created (the QPC clock).
+/// When the collection file can't be read, loaded or created, and on Windows and macOS,
+/// when a backend can't be created (the QPC or Mach clock, or on macOS a release below
+/// the floor).
 pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Arc<Engine>> {
     let mut engine = Engine::new().with_audit(audit);
     if let Some(path) = &options.collection {
@@ -71,7 +74,14 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
         let _ = cef_browser(Engine::clone(&engine), gpu.as_ref(), clock, options);
         engine
     };
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let engine = live(
+        engine,
+        macos_backends()?,
+        Arc::new(jstream_platform_macos::MacosKeychain),
+        rtmp(),
+    );
+    #[cfg(not(any(windows, target_os = "macos")))]
     let engine = Arc::new(engine);
     Ok(engine)
 }
@@ -94,6 +104,34 @@ fn windows_backends() -> anyhow::Result<Backends> {
         gpu: Arc::new(WindowsGpu::new()),
         media: Arc::new(MfMediaDecoders::new()),
         vcam: Some(Box::new(WindowsVcam::new())),
+    })
+}
+
+/// The macOS backends, as far as they are built (ADR-0063): ScreenCaptureKit capture,
+/// Core Audio, VideoToolbox and AudioToolbox codecs, the Mach media clock and
+/// AVFoundation media files. Webcams and GPU interop are stand-ins until they land
+/// (`NoVideoDevices` lists none, until AVFoundation webcams in #608; `NoGpuInterop`
+/// sends the engine to its own device and CPU frames, until the Metal interop), and
+/// there is no virtual camera. Creating them opens no device; capture
+/// and audio check the release floor, and ask for their permissions only when a
+/// pipeline first uses them.
+#[cfg(target_os = "macos")]
+fn macos_backends() -> anyhow::Result<Backends> {
+    use jstream_platform_macos::{
+        AvMediaDecoders, CoreAudioIo, MachClock, NoGpuInterop, NoVideoDevices,
+        ScreenCaptureKitCapture, VideoToolboxCodecs,
+    };
+    Ok(Backends {
+        clock: Arc::new(MachClock::new().context("could not open the Mach media clock")?),
+        capture: Arc::new(
+            ScreenCaptureKitCapture::new().context("could not open ScreenCaptureKit capture")?,
+        ),
+        video_devices: Arc::new(NoVideoDevices),
+        audio: Arc::new(CoreAudioIo::new().context("could not open Core Audio")?),
+        codecs: Arc::new(VideoToolboxCodecs::new()),
+        gpu: Arc::new(NoGpuInterop),
+        media: Arc::new(AvMediaDecoders::new()),
+        vcam: None,
     })
 }
 
@@ -160,7 +198,7 @@ pub fn browse(
 }
 
 /// Connects with `connect_rtmp`, whose errors never carry the key (R-SEC-001).
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn rtmp() -> Connect {
     Arc::new(|url, key| {
         let publish: Box<dyn LivePublish> =
@@ -176,7 +214,7 @@ fn rtmp() -> Connect {
 /// cycle would keep the engine, and its running pipeline, alive after the server and
 /// every session let go of it. So the engine is returned in an `Arc` and the opener
 /// gets only a `Weak` to it, set once the engine is built.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 pub fn live(
     engine: Engine,
     backends: Backends,
@@ -200,7 +238,7 @@ pub fn live(
 /// `connect`. A start fails with a reason that says what to fix when the output is not
 /// in the collection (a `--output` placeholder has no target), has no stream key, or
 /// the store can't be read. No reason carries the key (R-SEC-001).
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 fn opener(
     engine: Arc<OnceLock<Weak<Engine>>>,
     keys: Arc<dyn StreamKeyStore>,
