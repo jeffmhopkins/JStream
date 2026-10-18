@@ -10,7 +10,8 @@
 //! permission, the Keychain store for stream keys and OAuth tokens (`MacosKeychain`), and
 //! Core Audio devices, input recording (behind the Microphone permission) and output
 //! playback through the HAL, the processes Core Audio knows as audio clients, and
-//! desktop and application audio through process taps (`CoreAudioIo`), and the
+//! desktop and application audio through process taps (`CoreAudioIo`), webcams
+//! through AVFoundation, behind the Camera permission (`AvFoundationVideoDevices`), the
 //! VideoToolbox H.264 and HEVC decoder on CPU frames, its packets split by
 //! `split_access_unit` and its frames put in presentation order by `Reorder`, and
 //! local media files through AVFoundation's asset reader (`AvMediaDecoders`). Layer 2,
@@ -39,6 +40,7 @@ mod fourcc;
 mod keychain;
 mod media_file;
 mod version;
+mod video_device;
 #[cfg(target_os = "macos")]
 mod videotoolbox;
 #[cfg(target_os = "macos")]
@@ -74,3 +76,5 @@ pub use media_file::{
     AvReaderSettings, audio_layout, av_error_is_unsupported, av_reader_settings, bgra_to_rgba,
 };
 pub use version::{Arch, Feature, MacosVersion, SupportTier, check_floor, support_tier};
+#[cfg(target_os = "macos")]
+pub use video_device::AvFoundationVideoDevices;

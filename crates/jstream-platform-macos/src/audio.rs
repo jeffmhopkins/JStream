@@ -16,7 +16,7 @@ mod hal;
 #[cfg(any(target_os = "macos", test))]
 mod layout;
 #[cfg(any(target_os = "macos", test))]
-mod permission;
+pub(crate) mod permission;
 #[cfg(any(target_os = "macos", test))]
 mod process;
 #[cfg(target_os = "macos")]
