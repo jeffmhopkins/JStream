@@ -1798,7 +1798,7 @@ capture whose mailbox is empty repeats its last frame.
 
 **Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
 platform's context when there is one and the render thread hasn't left it (`VideoSession::open_on`,
-`Program::session_context`): it takes GPU frames when
+`Program::encoders`, through `GpuGate`): it takes GPU frames when
 the codecs can encode the context's encode targets (`Codecs::on_context`), and CPU
 frames otherwise, which is logged. The render thread learns which with the session's
 input. For each mix with a session on the GPU path it allocates a ring of
@@ -1873,7 +1873,13 @@ context's device is lost, the outputs fail at once, since nothing can draw into 
 targets. Once the render thread has left the context (a fallback, or a lost context
 device), it says so to the program stage, which from then on opens each new video
 session without the context: on the CPU path, taking the readback like any other, so a
-recording started after a fallback encodes and fails nothing (#699).
+recording started after a fallback encodes and fails nothing (#699). A session that
+opens on the GPU path claims the context first, and holds the claim until the render
+thread has its tap. A fallback due meanwhile waits for the tap, which then rules it out
+as above, so a session opened just before a fallback can't fail the stage either. The
+two sides meet at one gate (`GpuGate`): the fallback shuts it and then looks for
+claims, and a session claims it and then looks whether it is shut, so one always sees
+the other (#733). A lost context device shuts it whatever the claims.
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as
