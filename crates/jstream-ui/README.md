@@ -211,7 +211,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   card shows none of them; neither "Go live" nor "End stream" touches it. The card says
   what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
   read in `host.rs`): there an unregistered camera, or one turned off with `--no-vcam`,
-  can't be started, and the card gives the `jstream-daemon --register-vcam` hint. In a
+  can't be started, and the card gives the `jstream-daemon --register-vcam` hint, which
+  names the step as optional; an `outdated` one (registered, but not for a current copy
+  of this version's DLL) can still be started, and its hint offers registering again,
+  also optional. In a
   browser the page can't tell, so it lets the engine decide and explains its refusal:
   an unregistered camera ("is not registered") gets the full registration command, and
   an engine with no camera at all ("no virtual camera": not running on Windows, or the
