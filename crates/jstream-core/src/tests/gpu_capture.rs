@@ -1317,3 +1317,77 @@ fn a_gpu_encoder_gets_nv12_encode_targets_and_no_readback() {
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(engine.output_stats().is_none());
 }
+
+/// [`gpu_draw`], failing draws `from` to `to` (counted from 1) with a composite error.
+fn flaky_draw(from: u64, to: u64, draws: Arc<AtomicU64>) -> OpenDraw {
+    Arc::new(move |context: Option<&GpuContext>| {
+        let mut inner = (gpu_draw())(context)?;
+        let draws = Arc::clone(&draws);
+        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
+            let n = draws.fetch_add(1, Ordering::Relaxed) + 1;
+            if (from..=to).contains(&n) {
+                return Err(DrawError::Failed("unsupported format".to_owned()));
+            }
+            inner(shot, live, captures, frames, at)
+        });
+        Ok(draw)
+    })
+}
+
+/// An output whose encoder takes the context's GPU frames can't follow a fallback, so
+/// it rides out composite errors as an output did before the fallback existed: 20 in a
+/// row (past the fallback's 10, short of the 31st that fails) leave it `active` on the
+/// context, with no fallback, and encoding goes on after them (review B1 on #695).
+#[test]
+fn a_gpu_encoder_rides_out_errors_past_the_fallback_count() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    if let Err(err) = Nv12Gpu::open_context() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the encode-target error test: {err}"
+        );
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let gpu = Arc::new(Nv12Gpu {
+        stages: Arc::new(AtomicU64::new(0)),
+    });
+    let mut backends = backends(&clock, gpu, GpuMode::Deliver);
+    backends.codecs = Arc::new(GpuCodecs);
+    let draws = Arc::new(AtomicU64::new(0));
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(flaky_draw(3, 22, Arc::clone(&draws)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    let mut errors_done = None;
+    let past = tick_until(&clock, || {
+        let now = engine.output_stats().expect("still running");
+        let done = draws.load(Ordering::Relaxed) > 22;
+        errors_done = Some(now);
+        done
+    });
+    let errors_done = errors_done.expect("read");
+    assert!(past, "the errors never ran out: {errors_done:?}");
+    let mut later = None;
+    let encoded = tick_until(&clock, || {
+        let now = engine.output_stats().expect("still running");
+        let done = now.video.encoded >= errors_done.video.encoded + 3;
+        later = Some(now);
+        done
+    });
+    let later = later.expect("read");
+    assert!(encoded, "encoding didn't go on: {later:?}");
+    assert_eq!(later.gpu_fallbacks, 0, "no fallback with a GPU encoder");
+    assert_eq!(later.readbacks, 0, "still on the GPU encode path");
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
+}

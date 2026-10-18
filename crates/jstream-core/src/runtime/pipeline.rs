@@ -2181,6 +2181,11 @@ impl Frames {
         due
     }
 
+    /// Whether a session takes this program's GPU frames (encode targets).
+    fn feeds_gpu(&self) -> bool {
+        self.targets.iter().flatten().any(|tap| tap.gpu)
+    }
+
     /// Sets out what each due mix is drawn into on this tick: a readback while a session
     /// on the CPU path is fed it (or, for the program at the stage's `size`, while a
     /// virtual camera runs, as `cams` says), and the next free encode target of its ring
@@ -2191,11 +2196,6 @@ impl Frames {
     /// # Errors
     /// A ring that cannot be allocated ([`EncodeRing::next`]), which is fatal. No mix
     /// gets a target then.
-    /// Whether a session takes this program's GPU frames (encode targets).
-    fn feeds_gpu(&self) -> bool {
-        self.targets.iter().flatten().any(|tap| tap.gpu)
-    }
-
     fn prepare(
         &mut self,
         gpu: &dyn GpuInterop,
@@ -2285,9 +2285,12 @@ impl Frames {
 /// [`MAX_DRAW_ERRORS`] in a row. On the platform's context, [`GPU_FALLBACK_ERRORS`] in a
 /// row leave the GPU path once ([`Switch`]): while the compositor opens on a device of
 /// its own, the thread repeats the last frames, and the count starts again after it.
+/// No fallback starts while a session takes the context's GPU frames
+/// ([`Frames::feeds_gpu`]): the errors then run on to [`MAX_DRAW_ERRORS`].
 /// Fatal, reported on the failure channel: more composite errors than
-/// [`MAX_DRAW_ERRORS`], a fallback whose compositor does not open, panics or does not
-/// open in time, a panic inside a tick (the compositor's state is unknown), and a frame
+/// [`MAX_DRAW_ERRORS`], a lost context device while a session takes its GPU frames, an
+/// encode ring that cannot be had ([`EncodeRing::next`]), a fallback whose compositor
+/// does not open, panics or does not open in time, a panic inside a tick (the compositor's state is unknown), and a frame
 /// time that overflows. After a fatal error the thread keeps pushing the last
 /// frame until the pipeline stops, so the stream does not freeze before teardown. A
 /// tick that falls a whole period or more behind the clock skips to the current tick
@@ -2538,20 +2541,10 @@ fn render_loop(job: RenderJob) {
                     if draw_errors == 1 {
                         tracing::warn!(error = %err, "composite failed; repeating the last frame");
                     }
-                    if on_context && draw_errors >= GPU_FALLBACK_ERRORS && frames.feeds_gpu() {
-                        // The CPU path has no encode targets for a session that takes
-                        // the context's GPU frames, so it can't follow a fallback.
-                        broken = true;
-                        reader.stop();
-                        report(
-                            &fail,
-                            format!(
-                                "compositing failed {draw_errors} times in a row on the GPU \
-                                 path ({err}), and an encoder takes its GPU frames, so it \
-                                 can't fall back to the CPU path"
-                            ),
-                        );
-                    } else if on_context && draw_errors >= GPU_FALLBACK_ERRORS {
+                    // The CPU path has no encode targets for a session that takes the
+                    // context's GPU frames, so while one runs there is no fallback: the
+                    // errors run on to MAX_DRAW_ERRORS, as without one.
+                    if on_context && draw_errors >= GPU_FALLBACK_ERRORS && !frames.feeds_gpu() {
                         on_context = false;
                         let why = SwitchWhy::Failing {
                             cause: err,
@@ -2815,9 +2808,10 @@ impl EncodeRing {
         size: FrameSize,
         shown: Option<&GpuFrame>,
     ) -> Result<Option<GpuFrame>, String> {
+        // Checked on every call: targets left from before a fallback are the context's,
+        // which the compositor on its own device can't write.
+        let context = context.ok_or("a GPU encoder session without the platform's GPU context")?;
         if self.slots.is_empty() {
-            let context =
-                context.ok_or("a GPU encoder session without the platform's GPU context")?;
             for _ in 0..encode_ring_len() {
                 let target = gpu
                     .encode_target(context, size)

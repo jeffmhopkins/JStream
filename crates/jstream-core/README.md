@@ -252,8 +252,9 @@ state machine. Contents:
   the last frame meanwhile), an output surviving a lost device (its own, reopened on a
   new one; the context's, left at once) and failing at the third loss in a minute, and
   an output whose encoder takes GPU frames getting NV12 encode targets with no
-  readback, on a software device that stands in for the platform's
-  (`src/tests/gpu_capture.rs`; the last skips without `TEXTURE_FORMAT_NV12`), a page's
+  readback and riding out 20 composite errors in a row with no fallback, on a software
+  device that stands in for the platform's (`src/tests/gpu_capture.rs`; the last two
+  skip without `TEXTURE_FORMAT_NV12`), a page's
   GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -1475,11 +1476,14 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   composite error repeats the last composited frame, up to 30 in a row. On the
   platform's GPU context, the 10th in a row leaves the GPU path once instead, for CPU
   capture on a device of the thread's own, and the last frames repeat while that opens
-  (see [Runtime](#runtime)). A lost GPU device switches at once, to a new device or
+  (see [Runtime](#runtime)); while a session takes the context's GPU encode targets
+  there is no fallback, and the errors run on to the 31st. A lost GPU device switches at once, to a new device or
   off the context, the same way (#349).
 - **Fatal, reported:** a 31st composite error in a row (counted again after a
   fallback), a fallback from the GPU path whose compositor does not open, panics or
-  isn't done in time, the third lost device within 60 s, a panic
+  isn't done in time, a lost context device while a session takes its GPU encode
+  targets, an encode ring that cannot be allocated or has no context, the third lost
+  device within 60 s, a panic
   inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
@@ -1829,9 +1833,12 @@ or quarantine (X1).
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
-errors reach that count, or when the context's device is lost, the outputs fail
-instead, as they did before the fallback existed. A session that opens on the context after a fallback has no encode targets
-either, so its first tick fails the outputs too.
+errors reach that count, there is no fallback and the errors run on: the outputs fail
+at the 31st in a row, as they did before the fallback existed. If one runs when the
+context's device is lost, the outputs fail at once, since nothing can draw into its
+targets. A session that opens on the context after a fallback has no context to draw
+for, so its first due tick fails the outputs too, whether or not its mix still holds
+targets from before (#699).
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as
