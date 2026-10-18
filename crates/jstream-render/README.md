@@ -159,9 +159,10 @@ depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.
 ([R-RT-002](../../docs/RULES.md#R-RT-002)). This crate has no render thread: calling
 `render` is the caller's tick, on `jstream-core`'s render thread. `ResourceCache`
 returns what it frees as `Reclaimed`, so that thread can hand it to a collector
-([R-RT-003](../../docs/RULES.md#R-RT-003)). The one image this crate drops itself is a
-multi-pass filter's scratch layer that a call replaces at a new size or no longer asks
-for (**Filters**), so it happens only when a filter's size or settings change. GPU
+([R-RT-003](../../docs/RULES.md#R-RT-003)). The images this crate drops itself are a
+multi-pass filter's scratch layers that a call replaces at a new size or no longer asks
+for, and a video delay's held frames when its delay goes to 0, its input size changes or
+its memory cap shrinks (**Filters**), so only when a filter's size or settings change. GPU
 calls may allocate inside the driver; this crate does not allocate per item on the
 steady path.
 
