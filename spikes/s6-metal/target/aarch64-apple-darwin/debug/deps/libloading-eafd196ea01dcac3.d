@@ -1,0 +1,12 @@
+/home/claude/JStream/.claude/worktrees/agent-a5c0c5084d9af49ea/spikes/s6-metal/target/aarch64-apple-darwin/debug/deps/libloading-eafd196ea01dcac3.d: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/changelog.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/error.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/mod.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/unix/mod.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/unix/consts.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/safe.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/util.rs
+
+/home/claude/JStream/.claude/worktrees/agent-a5c0c5084d9af49ea/spikes/s6-metal/target/aarch64-apple-darwin/debug/deps/liblibloading-eafd196ea01dcac3.rmeta: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/changelog.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/error.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/mod.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/unix/mod.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/unix/consts.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/safe.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/util.rs
+
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/lib.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/changelog.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/error.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/mod.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/unix/mod.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/os/unix/consts.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/safe.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libloading-0.8.9/src/util.rs:
