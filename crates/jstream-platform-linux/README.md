@@ -107,8 +107,9 @@ It has:
   so render samples only the stream's textures. A copy still running after one second
   (`COPY_WAIT`) ends the GPU path, and that buffer goes back while the GPU may still
   read it, so the last frame can tear; a producer whose writes aren't done after
-  100 ms (`PRODUCER_WAIT`) costs a skipped frame. They are on the context's one queue, so the frames' `FrameSync`
-  only checks the queue. A frame that doesn't import or copy ends the GPU path: the
+  100 ms (`PRODUCER_WAIT`) costs a skipped frame. The copies and the frame textures
+  are on the context's one queue, so the frames' `FrameSync` only checks the queue. A
+  frame that doesn't import or copy ends the GPU path: the
   stream offers shared memory only, PipeWire renegotiates, and the capture goes on
   with CPU frames. Its `pts` is
   the buffer header's `CLOCK_MONOTONIC` time when that is plausible, else the clock's
