@@ -78,6 +78,10 @@ pub(crate) struct Maker<'a> {
 /// redraws the same images does not allocate one. An image only draws in the
 /// [`crate::Compositor`] that made it; another one refuses it with
 /// [`RenderError::Invalid`].
+///
+/// A clone shares the same texture, so a filter can read a layer the caller keeps (a
+/// scene that a `scene_mask` reads); the texture lives until its last clone is dropped.
+#[derive(Clone)]
 pub struct Image {
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,

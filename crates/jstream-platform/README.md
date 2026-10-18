@@ -70,7 +70,8 @@ Contents:
   `Yuy2` (converted to NV12 by the backend) or `Mjpeg`. MJPEG is a video codec, so it is
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
-  a frame it rejects is dropped and the stream goes on.
+  a frame it rejects is dropped and the stream goes on. The engine gets one decoder per
+  stream from `Codecs::capture_decoder` (below).
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
   format an input target would open in (`input_format`, so the engine can build the
@@ -99,7 +100,10 @@ Contents:
   #443).
   `Codecs::on_context` returns the backend on a `GpuContext`, whose video encoders take
   that context's encode targets ([GPU frames](#gpu-frames)); `Ok(None)`, the default,
-  when the backend has no GPU path.
+  when the backend has no GPU path. `Codecs::capture_decoder` makes a `CaptureDecoder`
+  for a capture device's compressed frames (MJPEG), since the codec path decodes them,
+  not the device backend; its default is `Unsupported`, and the engine then opens the
+  device in an uncompressed format.
 - **Media files** (`media_file.rs`,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `MediaDecoders`
   (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
@@ -184,7 +188,8 @@ Contents:
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
   (dropping it stops it; a test watches it through a `FakeVcamProbe`),
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
-  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
+  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, which
+  `FakeCodecs::capture_decoder` makes for MJPEG (all-zero NV12 frames), plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
   `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA
   frames whose colour tells them apart, seeking to the key frame before as a real
@@ -207,10 +212,10 @@ Contents:
 
 **Not yet:** a virtual camera that takes GPU frames (Windows capture delivers them
 through `WgcCapture::on_gpu`, the engine composites them, and Windows' H.264 encoder
-takes encode targets), an engine that opens `Backends::video_devices` (the field is
-filled, with `MfVideoDevices` on Windows and `MfMjpegDecoder` as its `CaptureDecoder`,
-but no source uses it, so `stats.tick` doesn't report `frames_undecodable`), an MJPEG
-`Codec` variant, and encoder selection by vendor ID for an encoder that reports no
+takes encode targets), `frames_undecodable` in `stats.tick` (the engine's `webcam`
+source opens `Backends::video_devices`, with `MfCodecs`' `MfMjpegDecoder` as its
+`CaptureDecoder` on Windows, but drop counts don't include it), an MJPEG `Codec`
+variant, and encoder selection by vendor ID for an encoder that reports no
 adapter LUID.
 
 <a id="gpu-frames"></a>

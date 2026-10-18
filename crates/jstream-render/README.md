@@ -288,7 +288,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Vertex buffer | Grown when the scene needs more vertices, never shrunk; `queue.write_buffer` otherwise |
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
-| Per-image texture and bind group | `Image`, dropped with it |
+| Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -572,8 +572,8 @@ Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
 `VideoFilter::set_reference(Option<Arc<Image>>)` (a defaulted `Pass::set_reference`
 underneath): render opens no files (R-RT-002), so `jstream-core`'s chain runtime
-resolves the reference and decodes it. It does so for `apply_lut` and `image_mask`;
-`scene_mask` still runs with no image and passes its input through (a V0 follow-up). A kind passes its input through unchanged until both its
+resolves the reference and decodes it, or for `scene_mask` hands over the scene's layer
+as drawn this frame (`Image` is `Clone`, sharing its texture). A kind passes its input through unchanged until both its
 reference setting is non-`null` and an image is set, and refuses an image from another
 compositor. A reference's `FrameSync` is staged and handed back with the input's, once
 per submit even when the reference is the input itself; a mask test passes one
