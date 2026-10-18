@@ -227,9 +227,13 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
 /// handshake timeout. The proxy connects when it starts, so it says `hello` at
 /// `initialize`: an agent that initializes and then stays idle past the timeout keeps
 /// its session.
+///
+/// The server counts the timeout from the TCP accept, so it also covers the proxy's
+/// start and the agent's `initialize`. 2 s leaves room for those when the machine is
+/// loaded (#660); 300 ms didn't.
 #[test]
 fn an_idle_agent_keeps_its_session_past_the_handshake_timeout() {
-    let running = serve(|config| config.handshake_timeout = Duration::from_millis(300));
+    let running = serve(|config| config.handshake_timeout = Duration::from_secs(2));
     let Proxy {
         child,
         mut stdin,
@@ -238,7 +242,7 @@ fn an_idle_agent_keeps_its_session_past_the_handshake_timeout() {
     } = proxy(&running.url, "mcp-idle-token");
     initialize(&mut stdin, &mut stdout);
     // Idle well past the timeout.
-    std::thread::sleep(Duration::from_millis(900));
+    std::thread::sleep(Duration::from_secs(3));
     let created = exchange(
         &mut stdin,
         &mut stdout,

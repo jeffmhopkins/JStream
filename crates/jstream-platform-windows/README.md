@@ -216,6 +216,15 @@ The code is ported from spikes S1 to S3. This first cut has:
     - **Choosing an encoder** on the CPU path: hardware encoder MFTs come first, then the
       OS software encoder (H.264 only), following `HardwarePreference`. The first one that accepts the
       media types wins, and `CodecInfo::hardware` says which kind it was.
+    - **First-frame fallback** (#443): with `Prefer`, a hardware encoder on the CPU path
+      that refuses the first frame at `ProcessInput` is replaced by the software MFT,
+      which gets that frame (`FirstFrameFallback`, `codec/fallback.rs`). No packet has
+      come out yet, so the stream sees one decoder configuration. It logs a warning
+      through `tracing` (the crate's one logging dependency) naming both encoders and
+      the refusal, and `info()` then reports the software encoder. Once the hardware
+      encoder has taken a frame, a refusal fails the session as before. `Require` and
+      the GPU path have no software to fall back to. The logic is tested with fake
+      encoders on every platform.
     - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
       size, no B-frames (so packets come out in presentation order and `dts == pts`),
       low latency, the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
@@ -506,7 +515,9 @@ packet flags, positions across a device move), the capture helpers (BGRA and RGB
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the video
 encoder helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts`
-mapping), the GPU capture ring's slot
+mapping), the first-frame fallback with fake encoders (`codec::fallback`: a refused
+first frame reopened in software, a later refusal failing, `Busy` keeping it armed, a
+failed software open, and when it applies), the GPU capture ring's slot
 choice (reuse, drop when full, release on resize), the credential helpers (target names
 of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
 the Media Foundation check's decision (edition kinds and the advice for each) and the
@@ -578,12 +589,13 @@ virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 - **Render times.** `AudioRenderBuffer::time` (when the first frame will play) is always
   `None` for now. `IAudioClock` can give it once the engine needs output sync, for
   example for monitoring with delay compensation.
-- **Hardware encoders and CPU frames.** A hardware MFT that takes NV12 when its media
-  types are set might still refuse system-memory samples at `ProcessInput`. If it does,
-  `HardwarePreference::Prefer` fails instead of falling back. The fallback only happens
-  when the media types are refused, which is enough for software-only machines. The
-  `hw-tests` hardware test will show whether this happens. The GPU path, which feeds
-  hardware encoders D3D11 textures as S1 did, makes the question moot for them.
+- **Hardware encoders and CPU frames** (answered for the first frame, #443). A hardware
+  MFT that takes NV12 when its media types are set might still refuse system-memory
+  samples at `ProcessInput`. With `Prefer`, a refusal of the first frame falls back to
+  the software MFT (First-frame fallback, above); a later one fails the output. Whether
+  Intel and NVIDIA encoders refuse at all still needs a `hw-tests` run on them. The GPU
+  path, which feeds hardware encoders D3D11 textures as S1 did, makes the question moot
+  for them.
 - **Moving to a default device with another format.** For now the stream ends with
   `DeviceLost` and the engine reopens it. Instead the backend could ask WASAPI to convert
   to the old format, which would keep the stream running but would resample if the

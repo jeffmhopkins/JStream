@@ -2816,6 +2816,7 @@ dependencies = [
  "jstream-platform",
  "jstream-plugin-proto",
  "jstream-vcam-proto",
+ "tracing",
  "wgpu",
  "windows",
  "windows-core",
