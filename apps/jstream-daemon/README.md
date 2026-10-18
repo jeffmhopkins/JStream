@@ -171,9 +171,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   names the file. A log directory that can't be created, or a data directory that can't
   be found (no portable marker, and no `HOME` or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
-  `0600`; on Windows the log files are created with a protected DACL for SYSTEM and the
-  user, and the directories keep what they inherit. Crash reports on Windows still get
-  their folder's ACL (#656).
+  `0600`; on Windows the files (logs and crash reports, which `jstream-crash` makes through
+  `logs::create_new`, #656) are created with a protected DACL for SYSTEM and the user,
+  and the directories keep what they inherit.
 - **Crash reports.** A panic writes `crash-<UTC time>-<pid>-<n>.txt` into the log
   directory and prints `crash report: <path>` to stderr; the newest 10 are kept.
   Nothing is uploaded ([R-SEC-004](../../docs/RULES.md#R-SEC-004)): attach the report
