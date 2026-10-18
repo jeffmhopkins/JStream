@@ -422,6 +422,75 @@ source: crates/jstream-mcp/src/tests.rs
                   "device_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "The classes, hosts and folders the person granted it."
+                  },
+                  "path": {
+                    "description": "The plugin's package: its manifest and module.",
+                    "type": "string"
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The ID to install it under."
+                  },
+                  "type": {
+                    "const": "plugin.install",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "path",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin\ndisabled because an update asks for more (`needs_grant`) stays disabled until a\ngrant covers the difference and it is re-enabled. For a person only, like\n`plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't\ninstalled.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "Its new grant."
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.grant",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a\nlimit or traps, and never re-enables it by itself. Succeeds for one already\nenabled. Fails with `not_found` for a plugin that isn't installed, and\n`action_failed` for one whose update asks for more than its grant. For a person\nonly, like `plugin.install`.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -2305,6 +2374,63 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "PluginClass": {
+            "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
+            "oneOf": [
+              {
+                "const": "read",
+                "description": "Every query but the never-granted ones, `kind.*` and `delete.plan`. Always\ngranted.",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "description": "The scene, item, source, filter, bus, send, hotkey and canvas edits, live\nparameter edits (`live.*`), and undo and redo on the plugin's own session.",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "description": "What changes what is on air: `scene.switch`.",
+                "type": "string"
+              },
+              {
+                "const": "outputs",
+                "description": "`output.start` and `output.stop` on outputs that already exist.",
+                "type": "string"
+              }
+            ]
+          },
+          "PluginGrant": {
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "properties": {
+              "classes": {
+                "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/PluginClass"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "folders": {
+                "description": "The folders the person picked for it, as absolute paths on the engine's machine,\nbesides its own private data folder. Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "hosts": {
+                "description": "The hosts the plugin may reach, each as `scheme://host:port` (`http`, `https`,\n`ws` or `wss`). Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "PluginId": {
+            "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
+            "type": "string"
           },
           "PreviewCodec": {
             "description": "How a preview stream's pictures are encoded.",
@@ -4246,6 +4372,75 @@ source: crates/jstream-mcp/src/tests.rs
                   "device_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "The classes, hosts and folders the person granted it."
+                  },
+                  "path": {
+                    "description": "The plugin's package: its manifest and module.",
+                    "type": "string"
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The ID to install it under."
+                  },
+                  "type": {
+                    "const": "plugin.install",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "path",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin\ndisabled because an update asks for more (`needs_grant`) stays disabled until a\ngrant covers the difference and it is re-enabled. For a person only, like\n`plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't\ninstalled.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "Its new grant."
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.grant",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a\nlimit or traps, and never re-enables it by itself. Succeeds for one already\nenabled. Fails with `not_found` for a plugin that isn't installed, and\n`action_failed` for one whose update asks for more than its grant. For a person\nonly, like `plugin.install`.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -6129,6 +6324,63 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "PluginClass": {
+            "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
+            "oneOf": [
+              {
+                "const": "read",
+                "description": "Every query but the never-granted ones, `kind.*` and `delete.plan`. Always\ngranted.",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "description": "The scene, item, source, filter, bus, send, hotkey and canvas edits, live\nparameter edits (`live.*`), and undo and redo on the plugin's own session.",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "description": "What changes what is on air: `scene.switch`.",
+                "type": "string"
+              },
+              {
+                "const": "outputs",
+                "description": "`output.start` and `output.stop` on outputs that already exist.",
+                "type": "string"
+              }
+            ]
+          },
+          "PluginGrant": {
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "properties": {
+              "classes": {
+                "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/PluginClass"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "folders": {
+                "description": "The folders the person picked for it, as absolute paths on the engine's machine,\nbesides its own private data folder. Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "hosts": {
+                "description": "The hosts the plugin may reach, each as `scheme://host:port` (`http`, `https`,\n`ws` or `wss`). Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "PluginId": {
+            "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
+            "type": "string"
           },
           "PreviewCodec": {
             "description": "How a preview stream's pictures are encoded.",
@@ -7619,6 +7871,75 @@ source: crates/jstream-mcp/src/tests.rs
                   "device_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "The classes, hosts and folders the person granted it."
+                  },
+                  "path": {
+                    "description": "The plugin's package: its manifest and module.",
+                    "type": "string"
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The ID to install it under."
+                  },
+                  "type": {
+                    "const": "plugin.install",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "path",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin\ndisabled because an update asks for more (`needs_grant`) stays disabled until a\ngrant covers the difference and it is re-enabled. For a person only, like\n`plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't\ninstalled.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "Its new grant."
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.grant",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a\nlimit or traps, and never re-enables it by itself. Succeeds for one already\nenabled. Fails with `not_found` for a plugin that isn't installed, and\n`action_failed` for one whose update asks for more than its grant. For a person\nonly, like `plugin.install`.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -9498,6 +9819,63 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "PluginClass": {
+            "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
+            "oneOf": [
+              {
+                "const": "read",
+                "description": "Every query but the never-granted ones, `kind.*` and `delete.plan`. Always\ngranted.",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "description": "The scene, item, source, filter, bus, send, hotkey and canvas edits, live\nparameter edits (`live.*`), and undo and redo on the plugin's own session.",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "description": "What changes what is on air: `scene.switch`.",
+                "type": "string"
+              },
+              {
+                "const": "outputs",
+                "description": "`output.start` and `output.stop` on outputs that already exist.",
+                "type": "string"
+              }
+            ]
+          },
+          "PluginGrant": {
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "properties": {
+              "classes": {
+                "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/PluginClass"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "folders": {
+                "description": "The folders the person picked for it, as absolute paths on the engine's machine,\nbesides its own private data folder. Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "hosts": {
+                "description": "The hosts the plugin may reach, each as `scheme://host:port` (`http`, `https`,\n`ws` or `wss`). Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "PluginId": {
+            "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
+            "type": "string"
           },
           "PreviewCodec": {
             "description": "How a preview stream's pictures are encoded.",

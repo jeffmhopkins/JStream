@@ -2540,6 +2540,14 @@ impl State {
             other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
+            // This engine hosts no plugins yet (WA1, ADR-0069).
+            other @ (Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
+            }
             other => return Err(not_implemented(other.name())),
         };
         for state in self.outputs.transition(&output_id, start)? {
