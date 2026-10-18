@@ -48,10 +48,13 @@ Contents ([Design](#design) explains the choices):
   logic behind it, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer along the bottom (faders, mutes, routing and buses, with meters and the
   master's loudness), also tested natively against `MockEngine`.
+- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the inspector's pages,
+  shown only when the server pairs devices (start pairing and show the code, list and
+  revoke devices), and the calls behind it, tested natively against `MockEngine` and a
+  stub that answers them as the server does.
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
-  over a placeholder background, edits their geometry with the pointer and the
-  keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
-  hooked up yet.
+  over the live program preview, edits their geometry with the pointer and the
+  keyboard, and undoes and redoes ([Canvas](#canvas)).
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)).
@@ -70,12 +73,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   console, and the field is a password field. It may be left empty when the daemon
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
-  subprotocol is sent. A remote browser will pair with a one-time code instead
-  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): the server side is built
-  (`pairing.start` and `POST /api/v1/pair`,
-  [jstream-server › Design](../jstream-server/README.md#design)), the UI's pairing form
-  isn't ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) decides
-  it). In the desktop app the form is skipped: the
+  subprotocol is sent. It may also be left empty in a browser that paired on the
+  server's `/pair` page, which holds its device token in a cookie the browser sends on
+  the upgrade ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md),
+  [jstream-server › Design](../jstream-server/README.md#design)); that page is the
+  server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
   token in the subprotocol, which `jstream-server` accepts
@@ -135,7 +137,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Routing.** `app.rs` decides the regions: the scene and sources lists on the left,
   the canvas in the middle, the inspector on the right, and the mixer along the
   bottom. The inspector's pages are `inspector_pages()`, one line each, shown as tabs
-  once there is more than one. A failed call shows in a dismissable bar.
+  once there is more than one; the pairing panel sits under them, outside the tabs,
+  because it hides itself where the server pairs nothing. A failed call shows in a
+  dismissable bar.
 - **The shell** is a CSS grid: a status bar on top, the scene and sources lists on the left, the
   preview canvas in the middle, the inspector on the right and the mixer along the
   bottom; narrow windows stack them. Each region is its own component, so the panels
@@ -163,6 +167,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sink's own reason ("it needs Windows 11") is shown as it is. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
+- **Pairing.** The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
+  calls `device.list` when it opens and shows only if that is served: a session with no
+  server in front answers `unsupported` and the panel stays hidden. "Pair a device"
+  calls `pairing.start` and shows the code, large, with a countdown from its
+  `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address). The
+  code shows until the countdown ends or a device pairs: every 3 seconds the panel
+  re-reads `device.list`, and a device ID that wasn't listed when the code was drawn
+  means the code was used. A newer code replaces the shown one. Each device shows its
+  name and its paired and last-used dates (UTC), with a button that calls
+  `device.revoke` and re-reads the list. The code is never logged or stored by the page,
+  and `OpenCode`'s `Debug` form hides it.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
   password field is not bound to a signal: the panel reads it only on save, wraps it in
   a `SecretString` at once (trimming a pasted newline), empties the field and sends
@@ -190,8 +205,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     a dB. While the pointer holds a fader the strip shows the value under it; letting
     go (or each key press) sends one `source.set_audio` or `bus.set_fader`, so a drag
     is one undo step. Hearing the fader during the drag needs live values
-    ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), not in the protocol
-    yet. Clicking the readout sets 0 dB. An accepted edit is applied to the shown
+    ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which `live.set` doesn't
+    take for faders yet. Clicking the readout sets 0 dB. An accepted edit is applied to the shown
     state at once, so the strip doesn't jump back before the re-read.
   - **Meters** take `meters.tick`: an RMS bar over a fainter peak bar per channel,
     from −60 dBFS to full scale, and a peak hold that waits about 1.5 s, then falls
@@ -226,8 +241,10 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
 handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
-scene and sends the edits. These three are pure and tested natively against
-`MockEngine`; `mod.rs` is the component.
+scene and sends the edits; `preview.rs` chooses the preview stream and decides what
+to do with each H.264 frame and when each JPEG decodes. These are pure and tested
+natively (`model.rs` against `MockEngine`). `screen.rs` decodes and draws the preview
+in the browser, and `mod.rs` is the component.
 
 - **What it shows.** The scene on program (`studio.get`, or the first non-group scene
   if none is), re-read on every `state.changed`, `studio.changed` and
@@ -236,6 +253,21 @@ scene and sends the edits. These three are pure and tested natively against
   placement is not drawn: its box depends on the source's runtime size, which the
   protocol doesn't report yet (ADR-0022's `source.sizes`), and the toolbar counts
   such items. Hidden items are drawn dashed.
+- **The preview.** Under the boxes is the program mix, live. The canvas opens the
+  session's binary channel (`Control::binary`; a session has one, so the canvas is
+  its only reader) and one `preview.subscribe` stream on channel 1, at 30 fps and as
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
+  It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
+  H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
+  (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
+  decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap` one at a
+  time, and while one decodes only the newest that arrives waits, so the last picture
+  is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
+  canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
+  again for JPEG only. If the engine refuses or ends the stream, the background says
+  why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  behind the `web_sys_unstable_apis` build flag. Without live values (below), the
+  preview shows a drag once it is committed.
 - **Selecting and dragging.** A press selects the topmost box under the pointer, or
   clears the selection on empty canvas. Dragging the box moves it. The selected box
   has eight resize handles and a rotate handle above its top edge. A corner keeps the
@@ -255,8 +287,9 @@ scene and sends the edits. These three are pure and tested natively against
   commits it, so each gesture (and each nudge) is one undo step. It carries no
   `expected_rev`: a drag is last writer wins per field
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
-  (`live.set`), which would show the drag on the output while it happens, are not in
-  the protocol yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
+  (`live.set` with `ends_gesture` on the committing batch), which would show the drag
+  on the output while it happens, are in the protocol but the canvas doesn't send them
+  yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
   while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
   out when the engine reports nothing left, and an `undo_conflict` is explained.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no

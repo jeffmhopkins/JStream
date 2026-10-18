@@ -229,6 +229,14 @@ status = "unverified"
 checked_note = "Not fetched from the PR's environment (proxy refused the host); the commands were run against cargo-fuzz 0.13.2"
 
 [[external]]
+id = "w3c-uievents-code"
+url = "https://www.w3.org/TR/uievents-code/"
+relied_on = "KeyboardEvent.code values name physical keys independently of layout: KeyA–KeyZ, Digit0–Digit9, the punctuation keys (Minus, Equal, BracketLeft, BracketRight, Backslash, Semicolon, Quote, Backquote, Comma, Period, Slash), Space, Enter, Tab, Backspace, Escape, F1–F24, Insert, Delete, Home, End, PageUp, PageDown, the Arrow keys, PrintScreen, ScrollLock, Pause, Numpad0–Numpad9 and NumpadAdd/Subtract/Multiply/Divide/Decimal/Enter, and MediaPlayPause, MediaStop, MediaTrackNext, MediaTrackPrevious, AudioVolumeMute, AudioVolumeDown, AudioVolumeUp (Chord::KEYS, ADR-0024 §5)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not fetched: the build container's proxy refused the host; the names follow the spec as widely implemented by browsers"
+
+[[external]]
 id = "playwright"
 url = "https://playwright.dev/"
 relied_on = "@playwright/test drives Chromium headless from a test runner with fixtures, HTTP Basic credentials per browser context (httpCredentials), a launch executablePath and expected failures (test.fail); the web UI's end-to-end tests (crates/jstream-ui/tests/e2e/README.md)"
@@ -267,6 +275,14 @@ relied_on = "Default allocation of 10,000 units per day per project; more quota 
 review_every = "180d"
 status = "ok"
 checked_note = "Re-read the default allocation and the audit requirement for more quota"
+
+[[external]]
+id = "yt-videos-list"
+url = "https://developers.google.com/youtube/v3/docs/videos/list"
+relied_on = "videos.list costs 1 unit and takes a comma-separated id list; with part=liveStreamingDetails,statistics a video carries liveStreamingDetails.concurrentViewers (present only while the broadcast has current viewers and dropped once it ends), actualStartTime, actualEndTime, and statistics.likeCount and viewCount, unsigned longs sent as strings (jstream-youtube stats)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the method's quota cost and parameters, and the videos resource's liveStreamingDetails and statistics properties"
 
 [[external]]
 id = "yt-quota-costs"

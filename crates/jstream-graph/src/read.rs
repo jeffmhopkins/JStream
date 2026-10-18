@@ -1,16 +1,18 @@
 //! Reading the graph as protocol query results: what an engine answers to the queries
 //! that read collection state (`scene.list`, `source.list`, `item.list`, `output.list`,
-//! `encoder.list`, `bus.list`, `state.get`), to the kind queries (`kind.list`,
-//! `kind.describe`), and to `delete.plan` (`plan.rs`).
+//! `encoder.list`, `video_mix.list`, `bus.list`, `state.get`), to the kind queries
+//! (`kind.list`, `kind.describe`), and to `delete.plan` (`plan.rs`).
 //!
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Bus, Encoder, Filter, Graph, Item, Output, Placement, Scene, Source, State};
+use crate::model::{
+    Bus, Chains, Encoder, Filter, Graph, Item, Output, Placement, Scene, Source, State, VideoMix,
+};
 use jstream_protocol::{
-    BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, ItemInfo, KindDescriptor,
-    OutputInfo, ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary, SendInfo,
-    SourceInfo,
+    BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, HotkeyBinding, ItemInfo,
+    KindDescriptor, MasterInfo, OutputInfo, ProtocolError, Query, QueryResult, SceneId, SceneInfo,
+    SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
 };
 
 impl Graph {
@@ -31,6 +33,7 @@ impl Graph {
             Query::KindDescribe { kind_id } => self.kind_describe(kind_id),
             Query::OutputList => Ok(self.output_list()),
             Query::EncoderList => Ok(self.encoder_list()),
+            Query::VideoMixList => Ok(self.video_mix_list()),
             Query::BusList => Ok(self.bus_list()),
             Query::DeletePlan { target } => self.delete_plan(target),
             _ => return None,
@@ -122,6 +125,14 @@ impl Graph {
         }
     }
 
+    /// The `video_mix.list` result: every video mix, ordered by ID.
+    pub fn video_mix_list(&self) -> QueryResult {
+        QueryResult::VideoMixList {
+            rev: self.rev,
+            video_mixes: self.state.video_mixes().map(VideoMix::to_info).collect(),
+        }
+    }
+
     /// The `bus.list` result: every bus, ordered by ID, and every send, ordered by bus,
     /// then by source.
     pub fn bus_list(&self) -> QueryResult {
@@ -144,7 +155,8 @@ impl Graph {
     }
 
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
-    /// in display order, every output, encoder profile and bus by ID, and every send.
+    /// in display order, every output, encoder profile, video mix and bus by ID, every
+    /// send, every hotkey binding by chord, and the master stage.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
@@ -157,8 +169,17 @@ impl Graph {
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
+            video_mixes: self.state.video_mixes().map(VideoMix::to_info).collect(),
             buses: self.state.buses().map(Bus::to_info).collect(),
             sends: self.send_infos(),
+            master: MasterInfo {
+                filters: self.state.master().to_info(),
+            },
+            hotkeys: self
+                .state
+                .hotkeys()
+                .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                .collect(),
         }
     }
 }
@@ -177,10 +198,7 @@ impl Source {
                 .clone()
                 .filter(|original| state.source(original).is_some()),
             audio: self.audio,
-            filters: FilterChains {
-                video: self.filters.video.iter().map(Filter::to_info).collect(),
-                audio: self.filters.audio.iter().map(Filter::to_info).collect(),
-            },
+            filters: self.filters.to_info(),
         }
     }
 }
@@ -197,6 +215,16 @@ impl Filter {
     }
 }
 
+impl Chains {
+    /// These chains as query results report them.
+    pub fn to_info(&self) -> FilterChains {
+        FilterChains {
+            video: self.video.iter().map(Filter::to_info).collect(),
+            audio: self.audio.iter().map(Filter::to_info).collect(),
+        }
+    }
+}
+
 impl Output {
     /// This output as `output.list` and `state.get` report it.
     pub fn to_info(&self) -> OutputInfo {
@@ -204,6 +232,19 @@ impl Output {
             output_id: self.id.clone(),
             kind: self.kind.clone(),
             encoder_profile: self.encoder_profile.clone(),
+            filters: self.filters.to_info(),
+            video_mix: self.video_mix.clone(),
+        }
+    }
+}
+
+impl VideoMix {
+    /// This mix as `video_mix.list` and `state.get` report it.
+    pub fn to_info(&self) -> VideoMixInfo {
+        VideoMixInfo {
+            mix_id: self.id.clone(),
+            name: self.name.clone(),
+            mix: self.mix.clone(),
         }
     }
 }
@@ -346,6 +387,7 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                video_mixes: vec![],
                 buses: vec![jstream_protocol::BusInfo {
                     bus_id: jstream_protocol::BusId::master(),
                     name: "Master".into(),
@@ -353,6 +395,8 @@ mod tests {
                     muted: false,
                 }],
                 sends: vec![],
+                master: Default::default(),
+                hotkeys: vec![],
             }
         );
         assert_eq!(

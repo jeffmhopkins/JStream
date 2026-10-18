@@ -72,6 +72,7 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
     let mut ids: BTreeMap<&str, &str> = BTreeMap::new();
     for doc in repo.docs {
         check_doc_meta(doc, &mut out);
+        check_conflict_markers(doc, &mut out);
         if let Some(id) = doc.meta_str("id")
             && let Some(other) = ids.insert(id, &doc.path)
         {
@@ -137,6 +138,39 @@ fn diag(path: &str, line: usize, msg: String) -> Diag {
         line,
         msg,
         warning: false,
+    }
+}
+
+/// Refuses git conflict markers left in a doc, as a merge whose conflicts were committed
+/// unresolved leaves them: `<<<<<<<`, `|||||||` and `>>>>>>>` at the start of a line, alone
+/// or before a space, and `=======` alone on a line inside an open `<<<<<<<` hunk. Outside
+/// one, a lone `=======` is a setext heading underline.
+fn check_conflict_markers(doc: &Doc, out: &mut Vec<Diag>) {
+    let mut open = false;
+    for (i, line) in doc.text.lines().enumerate() {
+        let line = line.trim_end_matches('\r');
+        let marker = |m: &str| {
+            line.strip_prefix(m)
+                .is_some_and(|r| r.is_empty() || r.starts_with(' '))
+        };
+        let found = if marker("<<<<<<<") {
+            open = true;
+            "<<<<<<<"
+        } else if marker(">>>>>>>") {
+            open = false;
+            ">>>>>>>"
+        } else if marker("|||||||") {
+            "|||||||"
+        } else if open && line == "=======" {
+            "======="
+        } else {
+            continue;
+        };
+        out.push(diag(
+            &doc.path,
+            i + 1,
+            format!("git conflict marker `{found}`: resolve the merge conflict before committing"),
+        ));
     }
 }
 
@@ -685,6 +719,22 @@ pub(crate) fn ci_check_names(rules_md: &str) -> BTreeSet<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conflict_markers_are_refused() {
+        let markers = |text: &str| {
+            let doc = super::super::parse::parse("T.md", text, &mut Vec::new());
+            let mut out = Vec::new();
+            check_conflict_markers(&doc, &mut out);
+            out.iter().map(|d| d.line).collect::<Vec<_>>()
+        };
+        let text = "# T\n\n<<<<<<< HEAD\nours\n||||||| base\nbase\n=======\ntheirs\n>>>>>>> origin/wave/m1-2\n";
+        assert_eq!(markers(text), vec![3, 5, 7, 9]);
+        assert_eq!(markers("<<<<<<<\n=======\n>>>>>>>\n"), vec![1, 2, 3]);
+        // A setext underline, and look-alikes that aren't markers, pass.
+        assert!(markers("Title\n=======\n\ntext\n").is_empty());
+        assert!(markers("a <<<<<<< b\n<<<<<<<< x\n>>>>>>>y\n `=======`\n").is_empty());
+    }
 
     #[test]
     fn ci_names_come_from_the_rgit003_table() {
