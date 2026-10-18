@@ -205,7 +205,11 @@ next of a ring of them and pushes it to such a session.
 On Linux, `LinuxGpu` opens the device on Vulkan, and the portal capture
 (`PortalCapture::on_context`) imports PipeWire's DMA-BUF frames there and copies each
 into a ring of RGBA textures of its own on the context's queue, so its frames need no
-fence; Linux has no encode targets yet, since its encoders take CPU frames
+fence. Its encode targets are NV12 images exported as DMA-BUFs, whose `FrameSync`
+signals the context's timeline semaphore after render's write; the VA-API encoder it
+reached through `Codecs::on_context` imports each one as a surface and waits for that
+value. A device that can't export them, or whose render node no VA-API encoder runs
+on, has none, and encodes CPU frames
 ([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
@@ -233,8 +237,10 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
       `TEXTURE_FORMAT_NV12`, as S1 chose it, and on a hybrid-GPU machine where sharing
       an adapter isn't possible, the platform says so (ARCH step 6). On Linux
       (`LinuxGpu`) it is a guess: a hardware Vulkan adapter, DMA-BUF importers first,
-      then integrated before discrete, opened without NV12. A capture whose frames
-      don't import on it falls back to CPU frames, so a hybrid machine is not reported.
+      then integrated before discrete, with NV12 only where it can export encode
+      targets. A capture whose frames don't import on it falls back to CPU frames, and
+      an encoder on another GPU leaves the context without GPU encode, so a hybrid
+      machine is not reported.
     - `jstream-render` uses this device when the engine has one, so capture, render and
       encode share one adapter. With no interop it opens its own, software adapter
       first.
