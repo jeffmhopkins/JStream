@@ -17,8 +17,11 @@
 //! the spectrum is filtered with the dequantized ones, so the decoder's all-pole filter
 //! inverts it exactly. One filter per window, upward in frequency.
 //!
-//! The decoder's filter amplifies the residual's quantization noise by its power gain on
-//! white noise, which the encoder divides the filtered bands' thresholds by. A filter is
+//! The envelope test takes the block energies of the input's first difference, as the
+//! attack detector does after Edler (1989). The decoder's filter amplifies the residual's
+//! quantization noise by its power gain on white noise (N. S. Jayant and P. Noll,
+//! "Digital Coding of Waveforms", Prentice-Hall, 1984, ch. 6), which the encoder divides
+//! the filtered bands' thresholds by. A filter is
 //! kept only when its weighted prediction gain clears [`MIN_GAIN`] and the residual is
 //! smaller than the spectrum by at least that noise gain, so the residual costs no more
 //! bits than the spectrum at the same noise.
