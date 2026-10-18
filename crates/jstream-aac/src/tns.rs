@@ -472,6 +472,27 @@ mod tests {
         );
     }
 
+    /// Coefficients beyond the quantizer's range clamp to its end indices, and every
+    /// coefficient lands on the index whose angle is nearest.
+    #[test]
+    fn the_quantizer_clamps_and_rounds_to_the_nearest_angle() {
+        assert_eq!(quantize(1.0), 7);
+        assert_eq!(quantize(2.0), 7);
+        assert_eq!(quantize(-1.0), -8);
+        assert_eq!(quantize(-2.0), -8);
+        for i in 0..=40 {
+            let k = -0.99 + 0.0495 * i as f32;
+            let q = quantize(k);
+            let off = |c: i8| (dequantize(c).asin() - k.asin()).abs();
+            for other in [q.saturating_sub(1), q.saturating_add(1).min(7)] {
+                assert!(
+                    off(q) <= off(other) + 1e-6,
+                    "k {k}: index {q}, {other} nearer"
+                );
+            }
+        }
+    }
+
     #[test]
     fn step_up_matches_the_recursion() {
         let mut lpc = [0.0; MAX_ORDER_LONG];
@@ -512,6 +533,22 @@ mod tests {
         assert!((k[0] + 0.9).abs() < 1e-6, "{k:?}");
         assert!(k[1].abs() < 1e-6, "{k:?}");
         assert!((err - (1.0 - 0.81)).abs() < 1e-6);
+    }
+
+    /// At a higher order than the process has, the extra reflection coefficients are 0
+    /// and the error is the AR(1) process's.
+    #[test]
+    fn levinson_stops_predicting_past_the_process_order() {
+        let r: Vec<f32> = (0..5).map(|k| 0.8f32.powi(k)).collect();
+        let mut k = [0.0; 4];
+        let err = levinson(&r, &mut k).expect("stable");
+        assert!((k[0] + 0.8).abs() < 1e-6, "{k:?}");
+        assert!(k[1..].iter().all(|k| k.abs() < 1e-5), "{k:?}");
+        assert!(
+            (r[0] / err - 1.0 / 0.36).abs() < 1e-3,
+            "gain {}",
+            r[0] / err
+        );
     }
 
     #[test]
@@ -650,5 +687,49 @@ mod tests {
             tns.write(&mut w, &frame);
             assert_eq!(w.bits() as u32, tns.bits(&frame), "{frame:?}");
         }
+    }
+
+    /// Hand-made filters: the most coefficients of each window length, uncompressed and
+    /// compressed, the most negative index, and windows without a filter.
+    #[test]
+    fn written_bits_match_counted_bits_for_every_filter_shape() {
+        use super::Filter;
+        let short = Shape {
+            offsets: &SWB_SHORT,
+            bands: 14,
+            windows: 8,
+            lines: 128,
+        };
+        for frame in [long(), short] {
+            let most = if frame.windows == 1 {
+                MAX_ORDER_LONG
+            } else {
+                super::MAX_ORDER_SHORT
+            } as u8;
+            for (order, coef, compress) in [(most, 7i8, false), (3, -4, true), (most, -8, false)] {
+                let mut tns = Tns::default();
+                for (w, f) in tns.filters[..frame.windows].iter_mut().enumerate() {
+                    if w % 3 == 1 {
+                        continue;
+                    }
+                    *f = Filter {
+                        length: 10,
+                        order,
+                        compress,
+                        coef: [coef; MAX_ORDER_LONG],
+                    };
+                }
+                let mut out = Vec::new();
+                let mut w = BitWriter::new(&mut out);
+                tns.write(&mut w, &frame);
+                assert_eq!(
+                    w.bits() as u32,
+                    tns.bits(&frame),
+                    "{} windows, order {order}, compress {compress}",
+                    frame.windows
+                );
+            }
+        }
+        assert_eq!(Tns::default().bits(&long()), 0);
     }
 }

@@ -152,6 +152,14 @@ impl Encoder {
         })
     }
 
+    /// Whether the last access unit sent TNS data on any channel.
+    #[cfg(test)]
+    pub(crate) fn used_tns(&self) -> bool {
+        self.state
+            .iter()
+            .any(|ch| ch.tns.filters.iter().any(|f| f.order > 0))
+    }
+
     /// The configuration the encoder was opened with.
     pub fn config(&self) -> Config {
         self.config
