@@ -5,7 +5,7 @@
 //! frame data. Throwaway code that answers ROADMAP M0 / S1; see `README.md` next to
 //! `Cargo.toml` for what it measures and how to run it.
 //!
-//! Docs: docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0031-source-types-and-decoding-scope.md
+//! Docs: docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0061-source-types-and-decoding-scope-v2.md
 
 #![warn(clippy::undocumented_unsafe_blocks)]
 

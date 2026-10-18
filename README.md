@@ -55,12 +55,12 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `█████████░` 87% | 20 | 1 | 2 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 40% | 4 | 0 | 6 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 5 | 1 | 7 |
 
-104 of 113 items are merged; 10 of those still wait on a run on Windows hardware.
+105 of 116 items are merged; 10 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 19 items, by next step: 🔨 build 6, 🧪 Windows run 9, 👤 maintainer 4</summary>
+<summary><b>What's left</b>: 21 items, by next step: 🔨 build 11, 🧪 Windows run 9, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -80,11 +80,13 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 in review into wave/m1-3 | #319 |
 | F6 | HEVC and AV1 encode | M3 | 🧪 Windows run | #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🔨 build | effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build | #359, #368 |
-| Y4 | YouTube chat, metadata, health and audience stats | M3 | 👤 maintainer | #363 landed with wave/m1-2 (#545), #375 with wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
+| Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
-| WA1 | WASM automation plugins | M3 | 🔨 build |  |  |
-| MAC1 | macOS platform crate | M3 | 👤 maintainer, then 🔨 build | the maintainer decides whether it stays in M3; then the macOS ADR |  |
-| LNX1 | Linux codec path and platform crate | M3 | 👤 maintainer, then 🔨 build | the maintainer decides platform support; then the Linux codec-path ADR |  |
+| WA1 | WASM automation plugins | M3 | 🔨 build, then 🌊 its wave lands | WASM host #486 landed with wave/m3-2 (#663); the wire half #642 is in review into wave/m3-3; the engine side to build | #486, #642 |
+| MAC1 | macOS platform crate | M3 | 🔨 build | ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663) | #511, #513, #533, #543, #554, #566, #570, #583, #586 |
+| LNX1 | Linux codec path and platform crate | M3 | 🔨 build | ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); the rest of the codec path to build | #481, #490, #509, #510 |
+| LNX2 | Linux OpenH264 download (ADR-0061) | M3 | 🔨 build | store, check, loader and encoder (#536, landed with wave/m3-2, #663); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come | #536 |
+| LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | M3 | 🔨 build | patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518 |
 
 </details>
 
@@ -240,20 +242,23 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 4 of 10 merged</summary>
+<summary><b>M3</b> Depth and reach: 5 of 13 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ✅ merged | #325 |
+| E3d | Composite to NV12 on the GPU | ✅ merged | #280 |
 | F6 | HEVC and AV1 encode | 🧪 merged, Windows run pending: #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build | #359, #368 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
-| Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned: #363 landed with wave/m1-2 (#545), #375 with wave/m1; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
+| Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned: chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
-| WA1 | WASM automation plugins | ⏳ planned |  |
-| MAC1 | macOS platform crate | ⏳ planned: the maintainer decides whether it stays in M3; then the macOS ADR |  |
-| LNX1 | Linux codec path and platform crate | ⏳ planned: the maintainer decides platform support; then the Linux codec-path ADR |  |
+| WA1 | WASM automation plugins | 🔍 in review: WASM host #486 landed with wave/m3-2 (#663); the wire half #642 is in review into wave/m3-3; the engine side to build | #486, #642 |
+| MAC1 | macOS platform crate | ⏳ planned: ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663) | #511, #513, #533, #543, #554, #566, #570, #583, #586 |
+| LNX1 | Linux codec path and platform crate | ⏳ planned: ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); the rest of the codec path to build | #481, #490, #509, #510 |
+| LNX2 | Linux OpenH264 download (ADR-0061) | ⏳ planned: store, check, loader and encoder (#536, landed with wave/m3-2, #663); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come | #536 |
+| LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | ⏳ planned: patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518 |
 
 </details>
 <!-- @generated end progress -->
@@ -292,14 +297,14 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token \
 <a id="platforms"></a>
 ## Platforms
 <!-- @section
-depends_on = ["docs/adr/0008-windows-support-policy.md"]
+depends_on = ["docs/adr/0008-windows-support-policy.md", "docs/adr/0063-macos-platform-support.md"]
 -->
 
 | Platform | Status | Support |
 |---|---|---|
 | Windows | Primary target | Runs on Windows 11 build 22000<!--fact:min-windows-build--> and later; supported on the versions Microsoft currently services ([ADR-0008](docs/adr/0008-windows-support-policy.md)) |
-| macOS | Later (M3) | To be decided in the macOS ADR |
-| Linux | Later (M3) | Codec path to be decided in an ADR first ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)) |
+| macOS | Later (M3) | Per [ADR-0063](docs/adr/0063-macos-platform-support.md): macOS 14 and later, Apple Silicon (Intel best effort) |
+| Linux | Later (M3) | Per [ADR-0060](docs/adr/0060-linux-platform-support.md): GNOME or KDE Plasma on Wayland, current Ubuntu LTS and Fedora |
 
 <a id="documentation"></a>
 ## Documentation
