@@ -69,7 +69,9 @@ page closes it.
   `.local`, `.lan`, `.home.arpa` or `.internal`. A page from a local file, a blank page
   and a page whose own host is local have no such limit. The check reads the host
   Chromium has already canonicalised, so it can't catch a public name that resolves to
-  a local address, whether fixed (`*.nip.io`) or by DNS rebinding. `file:` URLs are
+  a local address, whether fixed (`*.nip.io`) or by DNS rebinding. Chromium's Local
+  Network Access checks can, and they ask the page's permission handler, which answers
+  with `RequestPolicy::local_allowed` (below). `file:` URLs are
   allowed only for a page loaded from a local file, and only for files in its folder or
   below. The path is compared by name first, with `..` applied,
   and only a path inside the folder is ever opened. So a URL naming another server (an
@@ -132,8 +134,14 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
   permission a page asks for (camera, microphone, screen capture, geolocation,
   notifications, clipboard, MIDI and the rest) is refused by the page's permission
   handler rather than left to CEF's default: a media request is cancelled and a
-  permission prompt answered `DENY`. The answer comes from `permission.rs`, whose test
-  pins it for every permission bit (#347). The
+  permission prompt answered `DENY`. The one exception is Chromium's Local Network
+  Access prompt (CEF's `LOCAL_NETWORK`, `LOOPBACK_NETWORK` and the deprecated
+  `LOCAL_NETWORK_ACCESS` bits) asked alone: it is answered `ACCEPT` when the page's
+  `RequestPolicy` lets it make local requests, so a source that opted in with
+  `local_network` still reaches an app on `127.0.0.1`, and `DENY` otherwise, so
+  Chromium refuses at the network layer what the policy can't see. The answers come
+  from `permission.rs`, whose tests pin them for every permission bit, and the helper
+  checks the three bits against CEF's when it compiles (#347). The
   custom CSS is applied when the main frame finishes loading and again on each change.
   Every request a page makes, navigations included, goes through its `RequestPolicy`
   in `OnBeforeResourceLoad` and is cancelled when refused, and so does a redirect's
