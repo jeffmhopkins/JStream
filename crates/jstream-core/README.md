@@ -835,7 +835,9 @@ id. It changes no `rev` and emits no event, and a frame may arrive before the so
 exists. An applied `source.delete` drops the deleted source's frame, unless the same
 batch created a source under that id again, and then has the capture backend forget
 what it keeps for that source (`Capture::forget_source`, such as the portal's restore
-token), so a new source given the id asks again. That runs on `jstream-forget`, a
+token), so a new source given the id asks again. So does a source an undo brings back:
+the grant isn't held for undo history, so it never outlives the source it was given to.
+That runs on `jstream-forget`, a
 thread the engine starts when backends are injected (`forget.rs`), since it can remove
 a file, never under the engine's lock; the deleted source's capture, if one runs,
 stops when the render thread takes the next snapshot. Without that thread (it failed
