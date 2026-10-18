@@ -72,12 +72,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
-- **Docking** (`docking.spec.js`): the Editing layout's zones (Transitions as a tab
-  beside Outputs), with empty zones hidden;
-  the View menu hiding and adding a panel, and the layout marked "(modified)"; dragging
+- **Docking** (`docking.spec.js`): the Editing layout's zones (Transform under the
+  Inspector, Transitions as a tab beside Outputs), with empty zones hidden;
+  the View menu hiding and adding a panel at the end of its home zone, and the layout
+  marked "(modified)"; dragging
   a tab onto a tab strip groups it, and onto an empty zone, which shows while dragging,
-  docks it there; a lone panel collapses by its title, and closes on a second click of
-  its ×; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
+  docks it there; a lone panel collapses by its title, closes on a second click of
+  its ×, and doesn't collapse once it is alone in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live and resets to Editing.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
@@ -91,6 +92,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   canvas takes one out and Shift-click on its row in the sources list adds it back; a
   double click brings the closed Inspector back showing the item, and a double click
   on the canvas tools over an item leaves the selection alone.
+- **Transform** (`transform.spec.js`): the summary and the disabled buttons with
+  nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
+  Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
+  changes; with two items, Selection on, Distribute off, and Match width and height
+  giving both the primary item's size.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
   preview goes to program with Transition, and the old program scene comes back on
   preview; Transition and Cut are off while preview is the program scene; a value the

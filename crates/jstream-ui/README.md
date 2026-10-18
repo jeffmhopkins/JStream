@@ -65,7 +65,9 @@ Contents ([Design](#design) explains the choices):
   audio mixer (faders, mutes, routing and buses, with meters and the
   master's loudness), also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
-  transition presets and each scene's overrides; [Design](#design)).
+  transition presets and each scene's overrides; [Design](#design)); and
+  `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
+  selected items).
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
@@ -142,6 +144,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shows what else it takes, and sends the plan's edits expecting the plan's revision,
   so a change in between makes the engine refuse it rather than delete more than the
   user saw. Removing an item from its scene is a plain `item.remove`.
+- **The Transform panel** ([UI features › transform](../../docs/UI-FEATURES.md#transform))
+  aligns, distributes and arranges the selected items with the prototype's rules,
+  on their unrotated boxes: alignment is to the selection's bounds with two or more
+  selected and Align to on Selection, else to the canvas; distributing (three or more)
+  evens the gaps in centre order, keeping the first and last; Center moves the
+  selection as a block; Fit and Stretch also stand the item upright; Match width and
+  height take the primary item's. `plan` works out the new boxes, and each press sends
+  the changed ones as one batch of `item.set_geometry` (Clear crop: `item.set_crop`),
+  so it is one undo step. Items still in the legacy form are left alone.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
   (and slider when bounded), select, colour, text, asset (root and path) or reference
@@ -164,9 +175,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
-  shows one panel with its title, or tabs. Panels are the six the UI has: Scenes,
+  shows one panel with its title, or tabs. Panels are the seven the UI has: Scenes,
   Scene objects (`Sources`), the Inspector (`Properties`, with `Pairing` under it), the
-  Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
+  Transform, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. The panels' own `h2` headings are hidden, since
   the tab is the title. Narrow windows stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
