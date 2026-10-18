@@ -1,7 +1,9 @@
 //! The output pipeline's captures: one per thing the render snapshot captures
 //! ([`Shot::captures`]), started and stopped as the program mix changes. That is one per
 //! source ([`CaptureKey`]), started with the source's [`CaptureOptions`], so two sources
-//! showing the same target run two captures of it.
+//! showing the same target run two captures of it. A source whose `show_cursor` is off
+//! asks for the pointer apart from the picture ([`CursorCapture::Metadata`]) and the
+//! engine doesn't draw it.
 //!
 //! The render thread reads each capture's mailbox every tick and keeps its latest frame,
 //! a texture on the compositor's device or CPU RGBA8. Starting and stopping a capture
@@ -20,8 +22,8 @@ use jstream_media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Rounding, Timebase,
 };
 use jstream_platform::{
-    Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, DeviceId, GpuFrame,
-    PlatformError, VideoSurface,
+    Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CursorCapture, DeviceId,
+    GpuFrame, PlatformError, VideoSurface,
 };
 use jstream_sources::CaptureSpec;
 
@@ -114,7 +116,8 @@ pub(crate) fn start(
     let options = match &spec.source {
         Some(source) => CaptureOptions::for_source(source.as_str()),
         None => CaptureOptions::default(),
-    };
+    }
+    .with_cursor(cursor(spec));
     let gpu_failed = match &backends.gpu {
         Some(gpu) => match gpu.start_with(&target, &options) {
             Ok(stream) => {
@@ -160,6 +163,17 @@ fn target(capture: &dyn Capture, spec: &CaptureSpec) -> Result<CaptureTarget, St
                 .map(|info| info.target.clone())
                 .ok_or_else(|| "no display to capture".into())
         }
+    }
+}
+
+/// How `spec`'s capture asks for the pointer: drawn into the frames when it shows, or
+/// else apart from them ([`CursorCapture::Metadata`]), which the engine doesn't draw, so
+/// the pointer is left out. A backend that can't send it apart draws it in all the same.
+fn cursor(spec: &CaptureKey) -> CursorCapture {
+    if spec.show_cursor {
+        CursorCapture::Drawn
+    } else {
+        CursorCapture::Metadata
     }
 }
 

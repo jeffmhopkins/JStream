@@ -414,8 +414,13 @@ impl LiveSources {
         let running = entry.running.as_mut()?;
         if let Some(spec) = running.source.capture() {
             // A window source with no window chosen shows nothing.
-            return (*spec != CaptureSpec::Window(None))
-                .then(|| Look::Capture(CaptureKey::for_source(spec.clone(), source_id.clone())));
+            let show_cursor = running.source.show_cursor();
+            return (*spec != CaptureSpec::Window(None)).then(|| {
+                Look::Capture(
+                    CaptureKey::for_source(spec.clone(), source_id.clone())
+                        .with_cursor(show_cursor),
+                )
+            });
         }
         let at = since(now, running.start);
         if running.planned + 1 < plan {

@@ -1016,7 +1016,8 @@ pub(crate) enum CaptureImage<'a> {
     Gpu(&'a GpuFrame),
 }
 
-/// One capture the output pipeline runs: what it captures, and for which source.
+/// One capture the output pipeline runs: what it captures, for which source, and
+/// whether the pointer shows in it.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct CaptureKey {
     /// What is captured.
@@ -1024,22 +1025,34 @@ pub(crate) struct CaptureKey {
     /// The source it is captured for: `None` for the primary display that fills an
     /// output without a program scene, which no source owns.
     pub(crate) source: Option<SourceId>,
+    /// The source's `show_cursor` setting. Off, the capture asks for the pointer apart
+    /// from the picture and the engine doesn't draw it.
+    pub(crate) show_cursor: bool,
 }
 
 impl CaptureKey {
-    /// The capture of `spec` for the source `source`.
+    /// The capture of `spec` for the source `source`, showing the pointer.
     pub(crate) fn for_source(spec: CaptureSpec, source: SourceId) -> Self {
         Self {
             spec,
             source: Some(source),
+            show_cursor: true,
         }
     }
 
-    /// The primary display, for no source.
+    /// This capture, with the pointer shown or not.
+    #[must_use]
+    pub(crate) fn with_cursor(mut self, show_cursor: bool) -> Self {
+        self.show_cursor = show_cursor;
+        self
+    }
+
+    /// The primary display, for no source, showing the pointer.
     pub(crate) fn primary() -> Self {
         Self {
             spec: CaptureSpec::Display(None),
             source: None,
+            show_cursor: true,
         }
     }
 }

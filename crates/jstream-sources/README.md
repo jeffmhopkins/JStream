@@ -47,7 +47,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
   its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
   `capture()` is `Some` for a `display` or `window` source: what the platform captures
-  for it (a `CaptureSpec`). Its frames come from the platform's capture backend on the
+  for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it (`true`,
+  the default, for every other source). Its frames come from the platform's capture backend on the
   engine's render thread, so its `frame` is `SourceError::Captured`.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
@@ -161,7 +162,13 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   which is what a `display` source showed before it had settings, so the kind keeps
   version 1 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). An
   empty `window` target captures nothing. A new target needs a new source. The engine's
-  `capture.targets` query lists the IDs a `target` can take.
+  `capture.targets` query lists the IDs a `target` can take. `show_cursor` (on by
+  default, which is what the kinds did before it, so they keep version 1) says whether
+  the pointer shows; `Source::show_cursor` reports it, and the engine asks the capture
+  backend for the pointer apart from the picture when it is off and doesn't draw it, so
+  it is left out where the backend can send it that way (the Linux ScreenCast portal)
+  and stays drawn in elsewhere. Changing it needs a new source, so the capture starts
+  again.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), so it plays the

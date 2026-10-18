@@ -225,7 +225,8 @@ state machine. Contents:
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), an output starting a capture for each display and
-  window on program, one per source even when two show the same target, stopping it when its source leaves
+  window on program, one per source even when two show the same target, asking for the
+  pointer as each source's `show_cursor` says, stopping it when its source leaves
   and starting it again after a failed start or a lost target
   (`src/tests/cpu_pipeline/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames, and a browser page painting on
@@ -660,8 +661,8 @@ A `display` or `window` source with no stored frame shows what the pipeline capt
 for it on the render thread, and nothing in `video.snapshot`, which has no capture; a
 stored frame wins. The `Shot` lists what the passes of the program and of every mix
 capture (`Shot::captures`, a `jstream-sources` `CaptureSpec` each: a display or window
-by its capture-backend target ID, or the primary display, with the source it is for:
-`snapshot::CaptureKey`). Each source has a capture of its own, whichever mixes show it,
+by its capture-backend target ID, or the primary display, with the source it is for
+and its `show_cursor` setting: `snapshot::CaptureKey`). Each source has a capture of its own, whichever mixes show it,
 so a backend that keeps a grant per source (the ScreenCast portal's restore token,
 `Capture::start_with` with `CaptureOptions::for_source`) keeps each source's apart.
 The cost: two sources showing the same monitor or window run two captures of it, each
@@ -1622,8 +1623,12 @@ render thread compares what the snapshot captures (`Shot::captures`, one key per
 source, so two sources showing the same target run two captures; see *Snapshots* in
 Design) with what it runs: it asks the pipeline's `jstream-capture` thread to start
 each new one, with `Capture::start_with` and the source's `CaptureOptions::for_source`
-(the defaults for the primary display that fills an output with no scene), and hands it
-the stream of each one no longer shown, which that thread drops, so starting and
+(the defaults for the primary display that fills an output with no scene). A source
+whose `show_cursor` is off asks for the pointer as `CursorCapture::Metadata`, which the
+engine doesn't draw, so the pointer is left out where the backend sends it apart from
+the picture and stays drawn in where it can't; on, it asks for `Drawn`. A changed
+`show_cursor` is a new key, so that source's capture starts again. The render thread
+hands that thread the stream of each one no longer shown, which it drops, so starting and
 stopping a capture (OS calls that can block) never run on the render thread. Both go
 through channels it never waits on, and it takes the started streams with `try_recv`
 ([R-RT-002](../../docs/RULES.md#R-RT-002),

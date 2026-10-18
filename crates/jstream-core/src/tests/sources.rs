@@ -655,7 +655,7 @@ fn a_media_file_loaded_before_the_media_backend_plays_once_it_is_injected() {
 /// A capture backend that records what it was asked, around the fake capture.
 struct Recording {
     inner: jstream_platform::fake::FakeCapture,
-    started: std::sync::Mutex<Vec<Option<String>>>,
+    started: std::sync::Mutex<Vec<(Option<String>, jstream_platform::CursorCapture)>>,
     forgot: std::sync::Mutex<Vec<String>>,
 }
 
@@ -678,7 +678,7 @@ impl jstream_platform::Capture for Recording {
         target: &jstream_platform::CaptureTarget,
         options: &jstream_platform::CaptureOptions,
     ) -> Result<Box<dyn jstream_platform::CaptureStream>, jstream_platform::PlatformError> {
-        crate::lock(&self.started).push(options.source.clone());
+        crate::lock(&self.started).push((options.source.clone(), options.cursor));
         self.inner.start(target)
     }
 
@@ -712,10 +712,18 @@ fn a_sources_capture_is_started_for_that_source() {
     crate::runtime::start_capture(&backends, &key).expect("the capture starts");
     crate::runtime::start_capture(&backends, &crate::snapshot::CaptureKey::primary())
         .expect("the primary display starts");
+    crate::runtime::start_capture(&backends, &key.clone().with_cursor(false))
+        .expect("the capture without the pointer starts");
+    use jstream_platform::CursorCapture::{Drawn, Metadata};
     assert_eq!(
         *crate::lock(&capture.started),
-        vec![Some("screen".to_owned()), None],
-        "a source's capture names it; the primary display without a scene names none"
+        vec![
+            (Some("screen".to_owned()), Drawn),
+            (None, Drawn),
+            (Some("screen".to_owned()), Metadata)
+        ],
+        "a source's capture names it, the primary display without a scene names none, \
+         and a capture without the pointer asks for it apart from the picture"
     );
 }
 

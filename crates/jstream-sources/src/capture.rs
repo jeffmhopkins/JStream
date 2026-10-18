@@ -64,9 +64,16 @@ impl CaptureKind {
              the primary display."
                 .into()
         });
+        let mut show_cursor = param("show_cursor", "Show cursor", ParamType::Bool, json!(true));
+        show_cursor.description = Some(
+            "Whether the pointer shows in the capture. Off leaves it out where the platform \
+             sends it apart from the picture (the Linux ScreenCast portal); elsewhere it \
+             stays drawn in."
+                .into(),
+        );
         Self {
             descriptor: KindDescriptor {
-                params: vec![target],
+                params: vec![target, show_cursor],
                 ..kind(id, name, true, false)
             },
             window,
@@ -95,11 +102,19 @@ impl SourceKind for CaptureKind {
     }
 
     fn create(&self, settings: &Settings, _: &Context) -> Result<Box<dyn Source>, SourceError> {
+        let show_cursor =
+            setting(settings, "show_cursor")?
+                .as_bool()
+                .ok_or_else(|| SourceError::Setting {
+                    param: "show_cursor".into(),
+                    reason: "must be a boolean".into(),
+                })?;
         Ok(Box::new(CaptureSource {
             kind_id: self.descriptor.kind_id.clone(),
             descriptor: self.descriptor.clone(),
             settings: settings.clone(),
             spec: self.spec(settings)?,
+            show_cursor,
         }))
     }
 }
@@ -110,6 +125,7 @@ struct CaptureSource {
     descriptor: KindDescriptor,
     settings: Settings,
     spec: CaptureSpec,
+    show_cursor: bool,
 }
 
 impl Source for CaptureSource {
@@ -135,5 +151,9 @@ impl Source for CaptureSource {
 
     fn capture(&self) -> Option<&CaptureSpec> {
         Some(&self.spec)
+    }
+
+    fn show_cursor(&self) -> bool {
+        self.show_cursor
     }
 }
