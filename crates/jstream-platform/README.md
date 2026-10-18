@@ -208,9 +208,9 @@ into a ring of RGBA textures of its own on the context's queue, so its frames ne
 fence. Its encode targets are NV12 images exported as DMA-BUFs, whose `FrameSync`
 signals the context's timeline semaphore after render's write; the VA-API encoder it
 reached through `Codecs::on_context` imports each one as a surface and waits for that
-value. A device that can't export them, or whose render node no VA-API encoder runs
-on, has none, and encodes CPU frames
-([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
+value. A device that can't export them has none. On one whose render node no VA-API
+encoder runs on, `Codecs::on_context` gives no GPU encoder, and the engine encodes CPU
+frames ([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call

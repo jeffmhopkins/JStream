@@ -45,6 +45,11 @@ const USAGE: vk::ImageUsageFlags = vk::ImageUsageFlags::from_raw(
 const FLAGS: vk::ImageCreateFlags = vk::ImageCreateFlags::from_raw(
     vk::ImageCreateFlags::MUTABLE_FORMAT.as_raw() | vk::ImageCreateFlags::EXTENDED_USAGE.as_raw(),
 );
+/// The formats a target is viewed in: NV12 itself, and the R8 and RG8 plane views
+/// wgpu-hal makes for its planes. `MUTABLE_FORMAT` with a DRM-modifier tiling needs this
+/// list (VUID-VkImageCreateInfo-tiling-02353 and
+/// VUID-VkPhysicalDeviceImageFormatInfo2-tiling-02313); it is core in Vulkan 1.2.
+const VIEW_FORMATS: [vk::Format; 3] = [NV12, vk::Format::R8_UNORM, vk::Format::R8G8_UNORM];
 const DMA_BUF: vk::ExternalMemoryHandleTypeFlags = vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT;
 
 fn os(call: &'static str, message: impl ToString) -> PlatformError {
@@ -110,6 +115,7 @@ fn exports_nv12(instance: &ash::Instance, device: vk::PhysicalDevice) -> bool {
         .drm_format_modifier(MOD_LINEAR)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
     let mut external = vk::PhysicalDeviceExternalImageFormatInfo::default().handle_type(DMA_BUF);
+    let mut views = vk::ImageFormatListCreateInfo::default().view_formats(&VIEW_FORMATS);
     let info = vk::PhysicalDeviceImageFormatInfo2::default()
         .format(NV12)
         .ty(vk::ImageType::TYPE_2D)
@@ -117,12 +123,16 @@ fn exports_nv12(instance: &ash::Instance, device: vk::PhysicalDevice) -> bool {
         .usage(USAGE)
         .flags(FLAGS)
         .push_next(&mut external)
-        .push_next(&mut drm);
+        .push_next(&mut drm)
+        .push_next(&mut views);
     let mut external_props = vk::ExternalImageFormatProperties::default();
     let ok = {
         let mut props = vk::ImageFormatProperties2::default().push_next(&mut external_props);
         // SAFETY: a valid physical device of `instance`, and initialised info and
-        // properties chains that outlive the call.
+        // properties chains that outlive the call. The info chain names the DRM
+        // modifier (with the extension `exportable` checked), the external handle type,
+        // and the view-format list that `MUTABLE_FORMAT` with this tiling requires
+        // (VUID-VkPhysicalDeviceImageFormatInfo2-tiling-02313).
         unsafe { instance.get_physical_device_image_format_properties2(device, &info, &mut props) }
             .is_ok()
     };
@@ -369,6 +379,7 @@ pub(crate) fn target(shared: &Arc<Shared>, size: FrameSize) -> Result<GpuFrame, 
     let mut list =
         vk::ImageDrmFormatModifierListCreateInfoEXT::default().drm_format_modifiers(&modifiers);
     let mut external = vk::ExternalMemoryImageCreateInfo::default().handle_types(DMA_BUF);
+    let mut views = vk::ImageFormatListCreateInfo::default().view_formats(&VIEW_FORMATS);
     let info = vk::ImageCreateInfo::default()
         .flags(FLAGS)
         .image_type(vk::ImageType::TYPE_2D)
@@ -386,9 +397,13 @@ pub(crate) fn target(shared: &Arc<Shared>, size: FrameSize) -> Result<GpuFrame, 
         .sharing_mode(vk::SharingMode::EXCLUSIVE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
         .push_next(&mut external)
-        .push_next(&mut list);
+        .push_next(&mut list)
+        .push_next(&mut views);
     // SAFETY: a live device with the extensions `exportable` checked, and an
-    // initialised create info whose chain outlives the call.
+    // initialised create info whose chain outlives the call: the modifier list, the
+    // external handle type, and the view-format list that `MUTABLE_FORMAT` with this
+    // tiling requires (VUID-VkImageCreateInfo-tiling-02353); the query in
+    // `exports_nv12` used the same chain.
     let image = unsafe { raw.create_image(&info, None) }
         .map_err(|e| os("vkCreateImage (NV12 export)", e))?;
     let mut owned = Owned {

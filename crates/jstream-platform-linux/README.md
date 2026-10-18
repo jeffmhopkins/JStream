@@ -75,8 +75,10 @@ It has:
   wgpu-hal's `texture_from_dmabuf_fd` takes one plane. Its encode targets
   (`encode_target`, `gpu/export.rs`) are NV12 images in the `LINEAR` DRM layout with
   dedicated memory exported as a DMA-BUF (`vkGetMemoryFdKHR`), one object holding both
-  planes. A device has them when it can export such an image render draws into and
-  samples, has Vulkan 1.2 (timeline semaphores) and wgpu's NV12 and DMA-BUF features,
+  planes. The image lists its view formats (NV12, and the R8 and RG8 plane views),
+  which a mutable-format image in a DRM layout must, and the export check asks about
+  the same image. A device has them when it can export such an image render draws
+  into and samples, has Vulkan 1.2 (timeline semaphores) and wgpu's NV12 and DMA-BUF features,
   and names its DRM render node (`VK_EXT_physical_device_drm`); otherwise
   `encode_target` is `Unsupported` and the encoders take CPU frames. A target's
   `FrameSync` adds a signal of the context's timeline semaphore to the submit that
