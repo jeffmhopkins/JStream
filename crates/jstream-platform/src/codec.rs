@@ -177,7 +177,10 @@ pub trait Codecs: Send + Sync {
 /// instant as its frame's `pts` (on the media clock), and `dts <= pts`. Video packets
 /// follow the engine's framing conventions (H.264 as Annex B, per `jstream-media`).
 pub trait VideoEncoder: Send {
-    /// Which codec implementation was opened.
+    /// Which codec implementation was opened. It changes only when the encoder falls
+    /// back to another implementation before its first packet, as a hardware encoder
+    /// that refuses its first frame does with [`HardwarePreference::Prefer`] (#443); it
+    /// then names the one encoding.
     fn info(&self) -> &CodecInfo;
 
     /// Whether [`encode`](VideoEncoder::encode) would take a frame now. An asynchronous
