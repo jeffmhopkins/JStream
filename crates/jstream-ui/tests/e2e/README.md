@@ -73,12 +73,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
 - **Docking** (`docking.spec.js`): the Editing layout's zones (Transform under the
-  Inspector, Transitions as a tab beside Outputs), with empty zones hidden;
-  the View menu hiding and adding a panel at the end of its home zone, and the layout
-  marked "(modified)"; dragging
-  a tab onto a tab strip groups it, and onto an empty zone, which shows while dragging,
-  docks it there; a lone panel collapses by its title, closes on a second click of
-  its ×, and doesn't collapse once it is alone in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
+  Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
+  menu hiding and adding a panel at the end of its home zone, and the layout marked
+  "(modified)"; dragging a tab onto a tab strip groups it, and onto an empty zone,
+  which shows while dragging, docks it there; a lone panel collapses by its title,
+  closes on a second click of its ×, and doesn't collapse once it is alone in its
+  zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live and resets to Editing.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list

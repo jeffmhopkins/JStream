@@ -152,7 +152,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   selection as a block; Fit and Stretch also stand the item upright; Match width and
   height take the primary item's. `plan` works out the new boxes, and each press sends
   the changed ones as one batch of `item.set_geometry` (Clear crop: `item.set_crop`),
-  so it is one undo step. Items still in the legacy form are left alone.
+  so it is one undo step. Items still in the legacy form are left alone, and Match does
+  nothing while the primary item is one.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
   (and slider when bounded), select, colour, text, asset (root and path) or reference
@@ -177,9 +178,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the seven the UI has: Scenes,
   Scene objects (`Sources`), the Inspector (`Properties`, with `Pairing` under it), the
-  Transform, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
-  adds a `PanelId` and a line there. The panels' own `h2` headings are hidden, since
-  the tab is the title. Narrow windows stack the zones, without splitters.
+  Transform, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps
+  each to its component, and a new panel adds a `PanelId` and a line there. The
+  panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
+  stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
     switch keeps a panel's state; moving a panel to another group mounts it afresh.
   - A tab drags with pointer events, not HTML drag and drop, which desktop webviews

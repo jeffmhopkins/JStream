@@ -428,13 +428,20 @@ pub fn Transform() -> impl IntoView {
                         .collect::<Vec<_>>(),
                 );
             }
+            let geometry_form = |id: &ItemId| {
+                c.item(id)
+                    .is_some_and(|(_, i)| i.placement == PlacementForm::Geometry)
+            };
+            // Matching takes the primary item's size, which a legacy item doesn't have.
+            if matches!(action, Action::MatchWidth | Action::MatchHeight)
+                && !selection.items().next().is_some_and(geometry_form)
+            {
+                return None;
+            }
             // Items in the legacy form have no box to move.
             let items: Vec<(ItemId, ItemGeometry)> = selection
                 .items()
-                .filter(|id| {
-                    c.item(id)
-                        .is_some_and(|(_, i)| i.placement == PlacementForm::Geometry)
-                })
+                .filter(|id| geometry_form(id))
                 .filter_map(|id| layout.geometry_of(id).map(|g| (id.clone(), g)))
                 .collect();
             let align = if align_to.get_untracked() == AlignTo::Canvas {

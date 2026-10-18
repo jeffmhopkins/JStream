@@ -280,7 +280,7 @@ covers = ["crates/jstream-ui/src/panels/transform.rs"]
 
 Spec: [panels › transform](../design/ui-prototype/spec-panels.md#transform-arrange-panel),
 [workspace › transform actions](../design/ui-prototype/spec-workspace.md#sources-duplicates-and-groups) (9.11).
-All of it is client-side geometry sent as `item.set_geometry` edits.
+All of it is client-side geometry, sent as `item.set_geometry` edits (`item.set_crop` for Clear crop).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
