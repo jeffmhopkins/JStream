@@ -18,8 +18,8 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
 ADR is **accepted**; this crate has its first three parts (the platform basics, screen
-capture, then VA-API H.264 encoding) and ALSA audio input and output, and the rest
-follows in later PRs. Layer 2, and one
+capture, then VA-API H.264 encoding), ALSA audio input and output, and the capture's
+DMA-BUF import into Vulkan, and the rest follows in later PRs. Layer 2, and one
 of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
@@ -28,7 +28,7 @@ back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
 libasound are opened with `dlopen` through `libloading` when a backend first needs them, and only the
 functions the crate calls are declared, each with its C signature in a `SAFETY` comment.
 Nothing is linked, so the crate builds and tests on any machine, CI included, without
-their headers. This departs from [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)'s
+their headers. The Vulkan loader is loaded the same way, by wgpu-hal through `ash`. This departs from [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)'s
 preference for the `pipewire` crate for the reason ADR-0060 gives: that crate needs
 libpipewire's headers and libclang wherever the workspace builds. A missing or too-old
 library is `PlatformError::MissingComponent`, with the package to install. Everything that
@@ -72,7 +72,18 @@ It has:
   waiting on the picker then doesn't store the token it is granted. A
   thread keeps the portal's connection open for the session's
   life and reports the portal closing it (sharing stopped, grant revoked) as
-  `DeviceLost`.
+  `DeviceLost`. `on_context`, on a context `LinuxGpu` opened with DMA-BUF import, gives
+  the same backend (sharing its restore tokens) on the GPU path, below; on one without,
+  `Ok(None)`, and on another platform's context, `InvalidState`.
+- **`LinuxGpu`** (`GpuInterop`) opens the engine's wgpu device on Vulkan: the first
+  hardware adapter, those with DMA-BUF import (wgpu's `VULKAN_EXTERNAL_MEMORY_DMA_BUF`)
+  before the rest and integrated before discrete GPUs, since the desktop doesn't say
+  which GPU it composites on. It records, per format the stream offers, the DRM format
+  modifiers the device can import as a single-plane DMA-BUF and sample
+  (`vkGetPhysicalDeviceFormatProperties2` and `…ImageFormatProperties2` through `ash`).
+  Multi-plane layouts (Intel CCS, AMD DCC with metadata) are left out, because
+  wgpu-hal's `texture_from_dmabuf_fd` takes one plane. There are no encode targets yet
+  (`encode_target` is `Unsupported`): the encoders take CPU frames.
 - **The D-Bus client** (`dbus.rs`) is the crate's own: the wire format in both byte
   orders, `EXTERNAL` authentication with file descriptor passing, and blocking calls
   with timeouts over the session bus socket. Received messages are untrusted: lengths
@@ -85,10 +96,26 @@ It has:
   builder is inline C), asks for mappable shared-memory buffers with header and crop
   metadata, and copies each frame into a CPU `VideoSurface` (`Bgra8` or `Rgba8`,
   padding bytes made opaque, the crop applied) in `jstream_platform::mailbox`, the
-  single-slot mailbox Windows' capture uses too. Its `pts` is
+  single-slot mailbox Windows' capture uses too. On the GPU path it first offers one
+  DMA-BUF format per pixel format with the device's modifiers (flagged mandatory and
+  don't-fixate, so the producer picks the one it allocates), then shared memory. A
+  DMA-BUF frame is imported once per PipeWire buffer with wgpu-hal's
+  `texture_from_dmabuf_fd`, waited on until the producer's writes are done (the
+  DMA-BUF polls readable, the implicit-sync fences), and drawn on the context's queue
+  into one of four `Rgba8UnormSrgb` frame textures of the stream's own, cropped and
+  with padding made opaque; the buffer goes back to PipeWire once that copy is done,
+  so render samples only the stream's textures. A copy still running after one second
+  (`COPY_WAIT`) ends the GPU path, and that buffer goes back while the GPU may still
+  read it, so the last frame can tear; a producer whose writes aren't done after
+  100 ms (`PRODUCER_WAIT`) costs a skipped frame. The copies and the frame textures
+  are on the context's one queue, so the frames' `FrameSync` only checks the queue. A
+  frame that doesn't import or copy ends the GPU path: the
+  stream offers shared memory only, PipeWire renegotiates, and the capture goes on
+  with CPU frames. Its `pts` is
   the buffer header's `CLOCK_MONOTONIC` time when that is plausible, else the clock's
   `now`. With cursor metadata the stream also asks for `SPA_META_Cursor`, with room for
-  a 256-pixel picture, and reads it from every buffer, a pointer-only one included:
+  a 256-pixel picture, and reads it from every buffer on either path, before the frame
+  and whether or not the buffer holds one:
   the position less the hot spot, less the crop's origin, and the picture (RGBA, BGRA
   or their padded forms, made straight RGBA) when the buffer carries a new one. A
   buffer without one keeps the last picture, an empty one or an `id` of 0 hides the
@@ -189,8 +216,6 @@ It has:
   no AAC encoder, and opening one reports `Unsupported`.
 
 Not here yet, in roughly the order they follow:
-- DMA-BUF frames imported into the engine's Vulkan device (`Capture::on_context`), in
-  place of the CPU copy;
 - display and window sources' `show_cursor` setting (protocol 0.36), after the main
   sync (#521): the engine asks for `Drawn` when it's on and `Hidden` when it's off, and
   never draws the pointer itself (the cursor is drawn into the frames until then);
@@ -206,8 +231,12 @@ Not here yet, in roughly the order they follow:
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
-pods, the frame copy, the cursor metadata, and the H.264 parameters, parameter sets, GOP and upload are
-platform-independent. The Linux ones (the clock, loading libc through the loader,
+pods (the DMA-BUF offer was checked byte for byte against libspa's builder), the frame
+copy, the cursor metadata, and the H.264 parameters, parameter sets, GOP and upload are
+platform-independent. The GPU interop's tests open a device on a software Vulkan
+adapter where there is no GPU, and skip without one: the frame copy (crop, opaque
+padding, slots reused only once free) and the context checks. DMA-BUF import needs a
+GPU driver, so it is tested only in the `hw-tests` portal capture on the GPU. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
 stopping on drop, a capture stream running again after an overrun, loopback refused, an
@@ -218,7 +247,8 @@ encoder behind the library's vtable, and the bzip2 decoder is tested on files `b
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
-and run by hand: the session bus (`dbus-run-session` is enough), portal captures (frames,
-and the pointer as metadata) in a GNOME or KDE session with PipeWire, VA-API H.264
-encodes on a GPU with an encode driver, and a second of ALSA's default input on a sound
-card (`null` isn't paced, so only a real device shows real-time recording).
+and run by hand: the session bus (`dbus-run-session` is enough), portal captures in a
+GNOME or KDE session with PipeWire (frames on the CPU path, and on the GPU path with a
+Vulkan driver that imports DMA-BUFs, and the pointer as metadata), VA-API H.264 encodes
+on a GPU with an encode driver, and a second of ALSA's default input on a sound card
+(`null` isn't paced, so only a real device shows real-time recording).

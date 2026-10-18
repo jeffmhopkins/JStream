@@ -3022,6 +3022,7 @@ dependencies = [
 name = "jstream-platform-linux"
 version = "0.0.0"
 dependencies = [
+ "ash",
  "jstream-aac",
  "jstream-platform",
  "libc",
@@ -3029,6 +3030,7 @@ dependencies = [
  "ring",
  "rustls",
  "rustls-native-certs",
+ "wgpu",
 ]
 
 [[package]]
@@ -3038,6 +3040,7 @@ dependencies = [
  "block2",
  "dispatch2",
  "jstream-platform",
+ "libc",
  "mach2",
  "objc2",
  "objc2-audio-toolbox",
@@ -3052,6 +3055,7 @@ dependencies = [
  "objc2-screen-capture-kit",
  "objc2-security",
  "objc2-video-toolbox",
+ "tracing",
 ]
 
 [[package]]
@@ -3833,7 +3837,10 @@ checksum = "478ae33fcac9df0a18db8302387c666b8ef08a3e2d62b510ca4fc278a384b6c0"
 dependencies = [
  "bitflags 2.13.2",
  "block2",
+ "dispatch2",
  "objc2",
+ "objc2-core-media",
+ "objc2-core-video",
  "objc2-foundation",
 ]
 
@@ -3858,6 +3865,7 @@ dependencies = [
  "objc2",
  "objc2-core-audio-types",
  "objc2-core-foundation",
+ "objc2-foundation",
 ]
 
 [[package]]
