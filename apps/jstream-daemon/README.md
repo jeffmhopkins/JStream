@@ -31,21 +31,27 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   the tokio runtime,
   prints where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
+- **YouTube** (`youtube.rs`): gives the engine YouTube with JStream's built-in OAuth
+  client ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or with a developer's client from `--youtube-client` or the
+  environment ([Design](#design)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token, and names the device file beside it
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, which with the `cef`
-  feature also opens browser sources, and on macOS a live one on the macOS backends
-  built so far, [Design](#design)), installs the signal
-  handlers that stop it, then binds the server with MCP on and, with `--ui-dir`, the
-  web UI's files.
+  file and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
+  the CLAP plugins, and with the `cef` feature also opens browser sources, and on
+  macOS a live one on the macOS backends built so far, [Design](#design)), installs the signal handlers that stop it, then binds the server
+  with MCP on and, with `--ui-dir`, the web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
 - **Virtual camera registration** (`register.rs`, Windows only): `--register-vcam`
   registers the media source DLL shipped beside the daemon, and startup logs a warning
   when the registration names another folder ([Design](#design)).
+- **Live engine wiring** (`live.rs`, in the crate's library target `lib.rs`): the
+  backends, the stream key store and the publish opener that make an engine live
+  ([Design](#design)). It is a library so the integration tests build the daemon's own
+  wiring on the platform fakes; nothing else depends on it.
 - **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
   (MSVC), so that check can run at all. On macOS it embeds `Info.plist`, the camera,
   microphone and system audio recording usage strings, in the binary's
@@ -59,8 +65,10 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
   log directory ([Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
-  crash hook in a child process; the publish opener and the live engine on the
-  platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
+  crash hook in a child process, with a stream key and a refresh token loaded through
+  `crash::Redacting`; the real `connect_rtmp` failing against loopback servers without
+  naming the key, through `serve::live_redacting`, in `serve.rs`; the publish opener and
+  the live engine on the platform fakes, in `live.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
   requests, and stopped with
   SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
@@ -70,14 +78,16 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   loopback sink and a recording, the WebSocket client sets the key and starts the
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
   received and the recorded MP4. The binary has no backends on Linux, so it runs
-  in process; `tests/delay_load.rs`,
-  Windows MSVC only, which reads the built binary's PE headers to check that the
+  in process, on the library's `live` and `rtmp`, the wiring `serve.rs` uses;
+  `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
   `tests/info_plist.rs`, which checks on every OS that `Info.plist` has each usage
   string and the bundle identifier `docs/facts.toml` names, and on macOS that the built
   binary carries it).
 
-Not here yet: YouTube sign-in (the daemon doesn't call `Engine::with_youtube` yet), a default collection file, a
+Not here yet: YouTube sign-in for users (it waits on JStream's own OAuth client,
+[ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), YouTube outside Windows (it needs an OS credential store the daemon has
+only there), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -108,6 +118,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows and macOS it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
+| `--youtube-client <path>` | Windows, for developers: a Google OAuth client to use for YouTube sign-in instead of JStream's built-in one, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables, else the built-in client. |
 | `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
@@ -164,6 +175,23 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. Without `--collection` the
   engine's state is lost.
+- **YouTube (Windows).** Streaming to YouTube needs no sign-in: use **Going live**
+  below with YouTube Studio's RTMPS URL and stream key. Signing in, for the
+  `youtube.*` calls, uses JStream's own OAuth client
+  ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). This build's built-in client is still
+  empty, so `youtube.status` answers `unavailable` and the startup log says so. With a
+  client (the built-in one, or a developer's below), `youtube.status` answers
+  `signed_out` and `youtube.sign_in` returns Google's consent URL; once approved, the
+  account's refresh token is kept in Credential Manager, so a restart stays signed in. The `youtube.*` calls
+  are a person's tools, over the WebSocket API: MCP has no `youtube` tool ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
+  A developer can test with their own Google Cloud OAuth client of type "Desktop
+  app", with the YouTube Data API v3 enabled: pass its downloaded JSON with
+  `--youtube-client`, or set `JSTREAM_YOUTUBE_CLIENT_ID` (and
+  `JSTREAM_YOUTUBE_CLIENT_SECRET`, if it has one). Never commit it. Off Windows,
+  YouTube is `unavailable`. A client file that can't be read or holds no `client_id`,
+  or a secret set without an ID, is a startup failure (exit 1); the message names the
+  file but never its contents or the secret
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Going live (Windows and macOS).** `output.create` with an RTMP(S) server URL, then
   `output.set_key` (stored in Windows Credential Manager, or the login keychain on
   macOS), then `output.start`
@@ -210,7 +238,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -234,9 +262,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   webcam; that start fails with the sink's reason on a Windows without
   `MFCreateVirtualCamera` (before Windows 11) or before `--register-vcam`),
   `WindowsCredentials` as its
-  stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
+  stream key store (`with_key_store`; `serve.rs`'s `live_redacting` puts it behind
+  `crash::Redacting` before calling `live`, so each key is registered with the crash reports' redaction, [Crash reports](#design)), and a
+  publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
-  starts.
+  starts. A `jstream-clap-scan` thread then scans the CLAP plugins with
+  `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
+  audio-filter kinds once found, and logs each file it couldn't scan; the daemon
+  serves meanwhile. Without `jstream-plugin-host.exe` beside the daemon every file
+  fails to scan, and is logged.
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `CoreAudioIo`, `VideoToolboxCodecs` and
@@ -244,8 +278,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   - the stand-ins `NoVideoDevices`, which lists no webcams until AVFoundation's land,
     and `NoGpuInterop`, which sends the engine to its own device and CPU frames until
     the Metal interop does;
-  - no virtual camera;
-  - `MacosKeychain` as its stream key store, and the same publish opener as on Windows.
+  - no virtual camera, no CLAP scan and no YouTube sign-in;
+  - `MacosKeychain` as its stream key store, behind `crash::Redacting` through
+    `live_redacting` as on Windows, and the same publish opener.
 
   Capture and Core Audio refuse a release below the floor when created, which fails
   startup. Creating them asks for no permission: that happens when a pipeline first
@@ -261,8 +296,12 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   either. The engine stores the opener, so the opener holds only a `Weak` to the
   engine's `Arc`, set once the engine is built: a strong handle would be a cycle that
   keeps the engine and its running pipeline alive after the server lets go. The
-  opener upgrades it only to read the target. `live` is that wiring over any backends,
-  key store and connect function, which is how the tests run it on the platform fakes.
+  opener upgrades it only to read the target. `live` (`live.rs`, in the library
+  target) is that wiring over any backends, key store and connect function, and `rtmp`
+  the `connect_rtmp` connect function: `serve.rs` passes them the Windows backends and
+  Credential Manager (behind `crash::Redacting`, which is the binary's, so the library
+  never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
+  fakes, so the end-to-end test runs the daemon's wiring, not a copy of it.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
@@ -300,6 +339,22 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   already names this DLL is left alone, so repeating the command never prompts. The
   startup check (`log_status`) only logs: the daemon serves without the camera, and
   `WindowsVcam::start` refuses to start an unregistered camera on its own.
+- **YouTube** (`youtube.rs`, `serve.rs`). `youtube::client` reads a developer's OAuth
+  client from `--youtube-client`'s file (Google's `{"installed": {…}}` download, or the two
+  fields at the top level), else from the environment, holding the secret as a
+  `Secret` so it never prints. A JSON error reports only its line and column, because
+  serde_json's messages can quote a value. `main` reads it after the audit log opens
+  and before the token is touched. `serve.rs` then calls `Engine::with_youtube` with
+  that client, else with `YoutubeSetup::built_in` (JStream's client, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), `None`
+  while it is empty), over `jstream_youtube::HttpsTransport` (the OS's root store) with
+  `WindowsCredentials` behind `crash::Redacting` as the token store (so each refresh
+  token is redacted from crash reports, [Crash reports](#design)), before the engine
+  goes live; core keeps the
+  token under its fixed account ID. Off Windows there is no OAuth token store, so a
+  developer's client is dropped with a warning. Neither an empty built-in client nor a
+  transport that can't be built stops the daemon: YouTube is optional (ADR-0058).
+  `youtube::set_up` is the developer's-client call over any transport and store, which
+  is how the test runs it on `jstream-youtube`'s fake.
 - **Collection file and audit log** (`serve.rs`, `main.rs`). The daemon only passes
   them to the engine: `Engine::with_collection_file` loads and saves the collection,
   and `with_audit` takes a `jstream_core::AuditFile`, whose writer thread appends
@@ -328,9 +383,13 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   stops the daemon: a device that won't open leaves pages playing audio with their
   frames dropped, a daemon whose own path is unknown leaves browser sources empty, and
   a missing helper or missing CEF files fail the page that opens, not the daemon; the
-  first two are logged at `warn`. The program mix doesn't draw pages' frames yet (that is the
-  render import of GPU frames), so the device the compositor will sample is still to be
-  settled there. The daemon doesn't build or link CEF (only the helper does); the
+  first two are logged at `warn`. While the program stage runs, the engine lends the
+  backend the stage's own GPU context in place of that device (`Engine::use_gpu`), so
+  pages paint where the compositor samples them and are drawn into the mix; it takes
+  the context back when the stage stops, leaving the backend with no device, so the
+  device the daemon opens covers only paints before the first stage
+  ([jstream-core › Design](../../crates/jstream-core/README.md#design), *Live sources*).
+  The daemon doesn't build or link CEF (only the helper does); the
   feature is off by default until the helper and CEF's runtime are packaged
   ([jstream-browser › Open items](../../crates/jstream-browser/README.md#open-items)).
   `dox` type-checks the wiring without downloading CEF, as CI's Windows clippy does. Without the feature, `browser` sources show
@@ -342,13 +401,17 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   an agent's edits form their own undo history
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is
   no option to turn it off: it is behind the same token as the WebSocket API, which
-  already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)).
+  already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)),
+  except YouTube's account features, which MCP leaves out ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
 - **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port, MCP and the UI directory changed):
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS,
   [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
-  are accepted on loopback only until then.
+  are accepted on loopback only until then. `ServerConfig::tls` stays off, so the browser
+  pairing page and the device cookie
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)) wait on
+  TLS too: `/pair` is 404.
 - **The device file** (`token.rs`, `main.rs`). The daemon names
   `ServerConfig::device_file` as the token file's path plus `.devices`, so the devices
   live and move with the token they stand beside, and deleting the two together resets
@@ -408,8 +471,16 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   versions, OS and architecture, the UTC time, the process ID, the thread name, the
   panic's location and message (cut at 16 KiB), and a backtrace (`std`'s, always
   captured). It never writes the environment, the command line or settings. Secrets
-  registered with it (the control token, by `token.rs`) are replaced by `***` anywhere
-  in the report and in its stderr line ([R-SEC-001](../../docs/RULES.md#R-SEC-001));
+  registered with it are replaced by `***` anywhere in the report and in its stderr
+  line ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): the control token, by `token.rs`,
+  and every stream key the live engine stores or reads, since `serve::live_redacting` hands
+  `live`, and through it the engine and the publish opener, its key store behind
+  `crash::Redacting`, which
+  registers each secret as it is stored or loaded, and every YouTube refresh token,
+  since `serve.rs` hands YouTube its Credential Manager token store behind
+  `crash::Redacting` too. Secrets that pass through neither store are not registered
+  yet: a YouTube-bound output's stream key, which core reads with `Youtube::ingest`
+  and hands straight to its connect, and the OAuth access token (left open on #353);
   only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
   whose stderr line would quote the message unredacted. A panic in a tokio task writes
@@ -426,8 +497,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (the backends, the key store and the Media Foundation check), `jstream-platform-macos`
   on macOS only (the backends built so far, the stand-ins and the Keychain key store),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
-  check), `anyhow`, `tracing` (the startup line) and `blake3`
-  (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
+  check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
+  OAuth client file), `anyhow`, `tracing` (the startup line) and `blake3` (the crash
+  reports' secret digests), all already in the tree through core and the server, tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
   only `sharded-slab` and `thread_local`), and `getrandom`
@@ -436,8 +508,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`), for the live engine and opener tests;
-  `jstream-browser` (feature `fake`), for the browser wiring's test.
+  `jstream-platform` (feature `fake`), for the live engine and opener tests and
+  `crash.rs`'s `Redacting` tests (`MemoryKeyStore`, `MemoryTokenStore`);
+  `jstream-browser` (feature `fake`), for the browser wiring's test;
+  `jstream-youtube` (feature `fake`), for the YouTube setup's test.
 
 <a id="open-questions"></a>
 ### Open questions
