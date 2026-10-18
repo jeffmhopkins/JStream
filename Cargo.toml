@@ -10,7 +10,7 @@ publish = false
 
 [workspace.dependencies]
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
-# Coverage rasterising of glyph outlines for the text source (ADR-0031: pure-Rust font
+# Coverage rasterising of glyph outlines for the text source (ADR-0061: pure-Rust font
 # crates). No dependencies; `std` is its only default feature.
 ab_glyph_rasterizer = { version = "0.1", default-features = false, features = ["std"] }
 anyhow = "1"
@@ -42,6 +42,10 @@ criterion = { version = "~0.7", default-features = false, features = ["cargo_ben
 # Lock-free bounded queues for the audio mixer's commands and the collector (R-RT-003).
 # A send on a bounded channel does not allocate. `std` is the only feature.
 crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
+# The capture backends' latest-frame mailbox (`jstream_platform::mailbox`, ARCH › Threads):
+# `AtomicCell`'s safe single-word swap, so the mailbox needs no `unsafe` in
+# `jstream-platform`. Already in the tree through `crossbeam-channel`; no dependencies.
+crossbeam-utils = { version = "0.8", default-features = false }
 # Deflate and CRC-32 for the portable Windows zip (`cargo xtask dist`, ADR-0020). Already in
 # the tree through `png`, with the same pure-Rust backend (`miniz_oxide`).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
@@ -53,15 +57,16 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 # OS randomness (the daemon's control token). 0.4 is already in the tree through
 # `tempfile` and `uuid`, so this adds no version.
 getrandom = { version = "0.4", default-features = false }
-# GIF decoding for the image source (ADR-0031: pure-Rust image crates). No default
+# GIF decoding for the image source (ADR-0061: pure-Rust image crates). No default
 # features: `color_quant` only matters for encoding RGBA frames.
 gif = { version = "0.14", default-features = false, features = ["std"] }
 globset = { version = "0.4", default-features = false }
-# WebP decoding (still and animated) for the image source (ADR-0031).
+# WebP decoding (still and animated) for the image source (ADR-0061).
 image-webp = { version = "0.2", default-features = false }
 insta = { version = "1", default-features = false }
 # JavaScript built-ins (`Array`) for the browser WebSocket client. Part of wasm-bindgen.
 js-sys = { version = "0.3", default-features = false, features = ["std"] }
+jstream-aac = { path = "crates/jstream-aac" }
 jstream-audio = { path = "crates/jstream-audio" }
 jstream-browser = { path = "crates/jstream-browser" }
 jstream-control = { path = "crates/jstream-control" }
@@ -75,6 +80,8 @@ jstream-media = { path = "crates/jstream-media" }
 jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }
+jstream-platform-linux = { path = "crates/jstream-platform-linux" }
+jstream-platform-macos = { path = "crates/jstream-platform-macos" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
 jstream-plugin-clap = { path = "crates/jstream-plugin-clap" }
 jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
@@ -84,20 +91,86 @@ jstream-server = { path = "crates/jstream-server" }
 jstream-sources = { path = "crates/jstream-sources" }
 jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
 jstream-youtube = { path = "crates/jstream-youtube" }
+# `clock_gettime(CLOCK_MONOTONIC)` and `close` for the Linux backends (ADR-0060). Already
+# in the tree under tokio, getrandom and others; no build script compiling C.
+libc = { version = "0.2", default-features = false }
+# `dlopen` for the Linux backends' system libraries (libpipewire, libva), loaded at run
+# time so the workspace builds without their headers (ADR-0060), and for loading a CLAP
+# plugin file (a DLL) in the plugin host (`jstream-plugin-clap`, ADR-0035). Already in
+# the tree at 0.9 under cef; no build script.
+libloading = { version = "0.9", default-features = false, features = ["std"] }
 # WGSL parsing and validation for effect packs (`jstream-effects`). Pinned to wgpu's
 # exact version (ADR-0004), so it is the copy wgpu already brings in. `wgsl-in` is the
 # only feature: no back ends, no `std`-only extras.
 naga = { version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
-# PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
+# PNG for `video.snapshot` (ADR-0061: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.
 png = { version = "0.18", default-features = false }
 # The web UI framework (ADR-0045): client-side rendering only, no server functions or
 # hydration. Its `csr` feature also turns on `getrandom`'s browser backend.
 leptos = { version = "0.8", default-features = false, features = ["csr"] }
-# Loads a CLAP plugin file (a DLL) in the plugin host (`jstream-plugin-clap`, ADR-0035).
-# Already in the tree through wgpu; no default features.
-libloading = { version = "0.8", default-features = false }
+# `mach_absolute_time` and `mach_timebase_info` for the macOS media clock (ADR-0063 §5).
+# Maintained bindings to <mach/mach_time.h> (R-UNSAFE-004), already in the tree at 0.6
+# under wasmtime; no build script and no default features.
+mach2 = { version = "0.6", default-features = false }
+# Foundation through the objc2 framework crates (ADR-0063 §12), for the running macOS
+# version (`NSProcessInfo`), and the arrays, errors and strings ScreenCaptureKit hands back.
+# The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
+# only `std` and the classes the macOS crate calls.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString"] }
+# Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
+# crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
+# and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
+# `CVPixelBuffer` for its input; and CF data for the Keychain store's secrets (§9). The
+# 0.3 line, as `objc2-foundation`; plain C APIs, so no `objc2` feature and no build
+# script. Only the headers the macOS crate calls.
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFData", "CFDictionary", "CFNumber", "CFString"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "objc2-core-video"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
+objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
+# AudioToolbox and Core Audio's base types through the objc2 framework crates (ADR-0063 §7,
+# §12), for the AAC-LC `AudioConverter`: the converter and its properties, the codec's
+# bit-rate control mode, and `AudioStreamBasicDescription` and `AudioBufferList` for its
+# formats and buffers. The 0.3 line, as above; plain C APIs and no build script. Only the
+# headers the macOS crate calls (no AudioUnit, AudioQueue, blocks or Core MIDI).
+objc2-audio-toolbox = { version = "0.3", default-features = false, features = ["std", "AudioCodec", "AudioConverter", "objc2-core-audio-types"] }
+objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
+# The Core Audio HAL through the objc2 framework crates (ADR-0063 §4, §12), for audio
+# devices and input: the device list and defaults, device and stream properties and
+# their listeners, and the IOProc that records a device. The 0.3 line, as above, already
+# in the tree; plain C APIs (no `objc2`, blocks or dispatch features) and no build script.
+objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2-core-audio-types"] }
+# AVFoundation through the objc2 framework crates (ADR-0063 §4, §11, §12), for the
+# Microphone permission: `AVCaptureDevice`'s authorization status and request for the
+# audio media type. The 0.3 line, as above; no build script. Only those headers, and
+# `block2` for the request's completion handler.
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+# ScreenCaptureKit through the objc2 framework crates (ADR-0063 §3, §12), for display and
+# window capture: `SCShareableContent` lists targets, `SCStream` captures them, and
+# `SCError` has the codes for a refused permission or a stopped stream. The 0.3 line, as
+# above; no build script. No default features: no content-sharing picker, screenshots,
+# recording output, AVFoundation or UTType. `libc` is only for `pid_t`, so JStream's own
+# windows can be left out of the list.
+objc2-screen-capture-kit = { version = "0.3", default-features = false, features = ["std", "SCError", "SCShareableContent", "SCStream", "block2", "dispatch2", "libc", "objc2-core-foundation", "objc2-core-graphics", "objc2-core-media"] }
+# The Security framework through the objc2 framework crates (ADR-0063 §9, §12), for the
+# Keychain stream-key and OAuth-token store: `SecItemAdd`, `SecItemCopyMatching`,
+# `SecItemUpdate` and `SecItemDelete` on generic-password items, and the `kSec*` keys and
+# `errSec*` codes they take. The 0.3 line, as above; plain C APIs and no build script.
+# Only the Keychain item headers (no certificates, trust, authorization or codesigning).
+objc2-security = { version = "0.3", default-features = false, features = ["std", "SecBase", "SecItem"] }
+# Core Graphics for the Screen Recording permission (`CGPreflightScreenCaptureAccess` and
+# `CGRequestScreenCaptureAccess`), the main display's ID and the sRGB colour space the
+# capture asks for. The 0.3 line, which ScreenCaptureKit's crate already brings in.
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGDirectDisplay", "CGWindow"] }
+# The Objective-C runtime, blocks and dispatch queues that ScreenCaptureKit's API is made
+# of: a class for the stream's output and delegate (`objc2::define_class!`), completion
+# handler blocks (`block2`) and the serial queue frames arrive on (`dispatch2`). All three
+# are already in the tree under wgpu's Metal backend and the objc2 framework crates. No
+# default features, and never `objc2`'s `exception` feature, which compiles C.
+objc2 = { version = "0.6", default-features = false, features = ["std"] }
+block2 = { version = "0.6", default-features = false, features = ["std"] }
+dispatch2 = { version = "0.3", default-features = false, features = ["std", "objc2"] }
 # Property tests with shrinking (`jstream-graph`'s `tests/`), test-only. Held at 1.11:
 # 1.12 moves to `rand` 0.10, a second `rand` beside the 0.9 already in the tree
 # (R-DEP-005). No default features: no `fork`/`timeout` (`rusty-fork`, `tempfile`) and
@@ -128,7 +201,7 @@ serde = { version = "1", default-features = false, features = ["derive", "std"] 
 # it, a number with more digits than an `f64` holds can parse one ULP off, and then not
 # round-trip. Found by the `protocol_decode` fuzz target.
 serde_json = { version = "1", default-features = false, features = ["std", "float_roundtrip"] }
-# Font parsing and glyph outlines for the text source (ADR-0031: pure-Rust font crates),
+# Font parsing and glyph outlines for the text source (ADR-0061: pure-Rust font crates),
 # from Google's fontations. Pulls in `read-fonts`, `font-types`, `bytemuck`, `yoke` and
 # `once_cell`, plus derive macros at build time. Chosen over `ab_glyph` and `fontdue`
 # because their `ttf-parser` is unmaintained (RUSTSEC-2026-0192). No default features:
@@ -142,6 +215,11 @@ tauri = { version = "2.12", default-features = false, features = ["wry", "common
 # Tauri's build script: generates the app context from `tauri.conf.json` and embeds the
 # Windows resources (icon, manifest).
 tauri-build = { version = "2.7", default-features = false, features = ["config-json"] }
+# Test-only reference AAC decoder for jstream-aac's round-trip tests (ADR-0062: never
+# shipped): Symphonia's pure-Rust AAC-LC decoder, MPL-2.0, and the core crate its decoder
+# API is in. Neither has default features; `symphonia-core`'s optional `rustfft` stays off.
+symphonia-codec-aac = { version = "0.6", default-features = false }
+symphonia-core = { version = "0.6", default-features = false }
 thiserror = { version = "2", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false }
 # No TLS feature: plain `ws://` only, so no `rustls`/`ring` in the tree yet.
@@ -161,6 +239,15 @@ web-sys = { version = "0.3", default-features = false, features = ["std"] }
 # GPU (ADR-0004): pinned exactly, because wgpu-hal interop can change between releases;
 # the version spike S1 proved the Windows interop on. Backends are picked per crate.
 wgpu = { version = "=30.0.1", default-features = false, features = ["std"] }
+# The WASM automation plugin host (`jstream-plugin-wasm`, ADR-0035). No default features:
+# `cranelift` compiles a plugin once at load, `runtime` runs it, and nothing else: no WASI,
+# no async (plugins reach `Control` through a blocking bridge), no component model, GC,
+# threads, cache or profiling.
+wasmtime = { version = "49", default-features = false, features = ["cranelift", "runtime", "std"] }
+# The WASM text format, for `jstream-plugin-wasm`'s test plugins; test-only. Held at 1.258,
+# the wasm-tools release wasmtime 49 is built on: a later one brings a second
+# `wasm-encoder` (R-DEP-005). No default features: no component model.
+wat = { version = "~1.258", default-features = false }
 # Microsoft's official Windows bindings (R-UNSAFE-004), used only by the Windows platform
 # crate. Pinned exactly so every Windows crate resolves one version (R-DEP-005); the
 # platform crate picks its API features.
@@ -168,7 +255,7 @@ windows = { version = "=0.62.2", default-features = false }
 # `#[implement]` (COM callbacks) expands to `windows_core::` paths, so it is a direct
 # dependency at the version `windows` uses.
 windows-core = { version = "=0.62.2", default-features = false }
-# JPEG decoding for the image source (ADR-0031), and `zune-core` for its options. No
+# JPEG decoding for the image source (ADR-0061), and `zune-core` for its options. No
 # `log`; the `x86` and `neon` features keep the SIMD paths, chosen at run time.
 zune-core = { version = "0.5", default-features = false, features = ["std"] }
 zune-jpeg = { version = "0.5", default-features = false, features = ["std", "x86", "neon"] }
@@ -204,3 +291,7 @@ opt-level = 3
 inherits = "dev"
 debug = false
 strip = "symbols"
+# The AAC encoder likewise: unoptimised, its quantization loops can't keep up with
+# real time in a debug app, and its round-trip tests encode seconds of audio.
+[profile.dev.package.jstream-aac]
+opt-level = 3

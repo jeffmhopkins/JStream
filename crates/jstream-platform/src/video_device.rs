@@ -1,4 +1,4 @@
-//! Video capture devices: webcams and capture cards (docs/adr/0031-source-types-and-decoding-scope.md).
+//! Video capture devices: webcams and capture cards (docs/adr/0061-source-types-and-decoding-scope-v2.md).
 //!
 //! A device offers a list of formats (size, frame rate and how its frames are encoded).
 //! Opening one in a format starts a stream with the same "latest frame" mailbox as
@@ -36,7 +36,7 @@ pub enum CaptureEncoding {
     /// delivering it.
     Yuy2,
     /// Motion JPEG: each frame is one JPEG image. It is a video codec
-    /// (docs/adr/0031-source-types-and-decoding-scope.md), so the stream hands each frame to
+    /// (docs/adr/0061-source-types-and-decoding-scope-v2.md), so the stream hands each frame to
     /// a [`CaptureDecoder`].
     Mjpeg,
 }
@@ -89,7 +89,7 @@ pub struct CompressedFrame<'a> {
 /// It runs on the backend's capture thread, once per frame, before the frame enters the
 /// mailbox. The engine builds it from the platform's decoders (MJPEG is decoded by the OS
 /// or GPU-vendor path, like any video codec, per
-/// docs/adr/0031-source-types-and-decoding-scope.md), so the device backend never names a
+/// docs/adr/0061-source-types-and-decoding-scope-v2.md), so the device backend never names a
 /// decoder.
 pub trait CaptureDecoder: Send {
     /// Decodes one frame. The returned surface keeps the frame's `pts`.
