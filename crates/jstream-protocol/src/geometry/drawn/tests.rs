@@ -327,14 +327,18 @@ fn a_large_item_edge_on_draws_nothing_and_unplaces_nothing() {
         }
     }
     // A degree off, it draws.
-    let content = sized(1920.0, 1080.0, 0.0, 89.0, Some(1000.0))
-        .content(1920, 1080, Crop::default())
-        .expect("content")
-        .expect("pixels");
-    assert!(
-        sized(1920.0, 1080.0, 0.0, 89.0, Some(1000.0))
-            .drawn_polygon(&content)
-            .expect("ok")
-            .is_some()
-    );
+    // Near a quarter turn, but visibly off it, it draws, turned or tilted.
+    for angle in [89.0, 89.99, 90.01, 91.0] {
+        for (tilt, turn) in [(0.0, angle), (angle, 0.0)] {
+            let geometry = sized(1920.0, 1080.0, tilt, turn, Some(1000.0));
+            let content = geometry
+                .content(1920, 1080, Crop::default())
+                .expect("content")
+                .expect("pixels");
+            assert!(
+                geometry.drawn_polygon(&content).expect("ok").is_some(),
+                "tilt {tilt}, turn {turn}"
+            );
+        }
+    }
 }

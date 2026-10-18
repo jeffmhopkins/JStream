@@ -890,7 +890,8 @@ function in this crate so the compositor and the UI share one implementation.
   to five `DrawnVertex`es, each with its canvas point (`place` of its local point), local
   point, texture coordinate and `w = (p − z) / p` (1 without perspective), so the GPU
   can interpolate texture coordinates perspective-correctly. It returns nothing when the
-  content misses the box, the whole item is past the near plane, or it is seen edge-on.
+  content misses the box, the whole item is past the near plane, it is seen edge-on, or
+  it covers under 0.01 px².
   Edge-on is decided by the plane's facing (the z of its unit normal under a millionth:
   through the viewer with perspective, side-on without), whatever the item's size, and
   `unplace` makes the same test, so the two agree.
