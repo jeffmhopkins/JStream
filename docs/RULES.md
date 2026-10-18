@@ -539,7 +539,7 @@ enforced_by = [
   "test:jstream_crash::tests::a_redacting_store_registers_what_it_stores_and_loads",
   "review",
 ]
-applies_to = ["crates/**"]
+applies_to = ["crates/**", "apps/**"]
 -->
 Stream keys and OAuth tokens live only in the OS credential store. They never appear in
 collection files, logs, events, snapshots or MCP responses (they are redacted as `"***"`).

@@ -42,6 +42,8 @@ zune-core.workspace = true
 zune-jpeg.workspace = true
 
 [dev-dependencies]
+# The built-in kinds' snapshot, reviewed like an API diff (ADR-0025).
+insta.workspace = true
 # Checks that the audio scope and the scope sources draw without allocating (R-RT-001).
 assert_no_alloc.workspace = true
 # Fake media files for the `media` kind's tests (R-TEST-004).
