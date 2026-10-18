@@ -248,7 +248,10 @@ state machine. Contents:
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, and an output leaving the GPU path mid-run when every GPU frame
   fails to import or the context breaks (taking the context from browser pages, and
-  failing when that fallback fails), on a software device that stands in for the platform's
+  failing when that fallback fails, or at its deadline when it hangs, still repeating
+  the last frame meanwhile), an output surviving a lost device (its own, reopened on a
+  new one; the context's, left at once) and failing at the third loss in a minute, on
+  a software device that stands in for the platform's
   (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -783,6 +786,20 @@ changing with time (`Shot::changes_with_time`), so the preview redraws it like a
 running transition. `video.snapshot` runs the chains on its own compositor, so a
 stateful kind (a video delay) starts empty there. The built-in video filter kinds are
 in `kind.list` and `filter.add` takes them on a video chain.
+
+A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
+`image_mask`'s `image`, whose first frame is the mask) gets it through the live
+sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
+name, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+reads and decodes each new one, as it builds sources, and an asset no filter names any
+more is let go. A plan hands each chain filter the asset it names, numbered by its load,
+and each compositor makes the filter's reference image from it once: the LUT's tile
+layout (`jstream_render::lut_image`) or the mask uploaded as straight sRGB. A reference
+kind keeps no state between frames, so a new load makes the filter again with the new
+image, and the old filter, which holds the old image, is retired through the cache. A
+file that can't be read or decoded is logged and its filter passes its input through
+until the setting changes. Moving the collection file reloads every `collection`
+asset.
 A `display`, `window` or `webcam` source with no stored frame shows what the pipeline
 captures for it on the render thread, and nothing in `video.snapshot`, which has no
 capture; a stored frame wins. The `Shot` lists what the passes of the program, or the
@@ -1464,9 +1481,12 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   start or whose target is lost is started again 2 s later; a
   composite error repeats the last composited frame, up to 30 in a row. On the
   platform's GPU context, the 10th in a row leaves the GPU path once instead, for CPU
-  capture on a device of the thread's own (see [Runtime](#runtime)).
+  capture on a device of the thread's own, and the last frames repeat while that opens
+  (see [Runtime](#runtime)). A lost GPU device switches at once, to a new device or
+  off the context, the same way (#349).
 - **Fatal, reported:** a 31st composite error in a row (counted again after a
-  fallback), a fallback from the GPU path whose compositor does not open, a panic
+  fallback), a fallback from the GPU path whose compositor does not open, panics or
+  isn't done in time, the third lost device within 60 s, a panic
   inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
@@ -1706,11 +1726,10 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
 - Blend modes other than `normal` in the compositor.
-- The rest of the video chain runtime (V0): the asset and scene references
-  `apply_lut`, `image_mask` and `scene_mask` read (they pass their input through until
-  then), effect-pack kinds in a chain (bypassed), placing a bounds-growing filter's
-  output at the original content box, and pooling a multi-pass filter's scratch
-  layers.
+- The rest of the video chain runtime (V0): the referenced scene `scene_mask` reads
+  (it passes its input through until then), effect-pack kinds in a chain (bypassed),
+  placing a bounds-growing filter's output at the original content box, and pooling a
+  multi-pass filter's scratch layers.
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the
@@ -1761,17 +1780,38 @@ open.
 
 The GPU path can also break mid-run: every GPU frame fails to import (a format the
 compositor can't take), or the context's device goes away. After 10 composite errors in
-a row on the context, a third of a second, the render thread leaves it once. It reopens
-the compositor on a device of its own, lets go of the frames it holds, and has the
-`jstream-capture` thread drop its GPU backend and start every capture again on the CPU
-path (a start asked for before is stopped when it comes back). Browser pages are told to
-stop painting on the context, on a thread of its own because that takes the collection
-lock; until the re-planned snapshot arrives their frames, carrying the context's key,
-draw nothing on the new compositor. The fallback is logged as a warning and counted
-(`OutputStats::gpu_fallbacks`). If the compositor can't open on its own device, the
-output fails at once. Errors that go on after the fallback are counted again from zero
+a row on the context, a third of a second, the render thread leaves it once. A
+`jstream-gpu-fallback` thread tells browser pages to stop painting on the context (that
+takes the collection lock) and opens the compositor on a device of its own, while the
+render thread keeps repeating the last frames (black under the privacy screen, which
+fails closed) and adopting snapshots. Then the render
+thread lets go of the frames it holds, has the `jstream-capture` thread drop its GPU
+backend and start every capture again on the CPU path (a start asked for before is
+stopped when it comes back), and takes the new compositor. Until the re-planned snapshot
+arrives, the pages' frames, carrying the context's key, draw nothing on it. The fallback
+is logged as a warning and counted (`OutputStats::gpu_fallbacks`). The output fails at
+once if the compositor can't open on its own device, the fallback panics, or it isn't
+done within the open bound `output.start` uses (10 s): a hung adapter fails the output
+instead of freezing it (#577). A fallback thread that times out is left to finish on
+its own and drops what it opened; none of it uses the context. Errors that go on after the fallback are counted again from zero
 and fail the output as they would on the CPU path. The context itself stays until the
 render loop ends.
+
+**A lost device** (#349; a driver reset after a hang, Windows' TDR, a removed GPU) is
+one event, not a run of errors. `gpu_draw` turns a draw that failed on a lost device
+(`Compositor::lost`) into `DrawError::Lost`, and the render thread starts the same
+switch at once, without counting to 10. On the context, it is the fallback above, so
+the captures move to the CPU path. On the render thread's own device, it is a new
+device (`open(None)` again, hardware adapter first), and the captures stay where they
+are. Meanwhile the output repeats its last frames (black under the privacy screen) and stays
+`active`. Encoders take the
+CPU readback, so they don't reopen. A virtual camera gets the repeated frame, not its
+test pattern. Each loss is logged as a warning and counted
+(`OutputStats::gpu_device_losses`; leaving the context also counts in
+`gpu_fallbacks`). The third loss within 60 s fails the output instead ("the GPU was
+lost ... and the compositor could not reopen"), as does a switch that fails as above.
+There is no engine event for a loss yet (a protocol change), and no pack attribution
+or quarantine (X1).
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as

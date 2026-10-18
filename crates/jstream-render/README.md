@@ -121,6 +121,22 @@ and calls this crate.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
+- **A lost device** (a driver reset after a hang, Windows' TDR, a removed GPU; #349).
+  Every compositor sets wgpu's device-lost callback and uncaptured-error handler on its
+  device, its own or the context's (wgpu keeps one of each per device, and the program
+  stage opens one compositor on the context). `Compositor::lost` says why the device is
+  gone, polling it once because wgpu reports the loss on a poll. Nothing on a lost
+  device comes back: the caller opens a new compositor
+  ([jstream-core › Design](../jstream-core/README.md#design) does). wgpu's default
+  handler panics on every uncaptured error, and a lost device's invalid resources raise
+  them on each later call, sometimes before wgpu reports the loss. So the handler keeps
+  the first error instead (`Compositor::take_error`, logged as
+  `uncaptured wgpu error` before a loss), and `render` fails with
+  `RenderError::Uncaptured` when one is pending, before any readback. `render` empties
+  the slot, so an error that recurs every frame is logged once per frame until the caller
+  gives up. The handler is per device: on the shared context an error that a browser or
+  capture thread raised is taken by the program's next `render` and counts against the
+  program's frames.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
@@ -515,9 +531,9 @@ follow-up, and until then nothing reads the box and a placement fits the grown f
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
 `VideoFilter::set_reference(Option<Arc<Image>>)` (a defaulted `Pass::set_reference`
-underneath): render opens no files (R-RT-002), so the chain runtime is to resolve
-the asset or scene reference and decode it (a V0 follow-up; until then these kinds run
-with no image and pass their input through). A kind passes its input through unchanged until both its
+underneath): render opens no files (R-RT-002), so `jstream-core`'s chain runtime
+resolves the reference and decodes it. It does so for `apply_lut` and `image_mask`;
+`scene_mask` still runs with no image and passes its input through (a V0 follow-up). A kind passes its input through unchanged until both its
 reference setting is non-`null` and an image is set, and refuses an image from another
 compositor. A reference's `FrameSync` is staged and handed back with the input's, once
 per submit even when the reference is the input itself; a mask test passes one
@@ -537,9 +553,10 @@ imported frame as both and counts one stage.
   stored `Rgba16Float` through a one-function data upload in `image.rs`, values clamped to
   0 to 1. The shader recovers the size from the image's dimensions and does the
   trilinear lookup as two bilinear taps in adjacent slices at texel centres; an image
-  that is not such a layout passes the input through. `Lut`, `LutError` and
-  `lut_image` are crate-internal until V0 re-exports them.
-- `image_mask` (`image`: asset, png/jpg/jpeg/webp/gif/bmp; `mode` alpha or luma;
+  that is not such a layout passes the input through. `Lut` (with `parse_cube`,
+  `from_tiled_rgba8` and `size`), `LutError` and `lut_image` are public, for the chain
+  runtime to load a table and make its image.
+- `image_mask` (`image`: asset, png/jpg/jpeg/webp/gif, what `jstream-sources` decodes; `mode` alpha or luma;
   `invert`) and `scene_mask` (`scene`: scene reference, its composited layer; `mode`
   alpha, luma or clip; `invert`). The mask is stretched over the frame and scales the
   premultiplied input: by its alpha, by BT.709 luma of its sRGB-encoded colour times its
@@ -628,7 +645,11 @@ import is staged once, and once the frame ends nothing but the frame holds its
 coming round again reuses its import and stages again, a frame of a new size retires
 both old imports after the fence, an upload under the key replaces the import, and a
 straight import under a key that held a premultiplied one replaces it
-(the staged submit's `PRESENT` transition runs on the software adapter here). Without
+(the staged submit's `PRESENT` transition runs on the software adapter here). A lost
+device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
+`destroyed`, a render fails, and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
+validation error before any loss fails the next render as `Uncaptured`, and the
+render after it draws. Without
 an adapter, unit tests still cover the binary16 encode
 (every value an upload can produce, within half an ulp), the premultiply order and
 the compositor identity.
