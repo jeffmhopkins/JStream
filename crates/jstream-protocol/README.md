@@ -164,8 +164,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.38 because of YouTube
   audience stats and the quota estimate (the `youtube.stats` event and query,
-  `AudienceStatsInfo`, `QuotaInfo`, `StatsPolling`); 0.34 to 0.37 are held by bumps
-  queued ahead of it in the wave, and 0.33 added the
+  `AudienceStatsInfo`, `QuotaInfo`, `StatsPolling`); 0.34 to 0.37 are assigned to
+  other open bumps (#629, #642, #682, #653), and 0.33 added the
   privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`) and the `dedicated`
   flag on an output's encoder session; 0.32 added the geometry flips (`ItemGeometry`'s
   `flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,

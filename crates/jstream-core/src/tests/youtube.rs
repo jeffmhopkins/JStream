@@ -1153,6 +1153,28 @@ fn stats_polling_slows_then_stops_as_the_quota_runs_low() {
     );
 }
 
+/// A day of no quota stops audience polling before anything is spent (review N2).
+#[test]
+fn no_daily_quota_stops_stats_polling() {
+    let transport = FakeTransport::new();
+    let (_now, clock) = settable_clock(noon_pacific());
+    let engine = Engine::new().with_youtube(
+        setup(&transport, &signed_in_store())
+            .with_daily_quota(0)
+            .with_clock(clock),
+    );
+    let control = connected(&engine);
+    assert_eq!(
+        quota(&control),
+        QuotaInfo {
+            used: 0,
+            daily: 0,
+            exhausted: false,
+            stats: StatsPolling::Stopped,
+        }
+    );
+}
+
 /// With the quota nearly used up, a running output's audience is not read at all, and
 /// the actions are still charged at a write's cost.
 #[test]

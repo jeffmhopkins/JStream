@@ -1296,7 +1296,8 @@ token found there at setup signs the engine in.
   `youtube.health_changed` on the first reading and whenever the status, rating or
   issues change. The same thread reads the broadcast's audience (`videos.list`, one
   unit) every `STATS_INTERVAL` (60 s), every `STATS_SLOWDOWN` (5) intervals while
-  less than a fifth of the day's quota is left, and not at all below a tenth, and
+  less than a fifth of the day's quota is left, and not at all below a tenth (or with a
+  daily quota of 0), and
   emits `youtube.stats` on the first reading and whenever the viewers, likes or views
   change; the last reading is what the `youtube.stats` query lists. While signed out,
   or once the day is exhausted, it skips both reads, so the actions keep what quota is

@@ -206,7 +206,7 @@ impl YoutubeSetup {
     }
 
     /// Assumes the day's quota is `units` instead of [`DAILY_QUOTA`], for a Google Cloud
-    /// project YouTube granted more (or less).
+    /// project YouTube granted more (or less). Zero stops audience polling.
     #[must_use]
     pub fn with_daily_quota(mut self, units: u64) -> Self {
         self.daily_quota = units;
@@ -563,7 +563,8 @@ impl Youtube {
         let quota = self.quota();
         let daily = self.setup.daily_quota;
         let left = daily.saturating_sub(quota.used);
-        if quota.exhausted || left.saturating_mul(10) < daily {
+        // A day of no quota allows no reads at all (review N2).
+        if quota.exhausted || daily == 0 || left.saturating_mul(10) < daily {
             StatsPolling::Stopped
         } else if left.saturating_mul(5) < daily {
             StatsPolling::Slowed
@@ -928,6 +929,9 @@ impl Youtube {
             }
             kept.insert(output_id.clone(), stats.clone());
         }
+        // Emitted with the locks dropped, so the sink never runs under them: a stop that
+        // lands just now has already removed the reading, and this one event still goes
+        // out after it (review N1).
         (self.emit)(Event::YoutubeStats { stats });
     }
 
