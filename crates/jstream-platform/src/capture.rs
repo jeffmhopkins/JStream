@@ -16,6 +16,25 @@ pub enum CaptureTarget {
     Window(DeviceId),
 }
 
+/// How [`Capture::start_with`] starts a capture, beyond its target. The default is what
+/// [`Capture::start`] does.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CaptureOptions {
+    /// The source the capture is for (its ID in the collection), or `None` for a capture
+    /// no source owns.
+    pub source: Option<String>,
+}
+
+impl CaptureOptions {
+    /// The default options, for the source with ID `source`.
+    pub fn for_source(source: impl Into<String>) -> Self {
+        Self {
+            source: Some(source.into()),
+        }
+    }
+}
+
 /// A capture target as [`Capture::targets`] lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CaptureTargetInfo {
@@ -48,6 +67,32 @@ pub trait Capture: Send + Sync {
     /// [`PlatformError::Unsupported`] when the backend can't capture that kind of
     /// target, and [`PlatformError::Os`] when the OS refuses.
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError>;
+
+    /// Starts capturing `target` as `options` say: for one source, so a backend that
+    /// keeps a grant per source keeps each source's apart (the ScreenCast portal's
+    /// restore token, which reopens the screen or window that source was given without
+    /// asking again, ADR-0060 §3). The default ignores the options and calls
+    /// [`start`](Capture::start); `start` is `start_with` with the default options.
+    ///
+    /// # Errors
+    /// As [`start`](Capture::start).
+    fn start_with(
+        &self,
+        target: &CaptureTarget,
+        options: &CaptureOptions,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        let _ = options;
+        self.start(target)
+    }
+
+    /// Forgets what the backend keeps for `source`, such as its restore token, once the
+    /// source is deleted, including what a capture of it that is still starting would
+    /// keep. The default keeps nothing, so has nothing to forget. Best effort: a grant
+    /// whose file can't be removed stays, and a new source given the same ID would
+    /// reopen it, so call it once the source's captures have stopped.
+    fn forget_source(&self, source: &str) {
+        let _ = source;
+    }
 
     /// This backend on `context`'s device: its captures deliver `VideoSurface::Gpu`
     /// frames that render samples without a CPU copy (README › GPU frames). `Ok(None)`,
