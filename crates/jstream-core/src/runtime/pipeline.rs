@@ -2284,7 +2284,8 @@ fn render_loop(job: RenderJob) {
     // divisor draw on every `divisor`th, or later when an overrun skips one.
     let mut index: u64 = 0;
     let mut skipped: u64 = 0;
-    // Frames GPU sessions missed because their mix's every encode target was held.
+    // Frames GPU sessions missed because their mix's every encode target was held, or
+    // because a covered tick's draw failed (the privacy screen fails closed).
     let mut encode_held: u64 = 0;
     let mut draw_errors: u32 = 0;
     // Set by a fatal error: stop drawing and repeat `shown` until the pipeline stops. A
@@ -2503,7 +2504,8 @@ fn render_loop(job: RenderJob) {
                 push_each(
                     targets,
                     |tap| match (tap.gpu, &encode.shown) {
-                        // Every target was held: the frame is dropped, not repeated.
+                        // Every target was held, or a covered draw failed: the frame
+                        // is dropped, not repeated.
                         (true, _) if starved => true,
                         (true, Some(target)) => push_gpu(&tap.input, target, due),
                         (false, _) if !shown.is_empty() => {
@@ -2634,8 +2636,8 @@ struct MixEncode {
     ring: EncodeRing,
     /// The target the last frame was converted into, repeated as `shown` is.
     shown: Option<GpuFrame>,
-    /// Whether every target was held on this tick, so its GPU sessions miss the frame
-    /// rather than get the last one again.
+    /// Whether every target was held on this tick, or a covered tick's draw failed, so
+    /// its GPU sessions miss the frame rather than get the last one again.
     starved: bool,
 }
 

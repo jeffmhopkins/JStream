@@ -678,7 +678,7 @@ its other layers, so turning privacy on allocates nothing on the render thread. 
 virtual camera is fed the program frame, so it is covered too. It fails closed: a covered tick whose draw failed blackens the
 frames due on it instead of repeating them, including after a fatal draw error. A
 session on the GPU encode path is not pushed the mix's last encode target on such a
-tick, since that target holds an uncovered frame: it misses the tick, counted in
+tick, since that target may hold an uncovered frame: it misses the tick, counted in
 `encode_frames`, until a covered draw succeeds. The
 CPU stand-in draws covered frames black. `video.snapshot` and the preview streams show
 the editing view and are never covered. Only the default blur exists: the look setting, the slate and muting
@@ -1059,7 +1059,7 @@ What each stage contributes:
 | Render loop | ticks skipped to catch up with the media clock, published by the render thread | `render_ticks` |
 | Mixer input | overrun and late frames, each input while it records | `audio_frames` |
 | Mix bus | frames skipped when the mixer falls behind the clock | `audio_frames` |
-| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, one per such session, published by the render thread | `encode_frames` |
+| Encode ring | frames dropped for the GPU encoder sessions because a queued or encoding frame still holds every encode target, or because a tick under the privacy screen could not be drawn, one per such session, published by the render thread | `encode_frames` |
 | Video encode session | input drops (`dropped_queue_full` + `dropped_encoder_busy`) | `encode_frames` |
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
