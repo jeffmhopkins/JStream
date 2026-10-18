@@ -81,8 +81,11 @@ depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0
   - Place, move, resize, rotate and **crop** scene items (2D transform + crop), with golden
     tests.
   - **Filters and effects:** source filters apply everywhere the source appears. Each
-    placement has its own opacity and blend; per-placement effects are not in v1, and the
-    model reserves a slot for them.
+    placement has its own opacity and blend. Per-placement effects (item effects: a
+    video filter chain per placement,
+    [ADR-0065](docs/adr/0065-scene-chains-and-item-effects.md)) are in v1
+    ([ADR-0068](docs/adr/0068-item-effects-in-v1.md)), built after the video chain
+    runtime, and the model reserves their slot.
   - Bus-matrix mixer ([ADR-0028](docs/adr/0028-audio-model-v2.md)): a master bus,
     per-source and per-bus faders and mute, audio that follows the program
     (`when_shown`), filters, and peak, true-peak and loudness meters.
