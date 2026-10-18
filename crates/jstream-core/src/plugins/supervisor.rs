@@ -431,6 +431,9 @@ mod tests {
         now: Instant,
     }
 
+    /// How long, on the wall clock, a test waits for the fake host's thread.
+    const READY_WAIT: Duration = Duration::from_secs(20);
+
     impl Rig {
         fn new(policy: SupervisorPolicy) -> Self {
             let hosts = FakePluginHosts::new();
@@ -446,10 +449,15 @@ mod tests {
             self.sup.tick(self.now)
         }
 
-        /// Ticks until the host is ready, returning everything seen.
+        /// Ticks until the host is ready, returning everything seen. It waits on the
+        /// wall clock, not a count of ticks: the fake host is a thread, and a loaded CI
+        /// runner can leave it unscheduled for seconds. Each tick still moves the
+        /// supervisor's clock by only 1 ms, so even the whole wait stays well inside the
+        /// default 10 s `start_timeout`.
         fn until_ready(&mut self) -> Vec<HostEvent> {
             let mut seen = Vec::new();
-            for _ in 0..400 {
+            let deadline = Instant::now() + READY_WAIT;
+            while Instant::now() < deadline {
                 let events = self.tick(Duration::from_millis(1));
                 let ready = events.iter().any(|e| matches!(e, HostEvent::Ready { .. }));
                 seen.extend(events);
@@ -486,7 +494,8 @@ mod tests {
         rig.hosts.hosts()[0].set_state(vec![9, 9]);
         rig.sup.request_state();
         let mut saved = false;
-        for _ in 0..100 {
+        let deadline = Instant::now() + READY_WAIT;
+        while Instant::now() < deadline {
             saved |= rig
                 .tick(Duration::from_millis(1))
                 .iter()
