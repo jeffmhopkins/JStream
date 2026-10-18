@@ -1,25 +1,32 @@
 //! `POST /api/v1/pair` ([`PAIR_PATH`]): a device trades the open pairing code for its own
-//! device token (ADR-0044). It is the one request the server answers without a token: it
-//! passes the `Host` and `Origin` checks, and the open code is its gate (R-SEC-002).
+//! device token (ADR-0044). It is answered without a token: it passes the `Host` and
+//! `Origin` checks, and the open code is its gate (R-SEC-002).
 //!
 //! - **Request.** `Content-Type: application/json`, a body of at most 4 KiB:
 //!   `{"code": "XXXX-XXXX", "name": "Tablet"}`. The code is read loosely (case, the
 //!   dash and spaces don't matter, and `O`, `I` and `L` read as `0`, `1` and `1`). The
 //!   name is trimmed and must be 1 to 64 characters, none of them a control character.
+//!   The pairing page adds `"browser": true` (ADR-0047), which only a TLS listener
+//!   accepts; `false` or no `browser` is a native client.
 //! - **Answers.** `200` with `{"device_id": "dev_…", "token": "…"}` and
 //!   `Cache-Control: no-store`: the device presents the token from then on, as a client
-//!   presents the control token. `401` while no code is open (none was started, or it
+//!   presents the control token. To a browser exchange the `200` is
+//!   `{"device_id": "dev_…"}` alone, with the token set as the cookie
+//!   `__Host-jstream_device=<token>; Secure; HttpOnly; SameSite=Strict; Path=/;
+//!   Max-Age=2592000`, so no script, the page's own included, ever sees it. `401` while
+//!   no code is open (none was started, or it
 //!   expired, was used or was voided), `403` for a wrong code (the fifth voids it),
-//!   `400` for a body that isn't that object or a name that isn't allowed (which uses up
-//!   no attempt), `415` for another content type, `405` for another method, and `500`
+//!   `400` for a body that isn't that object, a name that isn't allowed, a `browser`
+//!   that isn't a boolean, or `"browser": true` without TLS (none of which uses up an
+//!   attempt), `415` for another content type, `405` for another method, and `500`
 //!   when the device file can't be written (nothing is paired then).
 //! - **Logs.** Refusals are logged at `warn` with their reason and the peer address,
 //!   a voided code at `warn`, and a paired device at `info` with its ID and name. The
-//!   code and the token are never logged (R-SEC-001).
+//!   code, the token and the cookie are never logged (R-SEC-001).
 
 use crate::App;
 use crate::devices::{Now, PairError, check_name};
-use crate::gate::Refusal;
+use crate::gate::{Refusal, device_cookie_header};
 use crate::listener::Accepted;
 use axum::body::Body;
 use axum::extract::{ConnectInfo, State};
@@ -87,7 +94,34 @@ pub(crate) async fn handle(
         Ok(name) => name,
         Err(reason) => return bad_request(reason),
     };
+    let browser = match value.get("browser") {
+        None => false,
+        Some(Value::Bool(browser)) => *browser,
+        Some(_) => return bad_request("`browser` must be true or false"),
+    };
+    if browser && !app.tls {
+        return bad_request("a browser pairs only on a TLS listener");
+    }
     match app.devices.pair(code, name, Now::current()) {
+        Ok((device_id, token)) if browser => {
+            let Some(cookie) = device_cookie_header(token.as_bytes()) else {
+                // The server's tokens are hex digits, so this can't happen; the device
+                // can't be reached without its token, so it is not kept.
+                let _ = app.devices.revoke(&device_id);
+                return (StatusCode::INTERNAL_SERVER_ERROR, "could not pair\n").into_response();
+            };
+            let mut response = (
+                StatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, "application/json"),
+                    (header::CACHE_CONTROL, "no-store"),
+                ],
+                json!({"device_id": device_id.as_str()}).to_string(),
+            )
+                .into_response();
+            response.headers_mut().insert(header::SET_COOKIE, cookie);
+            response
+        }
         Ok((device_id, token)) => (
             StatusCode::OK,
             [
