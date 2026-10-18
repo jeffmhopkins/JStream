@@ -2902,13 +2902,14 @@ pub(crate) mod tests {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
         let Some(mut compositor) = gpu() else { return };
         let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
         let square = FrameSize::new(256, 256).expect("invariant: non-zero");
         let shot = shot(vec![("program", vec![fill("green")])]);
         let mut draw = |privacy| {
             cache.begin_frame();
             let output = compose(
                 &mut compositor,
-                &mut cache,
+                (&mut cache, &mut chains),
                 (&shot, zero()),
                 View { mix: None, privacy },
                 &LiveParams::default(),

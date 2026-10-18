@@ -52,10 +52,10 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M2: UI](ROADMAP.md#m2) | `███████░░░` 68% | 17 | 6 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 2 | 5 |
 
-97 of 115 items are merged; 8 of those still wait on a run on Windows hardware.
+97 of 116 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 26 items, by next step: 🔨 build 5, 🌊 its wave lands 8, 🧪 Windows run 8, 👤 maintainer 2, ❔ not set 3</summary>
+<summary><b>What's left</b>: 27 items, by next step: 🔨 build 6, 🌊 its wave lands 8, 🧪 Windows run 8, 👤 maintainer 2, ❔ not set 3</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
