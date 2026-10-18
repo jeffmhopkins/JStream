@@ -39,9 +39,10 @@ wasn't granted:
 - **Limits** (`Limits`). Each invocation, and the module's `start` function at load, runs
   on a fuel budget, by default 10,000,000 units (one per WASM instruction, roughly);
   running out stops the plugin with `Error::OutOfFuel`, and the next invocation gets a
-  fresh budget. Host calls are charged to the same budget before the host does their
-  work: 1,000 units each plus one per byte the host copies or parses, so a plugin can't
-  spend host time its fuel doesn't cover. Each entry into the plugin also has a
+  fresh budget. The host calls that copy or parse bytes (`call`, `result_read` and
+  `input_read`) are charged to the same budget before the host does their work: 1,000
+  units each plus one per byte, so a plugin can't spend host time its fuel doesn't
+  cover. `result_len` and `input_len` do constant work and aren't charged. Each entry into the plugin also has a
   wall-time deadline, by default 100 ms for an invocation and 1 s for the load (#348's
   figures). A ticker thread advances wasmtime's epoch every 10 ms (`EPOCH_TICK`), so a
   plugin gets at least its deadline and at most its deadline rounded up to a whole tick,
