@@ -2,14 +2,14 @@
 id = "ADR-0072"
 title = "Linux media-file decoding: VA-API and pure Rust first, the system's FFmpeg for the gaps"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0072: Linux media-file decoding: VA-API and pure Rust first, the system's FFmpeg for the gaps
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -30,13 +30,13 @@ It is maintainer tier ([ADR-0043](0043-narrow-maintainer-tier.md)) for three rea
 - Decoding H.264 and AAC in software raises a patent question.
 - Using FFmpeg is a licensing decision, and it changes R-DEP-002.
 
-On the first draft, the maintainer said: "I feel like we can do ffmpeg is there are no
-other valid choices". So FFmpeg is an option below wherever no OS or pure-Rust choice can
-do the job.
+The maintainer allowed FFmpeg wherever no OS or pure-Rust choice can do the job: "I feel
+like we can do ffmpeg is there are no other valid choices".
 
 The forces:
-- **R-DEP-002 today.** [R-DEP-002](../RULES.md#R-DEP-002) bans FFmpeg, GStreamer and
-  every bundled C codec library, and `deny.toml` bans their binding crates. Its one
+- **R-DEP-002 before this ADR.** [R-DEP-002](../RULES.md#R-DEP-002) banned
+  FFmpeg, GStreamer and every bundled C codec library, and `deny.toml` bans their binding
+  crates. Its one
   run-time exception is a precedent: Cisco's prebuilt OpenH264 binary. JStream never
   builds or ships it; it is loaded at run time through hand-written declarations, and the
   `openh264` crates stay banned (ADR-0061, [ADR-0060](0060-linux-platform-support.md) §8).
@@ -86,109 +86,86 @@ The forces:
 
 <a id="decision"></a>
 ## Decision
-**Proposed, for the maintainer.** Each question has options and a recommendation. The
-maintainer accepts the recommendations, or names other options, and this ADR is then
-rewritten to the chosen ones before it is accepted.
+The maintainer accepted the recommendations on (a) to (d), (f) and (g), and chose "any
+build" on (e): the system's FFmpeg, GPL builds included. FFmpeg loading then has a second
+gate beside (g): the [GPL legal view](#gpl-precondition) below. The options not chosen are
+under [Options considered](#options).
 
-**(a) Does Linux get a media-file source?**
-1. **No.** Leave it out of scope, as ADR-0060 §9 does now.
-2. **Yes, within the limits of (b) to (g).** `jstream-platform-linux` implements
-   `MediaDecoders`.
+**(a) Linux gets a media-file source.** `jstream-platform-linux` implements
+`MediaDecoders`, within the limits of (b) to (g). Every other platform has this M2 kind.
 
-*Recommendation: 2.* Every other platform has this M2 kind.
+**(b) Video decode: VA-API, then FFmpeg as the software fallback.**
+- H.264 goes through VA-API first. Only where VA-API can't decode the file does it fall
+  back to FFmpeg, under (e) to (g).
+- Only this choice plays H.264 on NVIDIA, on Fedora's stock Mesa and in virtual machines.
+- VP8, VP9 and AV1 go through VA-API first, then through FFmpeg the same way.
+- Until the fallback's gates pass, a file VA-API can't decode is a missing component. Its
+  remedy names the driver or the distribution's full build. The gates differ by codec,
+  as [(g)](#patent-scope) says.
 
-**(b) Video decode.**
-1. **VA-API only.** On a driver without H.264 decode, a file with H.264 video is a
-   missing component whose remedy names the driver or the distribution's full build.
-2. **VA-API, then FFmpeg as the software fallback** where VA-API can't decode the file.
-   This is FFmpeg under (e) to (g).
-3. **VA-API, then OpenH264's decoder.** This changes ADR-0061's "nothing decodes through
-   OpenH264", and Cisco's patent licence would need checking for decoding.
-4. **VA-API, then a pure-Rust decoder**, once a mature one exists.
+**(c) Audio decode: symphonia first, FFmpeg for what it can't decode.**
+- symphonia decodes the patent-free codecs: PCM, FLAC, Vorbis and MP3.
+- AAC-LC goes through symphonia too, once (g) clears it.
+- FFmpeg decodes only what symphonia can't: HE-AAC, Opus, and anything else (e) allows.
+- Both AAC paths wait for (g). Until then, a file whose only audio is AAC plays its video
+  without sound, and the source reports the audio codec as unsupported.
 
-*Recommendation: 2.* It is the only option that plays H.264 on NVIDIA, on Fedora's stock
-Mesa and in virtual machines. It falls back only when VA-API refuses, and only after
-(g)'s patent check. Until then, the source behaves as in option 1. VP9 and AV1 go through
-VA-API first, and then through FFmpeg the same way.
+**(d) Containers: pure-Rust demuxers first, then `libavformat`.**
+- The pure-Rust demuxers read MP4 and MOV, Matroska and WebM. symphonia's readers add
+  WAV, FLAC, Ogg and MP3.
+- `libavformat` opens only a file none of them can read, such as AVI, MPEG-TS or FLV.
 
-**(c) Audio decode.**
-1. **symphonia for the patent-free codecs** (PCM, FLAC, Vorbis, MP3), and nothing else.
-   A file whose only audio is AAC plays its video without sound, and the source reports
-   the audio codec as unsupported.
-2. **Option 1, plus AAC-LC through symphonia**, once (g) clears it.
-3. **Options 1 and 2, plus FFmpeg for what symphonia can't decode:** HE-AAC, Opus, and
-   anything else (e) allows.
+**(e) Which FFmpeg: the system's `libav*` libraries, any build, loaded at run time.**
+- The libraries are `libavformat`, `libavcodec`, `libavutil` and `libswresample`, as the
+  distribution installs them.
+- They are opened with `dlopen` on first use, as libva is (ADR-0060 §8), through
+  hand-written declarations. No `-sys` or binding crate is used, and `deny.toml`'s FFmpeg
+  bans stay.
+- Any build loads, LGPL or GPL. So the fallback works with Debian's and Ubuntu's GPL builds
+  and with RPM Fusion's full build.
+- Each library's licence string (`avcodec_license()` and its siblings) is read when it
+  loads and logged, so a bug report shows which build ran.
+- JStream never ships, builds, links or downloads FFmpeg.
 
-*Recommendation: 3.* symphonia is pure Rust, so it comes first. FFmpeg serves only the
-codecs symphonia lacks. Both AAC paths wait for (g).
+**(f) The rule change: a narrow exception in R-DEP-002.** It is scoped to all of these at
+once:
+- Linux only, and decoding only;
+- the system's FFmpeg libraries, loaded at run time;
+- a fallback after VA-API and the pure-Rust crates.
 
-**(d) Containers.**
-1. **Pure-Rust demuxers only:** MP4 and MOV, Matroska and WebM, and symphonia's
-   audio-only readers (WAV, FLAC, Ogg, MP3).
-2. **Option 1, plus FFmpeg's `libavformat` for containers they can't read**, such as
-   AVI, MPEG-TS and FLV.
-3. **MP4 and MOV only.**
+Because the exception names its limits, lint-deps and `deny.toml` go on banning the rest:
+binding crates, bundled builds, and encoding through FFmpeg.
+- R-DEP-002's [new text](#rule-text) lands with this ADR.
+- ADR-0061's "OS APIs only" line for media files is superseded by an ADR-0061 v3, which
+  restates it with this exception. That lands with the implementing PR.
 
-*Recommendation: 2.* The pure-Rust demuxers come first. `libavformat` opens only a file
-that none of them can read.
+**(g) Patent exposure: a decoder patent check before any software H.264 or AAC decode
+ships.** Decoding H.264 or AAC through FFmpeg, or AAC through symphonia, is still decoding.
+A licence for FFmpeg's code isn't a patent licence.
+- The check is a follow-up ADR like ADR-0062. It covers:
+  - symphonia's AAC-LC decoder, and FFmpeg's H.264 and AAC decoders;
+  - who holds the licence when a system library does the decoding: the distribution, the
+    user, or JStream;
+  - whether JStream needs one at all, when it only calls a library the user installed.
+- Until the check says yes, those paths stay off.
+- VA-API decode isn't affected: the GPU's driver does the decoding, as it does the
+  encoding today.
 
-**(e) Which FFmpeg, and how it is reached.**
-1. **The system's `libav*` libraries, loaded at run time, and only LGPL builds.**
-   - They are opened with `dlopen` on first use, as libva is (ADR-0060 §8), through
-     hand-written declarations. No `-sys` or binding crate is used, and `deny.toml`'s
-     FFmpeg bans stay.
-   - Each library's licence string is checked when it loads. A GPL or non-free build is
-     refused as a missing component, whose remedy explains why.
-   - JStream never ships or builds FFmpeg.
-2. **The system's `libav*`, whatever their licence.** This works on Debian and Ubuntu's
-   GPL builds. Whether loading a GPL library at run time puts JStream under the GPL is
-   a legal question for the maintainer.
-3. **A bundled LGPL build** made by the project: decoders only, no GPL parts, shipped
-   beside the app and dynamically linked.
-   - It works the same on every distribution.
-   - But JStream then distributes FFmpeg, with LGPL obligations (its source, its notice,
-     and the user's right to replace it), and it distributes the decoders, which puts the
-     patent exposure on JStream itself.
-4. **No FFmpeg.** (b) to (d) take their option 1.
+<a id="patent-scope"></a>
+By default, (g) holds back only software H.264 and AAC decoding. FFmpeg's royalty-free
+paths don't wait for it: VP8, VP9 and AV1 video, Opus audio, and `libavformat`'s
+containers. Their makers license them royalty-free. (A third-party pool, Sisvel, claims
+patents on VP9 and AV1; (g) doesn't cover that claim, and the follow-up ADR may take it
+up.) These paths wait only for the [GPL legal view](#gpl-precondition), which every
+FFmpeg path needs.
+So the FFmpeg fallback comes in two stages:
 
-*Recommendation: 1.* It is the narrowest exception, and it matches the OpenH264 and libva
-precedents.
+| Path through FFmpeg | GPL legal view | (g)'s patent check |
+|---|---|---|
+| VP8, VP9, AV1, Opus, the extra containers | needed | not needed |
+| H.264, AAC (LC and HE) | needed | needed |
 
-Its cost should be stated plainly: on Debian and Ubuntu, whose system FFmpeg is GPL, the
-fallback doesn't load. Users there get option 1's "missing component" until they
-install an LGPL build. If the maintainer prefers coverage there, option 2 is the
-alternative, and it needs a legal view first.
-
-**(f) The rule change.**
-1. **A narrow exception in R-DEP-002**, scoped to all of these at once:
-   - Linux only, and decoding only;
-   - the system's FFmpeg libraries, loaded at run time, LGPL builds only;
-   - a fallback after VA-API and the pure-Rust crates.
-   - It is written next to the CEF and OpenH264 exceptions. ADR-0061's "OS APIs only"
-     line for media files is superseded by an ADR-0061 v3 that restates it with this
-     exception.
-2. **Lift the FFmpeg ban generally.** Not recommended: it would allow binding crates,
-   bundled builds and encoding through FFmpeg.
-
-*Recommendation: 1.* The exception names its limits, so lint-deps and `deny.toml` keep
-banning everything else. The R-DEP-002 edit and the ADR-0061 v3 land with the
-implementing PR, once this ADR is accepted.
-
-**(g) Patent exposure.** Decoding H.264 or AAC through FFmpeg, or AAC through symphonia,
-is still decoding. A licence for FFmpeg's code isn't a patent licence.
-1. **A decoder patent check before any software H.264 or AAC decode ships.** It is a
-   follow-up ADR like ADR-0062, covering:
-   - symphonia's AAC-LC decoder, and FFmpeg's H.264 and AAC decoders;
-   - who holds the licence when a system library does the decoding (the distribution,
-     the user, or JStream);
-   - whether JStream's role, calling a library the user installed, needs one.
-   - Until it says yes, those paths stay off.
-2. **Ship them, and treat a system library as the system's responsibility**, as on
-   Windows. Not recommended without the check: Windows' and macOS's decoders come with
-   the OS vendor's licences, and a Linux distribution's FFmpeg usually doesn't.
-
-*Recommendation: 1.* VA-API decode isn't affected: the GPU's driver does the decoding,
-as it does the encoding today.
+symphonia's AAC-LC decoder needs (g) only, since it loads no FFmpeg.
 
 **Either way:**
 - A container or codec outside the chosen set is `Unsupported`, naming it.
@@ -196,31 +173,162 @@ as it does the encoding today.
 - Video comes out in the configured CPU pixel format.
 - The other platforms are unchanged.
 
+<a id="gpl-precondition"></a>
+## Precondition: a legal view on loading a GPL FFmpeg
+**Nothing that loads FFmpeg ships until this is settled.**
+- The FFmpeg fallback can be written and reviewed on a branch.
+- It doesn't land in a wave or on `main`, and no build turns it on, until the maintainer
+  records counsel's answer in a maintainer-tier ADR.
+- (g)'s patent check is a separate gate. Both must pass.
+
+**This is not legal advice.** An agent wrote this section from what it knows of the public
+debate, without re-reading the sources here. Settling the question needs a lawyer, not an
+agent.
+
+### The question
+Does loading a GPL-licensed `libav*` build at run time make JStream a derivative work under
+the GPL's obligations? The facts:
+- JStream opens the library with `dlopen`, and has no link-time dependency on it.
+- It calls the library through hand-written declarations of FFmpeg's public C API.
+- It doesn't redistribute FFmpeg in any form.
+
+Two sub-questions go with it:
+- If the answer is yes, who carries the obligations: the JStream project, the user who
+  installed both, or whoever distributes the two together?
+- Does the answer change for a `--enable-nonfree` build, whose licence forbids
+  redistribution?
+
+### The view that it is a combined work
+This is the Free Software Foundation's position, as its GPL FAQ states it:
+- Suppose a program and a library are linked, statically or dynamically, and run in one
+  address space, calling each other's functions and sharing data structures. Then they
+  form a single combined program.
+- A plug-in loaded that way is part of the program, so the combination as a whole must be
+  under GPL-compatible terms.
+- On this view, JStream decoding through a GPL `libavcodec` is a combined work, however
+  the library is loaded.
+
+How JStream's licence fits this view:
+- JStream is `MIT OR Apache-2.0`. MIT is compatible with GPLv2 and GPLv3, and Apache-2.0
+  only with GPLv3. So JStream's code can be part of a GPL whole without changing its
+  licence. With a GPLv2 build, that is through the MIT side.
+- The GPL's conditions apply to conveying (distributing) the work, not to running it.
+  JStream doesn't convey FFmpeg, so the combination exists only on the user's machine.
+- The risk is in distribution:
+  - Anyone who ships JStream with a GPL FFmpeg would convey the combined work, and owe the
+    GPL's terms for all of it. That covers a distribution package, a Flatpak or an
+    AppImage.
+  - Some would argue that JStream's own release, built to load FFmpeg, is already a work
+    based on it.
+- JStream's code would stay permissive. But a proprietary product built on JStream could
+  not keep the FFmpeg path.
+
+### The view that it is not
+Many lawyers and commentators reject the FSF's line:
+- Under copyright law, a derivative work must copy or adapt protectable expression from
+  the original. How two programs are joined at run time is a technical fact, not the legal
+  test.
+- JStream's binary contains no FFmpeg code, only declarations of a public interface.
+  Courts have treated interfaces as functional or their reuse as fair use: *Google v.
+  Oracle* in the US, and *SAS Institute v. World Programming* in the EU, alongside the
+  Software Directive's interoperability provisions.
+- The library is optional and replaceable. JStream works without it, and an LGPL build
+  does the same job. That weighs against JStream being based on any one build.
+- The user puts the two together on their own machine, not JStream, and the GPL doesn't
+  restrict running a program.
+
+How JStream's licence fits this view: nothing changes. `MIT OR Apache-2.0` covers all of
+JStream for everyone, and the GPL binds only whoever distributes FFmpeg itself.
+
+### What the maintainer would give counsel
+- JStream's licence (`MIT OR Apache-2.0`, in `LICENSE-MIT` and `LICENSE-APACHE`). Also
+  whether the permissive promise must hold for every redistributor, proprietary forks
+  included.
+- How the code reaches FFmpeg, from this ADR and, once it exists, the implementing PR:
+  - `dlopen` on first use, with no link-time dependency;
+  - the hand-written declarations, and that they are written from FFmpeg's public headers,
+    which are LGPL files in FFmpeg's sources;
+  - what crosses the boundary: packets go in and decoded frames come out, in one address
+    space;
+  - that it is only a fallback, used when VA-API and the pure-Rust crates can't read the
+    file, and that an LGPL build works the same.
+- How JStream is distributed on Linux (a tarball, a Flatpak, an AppImage, distribution
+  packages), and whether any channel would bundle FFmpeg or pull it in.
+- Which builds users would load:
+  - Debian's, Ubuntu's and RPM Fusion's GPL builds;
+  - the GPL version of each (`--enable-version3` makes a build GPLv3);
+  - whether non-free builds are in scope.
+- What the app and its docs tell users, such as whether they suggest installing a GPL
+  build.
+- The jurisdictions that matter: where the maintainer is, and where JStream is offered.
+- That (g)'s patent question is separate, so counsel can say whether to take it on too.
+
+<a id="rule-text"></a>
+## R-DEP-002's new text
+R-DEP-002 now counts three media exceptions. It adds this one after the OpenH264
+exception:
+
+> On Linux, the media-file source may decode through the system's FFmpeg libraries
+> (`libavformat`, `libavcodec`, `libavutil`, `libswresample`) as a fallback, for a file
+> that VA-API and the pure-Rust crates can't read. They are loaded at run time through
+> hand-written declarations. JStream never ships, builds or links them, so the FFmpeg
+> binding crates stay banned, and nothing encodes through FFmpeg. The fallback lands only
+> once ADR-0072's GPL legal view is done, and its H.264 and AAC decoding only once
+> ADR-0072's decoder patent check is done too (ADR-0072).
+
+In RULES.md, that last ADR-0072 links here, and the rule's first sentence cites ADR-0072
+beside ADR-0061. The rule's title, its enforcement and `deny.toml`'s bans don't change.
+
+<a id="options"></a>
+## Options considered
+- **(a)** No Linux source, as ADR-0060 §9 left it.
+- **(b)**
+  - VA-API only.
+  - VA-API, then OpenH264's decoder. It goes against ADR-0061's "nothing decodes through
+    OpenH264", and Cisco's licence would need checking for decoding.
+  - VA-API, then a pure-Rust decoder, once a mature one exists.
+- **(c)** symphonia's patent-free codecs only, or those plus AAC-LC, without FFmpeg.
+- **(d)** Pure-Rust demuxers only, or MP4 and MOV only.
+- **(e)**
+  - LGPL builds only, refusing GPL ones. It was the narrowest exception, but the fallback
+    wouldn't load on Debian or Ubuntu.
+  - A bundled LGPL build made by the project. JStream would then distribute FFmpeg, with
+    the LGPL's obligations: its source, its notice, and the user's right to replace it.
+    It would also carry the decoders' patent exposure.
+  - No FFmpeg.
+- **(f)** Lifting the FFmpeg ban generally. That would allow binding crates, bundled
+  builds and encoding through FFmpeg.
+- **(g)** Shipping the software decoders without a check, and treating a system library as
+  the system's responsibility, as on Windows. But Windows' and macOS's decoders come with
+  the OS vendor's licences, and a Linux distribution's FFmpeg usually doesn't.
+
 <a id="consequences"></a>
 ## Consequences
-- **If accepted as recommended, playback grows in stages:**
-  - **First:** H.264 on a VA-API GPU, PCM, FLAC, Vorbis and MP3 audio, and MP4, MOV,
-    Matroska, WebM, WAV, FLAC, Ogg and MP3 files.
-  - **After (g)'s check says yes:** AAC-LC through symphonia, and the FFmpeg fallback for
-    H.264 without VA-API, HE-AAC, Opus and the other containers, where the system has an
-    LGPL FFmpeg.
+- **Playback grows in stages:**
+  - **First:** H.264, VP8, VP9 and AV1 on a VA-API GPU that decodes them, PCM, FLAC,
+    Vorbis and MP3 audio, and MP4, MOV, Matroska, WebM, WAV, FLAC, Ogg and MP3 files.
+  - **After the GPL legal view:** the FFmpeg fallback for VP8, VP9 and AV1 without
+    VA-API, Opus, and the other containers.
+  - **After (g)'s check says yes as well:** AAC-LC through symphonia (which needs only
+    (g)), and FFmpeg's H.264 and AAC decoding, HE-AAC included.
   - **Until then:** most `.mp4` files play without sound, and machines without VA-API
     H.264 play no H.264 video.
 - **The work is large.** VA-API decode means parsing H.264 headers, filling libva's
   picture and slice parameters, keeping the decoded picture buffer, and reordering into
   presentation order. The FFmpeg fallback is smaller: open, read packets, decode and
   convert, all through declarations written by hand.
-- **On acceptance:**
-  - R-DEP-002 gains the FFmpeg exception, worded as (f) says.
+- **With this ADR:** R-DEP-002 gains the FFmpeg exception, worded as
+  [above](#rule-text).
+- **With the implementing PR:**
   - ADR-0061 v3 supersedes ADR-0061, with the same text apart from the Linux media-file
     line. ADR-0060 stays accepted, its §9 media-file bullet answered here.
   - The `jstream-platform-linux` README names this ADR.
-  - ROADMAP's M3 Linux line adds the media-file item and the decoder patent check.
+  - ROADMAP's M3 Linux line adds the media-file item, the GPL legal view and the decoder
+    patent check.
 - **Tests:**
   - Demux, header parsing and symphonia decoding are tested on any platform, on small
     files committed under the crate's test data, in licences the repository allows.
   - VA-API decode and the FFmpeg fallback are `hw-tests` tests on a machine that has
     them.
-  - The licence check that refuses a GPL build is tested hermetically.
-- **If (a) is "no":** nothing changes. If (e) is "no FFmpeg", the source stays at its
-  first stage, plus AAC-LC if (g) clears it.
+  - Reading and logging each library's licence string is tested hermetically, and so is
+    the switch that keeps each FFmpeg path off until its gates pass.
