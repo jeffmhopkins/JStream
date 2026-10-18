@@ -1,5 +1,8 @@
 //! The output pipeline's captures: one per thing the render snapshot captures
-//! ([`Shot::captures`]), started and stopped as the program mix changes.
+//! ([`Shot::captures`]), started and stopped as the program mix changes. A display or
+//! window is captured through the capture backend. A webcam or capture card is captured
+//! through the video-device backend, on the CPU path, in a format [`device_format`]
+//! picks.
 //!
 //! The render thread reads each capture's mailbox every tick and keeps its latest frame,
 //! a texture on the compositor's device or CPU RGBA8. Starting and stopping a capture
@@ -19,7 +22,7 @@ use jstream_media::{
 };
 use jstream_platform::{
     Capture, CaptureStats, CaptureStream, CaptureTarget, DeviceId, GpuFrame, PlatformError,
-    VideoSurface,
+    VideoDeviceFormat, VideoDevices, VideoSurface,
 };
 use jstream_sources::CaptureSpec;
 
@@ -29,11 +32,16 @@ use crate::snapshot::{CaptureFrame, CaptureImage, Captures};
 pub(crate) const RETRY_MS: i64 = 2_000;
 
 /// The capture backend, and the same backend on the compositor's GPU device when it
-/// has a path there ([`Capture::on_context`]).
+/// has a path there ([`Capture::on_context`]), and the video-device backend.
 pub(crate) struct Backends {
     pub(crate) cpu: Arc<dyn Capture>,
     pub(crate) gpu: Option<Arc<dyn Capture>>,
+    pub(crate) devices: Arc<dyn VideoDevices>,
 }
+
+/// The most pixels a webcam or capture card is opened at: 1920x1080. The render thread
+/// converts each CPU frame to RGBA, so a 4K device is opened at a smaller size it offers.
+const MAX_DEVICE_PIXELS: u64 = 1920 * 1080;
 
 /// What the render thread asks the `jstream-capture` thread to do.
 enum Request {
@@ -103,11 +111,15 @@ fn capture_thread(backends: &Backends, rx: &Receiver<Request>, tx: &Sender<Start
 }
 
 /// Starts the capture of `spec`: on the GPU path when the backend has one and it
-/// starts, else on the CPU path. Fails with the reason when neither starts.
+/// starts, else on the CPU path. Fails with the reason when neither starts. A video
+/// device is opened on the CPU path ([`open_device`]).
 pub(crate) fn start(
     backends: &Backends,
     spec: &CaptureSpec,
 ) -> Result<Box<dyn CaptureStream>, String> {
+    if let CaptureSpec::Device(id) = spec {
+        return open_device(backends.devices.as_ref(), id.as_deref());
+    }
     let target = target(backends.cpu.as_ref(), spec)?;
     let gpu_failed = match &backends.gpu {
         Some(gpu) => match gpu.start(&target) {
@@ -139,6 +151,7 @@ fn target(capture: &dyn Capture, spec: &CaptureSpec) -> Result<CaptureTarget, St
         CaptureSpec::Display(Some(id)) => Ok(CaptureTarget::Display(DeviceId::new(id.clone()))),
         CaptureSpec::Window(Some(id)) => Ok(CaptureTarget::Window(DeviceId::new(id.clone()))),
         CaptureSpec::Window(None) => Err("no window is chosen".into()),
+        CaptureSpec::Device(_) => Err("a video device is not a capture target".into()),
         CaptureSpec::Display(None) => {
             let targets = capture
                 .targets()
@@ -155,6 +168,83 @@ fn target(capture: &dyn Capture, spec: &CaptureSpec) -> Result<CaptureTarget, St
                 .ok_or_else(|| "no display to capture".into())
         }
     }
+}
+
+/// Opens the video device `id`, or the first one listed, in the format
+/// [`device_format`] picks, with no decoder.
+fn open_device(
+    devices: &dyn VideoDevices,
+    id: Option<&str>,
+) -> Result<Box<dyn CaptureStream>, String> {
+    let id = match id {
+        Some(id) => DeviceId::new(id),
+        None => devices
+            .devices()
+            .map_err(|err| format!("listing video devices: {err}"))?
+            .into_iter()
+            .next()
+            .map(|info| info.id)
+            .ok_or("no webcam or capture card to capture")?,
+    };
+    let formats = devices
+        .formats(&id)
+        .map_err(|err| format!("listing {id}'s formats: {err}"))?;
+    let format = device_format(&formats).ok_or_else(|| {
+        format!(
+            "{id} offers no uncompressed format the engine reads (MJPEG decoding is not \
+             built yet)"
+        )
+    })?;
+    tracing::info!(
+        device = %id,
+        size = ?format.size,
+        period = ?format.frame_period,
+        encoding = ?format.encoding,
+        "opening the video device"
+    );
+    devices
+        .open(&id, &format, None)
+        .map_err(|err| format!("opening {id}: {err}"))
+}
+
+/// The format a webcam or capture card is opened in, from those it lists.
+///
+/// Only formats whose frames arrive uncompressed, in a format [`rgba_from_surface`]
+/// converts, are considered: RGBA, BGRA, or NV12 (which YUY2 is delivered as). Of
+/// those, it picks the largest of at most [`MAX_DEVICE_PIXELS`] (else the smallest),
+/// then the fastest, then the first listed. `None` when the device offers only
+/// compressed formats.
+pub(crate) fn device_format(formats: &[VideoDeviceFormat]) -> Option<VideoDeviceFormat> {
+    let pixels = |f: &VideoDeviceFormat| u64::from(f.size.width()) * u64::from(f.size.height());
+    let fits = |pixels: u64| pixels <= MAX_DEVICE_PIXELS;
+    let mut best: Option<&VideoDeviceFormat> = None;
+    for format in formats.iter().filter(|f| {
+        matches!(
+            f.encoding.delivered_format(),
+            Some(PixelFormat::Rgba8 | PixelFormat::Bgra8 | PixelFormat::Nv12)
+        )
+    }) {
+        let Some(current) = best else {
+            best = Some(format);
+            continue;
+        };
+        let (p, c) = (pixels(format), pixels(current));
+        let better = match (fits(p), fits(c)) {
+            (true, false) => true,
+            (false, true) => false,
+            (true, true) if p != c => p > c,
+            (false, false) if p != c => p < c,
+            // The same size: the shorter frame period, num/den, is faster.
+            _ => {
+                let (a, b) = (format.frame_period, current.frame_period);
+                u64::from(a.num()) * u64::from(b.den()) < u64::from(b.num()) * u64::from(a.den())
+            }
+        };
+        if better {
+            best = Some(format);
+        }
+    }
+    best.copied()
 }
 
 /// The render thread's captures: the running streams and the latest frame of each.
@@ -510,5 +600,93 @@ impl Yuv {
             channel(l + cb * i64::from(self.cb_b)),
             255,
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Backends, MAX_DEVICE_PIXELS, device_format, rgba_from_surface, start};
+    use jstream_media::{FrameSize, PixelFormat, Timebase};
+    use jstream_platform::fake::{
+        FAKE_CAPTURE_CARD, FAKE_WEBCAM, FakeCapture, FakeClock, FakeVideoDevices,
+    };
+    use jstream_platform::{CaptureEncoding, VideoDeviceFormat};
+    use jstream_sources::CaptureSpec;
+    use std::sync::Arc;
+
+    fn format(width: u32, height: u32, fps: u32, encoding: CaptureEncoding) -> VideoDeviceFormat {
+        VideoDeviceFormat {
+            size: FrameSize::new(width, height).expect("size"),
+            frame_period: Timebase::new(1, fps).expect("period"),
+            encoding,
+        }
+    }
+
+    #[test]
+    fn a_device_opens_in_its_largest_readable_format_up_to_1080p() {
+        let nv12 = CaptureEncoding::Raw(PixelFormat::Nv12);
+        let mjpeg = format(1920, 1080, 30, CaptureEncoding::Mjpeg);
+        let small = format(640, 360, 30, CaptureEncoding::Yuy2);
+        let hd = format(1280, 720, 30, nv12);
+        let hd60 = format(1280, 720, 60, nv12);
+        let full = format(1920, 1080, 30, nv12);
+        let uhd = format(3840, 2160, 30, nv12);
+        assert_eq!(
+            device_format(&[small, hd, mjpeg]),
+            Some(hd),
+            "MJPEG isn't read"
+        );
+        assert_eq!(
+            device_format(&[hd, hd60, small]),
+            Some(hd60),
+            "the faster rate"
+        );
+        assert_eq!(
+            device_format(&[hd60, hd]),
+            Some(hd60),
+            "the first of equals"
+        );
+        assert_eq!(
+            device_format(&[uhd, hd, full]),
+            Some(full),
+            "4K is over the limit"
+        );
+        assert_eq!(device_format(&[uhd]), Some(uhd), "the only size there is");
+        assert_eq!(device_format(&[mjpeg]), None, "MJPEG only");
+        assert_eq!(device_format(&[]), None);
+        assert_eq!(MAX_DEVICE_PIXELS, 1920 * 1080);
+    }
+
+    #[test]
+    fn a_device_spec_opens_the_device_and_delivers_frames_rgba_reads() {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let devices = FakeVideoDevices::new(clock.clone());
+        let backends = Backends {
+            cpu: Arc::new(FakeCapture::new(
+                clock.clone(),
+                FrameSize::new(64, 36).expect("size"),
+            )),
+            gpu: None,
+            devices: Arc::new(devices.clone()),
+        };
+        for (spec, size) in [
+            (CaptureSpec::Device(None), (640, 360)),
+            (CaptureSpec::Device(Some(FAKE_WEBCAM.into())), (640, 360)),
+            (
+                CaptureSpec::Device(Some(FAKE_CAPTURE_CARD.into())),
+                (1280, 720),
+            ),
+        ] {
+            let mut stream = start(&backends, &spec).expect("the device opens");
+            assert_eq!(devices.open_streams(), 1, "{spec:?}");
+            clock.advance(1_000);
+            let surface = stream.latest().expect("latest").expect("a frame");
+            let mut rgba = Vec::new();
+            let got = rgba_from_surface(&surface, &mut rgba).expect("an NV12 CPU frame");
+            assert_eq!((got.width(), got.height()), size, "{spec:?}");
+            drop(stream);
+            assert_eq!(devices.open_streams(), 0, "{spec:?}");
+        }
+        assert!(start(&backends, &CaptureSpec::Device(Some("nope".into()))).is_err());
     }
 }

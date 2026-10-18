@@ -1,8 +1,8 @@
-//! The `display` and `window` sources: what the platform captures.
+//! The `display`, `window` and `webcam` sources: what the platform captures.
 //!
-//! Their frames don't come from [`Source::frame`]. The platform's capture backend
-//! delivers them, on its own thread, to the engine's render thread, as CPU frames or as
-//! textures shared with the compositor. A capture source only says what to capture
+//! Their frames don't come from [`Source::frame`]. The platform's capture backend (for
+//! `webcam`, its video-device backend) delivers them, on its own thread, to the engine's
+//! render thread, as CPU frames or as textures shared with the compositor. A capture source only says what to capture
 //! ([`Source::capture`]); the engine starts and reads the capture.
 
 use crate::describe::{kind, param};
@@ -25,29 +25,51 @@ pub enum CaptureSpec {
     /// One top-level window: the one whose capture-backend target ID is given, or
     /// nothing when `None`.
     Window(Option<String>),
+    /// A video capture device, such as a webcam or a capture card: the one whose
+    /// video-device ID is given, or the first one listed when `None`.
+    Device(Option<String>),
 }
 
-/// The `display` or `window` kind.
+/// Which of the capture kinds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Flavor {
+    Display,
+    Window,
+    Device,
+}
+
+/// The `display`, `window` or `webcam` kind.
 pub(crate) struct CaptureKind {
     descriptor: KindDescriptor,
-    window: bool,
+    flavor: Flavor,
 }
 
 impl CaptureKind {
     /// The `display` kind. An empty `target` captures the primary display, which is
     /// what a `display` source showed before it had settings.
     pub(crate) fn display() -> Self {
-        Self::new("display", "Display capture", "Display", false)
+        Self::new("display", "Display capture", Flavor::Display)
     }
 
     /// The `window` kind. An empty `target` captures nothing.
     pub(crate) fn window() -> Self {
-        Self::new("window", "Window capture", "Window", true)
+        Self::new("window", "Window capture", Flavor::Window)
     }
 
-    fn new(id: &str, name: &str, label: &str, window: bool) -> Self {
+    /// The `webcam` kind: a webcam or capture card. An empty `device` captures the
+    /// first device the platform lists.
+    pub(crate) fn webcam() -> Self {
+        Self::new("webcam", "Webcam", Flavor::Device)
+    }
+
+    fn new(id: &str, name: &str, flavor: Flavor) -> Self {
+        let (param_id, label) = match flavor {
+            Flavor::Display => ("target", "Display"),
+            Flavor::Window => ("target", "Window"),
+            Flavor::Device => ("device", "Device"),
+        };
         let mut target = param(
-            "target",
+            param_id,
             label,
             ParamType::String {
                 multiline: false,
@@ -55,36 +77,39 @@ impl CaptureKind {
             },
             json!(""),
         );
-        target.description = Some(if window {
-            "The ID of the window to capture, as `capture.targets` lists it. Empty captures \
-             nothing."
-                .into()
-        } else {
-            "The ID of the display to capture, as `capture.targets` lists it. Empty captures \
-             the primary display."
-                .into()
+        target.description = Some(match flavor {
+            Flavor::Window => "The ID of the window to capture, as `capture.targets` lists \
+                               it. Empty captures nothing."
+                .into(),
+            Flavor::Display => "The ID of the display to capture, as `capture.targets` lists \
+                                it. Empty captures the primary display."
+                .into(),
+            Flavor::Device => "The ID of the webcam or capture card, as the platform lists \
+                               it. Empty captures the first device listed."
+                .into(),
         });
         Self {
             descriptor: KindDescriptor {
                 params: vec![target],
                 ..kind(id, name, true, false)
             },
-            window,
+            flavor,
         }
     }
 
     /// What the settings say to capture.
     fn spec(&self, settings: &Settings) -> Result<CaptureSpec, SourceError> {
-        let value = setting(settings, "target")?;
+        let param = &self.descriptor.params[0].id;
+        let value = setting(settings, param)?;
         let target = value.as_str().ok_or_else(|| SourceError::Setting {
-            param: "target".into(),
+            param: param.clone(),
             reason: "must be a string".into(),
         })?;
         let target = (!target.is_empty()).then(|| target.to_owned());
-        Ok(if self.window {
-            CaptureSpec::Window(target)
-        } else {
-            CaptureSpec::Display(target)
+        Ok(match self.flavor {
+            Flavor::Display => CaptureSpec::Display(target),
+            Flavor::Window => CaptureSpec::Window(target),
+            Flavor::Device => CaptureSpec::Device(target),
         })
     }
 }
@@ -104,7 +129,7 @@ impl SourceKind for CaptureKind {
     }
 }
 
-/// A running `display` or `window` source.
+/// A running `display`, `window` or `webcam` source.
 struct CaptureSource {
     kind_id: String,
     descriptor: KindDescriptor,
