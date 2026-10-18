@@ -1,5 +1,9 @@
 //! The output pipeline's captures: one per thing the render snapshot captures
-//! ([`Shot::captures`]), started and stopped as the program mix changes.
+//! ([`Shot::captures`]), started and stopped as the program mix changes. That is one per
+//! source ([`CaptureKey`]), started with the source's [`CaptureOptions`], so two sources
+//! showing the same target run two captures of it. A source whose `show_cursor` is off
+//! asks for the pointer to be left out ([`CursorCapture::Hidden`]); the engine never
+//! draws it.
 //!
 //! The render thread reads each capture's mailbox every tick and keeps its latest frame,
 //! a texture on the compositor's device or CPU RGBA8. Starting and stopping a capture
@@ -18,12 +22,12 @@ use jstream_media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Rounding, Timebase,
 };
 use jstream_platform::{
-    Capture, CaptureStats, CaptureStream, CaptureTarget, DeviceId, GpuFrame, PlatformError,
-    VideoSurface,
+    Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CursorCapture, DeviceId,
+    GpuFrame, PlatformError, VideoSurface,
 };
 use jstream_sources::CaptureSpec;
 
-use crate::snapshot::{CaptureFrame, CaptureImage, Captures};
+use crate::snapshot::{CaptureFrame, CaptureImage, CaptureKey, Captures};
 
 /// How long a capture that failed waits before it is started again, in milliseconds.
 pub(crate) const RETRY_MS: i64 = 2_000;
@@ -37,14 +41,14 @@ pub(crate) struct Backends {
 
 /// What the render thread asks the `jstream-capture` thread to do.
 enum Request {
-    Start(CaptureSpec),
+    Start(CaptureKey),
     /// Stop a capture: its stream is dropped there.
     Stop(Box<dyn CaptureStream>),
 }
 
 /// A start's outcome, sent back to the render thread.
 struct Started {
-    spec: CaptureSpec,
+    spec: CaptureKey,
     stream: Option<Box<dyn CaptureStream>>,
 }
 
@@ -106,11 +110,16 @@ fn capture_thread(backends: &Backends, rx: &Receiver<Request>, tx: &Sender<Start
 /// starts, else on the CPU path. Fails with the reason when neither starts.
 pub(crate) fn start(
     backends: &Backends,
-    spec: &CaptureSpec,
+    spec: &CaptureKey,
 ) -> Result<Box<dyn CaptureStream>, String> {
-    let target = target(backends.cpu.as_ref(), spec)?;
+    let target = target(backends.cpu.as_ref(), &spec.spec)?;
+    let options = match &spec.source {
+        Some(source) => CaptureOptions::for_source(source.as_str()),
+        None => CaptureOptions::default(),
+    }
+    .with_cursor(cursor(spec));
     let gpu_failed = match &backends.gpu {
-        Some(gpu) => match gpu.start(&target) {
+        Some(gpu) => match gpu.start_with(&target, &options) {
             Ok(stream) => {
                 tracing::info!(capture = ?spec, "capture delivers GPU frames");
                 return Ok(stream);
@@ -119,7 +128,7 @@ pub(crate) fn start(
         },
         None => None,
     };
-    match (backends.cpu.start(&target), gpu_failed) {
+    match (backends.cpu.start_with(&target, &options), gpu_failed) {
         (Ok(stream), Some(gpu)) => {
             tracing::warn!(capture = ?spec, error = %gpu, "GPU capture did not start; capturing CPU frames");
             Ok(stream)
@@ -157,9 +166,19 @@ fn target(capture: &dyn Capture, spec: &CaptureSpec) -> Result<CaptureTarget, St
     }
 }
 
+/// How `spec`'s capture asks for the pointer: drawn into the frames by the OS when it
+/// shows, else left out ([`CursorCapture::Hidden`]). The engine never draws it.
+fn cursor(spec: &CaptureKey) -> CursorCapture {
+    if spec.show_cursor {
+        CursorCapture::Drawn
+    } else {
+        CursorCapture::Hidden
+    }
+}
+
 /// The render thread's captures: the running streams and the latest frame of each.
 pub(crate) struct RenderCaptures {
-    slots: BTreeMap<CaptureSpec, Slot>,
+    slots: BTreeMap<CaptureKey, Slot>,
     /// `None` once [`stop`](Self::stop) has run.
     requests: Option<Sender<Request>>,
     started: Receiver<Started>,
@@ -212,7 +231,7 @@ impl RenderCaptures {
     /// Starts what `wanted` captures and isn't running, stops what it no longer
     /// captures, takes the streams the `jstream-capture` thread started, and reads every
     /// running capture's mailbox. Never waits.
-    pub(crate) fn tick(&mut self, wanted: &BTreeSet<CaptureSpec>, now: MediaTime) {
+    pub(crate) fn tick(&mut self, wanted: &BTreeSet<CaptureKey>, now: MediaTime) {
         let Some(requests) = &self.requests else {
             return;
         };
@@ -371,7 +390,7 @@ impl Drop for RenderCaptures {
 }
 
 impl Captures for RenderCaptures {
-    fn frame(&self, spec: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+    fn frame(&self, spec: &CaptureKey) -> Option<CaptureFrame<'_>> {
         let slot = self.slots.get(spec)?;
         let image = match slot.frame.as_ref()? {
             Latest::Gpu(frame) => CaptureImage::Gpu(frame),

@@ -190,7 +190,13 @@ fn capture_sources_capture_their_targets() {
     )
     .expect("created");
     assert!(engine.settle_sources(), "the sources were built in time");
-    let captures = |engine: &Engine| engine.render_hub().load().shot().captures().clone();
+    let keys = |engine: &Engine| engine.render_hub().load().shot().captures().clone();
+    let captures = |engine: &Engine| {
+        keys(engine)
+            .into_iter()
+            .map(|key| key.spec)
+            .collect::<BTreeSet<_>>()
+    };
     assert_eq!(
         captures(&engine),
         BTreeSet::from([
@@ -198,6 +204,16 @@ fn capture_sources_capture_their_targets() {
             CaptureSpec::Display(Some("monitor:2".into())),
             CaptureSpec::Window(Some("hwnd:0x2a".into())),
         ])
+    );
+    // Each source has a capture of its own, so a backend that keeps a grant per source
+    // keeps them apart: `screen` and `again` show the same display through two.
+    let sources: BTreeSet<_> = keys(&engine)
+        .into_iter()
+        .filter_map(|key| key.source.map(|id| id.as_str().to_owned()))
+        .collect();
+    assert_eq!(
+        sources,
+        BTreeSet::from(["again", "editor", "screen", "second"].map(String::from))
     );
     assert_eq!(shown(&engine, "screen"), None, "no frame of its own");
 
@@ -634,4 +650,123 @@ fn a_media_file_loaded_before_the_media_backend_plays_once_it_is_injected() {
     clock.advance(150);
     assert!(plays(&engine, 1), "and advances on the clock");
     let _ = fs::remove_dir_all(dir);
+}
+
+/// A capture backend that records what it was asked, around the fake capture.
+struct Recording {
+    inner: jstream_platform::fake::FakeCapture,
+    started: std::sync::Mutex<Vec<(Option<String>, jstream_platform::CursorCapture)>>,
+    forgot: std::sync::Mutex<Vec<String>>,
+}
+
+impl jstream_platform::Capture for Recording {
+    fn targets(
+        &self,
+    ) -> Result<Vec<jstream_platform::CaptureTargetInfo>, jstream_platform::PlatformError> {
+        self.inner.targets()
+    }
+
+    fn start(
+        &self,
+        target: &jstream_platform::CaptureTarget,
+    ) -> Result<Box<dyn jstream_platform::CaptureStream>, jstream_platform::PlatformError> {
+        self.start_with(target, &jstream_platform::CaptureOptions::default())
+    }
+
+    fn start_with(
+        &self,
+        target: &jstream_platform::CaptureTarget,
+        options: &jstream_platform::CaptureOptions,
+    ) -> Result<Box<dyn jstream_platform::CaptureStream>, jstream_platform::PlatformError> {
+        crate::lock(&self.started).push((options.source.clone(), options.cursor));
+        self.inner.start(target)
+    }
+
+    fn forget_source(&self, source: &str) {
+        crate::lock(&self.forgot).push(source.to_owned());
+    }
+}
+
+fn recording() -> Arc<Recording> {
+    Arc::new(Recording {
+        inner: jstream_platform::fake::FakeCapture::new(
+            FakeClock::new(Timebase::MICROS),
+            FrameSize::new(64, 36).expect("size"),
+        ),
+        started: std::sync::Mutex::new(Vec::new()),
+        forgot: std::sync::Mutex::new(Vec::new()),
+    })
+}
+
+#[test]
+fn a_sources_capture_is_started_for_that_source() {
+    let capture = recording();
+    let backends = crate::runtime::CaptureBackends {
+        cpu: Arc::clone(&capture) as Arc<dyn jstream_platform::Capture>,
+        gpu: None,
+    };
+    let key = crate::snapshot::CaptureKey::for_source(
+        CaptureSpec::Display(None),
+        SourceId::new("screen"),
+    );
+    crate::runtime::start_capture(&backends, &key).expect("the capture starts");
+    crate::runtime::start_capture(&backends, &crate::snapshot::CaptureKey::primary())
+        .expect("the primary display starts");
+    crate::runtime::start_capture(&backends, &key.clone().with_cursor(false))
+        .expect("the capture without the pointer starts");
+    use jstream_platform::CursorCapture::{Drawn, Hidden};
+    assert_eq!(
+        *crate::lock(&capture.started),
+        vec![
+            (Some("screen".to_owned()), Drawn),
+            (None, Drawn),
+            (Some("screen".to_owned()), Hidden)
+        ],
+        "a source's capture names it, the primary display without a scene names none, \
+         and a capture without the pointer asks for it to be left out"
+    );
+}
+
+#[test]
+fn deleting_a_source_forgets_its_capture_grant() {
+    use jstream_media::ChannelLayout;
+    use jstream_platform::Backends;
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCodecs, FakeGpuInterop, FakeMediaDecoders, FakeVideoDevices,
+    };
+
+    let capture = recording();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
+        capture: Arc::clone(&capture) as Arc<dyn jstream_platform::Capture>,
+        audio: Arc::new(FakeAudioIo::new(clock, 48_000, ChannelLayout::Stereo).expect("audio")),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
+        vcam: None,
+    };
+    let engine = Engine::new().with_backends(backends);
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            source("screen", "display", Settings::new()),
+            source("other", "display", Settings::new()),
+        ]),
+    )
+    .expect("created");
+    batch(
+        &control,
+        edits(vec![Edit::SourceDelete {
+            source_id: SourceId::new("screen"),
+        }]),
+    )
+    .expect("deleted");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while crate::lock(&capture.forgot).is_empty() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(*crate::lock(&capture.forgot), vec!["screen".to_owned()]);
 }

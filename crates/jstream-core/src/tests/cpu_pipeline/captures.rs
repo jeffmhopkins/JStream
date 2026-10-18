@@ -10,8 +10,8 @@ use jstream_control::Control;
 use jstream_media::FrameSize;
 use jstream_platform::fake::FakeCapture;
 use jstream_platform::{
-    Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, DeviceId, MediaClock,
-    PlatformError, VideoSurface,
+    Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
+    CursorCapture, DeviceId, MediaClock, PlatformError, VideoSurface,
 };
 use jstream_protocol::{
     CaptureTargetKind, Edit, ItemId, PixelSize, ProtocolError, Query, QueryResult, Settings,
@@ -27,6 +27,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 struct Log {
     /// Every target started, in order, refused ones included.
     started: Vec<CaptureTarget>,
+    /// How each start asked for the pointer, in the same order.
+    cursors: Vec<CursorCapture>,
     /// Targets whose start is refused with `NotFound`.
     refused: BTreeSet<String>,
     /// Targets whose running streams report `DeviceLost`.
@@ -73,10 +75,19 @@ impl Capture for Targets {
     }
 
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.start_with(target, &CaptureOptions::default())
+    }
+
+    fn start_with(
+        &self,
+        target: &CaptureTarget,
+        options: &CaptureOptions,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
         let id = id(target);
         {
             let mut log = self.log.lock().unwrap_or_else(PoisonError::into_inner);
             log.started.push(target.clone());
+            log.cursors.push(options.cursor);
             if log.refused.contains(&id) {
                 return Err(PlatformError::NotFound { kind: "window", id });
             }
@@ -225,10 +236,11 @@ fn capture_targets_lists_the_displays_then_the_windows() {
     );
 }
 
-/// The output captures each display and window its program scene shows, once however
-/// many sources show it, and nothing else: not the primary display, which only fills an
-/// output with no scene. A capture whose source leaves the program stops, and one that
-/// comes back starts again.
+/// The output captures each display and window its program scene shows, once for each
+/// source that shows it (so a backend that keeps a grant per source keeps each source's
+/// apart), and nothing else: not the primary display, which only fills an output with no
+/// scene. A capture whose source leaves the program stops, and one that comes back
+/// starts again.
 #[test]
 fn an_output_captures_what_its_program_shows() {
     let setup = Setup::new();
@@ -255,11 +267,11 @@ fn an_output_captures_what_its_program_shows() {
     let mut events = control.events();
     start(&control, &mut events);
     assert!(
-        setup.until(|| setup.live() == 2),
-        "two captures run: {}",
+        setup.until(|| setup.live() == 3),
+        "three captures run: {}",
         setup.live()
     );
-    assert_eq!(setup.starts(&display("d2")), 1, "shared by two sources");
+    assert_eq!(setup.starts(&display("d2")), 2, "one for each source");
     assert_eq!(setup.starts(&window("w1")), 1);
     assert_eq!(
         setup.starts(&display("d1")),
@@ -275,17 +287,96 @@ fn an_output_captures_what_its_program_shows() {
     )
     .expect("removed");
     assert!(
-        setup.until(|| setup.live() == 1),
+        setup.until(|| setup.live() == 2),
         "the window's capture stopped"
     );
     batch(&control, edits(vec![add("a", "i4", "editor")])).expect("added");
     assert!(
-        setup.until(|| setup.live() == 2 && setup.starts(&window("w1")) == 2),
+        setup.until(|| setup.live() == 3 && setup.starts(&window("w1")) == 2),
         "the window's capture started again"
     );
 
     block_on_stop(&control);
     assert_eq!(setup.live(), 0, "stopping the output stops every capture");
+}
+
+/// A source whose `show_cursor` is off asks for the pointer to be left out; turning it on
+/// starts that source's capture again with the pointer drawn in.
+#[test]
+fn a_capture_asks_for_the_pointer_as_its_source_says() {
+    let setup = Setup::new();
+    let engine = engine(
+        share(&setup.fakes.backends),
+        cpu_draw(),
+        Box::new(RecordingPublish::new()),
+    );
+    let control = connected(&engine);
+    let mut hidden = capture_source("second", "display", "d2");
+    if let Edit::SourceCreate { settings, .. } = &mut hidden {
+        settings.insert("show_cursor", json!(false));
+    }
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            hidden,
+            capture_source("editor", "window", "w1"),
+            add("a", "i1", "second"),
+            add("a", "i2", "editor"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let mut events = control.events();
+    start(&control, &mut events);
+    assert!(setup.until(|| setup.live() == 2), "both captures run");
+    let cursor = |target: &CaptureTarget| {
+        let log = setup.log();
+        log.started
+            .iter()
+            .zip(&log.cursors)
+            .filter(|(t, _)| *t == target)
+            .map(|(_, c)| *c)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        cursor(&display("d2")),
+        vec![CursorCapture::Hidden],
+        "left out"
+    );
+    assert_eq!(
+        cursor(&window("w1")),
+        vec![CursorCapture::Drawn],
+        "the default"
+    );
+
+    batch(
+        &control,
+        edits(vec![Edit::SourceSetSettings {
+            source_id: SourceId::new("second"),
+            patch: Settings(
+                [("show_cursor".to_owned(), json!(true))]
+                    .into_iter()
+                    .collect(),
+            ),
+        }]),
+    )
+    .expect("shown");
+    assert!(
+        setup.until(|| setup.starts(&display("d2")) == 2 && setup.live() == 2),
+        "the display's capture started again"
+    );
+    assert_eq!(
+        cursor(&display("d2")),
+        vec![CursorCapture::Hidden, CursorCapture::Drawn]
+    );
+    assert_eq!(
+        setup.starts(&window("w1")),
+        1,
+        "the window's capture kept running"
+    );
+
+    block_on_stop(&control);
 }
 
 /// A capture that doesn't start, or whose target goes away, is started again
