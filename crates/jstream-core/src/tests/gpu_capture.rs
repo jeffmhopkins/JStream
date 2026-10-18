@@ -912,6 +912,16 @@ fn an_output_fails_when_the_gpu_fallback_hangs_or_panics() {
             .with_draw(stuck_fallback_draw(own, Arc::clone(&release)))
             .with_publish(Box::new(RecordingPublish::new()));
         let control = connected(&engine);
+        // Lets a hanging open finish when the test ends, passed or failed. Declared after
+        // the engine, so it runs first: an engine whose render thread is stuck in the open
+        // could not drop before it.
+        struct Release(Arc<AtomicBool>);
+        impl Drop for Release {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let _release = Release(Arc::clone(&release));
         block_on(control.call(output_call("yt", true))).expect("output.start");
         let started = Instant::now();
         let failed = tick_until(&clock, || {
@@ -923,7 +933,5 @@ fn an_output_fails_when_the_gpu_fallback_hangs_or_panics() {
             "{own:?}: failed only after {:?}",
             started.elapsed()
         );
-        // Lets a hanging open finish; its thread then drops it.
-        release.store(true, Ordering::Release);
     }
 }
