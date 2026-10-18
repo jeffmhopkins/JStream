@@ -202,7 +202,6 @@ impl fmt::Debug for StreamKey {
     }
 }
 
-/// Whether `host` names this machine: `localhost` or a loopback address.
 #[cfg(test)]
 mod tests {
     use super::*;
