@@ -159,10 +159,11 @@ depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.
 ([R-RT-002](../../docs/RULES.md#R-RT-002)). This crate has no render thread: calling
 `render` is the caller's tick, on `jstream-core`'s render thread. `ResourceCache`
 returns what it frees as `Reclaimed`, so that thread can hand it to a collector
-([R-RT-003](../../docs/RULES.md#R-RT-003)). The one image this crate drops itself is a
-multi-pass filter's scratch layer that a call replaces at a new size or no longer asks
-for (**Filters**), so it happens only when a filter's size or settings change; the same
-goes for a filter draw's two small uniform buffers, which hold no texture. GPU
+([R-RT-003](../../docs/RULES.md#R-RT-003)). The images this crate drops itself are a
+multi-pass filter's scratch layers that a call replaces at a new size or no longer asks
+for, and a video delay's held frames when its delay goes to 0, its input size changes or
+its memory cap shrinks (**Filters**), so only when a filter's size or settings change; the
+same goes for a filter draw's two small uniform buffers, which hold no texture. GPU
 calls may allocate inside the driver; this crate does not allocate per item on the
 steady path.
 
@@ -391,10 +392,9 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 
 - `VideoFilter::new(kind_id, settings)` builds a kind's pass; `set_settings` updates it
   in place, keeping its state; `output_size` is the size it draws for a given input,
-  so a filter can change the source's reported size (for example aspect ratio, padding,
-  a drop shadow, an outside outline or a glow). `content_box` is where the input's
-  frame sits in that output (a `ContentBox`, see **Bounds** below), and
-  `ContentBox::then` carries a box down a chain.
+  so a filter can change the source's reported size. Only aspect ratio does (its crop,
+  pad and stretch reshape the frame); every other kind keeps its input's size
+  (**Bounds** below).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `apply_filter_into(filter, input, output,
   clock)` draws into a layer the caller keeps (a `ResourceCache` layer), so a chain
@@ -424,19 +424,20 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each `apply_filter` makes its output layer (`apply_filter_into` reuses the caller's).
-  A filter's draws keep their two small uniform buffers in the same pool (#369): a
-  call's `n`th draw reuses the call before's `n`th, rewriting them with
-  `queue.write_buffer` before the submit. They are made again for another compositor or
-  when the parameter block changes size. Each draw still makes its bind group and two
-  views: they hold the textures it reads, and a kept one could outlive the cache entry
-  that owns those textures and free them on the drawing thread (R-RT-003). A
-  multi-pass filter's `Ctx::scratch` layers (up to three, each at most the filter's
+  A multi-pass filter's `Ctx::scratch` layers (up to three, each at most the filter's
   output size, about 16.6 MB at 1080p) come from a pool its `VideoFilter` keeps (V0): a
   call's `n`th scratch layer is the call before's `n`th when the size is the same, so a
   filter at a steady size makes them once. A layer of another size replaces it, and one
   a call doesn't ask for is dropped at its end. A pass never keeps a scratch layer, or
-  relies on its contents, past the call that takes it. The video delay's ring of held frames is the other thing a filter
-  keeps between frames; those are its own layers (`Ctx::layer`), never scratch ones.
+  relies on its contents, past the call that takes it. A filter's draws keep their two
+  small uniform buffers in that pool too (#369): a call's `n`th draw reuses the call
+  before's `n`th, rewriting them with `queue.write_buffer` before the submit. They are
+  made again for another compositor or when the parameter block changes size. Each draw
+  still makes its bind group and two views: they hold the textures it reads, and a kept
+  one could outlive the cache entry that owns those textures and free them on the
+  drawing thread (R-RT-003). Besides its scratch layers and these buffers, the only thing
+  a filter keeps between frames is the video delay's ring of held frames; those are its
+  own layers (`Ctx::layer`), never scratch ones.
 
 **External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
 whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
@@ -529,17 +530,16 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   shown are reused. A new input size empties the ring, and so does a clock that goes
   backwards.
 
-**Bounds.** Drop shadow, outline (outside) and glow grow their output by the effect's
-extent on each side, rounded up to whole pixels: the blur radius plus the offset
-toward that side, or the stroke width. The input is drawn 1:1 at the matching inset, so
-**these filters change the source's reported size**. Each reports where the input
-landed as its `content_box`: the inset and the input's own size. Every other kind
-reports its whole output, aspect ratio included, since its output is the reshaped
-frame. Down a chain, `ContentBox::then` adds the offsets while each next filter holds
-the previous output 1:1, and takes the next filter's box when it reshapes or resamples
-it. The chain runtime places the grown output as the source's frame; fitting that box,
-not the grown frame, to the item's bounds (so a shadow hangs outside them) is a V0
-follow-up, and until then nothing reads the box and a placement fits the grown frame.
+**Bounds.** Drop shadow, outline (outside) and glow draw within their input's frame,
+as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for a
+source or scene chain: the output is the input's size, the input is drawn 1:1, and
+the part of the effect past the frame's edge is cut. So they don't change the
+source's reported size, and around an opaque frame a shadow, an outside stroke or a
+glow is cut away whole; on a shape with transparent margins (a keyed camera, a logo)
+they show inside them. A drop shadow and a glow still blur the shape in a scratch
+frame grown by the blur radius, so the blur fades out instead of stopping at the
+frame's edge. An effect that hangs outside a placement is an item effect, whose layer
+ADR-0065 pads by the chain's `max_outset_px` (not built yet).
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
