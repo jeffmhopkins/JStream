@@ -94,7 +94,7 @@ impl Pass for ApplyLut {
     }
 }
 
-/// The image `apply_lut` reads for `lut`, to hand to [`VideoFilter::set_reference`]:
+/// The image `apply_lut` reads for `lut`, to hand to [`VideoFilter::set_reference`](crate::VideoFilter::set_reference):
 /// the table's 2D tile layout as `Rgba16Float`, so a 33- or 64-point table keeps its
 /// precision. Output values are clamped to `0..=1`. It is uploaded straight through the
 /// compositor's image maker, with no draw or submit.
