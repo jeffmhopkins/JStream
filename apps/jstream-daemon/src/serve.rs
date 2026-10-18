@@ -188,17 +188,16 @@ fn windows_backends() -> anyhow::Result<Backends> {
 }
 
 /// The macOS backends, as far as they are built (ADR-0063): ScreenCaptureKit capture,
-/// Core Audio, VideoToolbox and AudioToolbox codecs, the Mach media clock and
-/// AVFoundation media files. Webcams and GPU interop are stand-ins until they land
-/// (`NoVideoDevices` lists none, until AVFoundation webcams in #608; `NoGpuInterop`
-/// sends the engine to its own device and CPU frames, until the Metal interop), and
-/// there is no virtual camera. Creating them opens no device; capture
-/// and audio check the release floor, and ask for their permissions only when a
+/// AVFoundation webcams, Core Audio, VideoToolbox and AudioToolbox codecs, the Mach
+/// media clock and AVFoundation media files. GPU interop is a stand-in until it lands
+/// (`NoGpuInterop` sends the engine to its own device and CPU frames, until the Metal
+/// interop), and there is no virtual camera. Creating them opens no device; capture,
+/// webcams and audio check the release floor, and ask for their permissions only when a
 /// pipeline first uses them.
 #[cfg(target_os = "macos")]
 fn macos_backends() -> anyhow::Result<Backends> {
     use jstream_platform_macos::{
-        AvMediaDecoders, CoreAudioIo, MachClock, NoGpuInterop, NoVideoDevices,
+        AvFoundationVideoDevices, AvMediaDecoders, CoreAudioIo, MachClock, NoGpuInterop,
         ScreenCaptureKitCapture, VideoToolboxCodecs,
     };
     Ok(Backends {
@@ -206,7 +205,9 @@ fn macos_backends() -> anyhow::Result<Backends> {
         capture: Arc::new(
             ScreenCaptureKitCapture::new().context("could not open ScreenCaptureKit capture")?,
         ),
-        video_devices: Arc::new(NoVideoDevices),
+        video_devices: Arc::new(
+            AvFoundationVideoDevices::new().context("could not open AVFoundation webcams")?,
+        ),
         audio: Arc::new(CoreAudioIo::new().context("could not open Core Audio")?),
         codecs: Arc::new(VideoToolboxCodecs::new()),
         gpu: Arc::new(NoGpuInterop),

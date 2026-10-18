@@ -273,11 +273,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   fails to scan, and is logged.
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):
-  - `MachClock`, `ScreenCaptureKitCapture`, `CoreAudioIo`, `VideoToolboxCodecs` and
-    `AvMediaDecoders`;
-  - the stand-ins `NoVideoDevices`, which lists no webcams until AVFoundation's land,
-    and `NoGpuInterop`, which sends the engine to its own device and CPU frames until
-    the Metal interop does;
+  - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,
+    `VideoToolboxCodecs` and `AvMediaDecoders`;
+  - the stand-in `NoGpuInterop`, which sends the engine to its own device and CPU
+    frames until the Metal interop does;
   - no virtual camera, no CLAP scan and no YouTube sign-in;
   - `MacosKeychain` as its stream key store, behind `crash::Redacting` through
     `live_redacting` as on Windows, and the same publish opener.
