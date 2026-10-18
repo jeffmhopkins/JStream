@@ -274,8 +274,11 @@ its own from a short code instead of the control token.
   hourly.
 - **The device file.** With `ServerConfig::device_file` set (`jstream-daemon` sets it
   beside the token file), the devices (ID, name, digest, paired and last-used times) are
-  kept there as JSON, written through a temporary file and renamed, user-only on Unix;
-  `Server::bind` refuses a file others can read (`ServerError::DeviceFile`). Without it,
+  kept there as JSON, written through a temporary file and renamed, user-only (mode
+  `0600` on Unix; on Windows a protected DACL for SYSTEM and the user, from
+  `jstream_platform_windows::create_private_file`, #344); `Server::bind` refuses a file
+  others may access (`ServerError::DeviceFile`): on Windows, one
+  `check_private_file` refuses. Without it,
   devices last as long as the server.
 - **Listing and revoking.** `device.list` answers each device's ID, name, and when it was
   paired and last used. `device.revoke` forgets one and closes its open WebSocket
@@ -527,7 +530,9 @@ connection tasks; `futures-util` to split the socket, run calls concurrently
 for the token and device-token digests; `tracing` for the spans and events above; `jstream-mcp` for the
 MCP server behind `/mcp`; `serde_json` for the pairing exchange and the device file;
 `getrandom` for MCP session IDs, pairing codes and device tokens, already in the tree through
-tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is in the tree, so no `ring` or `rustls`.
+tungstenite's `rand` and used by `jstream-daemon` for its token; on Windows only,
+`jstream-platform-windows` for the device file's user-only DACL and its check (#344):
+the server forbids `unsafe`, and the daemon links that crate anyway. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
 
