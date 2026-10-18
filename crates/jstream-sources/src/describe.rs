@@ -51,8 +51,8 @@ pub(crate) fn asset(accept: &[&str]) -> ParamType {
 
 /// A kind that is described, so the collection can hold its sources and validate their
 /// settings, but has no implementation yet: its sources fail to start with
-/// [`SourceError::NotBuilt`]. Each is replaced by its roadmap item (display and window
-/// C3, webcam C4, media file M2).
+/// [`SourceError::NotBuilt`]. Each is replaced by its roadmap item (webcam C4, media
+/// file M2).
 pub(crate) struct Described(pub(crate) KindDescriptor);
 
 impl SourceKind for Described {
@@ -69,9 +69,5 @@ impl SourceKind for Described {
 
 /// The described-only built-in kinds, with the settings B4 gave them.
 pub(crate) fn described() -> Vec<Described> {
-    vec![
-        Described(kind("display", "Display capture", true, false)),
-        Described(kind("webcam", "Webcam", true, false)),
-        Described(kind("window", "Window capture", true, false)),
-    ]
+    vec![Described(kind("webcam", "Webcam", true, false))]
 }

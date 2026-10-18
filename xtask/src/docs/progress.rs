@@ -9,7 +9,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use super::generate::{begin, end, escape, join, outside_fences};
+use super::generate::{begin, escape, with_block};
 use super::parse::{Diag, Doc};
 
 /// The data file: milestones and roadmap items with their status and PRs.
@@ -25,6 +25,16 @@ const STATUSES: &[(&str, &str)] = &[
     ("review", "🔍 in review"),
     ("planned", "⏳ planned"),
 ];
+/// The steps an unfinished item can still need (its `needs`), with the label the
+/// "What's left" table shows for each.
+const NEEDS: &[(&str, &str)] = &[
+    ("build", "🔨 build"),
+    ("wave", "🌊 its wave lands"),
+    ("hardware", "🧪 Windows run"),
+    ("maintainer", "👤 maintainer"),
+];
+/// The step shown for an unfinished item whose `needs` isn't set yet.
+const UNSET: &str = "unset";
 /// Cells in the progress bar.
 const BAR: usize = 10;
 
@@ -46,12 +56,26 @@ struct Item {
     status: String,
     prs: Vec<u64>,
     note: Option<String>,
+    /// The steps still to do before it is `done`, in order (`NEEDS`).
+    needs: Vec<String>,
 }
 
 impl Item {
     /// Its PRs are on `main` (it may still wait on a hardware run).
     fn merged(&self) -> bool {
         matches!(self.status.as_str(), "done" | "hardware")
+    }
+
+    /// The steps it still needs: its `needs`, or for a `hardware` item that lists none,
+    /// its Windows run, or `unset` for another unfinished item that lists none. Empty
+    /// once it is `done`.
+    fn steps(&self) -> Vec<&str> {
+        match self.status.as_str() {
+            "done" => Vec::new(),
+            _ if !self.needs.is_empty() => self.needs.iter().map(String::as_str).collect(),
+            "hardware" => vec!["hardware"],
+            _ => vec![UNSET],
+        }
     }
 }
 
@@ -126,7 +150,7 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
         let what = format!("item `{id}`");
         unknown_keys(
             t,
-            &["id", "milestone", "title", "status", "prs", "note"],
+            &["id", "milestone", "title", "status", "prs", "note", "needs"],
             &what,
             &mut errs,
         );
@@ -155,12 +179,39 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
                 }
             },
         };
+        let needs = match t.get("needs") {
+            None => Vec::new(),
+            Some(v) => v
+                .as_array()
+                .and_then(|a| {
+                    a.iter()
+                        .map(|x| x.as_str().map(str::to_owned))
+                        .collect::<Option<Vec<_>>>()
+                })
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| {
+                    errs.push(format!(
+                        "{what}: `needs` must be a non-empty array of steps"
+                    ));
+                    Vec::new()
+                }),
+        };
+        for n in &needs {
+            if !NEEDS.iter().any(|(s, _)| s == n) {
+                let names: Vec<&str> = NEEDS.iter().map(|(s, _)| *s).collect();
+                errs.push(format!(
+                    "{what}: unknown step `{n}` in `needs` (one of {})",
+                    names.join(", ")
+                ));
+            }
+        }
         let item = Item {
             milestone: string(t, "milestone", &what, &mut errs),
             title: string(t, "title", &what, &mut errs),
             status: string(t, "status", &what, &mut errs),
             prs,
             note,
+            needs,
             id,
         };
         if !item.milestone.is_empty() && !milestones.iter().any(|m| m.id == item.milestone) {
@@ -187,6 +238,18 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
             errs.push(format!(
                 "{what}: status `hardware` needs a `note` naming the pending run"
             ));
+        }
+        if item.status == "hardware"
+            && !item.needs.is_empty()
+            && !item.needs.iter().any(|n| n == "hardware")
+        {
+            errs.push(format!(
+                "{what}: status `hardware` needs `hardware` in its `needs`"
+            ));
+        }
+        let mut seen = BTreeSet::new();
+        if item.needs.iter().any(|n| !seen.insert(n)) {
+            errs.push(format!("{what}: a step is listed twice in `needs`"));
         }
         let mut seen = BTreeSet::new();
         if item.prs.iter().any(|p| !seen.insert(p)) {
@@ -250,6 +313,7 @@ fn render(p: &Progress) -> String {
         p.items.iter().filter(|i| i.merged()).count(),
         p.items.len(),
     );
+    left(p, &mut out);
     for m in &p.milestones {
         let items = of(m);
         let merged = items.iter().filter(|i| i.merged()).count();
@@ -283,22 +347,56 @@ fn render(p: &Progress) -> String {
     out
 }
 
-/// `doc`'s text with the inside of its `progress` block replaced by `body`, and the
-/// 1-based line of the begin marker.
-fn with_block(doc: &Doc, body: &str) -> Result<(String, usize), String> {
-    let lines: Vec<&str> = doc.text.lines().collect();
-    let open = outside_fences(&lines);
-    let (b, e) = (begin(BLOCK), end(BLOCK));
-    let start = (0..lines.len())
-        .find(|&k| open[k] && lines[k].trim_end() == b)
-        .ok_or_else(|| format!("no `{b}` line to generate the progress block into"))?;
-    let stop = (start + 1..lines.len())
-        .find(|&k| lines[k].trim_end() == e)
-        .ok_or_else(|| format!("the `{BLOCK}` block is not closed by `{e}`"))?;
-    let mut out: Vec<&str> = lines[..=start].to_vec();
-    out.extend(body.lines());
-    out.extend(&lines[stop..]);
-    Ok((join(&out, &doc.text), start + 1))
+/// The "What's left" part of the block: every item not yet `done` with the steps it still
+/// needs, in milestone order.
+fn left(p: &Progress, out: &mut String) {
+    let open: Vec<&Item> = p
+        .milestones
+        .iter()
+        .flat_map(|m| p.items.iter().filter(move |i| i.milestone == m.id))
+        .filter(|i| !i.steps().is_empty())
+        .collect();
+    if open.is_empty() {
+        out.push_str("\nNothing is left: every item is done.\n");
+        return;
+    }
+    let label = |s: &str| {
+        NEEDS
+            .iter()
+            .find(|(n, _)| *n == s)
+            .map_or("❔ not set", |(_, l)| l)
+    };
+    let counts: Vec<String> = NEEDS
+        .iter()
+        .chain([&(UNSET, "❔ not set")])
+        .filter_map(|(n, l)| {
+            let c = open.iter().filter(|i| i.steps().first() == Some(n)).count();
+            (c > 0).then(|| format!("{l} {c}"))
+        })
+        .collect();
+    let _ = write!(
+        out,
+        "\n<details open>\n<summary><b>What's left</b>: {} items, by next step: {}</summary>\n\n\
+         The order these land in, and what done means, is in \
+         [ROADMAP › Endgame](ROADMAP.md#endgame).\n\n\
+         | ID | Item | Milestone | Needs, in order | Note | PRs |\n|---|---|---|---|---|---|\n",
+        open.len(),
+        counts.join(", "),
+    );
+    for i in open {
+        let steps: Vec<&str> = i.steps().into_iter().map(label).collect();
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} | {} | {} |",
+            escape(&i.id),
+            escape(&i.title),
+            escape(&i.milestone),
+            steps.join(", then "),
+            i.note.as_deref().map(escape).unwrap_or_default(),
+            prs(i)
+        );
+    }
+    out.push_str("\n</details>\n");
 }
 
 /// Reads the data file, if there is one.
@@ -344,7 +442,7 @@ pub(crate) fn generate(root: &Path, docs: &[Doc]) -> (Option<(String, usize, Str
             vec![problem(DATA, format!("{TARGET} is not tracked"))],
         );
     };
-    match with_block(doc, &render(&p)) {
+    match with_block(doc, BLOCK, &render(&p)) {
         Ok((new, _)) if new == doc.text => (None, Vec::new()),
         Ok((new, line)) => (Some((TARGET.to_owned(), line, new)), Vec::new()),
         Err(msg) => (None, vec![problem(TARGET, msg)]),
@@ -395,6 +493,28 @@ fn merged_from(subject: &str) -> Option<Merged> {
     Some(Merged { number, names })
 }
 
+/// The merged PRs in `git log --format=%B%x00` output: each commit's subject, and for a
+/// wave's landing squash (`chore(wave): land …`), the `* <subject> (#N)` lines of its
+/// body, which are the PRs the wave carried (docs/runbooks/waves.md#landing).
+fn merged_in(log: &str) -> Vec<Merged> {
+    let mut out = Vec::new();
+    for message in log.split('\0') {
+        let mut lines = message.trim_start_matches('\n').lines();
+        let Some(subject) = lines.next() else {
+            continue;
+        };
+        out.extend(merged_from(subject));
+        if subject.starts_with("chore(wave): land ") {
+            out.extend(
+                lines
+                    .filter_map(|l| l.strip_prefix("* "))
+                    .filter_map(merged_from),
+            );
+        }
+    }
+    out
+}
+
 /// What the merged history says is out of date in `p`, as Markdown list lines.
 fn stale(p: &Progress, merged: &[Merged]) -> Vec<String> {
     let numbers: BTreeSet<u64> = merged.iter().map(|m| m.number).collect();
@@ -407,6 +527,18 @@ fn stale(p: &Progress, merged: &[Merged]) -> Vec<String> {
                 i.id,
                 i.status,
                 prs(i)
+            ));
+        }
+        if matches!(i.status.as_str(), "planned" | "review") && i.needs.is_empty() {
+            out.push(format!(
+                "- **{}** is `{}` but has no `needs`: list the steps it still needs.",
+                i.id, i.status
+            ));
+        }
+        if i.status == "done" && !i.needs.is_empty() {
+            out.push(format!(
+                "- **{}** is `done` but still lists `needs`: remove it.",
+                i.id
             ));
         }
         if i.merged() {
@@ -453,17 +585,14 @@ pub(crate) fn report(root: &Path) -> Result<String> {
         .output()
         .context("running `git rev-parse`")?;
     let log = Command::new("git")
-        .args(["log", "--first-parent", "--format=%s", "HEAD"])
+        .args(["log", "--first-parent", "--format=%B%x00", "HEAD"])
         .current_dir(root)
         .output()
         .context("running `git log`")?;
     if !log.status.success() {
         bail!("`git log` failed: {}", String::from_utf8_lossy(&log.stderr));
     }
-    let merged: Vec<Merged> = String::from_utf8_lossy(&log.stdout)
-        .lines()
-        .filter_map(merged_from)
-        .collect();
+    let merged = merged_in(&String::from_utf8_lossy(&log.stdout));
     let mut out = String::new();
     if String::from_utf8_lossy(&shallow.stdout).trim() == "true" {
         out.push_str("Shallow clone: PRs merged before its first commit look unmerged.\n\n");
@@ -530,12 +659,14 @@ milestone = "M1"
 title = "Open"
 status = "review"
 prs = [13]
+needs = ["build", "hardware"]
 
 [[item]]
 id = "A4"
 milestone = "M1"
 title = "Later"
 status = "planned"
+needs = ["maintainer"]
 "#;
 
     #[test]
@@ -565,6 +696,44 @@ status = "planned"
             "{r}"
         );
         assert!(r.contains("| A4 | Later | ⏳ planned |  |\n"), "{r}");
+        assert!(
+            r.contains(
+                "<summary><b>What's left</b>: 3 items, by next step: 🔨 build 1, 🧪 Windows run 1, 👤 maintainer 1</summary>"
+            ),
+            "{r}"
+        );
+        assert!(
+            r.contains("| A2 | Box \\| pipe | M1 | 🧪 Windows run | Run on Windows | #12 |\n"),
+            "{r}"
+        );
+        assert!(
+            r.contains("| A3 | Open | M1 | 🔨 build, then 🧪 Windows run |  | #13 |\n"),
+            "{r}"
+        );
+        assert!(!r.contains("| A1 | Done thing | M1 |"), "{r}");
+        let unset = parse(&DATA_OK.replace("needs = [\"maintainer\"]\n", ""))
+            .expect("invariant: needs is optional");
+        let r = render(&unset);
+        assert!(
+            r.contains("| A4 | Later | M1 | ❔ not set |  |  |\n"),
+            "{r}"
+        );
+        assert!(
+            r.contains("🧪 Windows run 1, ❔ not set 1</summary>"),
+            "{r}"
+        );
+        let s = stale(&unset, &[]).join("\n");
+        assert!(s.contains("**A4** is `planned` but has no `needs`"), "{s}");
+    }
+
+    #[test]
+    fn nothing_left_once_every_item_is_done() {
+        let all_done = DATA_OK
+            .replace("status = \"hardware\"", "status = \"done\"")
+            .replace("status = \"review\"", "status = \"done\"")
+            .replace("status = \"planned\"", "status = \"done\"\nprs = [14]");
+        let p = parse(&all_done).expect("invariant: valid");
+        assert!(render(&p).contains("Nothing is left: every item is done."));
     }
 
     #[test]
@@ -589,6 +758,14 @@ milestone = "M1"
 title = "y"
 status = "hardware"
 prs = [3, 3]
+needs = ["build", "build"]
+
+[[item]]
+id = "A3"
+milestone = "M1"
+title = "w"
+status = "planned"
+needs = ["soon"]
 "#;
         let errs = parse(bad).expect_err("invariant: invalid");
         let all = errs.join("\n");
@@ -600,6 +777,9 @@ prs = [3, 3]
             "status `hardware` needs a `note`",
             "a PR is listed twice",
             "duplicate item id `A1`",
+            "status `hardware` needs `hardware` in its `needs`",
+            "a step is listed twice in `needs`",
+            "item `A3`: unknown step `soon`",
         ] {
             assert!(all.contains(needle), "missing {needle:?} in:\n{all}");
         }
@@ -610,15 +790,15 @@ prs = [3, 3]
         let readme = "<!-- @doc\nid = \"README\"\ntitle = \"R\"\nkind = \"normative\"\nstatus = \"active\"\nreview_every = \"90d\"\n-->\n\n# R\n\n<!-- @generated begin progress -->\nold\n<!-- @generated end progress -->\n\nAfter.\n";
         let doc = parse_doc("README.md", readme, &mut Vec::new());
         let p = parse(DATA_OK).expect("invariant: valid");
-        let (new, line) = with_block(&doc, &render(&p)).expect("invariant: has a block");
+        let (new, line) = with_block(&doc, BLOCK, &render(&p)).expect("invariant: has a block");
         assert_eq!(line, 11);
         assert!(!new.contains("\nold\n"));
         assert!(new.ends_with("<!-- @generated end progress -->\n\nAfter.\n"));
         let again = parse_doc("README.md", &new, &mut Vec::new());
-        let (twice, _) = with_block(&again, &render(&p)).expect("invariant: has a block");
+        let (twice, _) = with_block(&again, BLOCK, &render(&p)).expect("invariant: has a block");
         assert_eq!(twice, new);
         let none = parse_doc("README.md", "# R\n", &mut Vec::new());
-        assert!(with_block(&none, "x").is_err());
+        assert!(with_block(&none, BLOCK, "x").is_err());
     }
 
     #[test]
@@ -633,6 +813,13 @@ prs = [3, 3]
         assert!(m.names.contains("B10") && m.names.contains("ADR-0030"));
         assert!(!m.names.contains("protocol"));
         assert!(merged_from("Merge branch 'main'").is_none());
+        let landed = merged_in(
+            "chore(wave): land wave/m2 (#470)\n\n* feat: a (W1) (#315)\n\nbody\n\n\
+             * fix: a review round\n\n* feat: b (#466)\n\0\nfeat: c (#469)\n\n* feat: d (#1)\n\0\n",
+        );
+        let numbers: Vec<u64> = landed.iter().map(|m| m.number).collect();
+        assert_eq!(numbers, [470, 315, 466, 469]);
+        assert!(landed[1].names.contains("W1"));
 
         let p = parse(DATA_OK).expect("invariant: valid");
         let merged: Vec<Merged> = [
@@ -658,5 +845,13 @@ prs = [3, 3]
             "{s}"
         );
         assert!(!s.contains("**A2**"), "{s}");
+        let leftover =
+            parse(&DATA_OK.replace("prs = [10, 11]", "prs = [10, 11]\nneeds = [\"build\"]"))
+                .expect("invariant: valid");
+        let s = stale(&leftover, &merged).join("\n");
+        assert!(
+            s.contains("**A1** is `done` but still lists `needs`: remove it."),
+            "{s}"
+        );
     }
 }
