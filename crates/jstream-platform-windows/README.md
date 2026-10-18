@@ -425,8 +425,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
 - **`create_private_file`** and **`check_private_file`**, user-only files for a host's
-  secrets (#344: the daemon's token, devices and log files, as mode `0600` gives
-  them on Unix). `create_private_file` makes a new file (`CREATE_NEW`, never replacing
+  secrets (#344: the daemon's token, devices and log files; #656: both apps' crash
+  reports), as mode `0600` gives them on Unix. `create_private_file` makes a new file (`CREATE_NEW`, never replacing
   one) with a protected DACL for SYSTEM and the user (`jstream-vcam-proto`'s
   `sddl_user_only`, built like the vcam's `sddl_objects`) in the same `CreateFileW`
   call, so it never carries its folder's inherited entries. `check_private_file` reads
