@@ -967,10 +967,10 @@ settings records nothing. Like a page's audio, a webcam's doesn't count as an au
 source for the defaults below.
 
 A webcam's paired input opens only while the source has at least one send, whatever
-its visibility or `follow` (#716). The collection file leaves a source's audio out
-when it is the kind's default, so a webcam saved before webcams had audio can load with
-its audio on; without the rule its microphone would record whenever the program stage
-runs, heard by no bus. A new webcam gets its master send and records at once; removing
+its visibility or `follow` (#716). A webcam can have its audio on and no send, for
+example once its last send is removed; without the rule its microphone would record
+whenever the program stage runs, heard by no bus. (A webcam saved before webcams had
+audio loads with its audio off; see `jstream-graph`'s persistence.) A new webcam gets its master send and records at once; removing
 its last send closes the input, and a send opens it again. The trade-off: a webcam
 with no send records nothing, so its channel meter reads silence.
 

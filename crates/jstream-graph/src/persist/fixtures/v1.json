@@ -143,7 +143,13 @@
       "settings": {
         "device": ""
       },
-      "duplicated_from": "gone"
+      "duplicated_from": "gone",
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
     },
     {
       "id": "b_src",
@@ -169,6 +175,12 @@
       "kind_version": 1,
       "settings": {
         "device": ""
+      },
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
       }
     },
     {
@@ -182,7 +194,13 @@
       "settings": {
         "device": ""
       },
-      "duplicated_from": "cam"
+      "duplicated_from": "cam",
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
     },
     {
       "id": "desk",

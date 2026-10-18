@@ -413,13 +413,18 @@ fn a_file_from_before_audio_keeps_the_master_sends() {
 
 /// #716: a file saved before webcams had audio gives a `webcam` no audio settings and
 /// no send. It loads with the master send a new webcam gets, and its audio off, so
-/// opening it never starts recording the webcam's microphone. A webcam the file gives a
-/// send, or audio settings, loads as saved.
+/// opening it never starts recording the webcam's microphone. A webcam the file gives
+/// audio settings (every current file does) loads as saved.
 #[test]
 fn a_webcam_from_before_webcam_audio_loads_with_its_audio_off() {
     let older = edit_file(|file| {
         if let Some(sends) = file["sends"].as_array_mut() {
             sends.retain(|send| !matches!(send["source_id"].as_str(), Some("cam" | "aux")));
+        }
+        for source in file["sources"].as_array_mut().into_iter().flatten() {
+            if matches!(source["id"].as_str(), Some("cam" | "aux")) {
+                source.as_object_mut().map(|s| s.remove("audio"));
+            }
         }
     });
     let Ok(graph) = load(&older) else {
@@ -478,6 +483,49 @@ fn a_removed_master_send_round_trips() {
     assert_eq!(value["sends"], json!([]));
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// #716: a webcam's audio settings are written even at their defaults, so a current
+/// webcam whose master send was removed doesn't read back as one saved before webcams
+/// had audio: it keeps its audio on and gets no send back.
+#[test]
+fn a_webcam_with_its_master_send_removed_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::SourceCreate {
+                source_id: SourceId::new("cam"),
+                name: "cam".into(),
+                kind: SourceKind::Builtin {
+                    kind: "webcam".into(),
+                },
+                settings: jstream_protocol::Settings::default(),
+                duplicated_from: None,
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("cam"),
+                bus_id: BusId::master(),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(value["sends"], json!([]));
+    assert_eq!(value["sources"][0]["audio"]["enabled"], json!(true));
+    let loaded = load(&json);
+    assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(
+        loaded
+            .as_ref()
+            .ok()
+            .and_then(|g| g.state().source(&SourceId::new("cam")))
+            .and_then(|s| s.audio())
+            .map(|a| a.enabled),
+        Some(true)
+    );
     assert_eq!(loaded.as_ref(), Ok(&graph));
 }
 

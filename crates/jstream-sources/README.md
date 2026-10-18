@@ -325,8 +325,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   before it had a setting, its sources couldn't start. It has audio too (#716): the
   input the platform pairs with the device, a webcam's microphone or a capture card's
   HDMI audio, which the engine records as an audio input's
-  (`webcam_device(kind, settings)` says whose pair: the `device`, or `None` for the first
-  device listed). So a new webcam gets audio settings that follow `when_shown` and a
+  (`webcam_device(kind, settings)` says whose pair: `Some(Some(id))` for the `device`
+  named, `Some(None)` for the first device listed, and `None` for any other kind). So a new webcam gets audio settings that follow `when_shown` and a
   master send, as ADR-0028 gives a source with video and audio.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.

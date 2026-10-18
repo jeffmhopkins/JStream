@@ -38,6 +38,11 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// collection files existed; see `rebuild_audio`.
 const WEBCAM: &str = "webcam";
 
+/// Whether `kind` is the built-in `webcam`.
+fn is_webcam(kind: &SourceKind) -> bool {
+    matches!(kind, SourceKind::Builtin { kind } if kind == WEBCAM)
+}
+
 /// A migration upgrades a file's JSON from one schema version to the next, in place.
 type Migration = fn(&mut Value) -> Result<(), String>;
 
@@ -292,7 +297,9 @@ struct FileSource {
     /// that may name a source since deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     duplicated_from: Option<SourceId>,
-    /// An audio source's audio settings; omitted when they are its kind's defaults.
+    /// An audio source's audio settings; omitted when they are its kind's defaults,
+    /// except a `webcam`'s, which are always written (#716). A webcam without them was
+    /// saved before webcams had audio, and loads with its audio off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     audio: Option<SourceAudio>,
     /// The labels it carries, ordered by ID; omitted for none.
@@ -486,9 +493,13 @@ impl Graph {
                     settings: source.settings.clone(),
                     duplicated_from: source.duplicated_from.clone(),
                     filters: self.file_chains(&source.filters),
-                    audio: source
-                        .audio
-                        .filter(|a| Some(*a) != audio::default_audio(&source.kind, &self.kinds)),
+                    // A webcam's audio is always written, even at its default: a webcam
+                    // without it can then only come from before webcams had audio (#716),
+                    // which loads with its audio off.
+                    audio: source.audio.filter(|a| {
+                        is_webcam(&source.kind)
+                            || Some(*a) != audio::default_audio(&source.kind, &self.kinds)
+                    }),
                     labels: source.labels.iter().cloned().collect(),
                     favourite: source.favourite,
                 })
@@ -1109,17 +1120,12 @@ fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
         let object = format!("source `{}`", source.id);
         let default = audio::default_audio(&source.kind, &graph.kinds);
         let gets_master = default.is_some() && !matches!(source.kind, SourceKind::Scene { .. });
-        // A `webcam` saved before webcams had audio (#716) has no audio settings and no
-        // send. It keeps the master send its creation gives it, but loads with its audio
-        // off, so opening an older collection never starts recording a webcam's
-        // microphone; turning it on sends it to the master.
-        let unheard_webcam = matches!(&source.kind, SourceKind::Builtin { kind } if kind == WEBCAM)
-            && source.audio.is_none()
-            && file
-                .sends
-                .iter()
-                .flatten()
-                .all(|send| send.source_id != source.id);
+        // A `webcam` without audio settings was saved before webcams had audio (#716):
+        // since then a webcam's are always written. It has no send either (a source
+        // without audio settings can't have one). It keeps the master send its creation
+        // gives it, but loads with its audio off, so opening an older collection never
+        // starts recording a webcam's microphone; turning it on sends it to the master.
+        let unheard_webcam = is_webcam(&source.kind) && source.audio.is_none();
         // A file without `sends` predates them (or has no audio): every channel source
         // keeps the master send its creation gave it.
         let keeps_master = unheard_webcam

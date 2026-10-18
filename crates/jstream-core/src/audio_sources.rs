@@ -204,9 +204,8 @@ impl AudioSources {
                     Some(target) => Recorded::Device(target),
                     // A webcam made before webcams had audio has no audio settings. Its
                     // microphone opens only while the source has a send (#716): a
-                    // collection file leaves default audio out, so an older webcam
-                    // can come back with its audio on, and one that no bus hears
-                    // must not record.
+                    // webcam can have its audio on and no send (its last send
+                    // removed), and one that no bus hears must not record.
                     None if source.audio().is_some() => {
                         let device = webcam_device(kind, source.settings())?;
                         if !state.sends().any(|(id, _, _)| id == source.id()) {
