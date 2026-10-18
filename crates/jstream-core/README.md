@@ -253,7 +253,9 @@ state machine. Contents:
   queued, run without one),
   `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
   and is reconnected to, one that stops reading while a stop's deadline runs out, and
-  one that reads only a trickle of one large tag,
+  one that reads only a trickle of one large tag, and `connect_rtmp` with a plain
+  `rtmp://` URL to another machine logging one warning that names the host and
+  nothing from the path, and none for `rtmps://` or loopback,
   a publish opener connecting that fake server on every start (start, media, stop,
   twice) and one that cannot connect, a recording output writing MP4 to a temp dir
   (renamed into place on stop, refused when the file exists or the path is not
@@ -1474,7 +1476,10 @@ into the buffer `AudioInput::push` keeps. Not measured. The mixer thread
 polls the audio sources' inputs into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
 publish target. Drops on a full encoder queue are counted in `output_stats`. The
-test records tags in memory. `connect_rtmp` is the live publisher: `RtmpPublish`
+test records tags in memory. `connect_rtmp` is the live publisher. When its URL is
+plain `rtmp://` to another machine (`RtmpUrl::sends_key_in_cleartext`), it logs a
+warning naming the host, never the path, since the key then crosses the network
+unencrypted (#353). `RtmpPublish`
 wraps `jstream-outputs`' `ReconnectingPublisher` with its default `ReconnectPolicy`
 (backoff from 1 s up to 30 s, giving up after a 5-minute outage). It opens the first
 session itself, on the caller's thread, so a refused first connect is still its
@@ -1516,7 +1521,10 @@ without the `FCUnpublish` … `deleteStream` goodbye. So a peer that has stopped
 reading holds `output.stop` for about 2 s, not 10 s per blocked write.
 `connect_rtmp`'s unit tests drive fake servers on loopback: a slow one, one that
 hangs up mid-stream, one that stops reading while the deadline runs out, and one
-that reads only a trickle of a 12 MiB tag.
+that reads only a trickle of a 12 MiB tag. One more drives no server: it captures
+the log while `connect_rtmp` refuses an empty key, and checks that a plain `rtmp://`
+URL to another machine logs one warning naming the host and nothing from the path,
+and that `rtmps://` and loopback log none.
 
 ### Locking
 
