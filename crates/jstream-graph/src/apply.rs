@@ -12,9 +12,9 @@ use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem}
 use crate::touched::Touched;
 use jstream_protocol::{
     Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
-    ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
-    ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget,
-    SceneId, Settings, SourceAudio, SourceId, SourceKind,
+    HotkeyBinding, ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media,
+    OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference,
+    Rev, RtmpTarget, SceneId, Settings, SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -35,6 +35,9 @@ pub struct Applied {
     /// What the batch touched, from its edits and the inverse's: what the engine's undo
     /// history checks other clients' later batches against (ADR-0032).
     pub touched: Touched,
+    /// The hotkey bindings the batch removed because their action named an object it
+    /// deleted (ADR-0040 §3), in the order it removed them. The inverse restores them.
+    pub removed_hotkeys: Vec<HotkeyBinding>,
 }
 
 impl Graph {
@@ -85,19 +88,35 @@ impl Graph {
         })?;
         let mut work = self.state.clone();
         let mut undo: Vec<Vec<Edit>> = Vec::with_capacity(edits.len());
+        let mut removed_hotkeys = Vec::new();
         for (at, edit) in edits.iter().enumerate() {
-            undo.push(apply_edit(&mut work, &self.kinds, edit, at, running)?);
+            let mut removed = Vec::new();
+            let mut inverse = apply_edit(&mut work, &self.kinds, edit, at, running)?;
+            // A delete takes the bindings that name its target with it (ADR-0040 §3);
+            // they come back after the target does.
+            if let Some((entity, id)) = deleted_object(edit) {
+                inverse.extend(crate::hotkey::remove_naming(
+                    &mut work,
+                    entity,
+                    id,
+                    &mut removed,
+                ));
+            }
+            removed_hotkeys.append(&mut removed);
+            undo.push(inverse);
         }
         self.state = work;
         self.rev = rev;
         let inverse: Vec<Edit> = undo.into_iter().rev().flatten().collect();
         Ok(Applied {
             rev,
+            removed_hotkeys,
             touched: Touched::of(edits, &inverse),
             inverse: Batch {
                 edits: inverse,
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
         })
     }
@@ -106,6 +125,17 @@ impl Graph {
     /// engine's concern and is ignored here.
     pub fn apply_batch(&mut self, batch: &Batch) -> Result<Applied, ProtocolError> {
         self.apply(&batch.edits, batch.expected_rev)
+    }
+}
+
+/// The object a delete edit removes, by kind and ID, or `None` for any other edit.
+fn deleted_object(edit: &Edit) -> Option<(EntityKind, &str)> {
+    match edit {
+        Edit::SceneDelete { scene_id } => Some((EntityKind::Scene, scene_id.as_str())),
+        Edit::SourceDelete { source_id } => Some((EntityKind::Source, source_id.as_str())),
+        Edit::OutputDelete { output_id } => Some((EntityKind::Output, output_id.as_str())),
+        Edit::EncoderDelete { profile_id } => Some((EntityKind::Encoder, profile_id.as_str())),
+        _ => None,
     }
 }
 
@@ -294,10 +324,16 @@ fn apply_edit(
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::mix::apply(state, edit, at) {
+        return applied;
+    }
     if let Some(applied) = crate::filter::apply(state, kinds, edit, at) {
         return applied;
     }
     if let Some(applied) = crate::audio::apply(state, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::hotkey::apply(state, edit, at) {
         return applied;
     }
     match edit {
@@ -596,7 +632,7 @@ fn apply_edit(
                             format!("kind `{kind}` is a filter kind, not a source kind"),
                         ));
                     }
-                    complete_settings(state, kinds, descriptor, source_id, settings, at)?
+                    complete_settings(state, kinds, descriptor, Some(source_id), settings, at)?
                 }
                 _ => {
                     return Err(unsupported(at, "kind", "this source kind"));
@@ -712,6 +748,8 @@ fn apply_edit(
                     id: output_id.clone(),
                     kind: kind.clone(),
                     encoder_profile: None,
+                    filters: Chains::default(),
+                    video_mix: None,
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -747,14 +785,21 @@ fn apply_edit(
                 .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
             let mut inverse = vec![Edit::OutputCreate {
                 output_id: output.id.clone(),
-                kind: output.kind,
+                kind: output.kind.clone(),
             }];
-            if let Some(profile_id) = output.encoder_profile {
+            if let Some(profile_id) = &output.encoder_profile {
                 inverse.push(Edit::OutputSetEncoder {
-                    output_id: output.id,
-                    profile_id: Some(profile_id),
+                    output_id: output.id.clone(),
+                    profile_id: Some(profile_id.clone()),
                 });
             }
+            if let Some(mix_id) = output.video_mix.clone() {
+                inverse.push(Edit::OutputSetVideoMix {
+                    output_id: output.id.clone(),
+                    mix_id: Some(mix_id),
+                });
+            }
+            inverse.extend(crate::filter::restore_output(&output));
             Ok(inverse)
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
@@ -996,7 +1041,7 @@ pub(crate) fn complete_settings(
     state: &State,
     kinds: &Kinds,
     descriptor: &KindDescriptor,
-    source_id: &SourceId,
+    source_id: Option<&SourceId>,
     given: &Settings,
     at: usize,
 ) -> Result<Settings, ProtocolError> {
@@ -1067,7 +1112,7 @@ fn set_settings(
         let value = if value.is_null() && !param.is_reference() {
             &param.default
         } else {
-            check_value(state, kinds, source_id, param, value, at, &field)?;
+            check_value(state, kinds, Some(source_id), param, value, at, &field)?;
             value
         };
         new.push((id.to_owned(), value.clone()));
@@ -1090,14 +1135,15 @@ fn set_settings(
     }])
 }
 
-/// Checks one settings value for `param` of source `source_id`: its type and
-/// constraints, that a referenced scene, source or bus exists (`not_found` if not), and that a
-/// referenced source produces what the parameter needs. A source may name itself here;
-/// [`check_reference_cycles`] rejects that as a cycle.
+/// Checks one settings value for `param` of source `source_id` (`None` for a filter of
+/// the master stage or an output): its type and constraints, that a referenced scene,
+/// source or bus exists (`not_found` if not), and that a referenced source produces what
+/// the parameter needs. A source may name itself here; [`check_reference_cycles`] rejects
+/// that as a cycle.
 pub(crate) fn check_value(
     state: &State,
     kinds: &Kinds,
-    source_id: &SourceId,
+    source_id: Option<&SourceId>,
     param: &ParamDescriptor,
     value: &Value,
     at: usize,
@@ -1115,7 +1161,7 @@ pub(crate) fn check_value(
                 return Err(not_found(EntityKind::Bus, bus_id.as_str()));
             }
         }
-        Some(Reference::Source { source_id: target }) if &target != source_id => {
+        Some(Reference::Source { source_id: target }) if Some(&target) != source_id => {
             let referenced = state
                 .source(&target)
                 .ok_or_else(|| not_found(EntityKind::Source, target.as_str()))?;

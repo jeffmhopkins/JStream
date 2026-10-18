@@ -85,6 +85,41 @@ Contents:
     broadcast) and the monitor stream on (`testing` needs it). `NewStream::new` asks for
     a reusable RTMP stream with variable resolution and frame rate.
   - A stream's key (`cdn.ingestionInfo.streamName`) parses straight into a `Secret`.
+- **`chat`:** reading a broadcast's live chat (ADR-0041 §2, §5).
+  `LiveClient::chat_messages(live_chat_id, page_token)` reads one page of
+  `liveChatMessages.list` (`part=id,snippet,authorDetails`, up to 2000 messages, oldest
+  first; `Scope::Readonly`, which the method accepts along with `youtube`). A
+  `ChatMessage` keeps its ID, time, author (name, channel, and whether owner,
+  moderator, member or verified), the text YouTube displays for it, and its event:
+  text, Super Chat or Super Sticker (amount as displayed, currency, micros),
+  membership, a deletion (naming the removed message), or `Other` by its `type`. Text
+  and names come from strangers: control characters are replaced and they are cut to
+  1000 and 100 characters, and nothing here interprets them. `ChatPoller` drives one
+  chat: it follows the page token, waits the `pollingIntervalMillis` the API returns
+  (never faster, and at least 1 s), backs off doubling after errors (from 60 s up to
+  30 min for quota and rate-limit errors, from 5 s up to 5 min for others; a change of
+  class starts that ladder at its first step), and stops
+  for good when a page reports `offlineAt` or the API answers `liveChatEnded`,
+  `liveChatNotFound` or `liveChatDisabled`. It takes the time as an argument, starts
+  no thread and never sleeps: the engine's loop calls `poll` and waits until `due`.
+  Every page costs quota from the one daily quota JStream's built-in client shares
+  across its users, so reading chat through the API is opt-in: a per-collection
+  switch, off by default, decides whether the engine polls at all (ADR-0058 §5). The
+  "YouTube chat" browser preset shows chat at no quota cost.
+- **`stats`:** audience stats (ADR-0041 §3, kept by ADR-0058). `LiveClient::audience_stats`
+  reads a broadcast's concurrent viewers, likes and views, and its actual start and end
+  times, with one
+  [`videos.list`](https://developers.google.com/youtube/v3/docs/videos/list) call
+  (`part=id,liveStreamingDetails,statistics`, one unit of quota) under
+  `Scope::Readonly`, which the one `youtube` sign-in covers. A count YouTube leaves out
+  is `None`, never 0: the viewer count while nobody watches, once the broadcast ends,
+  or when the owner hides it, and a hidden like count. `STATS_INTERVAL` (60 s) is the
+  low fixed rate the engine polls at (ADR-0041 §5); this crate keeps no timer.
+  `ChatRate` turns the message count of each chat poll into messages per minute over
+  the last minute (`CHAT_RATE_WINDOW`): the messages of the polls after the oldest one
+  in the window, over the time from it to the newest, since a poll returns what arrived
+  since the one before (so a first poll's backlog is not a burst). It is `None` until
+  two polls are in the window, and keeps at most 128 counts, never a message.
 - **`fake`** (feature `fake`, and in this crate's tests): `FakeTransport` replays
   queued responses and records requests. Tests run on JSON fixtures in `fixtures/`,
   shaped after the API reference's documented responses, so no test uses the network
@@ -108,5 +143,8 @@ The engine (`jstream-core`, roadmap Y3) holds one `LiveClient`, keeps its refres
 in the `OAuthTokenStore` and exposes these calls as protocol commands for the UI. MCP
 leaves them out: YouTube is for people, not agents (ADR-0058 §3).
 
-**Not yet:** chat (reading, sending as the channel, the featured message) and audience
-stats from ADR-0041 (kept by ADR-0058), and quota accounting.
+**Not yet:** sending chat as the channel, the engine's chat polling with its
+per-collection opt-in switch and its `youtube.chat.feature` action,
+`liveChatMessages.streamList` where the API offers it (ADR-0058 §5), the engine's
+stats polling and its `youtube.stats` event and query (protocol work), and quota
+accounting.

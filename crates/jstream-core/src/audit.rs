@@ -1,6 +1,8 @@
 //! The audit log: one entry for every batch, undo, redo and action the engine executes,
 //! naming who sent it, what it was, the `rev` before and after, and how it ended
-//! (ADR-0006, ADR-0013, ADR-0032).
+//! (ADR-0006, ADR-0013, ADR-0032). Live values are logged once per gesture, never per
+//! `live.set`: a committed gesture through its batch, and a cancelled or expired one in
+//! an entry of its own.
 //!
 //! Entries carry names, IDs, revisions and error codes only, never a call's arguments,
 //! so a stream key, a URL or a source's settings cannot reach the log (R-SEC-001).
@@ -12,9 +14,11 @@
 //!
 //! Docs: crates/jstream-core/README.md#design, docs/adr/0006-mcp-full-access.md, docs/RULES.md#R-SEC-001
 
+use crate::gesture::Ended;
 use crate::lock;
 use jstream_protocol::{
-    Action, Call, CallResult, ClientId, OutputId, ProtocolError, RequestId, Rev, SceneId,
+    Action, Call, CallResult, ClientId, GestureId, LiveOutcome, OutputId, ProtocolError, RequestId,
+    Rev, SceneId,
 };
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
@@ -38,17 +42,25 @@ pub struct AuditEntry {
     /// [`MAX_CLIENT_NAME_BYTES`]. Chosen by the client, so it says who claims to act,
     /// not who proved it.
     pub client_name: String,
-    /// The request, as numbered by the client's session.
-    pub request_id: RequestId,
+    /// The request, as numbered by the client's session. `None` for a gesture that
+    /// expired when its session ended, which no request did.
+    pub request_id: Option<RequestId>,
     /// `batch`, `history.undo`, `history.redo`, or the action's name (`output.start`).
+    /// A gesture that ended without a commit is `live.cancel` when its client cancelled
+    /// it and `live.ended` when it expired.
     pub call: &'static str,
     /// A batch's edits by name (`scene.create`), in order, without their arguments.
-    /// Empty for an undo, a redo or an action.
+    /// For a gesture, the edits it held a value for, one per parameter. Empty for an
+    /// undo, a redo or an action.
     pub edits: Vec<&'static str>,
     /// The output an action names.
     pub output_id: Option<OutputId>,
     /// The scene an action names (`scene.switch`).
     pub scene_id: Option<SceneId>,
+    /// The gesture a `live.cancel` or `live.ended` entry is about.
+    pub gesture_id: Option<GestureId>,
+    /// How that gesture ended: `cancelled` or `expired`.
+    pub outcome: Option<LiveOutcome>,
     /// The collection `rev` before the call.
     pub rev_before: Rev,
     /// The collection `rev` after it. Equal to `rev_before` unless a batch was applied.
@@ -71,8 +83,10 @@ impl AuditEntry {
         json_string(&mut line, self.client_id.as_str());
         line.push_str(",\"client_name\":");
         json_string(&mut line, &self.client_name);
-        line.push_str(",\"request_id\":");
-        json_string(&mut line, self.request_id.as_str());
+        if let Some(request_id) = &self.request_id {
+            line.push_str(",\"request_id\":");
+            json_string(&mut line, request_id.as_str());
+        }
         line.push_str(",\"call\":");
         json_string(&mut line, self.call);
         if !self.edits.is_empty() {
@@ -92,6 +106,14 @@ impl AuditEntry {
         if let Some(scene_id) = &self.scene_id {
             line.push_str(",\"scene_id\":");
             json_string(&mut line, scene_id.as_str());
+        }
+        if let Some(gesture_id) = &self.gesture_id {
+            line.push_str(",\"gesture_id\":");
+            json_string(&mut line, gesture_id.as_str());
+        }
+        if let Some(outcome) = self.outcome {
+            line.push_str(",\"outcome\":");
+            json_string(&mut line, outcome.name());
         }
         let _ = write!(
             line,
@@ -336,15 +358,50 @@ impl Audit {
     }
 
     /// The sink, if `call` is one the log records (a batch, an undo or redo, or an
-    /// action) and the host gave one.
+    /// action other than `live.set` and `live.cancel`, whose gestures are logged when
+    /// they end) and the host gave one.
     pub(crate) fn sink_for(&self, call: &Call) -> Option<Arc<dyn AuditSink>> {
-        if !matches!(
-            call,
-            Call::Batch(_) | Call::History(_) | Call::Action { .. }
-        ) {
-            return None;
+        match call {
+            Call::Action {
+                action: Action::LiveSet { .. } | Action::LiveCancel { .. },
+            } => None,
+            Call::Batch(_) | Call::History(_) | Call::Action { .. } => self.sink(),
+            _ => None,
         }
+    }
+
+    /// The sink, if the host gave one.
+    pub(crate) fn sink(&self) -> Option<Arc<dyn AuditSink>> {
         lock(&self.sink).clone()
+    }
+}
+
+/// The entry for a gesture that ended at `rev` without a commit: cancelled by the
+/// request `request_id`, or expired with its session.
+pub(crate) fn gesture_entry(
+    ended: Ended,
+    client_name: String,
+    request_id: Option<RequestId>,
+    rev: Rev,
+) -> AuditEntry {
+    AuditEntry {
+        time: SystemTime::now(),
+        client_id: ended.client_id,
+        client_name,
+        request_id,
+        call: match ended.outcome {
+            LiveOutcome::Cancelled => "live.cancel",
+            _ => "live.ended",
+        },
+        edits: ended.edits,
+        output_id: None,
+        scene_id: None,
+        gesture_id: Some(ended.gesture_id),
+        outcome: Some(ended.outcome),
+        rev_before: rev,
+        rev_after: rev,
+        error: None,
+        replayed: false,
     }
 }
 
@@ -407,7 +464,7 @@ impl Pending {
     ) -> AuditEntry {
         let (rev_before, rev_after, replayed) = match result {
             // Applied now: the rev it produced is newer than any read before it ran.
-            Ok(CallResult::Batch { rev } | CallResult::History { rev, .. })
+            Ok(CallResult::Batch { rev, .. } | CallResult::History { rev, .. })
                 if *rev > self.rev_before =>
             {
                 (Rev(rev.0.saturating_sub(1)), *rev, false)
@@ -423,11 +480,13 @@ impl Pending {
             time: SystemTime::now(),
             client_id: client_id.clone(),
             client_name: self.client_name,
-            request_id: request_id.clone(),
+            request_id: Some(request_id.clone()),
             call: self.call,
             edits: self.edits,
             output_id: self.output_id,
             scene_id: self.scene_id,
+            gesture_id: None,
+            outcome: None,
             rev_before,
             rev_after,
             error: result.as_ref().err().map(ProtocolError::code),
@@ -523,11 +582,13 @@ mod tests {
             time: UNIX_EPOCH + Duration::from_millis(1_760_488_935_007),
             client_id: ClientId::new("client_1"),
             client_name: "claude-desktop".to_owned(),
-            request_id: RequestId::new(format!("req_{n}")),
+            request_id: Some(RequestId::new(format!("req_{n}"))),
             call: "output.set_key",
             edits: Vec::new(),
             output_id: Some(OutputId::new("out_yt")),
             scene_id: None,
+            gesture_id: None,
+            outcome: None,
             rev_before: Rev(n),
             rev_after: Rev(n),
             error: None,

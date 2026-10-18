@@ -20,7 +20,9 @@ Layer-1 backend traits: the seam between the engine and the OS. Platform crates
 holds the backends as injected trait objects, so no engine crate names a platform API.
 This crate is the **single owner** of the encoder and decoder traits
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). It depends only on
-[`jstream-media`](../jstream-media/README.md#purpose), `thiserror`, `wgpu` (for the
+[`jstream-media`](../jstream-media/README.md#purpose),
+[`jstream-plugin-proto`](../jstream-plugin-proto/README.md#purpose) (the plugin-host
+contract, itself dependency-free), `thiserror`, `wgpu` (for the
 GPU-frame types, pinned exactly per
 [ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md) and re-exported as
 `jstream_platform::wgpu`) and `crossbeam-utils` (the mailbox's atomic cell), and has no
@@ -40,7 +42,10 @@ Contents:
   platform. It is `#[non_exhaustive]`.
 - **GPU interop** ([GPU frames](#gpu-frames)): `GpuInterop` (`Send + Sync`) opens the
   engine's `GpuContext` (adapter, device, queue, `AdapterId`, and the platform's own
-  state, which drops first) and allocates NV12 `encode_target`s. A `GpuFrame` holds a
+  state, which drops first) and allocates NV12 `encode_target`s. `GpuContext::key`
+  is a `ContextKey`, equal only for the same context: `wgpu::Device` equality compares
+  IDs each wgpu instance numbers from zero, so it can't tell two instances' devices
+  apart. A `GpuFrame` holds a
   `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
   stages its fence wait and signal around the engine's next submit, and
   `FrameSync::platform` lets the platform that made a hold recognise it (`None` by
@@ -129,6 +134,18 @@ Contents:
   a separate trait from `StreamKeyStore`, so a token and a stream key never share a name.
   Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
   contain a token. `jstream-youtube` keeps its Google refresh token here.
+- **CLAP plugin hosts** (`plugin_host.rs`,
+  [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): `PluginHosts`
+  (`Send + Sync`) lists the CLAP search directories that exist, `scan`s a plugin file
+  in a short-lived host process (so a plugin that crashes while scanned costs only that
+  process), and `start`s a host for a `HostRequest` (file, plugin id, the block's
+  `Config` and a saved state): it creates the block initialised with that
+  configuration, starts the process on it and sends `Start`. A `PluginHost` (`Send`)
+  gives the block as a `HostBlock` (an `Arc` of anything that is `AsRef<Shared>`) for
+  the mixer's CLAP filter, says whether the process has `exited`, receives control
+  messages without waiting (`try_recv`), `send`s them (false once the host is gone),
+  and is ended by `kill` or by dropping it. Deciding when to restart or give up is the
+  engine's job, not this trait's. The engine holds it apart from `Backends`.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
   capture device, audio, codec, GPU-interop and media-file backends and its optional
   virtual-camera sink.
@@ -178,7 +195,15 @@ Contents:
   count opens, seeks, frames and audio blocks),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
-  `fake::backends`. The crate's tests drive every trait through trait objects only,
+  `fake::backends`. `plugin_host::fake::FakePluginHosts` (scans find the files a test
+  adds; `refuse_starts` fails starts, `start_hung` starts hosts already hung, and
+  `start_loading` starts hosts that don't get ready until `finish_loading`) runs each
+  host as a thread acting like a unity-gain plugin with `FAKE_LATENCY` and one
+  parameter (`fake_param`): once started it publishes ready and, like the real host,
+  only then beats the heartbeat, copies each input block to the output under the same
+  number, answers `SaveState` and ends on `Stop` or the `stop` word. A test makes it
+  `crash` (it exits) or `hang` (the heartbeat stops but it hasn't exited) through its
+  `FakeHostControl`, which also records what the host received. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
@@ -201,12 +226,13 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
-that device when the engine has one, sampling capture frames there, and opens its own
-(software adapter first) when it does not. It has the NV12 pass that can render into an
-encode target's plane views (`Nv12Converter`).
-Windows' H.264 encoder takes encode targets on the context it reached through
-`Codecs::on_context`, and the engine's render thread converts each composite into the
-next of a ring of them and pushes it to such a session.
+that device when the engine has one, sampling capture frames there, and the frames a
+browser source's page paints on it, and opens its own (hardware adapter first, the
+software one as the fallback) when it does not. It has the NV12 pass that can render
+into an encode target's plane views (`Nv12Converter`). Windows' video encoders take
+encode targets on the context they reached through `Codecs::on_context`, and the
+engine's render thread converts each video mix's composite into the next of that mix's
+ring of them and pushes it to the mix's sessions on that path.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -232,8 +258,11 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
     - The media adapter is the one that drives the captured display, with
       `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
       engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, software adapter first. On a hybrid-GPU machine where sharing an
+      opens its own, hardware adapter first with the software one as the fallback. On a hybrid-GPU machine where sharing an
       adapter isn't possible, the platform says so (ARCH step 6).
+    - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
+      allocation), so the engine can tell whether a texture is on the context a
+      compositor runs on. wgpu's own `Device` equality is per instance and can't.
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.

@@ -1,13 +1,16 @@
-//! Live sources (C1b): the engine builds a `jstream-sources` source for each source in
-//! the collection, rebuilds it when its settings change, drops it when the source is
-//! deleted, and the program mix shows its frames, advancing animations on the clock.
+//! Live sources (C1b, C3): the engine builds a `jstream-sources` source for each source
+//! in the collection, rebuilds it when its settings change, drops it when the source is
+//! deleted, and the program mix shows its frames, advancing animations on the clock, or
+//! what the pipeline captures for it.
 
 use super::{add, batch, connected, create, edits};
 use crate::Engine;
 use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
 use jstream_protocol::{AssetRoot, Batch, Edit, ItemId, Reference, Settings, SourceId, SourceKind};
+use jstream_sources::CaptureSpec;
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -160,21 +163,57 @@ fn a_text_source_is_built_and_rebuilt() {
     assert_eq!(shown(&engine, "caption"), Some([0, 0, 0xff, 0xff]));
 }
 
+/// A `display` or `window` source shows what the pipeline captures for its target:
+/// the primary display by default, the one its `target` names otherwise. Sources that
+/// capture the same thing share one capture, and a window source with no window chosen
+/// captures nothing.
 #[test]
-fn a_kind_that_is_not_built_still_shows_the_capture() {
+fn capture_sources_capture_their_targets() {
     let engine = Engine::new();
     let control = connected(&engine);
+    let target = |id: &str| settings(&[("target", json!(id))]);
     batch(
         &control,
         edits(vec![
             create("a"),
             source("screen", "display", Settings::new()),
+            source("again", "display", Settings::new()),
+            source("second", "display", target("monitor:2")),
+            source("editor", "window", target("hwnd:0x2a")),
+            source("unset", "window", Settings::new()),
             add("a", "i1", "screen"),
+            add("a", "i2", "again"),
+            add("a", "i3", "second"),
+            add("a", "i4", "editor"),
+            add("a", "i5", "unset"),
         ]),
     )
     .expect("created");
-    assert_eq!(shown(&engine, "screen"), None);
-    assert!(engine.render_hub().load().shot().uses_capture());
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let captures = |engine: &Engine| engine.render_hub().load().shot().captures().clone();
+    assert_eq!(
+        captures(&engine),
+        BTreeSet::from([
+            CaptureSpec::Display(None),
+            CaptureSpec::Display(Some("monitor:2".into())),
+            CaptureSpec::Window(Some("hwnd:0x2a".into())),
+        ])
+    );
+    assert_eq!(shown(&engine, "screen"), None, "no frame of its own");
+
+    batch(
+        &control,
+        edits(vec![Edit::SourceSetSettings {
+            source_id: SourceId::new("editor"),
+            patch: target("hwnd:0x2b"),
+        }]),
+    )
+    .expect("retargeted");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    assert!(
+        captures(&engine).contains(&CaptureSpec::Window(Some("hwnd:0x2b".into()))),
+        "a new target is a new capture"
+    );
 }
 
 /// A new, empty directory for one test.
