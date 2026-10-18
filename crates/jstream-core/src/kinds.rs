@@ -50,6 +50,7 @@ mod tests {
             assert!(kinds.contains(&kind), "{}", kind.kind_id);
         }
     }
+
     /// Every built-in kind's descriptor, as `kind.list` serves it, snapshot-tested
     /// (ADR-0025, "Kinds get their own snapshot"; #635): adding or changing a kind changes
     /// no protocol schema, so this diff is where the audio filter kinds' settings, which

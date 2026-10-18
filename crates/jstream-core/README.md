@@ -414,8 +414,9 @@ tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
 `src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
-`insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `jstream-mcp` (`tests/mcp.rs`) and, on Windows,
-`jstream-platform-windows` (the GPU capture hardware test, `src/tests/windows_gpu.rs`,
+`insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `jstream-mcp`
+(`tests/mcp.rs`) and, on Windows, `jstream-platform-windows` (the GPU capture
+hardware test, `src/tests/windows_gpu.rs`,
 compiled only with this crate's `hw-tests` feature); the tests also use `serde_json`
 for settings values and saved collection files. All of them
 are in lower layers
