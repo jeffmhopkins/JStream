@@ -141,8 +141,8 @@ and calls this crate.
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
 P010 conversion, encode-target export, loading WGSL effect packs
-(`jstream-effects`; this crate only draws them), the video filter chain runtime (the built-in filters' passes are here, see
-[Filters](#filters)), 3D tilt/turn/depth/perspective, the master chain and the privacy
+(`jstream-effects`; this crate only draws them), the video filter chain runtime
+(`jstream-core`'s; the built-in filters' passes are here, see [Filters](#filters)), 3D tilt/turn/depth/perspective, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
 steps stay in
@@ -266,7 +266,11 @@ registers `Queue::on_submitted_work_done` for the frame (the frame fence: it rec
 the newest finished frame in an atomic), polls the device once without blocking, and
 returns the retired images whose last frame has finished. A steady frame allocates
 only that callback; a frame that fails before `end_frame` leaves its retirees to the
-next frame's fence, which covers it.
+next frame's fence, which covers it. `frame` names the frame being built, so work that
+several draws of one frame share (a source's video chain) can run once in it.
+`retire_filter` hands the cache a `VideoFilter` no frame runs any more: it may hold
+textures of its own (a video delay's ring), so it waits for the same fence and comes
+back in `Reclaimed` (`Reclaimed::filters` counts them) to be dropped with the images.
 
 `import` keyed by an ID samples a `GpuFrame` with no copy (`import_premultiplied`
 does the same for a premultiplied texture, and `import_opaque` for a capture, and each
@@ -372,11 +376,11 @@ each under `src/filter/` (`pack`, `aspect`, `multipass`, `assets`). Each kind ha
 them) to shader values, and its WGSL. A test checks that every kind is unique, that its
 defaults pass its descriptor, and that they build its pass.
 
-**Not wired yet.** The chain runtime (roadmap V0) is what keeps a `VideoFilter` per
-enabled filter of a source's video chain and runs them in order before placement.
-Until it lands nothing in the engine calls these passes, and the kinds are not in
-`kind.list`: `video_filter_descriptors()` is what V0 adds to `jstream-core`'s built-in
-kinds.
+**Where they run.** `jstream-core`'s chain runtime (roadmap V0,
+[core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
+filter of a source's video chain and runs them in order before placement, each into a
+cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
+`kind.list` gets these kinds.
 
 **The harness.**
 
@@ -387,7 +391,10 @@ kinds.
   frame sits in that output (a `ContentBox`, see **Bounds** below), and
   `ContentBox::then` carries a box down a chain.
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
-  new layer of that size, in one submit. `clock` is the media-clock time, for filters
+  new layer of that size, in one submit. `apply_filter_into(filter, input, output,
+  clock)` draws into a layer the caller keeps (a `ResourceCache` layer), so a chain
+  that runs every frame allocates no output; it refuses an output of another size than
+  the filter reports, the input itself, or an image that isn't a layer. `clock` is the media-clock time, for filters
   that move or hold frames. An imported input's `FrameSync`, and that of any image the
   filter reads besides it (`Ctx::hold`), is staged once the pass has recorded, right
   before the submit, and the submit hands those textures back in `PRESENT`, as `render`
@@ -412,10 +419,10 @@ kinds.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each draw creates its two small uniform buffers, two views and a bind group, and each
-  `apply_filter` its output layer. A multi-pass filter also creates its `Ctx::scratch`
-  layers on every call: up to three, each at most the filter's output size (about
-  16.6 MB at 1080p). Pooling all of these is the chain runtime's job (V0); until then a
-  filter costs those allocations per frame. The video delay's ring of held frames is
+  `apply_filter` its output layer (`apply_filter_into` reuses the caller's). A
+  multi-pass filter also creates its `Ctx::scratch` layers on every call: up to three,
+  each at most the filter's output size (about 16.6 MB at 1080p). Pooling the scratch
+  layers is still to do (V0); until then a multi-pass filter costs them per frame. The video delay's ring of held frames is
   the one thing a filter keeps between frames.
 
 **External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
@@ -517,15 +524,16 @@ landed as its `content_box`: the inset and the input's own size. Every other kin
 reports its whole output, aspect ratio included, since its output is the reshaped
 frame. Down a chain, `ContentBox::then` adds the offsets while each next filter holds
 the previous output 1:1, and takes the next filter's box when it reshapes or resamples
-it. The chain runtime (V0) is meant to fit that box, not the grown frame, to the
-item's bounds, so a shadow hangs outside them; until it lands nothing reads the box,
-and a placement would fit the grown frame.
+it. The chain runtime places the grown output as the source's frame; fitting that box,
+not the grown frame, to the item's bounds (so a shadow hangs outside them) is a V0
+follow-up, and until then nothing reads the box and a placement fits the grown frame.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
 `VideoFilter::set_reference(Option<Arc<Image>>)` (a defaulted `Pass::set_reference`
-underneath): render opens no files (R-RT-002), so V0 resolves the asset or scene
-reference and decodes it. A kind passes its input through unchanged until both its
+underneath): render opens no files (R-RT-002), so the chain runtime is to resolve
+the asset or scene reference and decode it (a V0 follow-up; until then these kinds run
+with no image and pass their input through). A kind passes its input through unchanged until both its
 reference setting is non-`null` and an image is set, and refuses an image from another
 compositor. A reference's `FrameSync` is staged and handed back with the input's, once
 per submit even when the reference is the input itself; a mask test passes one
@@ -578,6 +586,10 @@ the result back through a 1:1 scene on a transparent canvas, so each kind's gold
 test is a pixel or grid check like the ones below. A two-pass copy covers the harness
 itself, including a half-transparent texel round-tripping, and copies a premultiplied
 browser-page import through unchanged (read as premultiplied linear, it would brighten).
+`tests/kinds.rs` snapshots every built-in video filter kind's descriptor
+(`schema/kinds.snap`, an `insta` snapshot, as `jstream-sources` does for source kinds),
+so a change to a filter's settings is reviewed like an API diff (ADR-0025, #369).
+`INSTA_UPDATE=always cargo test -p jstream-render --test kinds` rewrites it.
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1

@@ -66,6 +66,7 @@ use jstream_sources::AudioScopes;
 
 use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
+use crate::chain::Chains;
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, DropGuard, DropSnapshot, FnDropSource, VideoEncodeDrops,
     capture_drops, output_packet_drops, render_tick_drops,
@@ -1169,6 +1170,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
+        let mut chains = Chains::default();
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
             if let Some(hook) = &hook {
                 hook(&compositor);
@@ -1181,7 +1183,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             for frame in frames.iter().filter(|frame| !frame.due) {
                 let claimed = snapshot::claim_layers(
                     &mut compositor,
-                    &mut cache,
+                    (&mut cache, &mut chains),
                     shot,
                     frame.mix.as_ref(),
                     frame.size,
@@ -1196,7 +1198,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                 };
                 let drawn = snapshot::compose(
                     &mut compositor,
-                    &mut cache,
+                    (&mut cache, &mut chains),
                     (shot, at),
                     view,
                     live,
