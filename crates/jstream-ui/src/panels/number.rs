@@ -120,8 +120,9 @@ pub fn NumberField(
     /// The largest value sent.
     #[prop(default = 100_000.0)]
     max: f64,
-    /// Takes each new value.
-    send: impl Fn(f64) + Copy + Send + Sync + 'static,
+    /// Takes each new value, and says whether it sent an edit; when it didn't, the field
+    /// shows the committed value again.
+    send: impl Fn(f64) -> bool + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     // The value a drag shows before its release sends it.
     let dragged = RwSignal::new(None::<f64>);
@@ -140,10 +141,8 @@ pub fn NumberField(
     let disabled = move || value.get().is_none();
     let put = move |v: f64| {
         let v = settle(v, min, max, decimals);
-        if value.get_untracked() == Some(v) {
+        if value.get_untracked() == Some(v) || !send(v) {
             again.update(|n| *n += 1);
-        } else {
-            send(v);
         }
     };
     let nudge = move |by: f64| {

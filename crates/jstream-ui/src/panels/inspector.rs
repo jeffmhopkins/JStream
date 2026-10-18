@@ -473,19 +473,21 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
             Signal::derive(move || geometry.get().map(|g| f64::from(param_value(&g, param))));
         let commit = move |v: f64| {
             let Some(g) = geometry.get_untracked() else {
-                return;
+                return false;
             };
             let Some(placed) = with_param(&g, param, to_f32(v), linked.get_untracked()) else {
-                return;
+                return false;
             };
-            if placed != g {
-                let (item_id, scene) = ids.get_value();
-                send(Edit::ItemSetGeometry {
-                    item_id,
-                    scene_id: Some(scene),
-                    geometry: placed,
-                });
+            if placed == g {
+                return false;
             }
+            let (item_id, scene) = ids.get_value();
+            send(Edit::ItemSetGeometry {
+                item_id,
+                scene_id: Some(scene),
+                geometry: placed,
+            });
+            true
         };
         let (label, step, decimals, fixed, unit) = match param {
             Param::X => ("X", 1.0, 2, false, "px"),
@@ -533,17 +535,19 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
         let value = Signal::derive(move || crop.get().map(|c| f64::from(crop_side(&c, side))));
         let commit = move |v: f64| {
             let Some(c) = crop.get_untracked() else {
-                return;
+                return false;
             };
             let next = with_side(&c, side, to_f32(v));
-            if next != c {
-                let (item_id, scene) = ids.get_value();
-                send(Edit::ItemSetCrop {
-                    item_id,
-                    scene_id: Some(scene),
-                    crop: next,
-                });
+            if next == c {
+                return false;
             }
+            let (item_id, scene) = ids.get_value();
+            send(Edit::ItemSetCrop {
+                item_id,
+                scene_id: Some(scene),
+                crop: next,
+            });
+            true
         };
         view! {
             <NumberField label unit="px" value step=1.0 decimals=0 min=0.0
@@ -564,10 +568,10 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
     });
     let send_opacity = move |v: f64| {
         let Some(opacity) = Finite32::new(to_f32(v.clamp(0.0, 100.0) / 100.0)) else {
-            return;
+            return false;
         };
         if current.with_untracked(|i| i.as_ref().is_some_and(|i| i.opacity == opacity)) {
-            return;
+            return false;
         }
         let (item_id, scene) = ids.get_value();
         send(Edit::ItemSetOpacity {
@@ -575,6 +579,7 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
             scene_id: Some(scene),
             opacity,
         });
+        true
     };
     let send_blend = move |name: String| {
         let Some(mode) = BlendMode::ALL.into_iter().find(|m| blend_name(*m) == name) else {

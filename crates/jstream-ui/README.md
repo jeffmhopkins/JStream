@@ -166,8 +166,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   unfocused field steps once per 3 px (Shift a tenth, Ctrl four times, per move so a
   modifier never makes the value jump) and is sent once on release, so it is one edit
   and one undo step; a drag whose release the field never saw ends unsent at the next
-  move with no button held. Values are kept to the field's range and rounded, and negatives
-  are written with `−`.
+  move with no button held. Values are kept to the field's range and rounded, and
+  negatives are written with `−`. A value its panel doesn't send, because the edit
+  would change nothing, puts the committed value back in the field.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
   (and slider when bounded), select, colour, text, asset (root and path) or reference
