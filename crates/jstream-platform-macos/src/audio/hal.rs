@@ -18,9 +18,10 @@ use objc2_core_audio::{
     kAudioDevicePropertyPreferredChannelsForStereo, kAudioDevicePropertyStreamConfiguration,
     kAudioDevicePropertyStreams, kAudioHardwarePropertyDefaultInputDevice,
     kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDevices,
-    kAudioObjectPropertyElementMain, kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal,
-    kAudioObjectPropertyScopeInput, kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject,
-    kAudioObjectUnknown, kAudioStreamPropertyVirtualFormat,
+    kAudioHardwarePropertyProcessObjectList, kAudioObjectPropertyElementMain,
+    kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyScopeInput,
+    kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject, kAudioObjectUnknown,
+    kAudioProcessPropertyBundleID, kAudioProcessPropertyPID, kAudioStreamPropertyVirtualFormat,
 };
 use objc2_core_audio_types::{AudioBuffer, AudioBufferList, AudioStreamBasicDescription};
 use objc2_core_foundation::{CFRetained, CFString};
@@ -128,6 +129,8 @@ unsafe trait Pod: Copy {}
 // SAFETY: integers and floats have no invalid bit patterns.
 unsafe impl Pod for u32 {}
 // SAFETY: as above.
+unsafe impl Pod for i32 {}
+// SAFETY: as above.
 unsafe impl Pod for f64 {}
 // SAFETY: as above, for two of them.
 unsafe impl Pod for [u32; 2] {}
@@ -197,6 +200,42 @@ fn read_string(
     // and releases it when dropped.
     let string = unsafe { CFRetained::from_raw(raw) };
     Ok(string.to_string())
+}
+
+/// The process objects Core Audio knows now: its audio clients.
+pub(super) fn process_objects() -> Result<Vec<AudioObjectID>, PlatformError> {
+    read_list(
+        SYSTEM,
+        &address(
+            kAudioHardwarePropertyProcessObjectList,
+            kAudioObjectPropertyScopeGlobal,
+        ),
+        0,
+    )
+}
+
+/// A process object's PID, unless it is gone.
+pub(super) fn process_pid(process: AudioObjectID) -> Option<i32> {
+    read_value(
+        process,
+        &address(kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal),
+        0i32,
+    )
+    .ok()
+    .filter(|&pid| pid > 0)
+}
+
+/// A process object's bundle ID, if it has one.
+pub(super) fn process_bundle_id(process: AudioObjectID) -> Option<String> {
+    read_string(
+        process,
+        &address(
+            kAudioProcessPropertyBundleID,
+            kAudioObjectPropertyScopeGlobal,
+        ),
+    )
+    .ok()
+    .filter(|s| !s.is_empty())
 }
 
 /// The devices present now.
