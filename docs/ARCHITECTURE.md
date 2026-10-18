@@ -944,6 +944,21 @@ frame. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
 
+**Device loss** (#349). A GPU hang that Windows resets (TDR), a driver reset or a removed
+GPU takes the device with it, and with it everything made on it. The compositor watches
+its device, its own or the context's, for the loss (`Compositor::lost`), and keeps the
+invalid-resource errors that follow from panicking the render thread. The render thread
+treats a lost device as one event: it opens the compositor on a new device at once, off
+the render thread with the fallback's deadline, and the output repeats its last frame
+meanwhile and stays up. On the platform's context that is step 6's fallback, so capture
+moves to CPU frames. On a device of its own it is a new device, the hardware adapter
+first again. Encoders take the CPU readback, so they don't reopen. The third loss within
+60 s fails the output instead. Each loss is logged and counted in the output's stats
+([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
+engine event for a loss (a protocol change), attributing a loss to the effect pack that
+was drawing, and quarantining that pack, all of which wait for packs to be drawn in the
+engine (X1).
+
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
 during it, the program mix is a synthetic item list whose transforms and opacity come
