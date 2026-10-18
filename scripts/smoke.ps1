@@ -6,9 +6,11 @@ its key, going live, sampling stats.tick, taking a snapshot and stopping.
 .DESCRIPTION
 The steps and what each one checks are in docs/runbooks/go-live.md (Smoke script). By
 default it streams to a local RTMP sink (an ffmpeg listen process) with a throwaway key,
-so it needs no real stream key. On Windows the daemon really encodes and publishes; on
-Linux and macOS it only steps the placeholder output, so the key, stats and sink checks
-are skipped there.
+so it needs no real stream key. On Windows the daemon really encodes and publishes, and
+the script checks it. On Linux the daemon only steps the placeholder output, so the key,
+stats and sink checks are skipped. On macOS the daemon goes live, but the script doesn't
+drive that yet (its key would go to the login keychain), so it refuses to run there with
+exit 2: going live on a Mac is checked by hand (#644).
 
 The script never reads, prints or logs a stream key: -KeyFile is passed to jstream-cli as
 a path, and the local sink's key is a fixed, non-secret placeholder.
@@ -54,6 +56,10 @@ $ErrorActionPreference = 'Stop'
 $OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or $IsWindows
 $Exe = ''
 if ($OnWindows) { $Exe = '.exe' }
+# PowerShell 5.1 has no $IsMacOS; it runs only on Windows.
+if (-not $OnWindows -and $IsMacOS) {
+    Write-Error 'macOS: going live is checked by hand, #644'; exit 2
+}
 $Repo = Split-Path -Parent $PSScriptRoot
 # The output the run creates. Its key lives in Credential Manager as
 # JStream/stream-key/smoke_test while the run lasts, and is cleared at the end.
@@ -64,7 +70,7 @@ $SinkKey = 'smoke'
 if ($RtmpUrl -and -not $KeyFile) { Write-Error '-RtmpUrl needs -KeyFile'; exit 2 }
 if ($KeyFile -and -not $RtmpUrl) { Write-Error '-KeyFile needs -RtmpUrl'; exit 2 }
 if ($RtmpUrl -and -not $OnWindows) {
-    Write-Error '-RtmpUrl needs Windows: elsewhere the daemon does not publish yet'; exit 2
+    Write-Error '-RtmpUrl needs Windows: on Linux the daemon does not publish yet'; exit 2
 }
 if ($KeyFile) {
     if (-not (Test-Path -LiteralPath $KeyFile -PathType Leaf)) {
@@ -340,7 +346,7 @@ try {
         if (-not $s -or -not $s.key_set) { Fail 'output.set_key' 'output.status says no key is set' }
         Add-Result 'PASS' 'output.set_key' 'stored in Credential Manager; status says key set'
     } else {
-        Add-Result 'SKIP' 'output.set_key' 'not Windows: this daemon has no key store'
+        Add-Result 'SKIP' 'output.set_key' 'Linux: this daemon has no key store'
     }
 
     # 6. Subscribe to events before going live, so the first stats.tick is caught.

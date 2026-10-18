@@ -252,9 +252,14 @@ It has:
   still connected and the session still running, and otherwise the stream reports
   `DeviceLost`.
 
+- **`NoGpuInterop`** (`GpuInterop`) stands in for the interop not built yet, so a host
+  can build a whole `Backends` (the daemon does): its `open_device` is `Unsupported`,
+  so the engine opens a device of its own and takes the CPU frame paths. The Metal
+  interop replaces it.
+
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
-  proves the synchronisation;
+  proves the synchronisation, in place of `NoGpuInterop`;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
 - GPU frames (IOSurface pixel buffers imported into Metal) from the VideoToolbox decoder

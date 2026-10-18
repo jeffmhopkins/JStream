@@ -107,7 +107,7 @@ runs on Windows PowerShell 5.1 and PowerShell 7:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\smoke.ps1 -Release
-pwsh scripts/smoke.ps1                  # debug build, also on Linux and macOS
+pwsh scripts/smoke.ps1                  # debug build, also on Linux
 ```
 
 | Option | Meaning |
@@ -138,18 +138,20 @@ What it does, in order, with a `PASS`, `FAIL`, `WARN` or `SKIP` line for each st
    warning.
 10. Clears the key from Credential Manager, and checks that the sink received H.264 and
     AAC lasting at least half the live time.
-11. Ends the daemon. On Linux and macOS it sends SIGINT and checks the graceful stop
+11. Ends the daemon. On Linux it sends SIGINT and checks the graceful stop
     (`stopped`, exit 0). On Windows a process without a console can't be sent Ctrl-C,
     so it is ended, and the graceful stop is step 7 of the manual run.
 
-It exits 0 when nothing failed, 1 when a step failed, and 2 for bad options. The run's
-folder keeps the daemon's logs (and any crash report), the snapshot and the sink's
-recording. It holds the run's token file too, so don't attach the whole folder to an
-issue.
+It exits 0 when nothing failed, 1 when a step failed, and 2 for bad options or on
+macOS. The run's folder keeps the daemon's logs (and any crash report), the snapshot
+and the sink's recording. It holds the run's token file too, so don't attach the whole
+folder to an issue.
 
-Off Windows the daemon only steps a placeholder output, so the run skips the key, the
-sink and `stats.tick`, and checks the rest: start-up, MCP, the output's states, the
-snapshot and the graceful stop. That is what CI or a Linux machine can run.
+On Linux the run skips the key, the sink and `stats.tick`, and checks the rest:
+start-up, MCP, the output's states, the snapshot and the graceful stop. The daemon only
+steps a placeholder output there, so that is what CI or a Linux machine can run. On
+macOS the daemon goes live, but the script doesn't drive that yet, so it refuses to
+run there with exit 2 ("macOS: going live is checked by hand, #644").
 
 <a id="youtube"></a>
 ## YouTube

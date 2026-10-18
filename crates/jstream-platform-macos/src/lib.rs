@@ -14,8 +14,9 @@
 //! through AVFoundation, behind the Camera permission (`AvFoundationVideoDevices`), the
 //! VideoToolbox H.264 and HEVC decoder on CPU frames, its packets split by
 //! `split_access_unit` and its frames put in presentation order by `Reorder`, and
-//! local media files through AVFoundation's asset reader (`AvMediaDecoders`). Layer 2,
-//! and one of the crates allowed `unsafe` (R-UNSAFE-001): every
+//! local media files through AVFoundation's asset reader (`AvMediaDecoders`), with a
+//! stand-in for the GPU interop not built yet (`NoGpuInterop`). Layer 2, and one of the
+//! crates allowed `unsafe` (R-UNSAFE-001): every
 //! system call is wrapped here behind safe APIs.
 //!
 //! Apple's frameworks are called through the objc2 crates and Mach time through `mach2`
@@ -39,6 +40,7 @@ mod decode;
 mod fourcc;
 mod keychain;
 mod media_file;
+mod unbuilt;
 mod version;
 mod video_device;
 #[cfg(target_os = "macos")]
@@ -75,6 +77,7 @@ pub use keychain::MacosKeychain;
 pub use media_file::{
     AvReaderSettings, audio_layout, av_error_is_unsupported, av_reader_settings, bgra_to_rgba,
 };
+pub use unbuilt::NoGpuInterop;
 pub use version::{Arch, Feature, MacosVersion, SupportTier, check_floor, support_tier};
 #[cfg(target_os = "macos")]
 pub use video_device::AvFoundationVideoDevices;
