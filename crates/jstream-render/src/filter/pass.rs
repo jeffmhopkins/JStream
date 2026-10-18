@@ -13,9 +13,9 @@ use jstream_platform::FrameSync;
 use jstream_protocol::Settings;
 
 use crate::error::RenderError;
-use crate::filter::FilterClock;
+use crate::filter::{ContentBox, FilterClock};
 use crate::gpu::Gpu;
-use crate::image::{self, Alpha, Image, LAYER_FORMAT, Maker};
+use crate::image::{self, Image, LAYER_FORMAT, Maker};
 
 /// The WGSL every filter shader starts with: the vertex stage, the bindings and the colour
 /// helpers. Effect packs validate against it.
@@ -36,6 +36,12 @@ pub(crate) trait Pass: Send {
     /// The size this filter draws for an input of `width` by `height`.
     fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         (width, height)
+    }
+
+    /// Where the input's frame sits in the output for an input of `width` by `height`.
+    /// The whole output unless the filter draws the input 1:1 inside a larger frame.
+    fn content_box(&self, width: u32, height: u32) -> ContentBox {
+        ContentBox::whole(self.output_size(width, height))
     }
 
     /// Hands the filter its external image: a decoded asset (a LUT from
@@ -375,11 +381,7 @@ impl Ctx<'_> {
             });
         }
         let aux = draw.aux.unwrap_or(draw.input);
-        let alpha = |image: &Image| match image.alpha() {
-            Alpha::Premultiplied => 0.0,
-            Alpha::Straight => 1.0,
-            Alpha::PremultipliedSrgb => 2.0,
-        };
+        let alpha = |image: &Image| image.alpha().shader_mode();
         let seconds = (self.clock.seconds.rem_euclid(TIME_WRAP_SECONDS)) as f32;
         let frame = super::params::Uniforms::new()
             .vec2([draw.input.width() as f32, draw.input.height() as f32])

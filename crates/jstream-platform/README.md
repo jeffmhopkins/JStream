@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -122,7 +122,7 @@ Contents:
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
-  ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)), not this trait's.
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)), not this trait's.
 - **Stream keys** (`keys.rs`): `StreamKeyStore` (`Send + Sync`), the seam to the OS
   credential store ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `clear`
   and `is_set`, one key per output ID. No error may contain a key. `Secret` carries a
@@ -151,7 +151,7 @@ Contents:
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
   capture device, audio, codec, GPU-interop and media-file backends and its optional
   virtual-camera sink.
-- **Data folder** (`paths.rs`, [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)):
+- **Data folder** (`paths.rs`, [ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)):
   `paths::data_dir`, the one folder every host keeps its state in. It is a folder named
   `data` beside the exe when a file named `portable` sits there (so the app can run from
   a USB stick), and otherwise the platform's per-user data folder: `%APPDATA%\JStream`

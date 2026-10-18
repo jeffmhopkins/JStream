@@ -19,7 +19,7 @@
 //! `device.list` and `device.revoke` itself, on every connection and MCP session.
 //! Layer 4.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md, docs/adr/0047-browser-pairing-page-and-device-cookie.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md, docs/adr/0047-browser-pairing-page-and-device-cookie.md, docs/security/threat-model.md#server, docs/security/threat-model.md#pairing
 
 #![forbid(unsafe_code)]
 
