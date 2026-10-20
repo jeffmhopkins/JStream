@@ -112,7 +112,7 @@ leptos = { version = "0.8", default-features = false, features = ["csr"] }
 # `mach_absolute_time` and `mach_timebase_info` for the macOS media clock (ADR-0063 §5).
 # Maintained bindings to <mach/mach_time.h> (R-UNSAFE-004), already in the tree at 0.6
 # under wasmtime; no build script and no default features.
-mach2 = { version = "0.6", default-features = false }
+mach2 = { version = "0.7", default-features = false }
 # Foundation through the objc2 framework crates (ADR-0063 §12), for the running macOS
 # version (`NSProcessInfo`), and the arrays, errors and strings ScreenCaptureKit hands back.
 # The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
@@ -246,7 +246,7 @@ wasmtime = { version = "49", default-features = false, features = ["cranelift", 
 # The WASM text format, for `jstream-plugin-wasm`'s test plugins; test-only. Held at 1.258,
 # the wasm-tools release wasmtime 49 is built on: a later one brings a second
 # `wasm-encoder` (R-DEP-005). No default features: no component model.
-wat = { version = "~1.258", default-features = false }
+wat = { version = "~1.262", default-features = false }
 # Microsoft's official Windows bindings (R-UNSAFE-004), used only by the Windows platform
 # crate. Pinned exactly so every Windows crate resolves one version (R-DEP-005); the
 # platform crate picks its API features.
