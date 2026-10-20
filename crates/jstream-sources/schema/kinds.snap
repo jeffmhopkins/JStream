@@ -701,7 +701,7 @@ source: crates/jstream-sources/tests/kinds.rs
     "name": "Webcam",
     "version": 1,
     "video": true,
-    "audio": false,
+    "audio": true,
     "params": [
       {
         "id": "device",
