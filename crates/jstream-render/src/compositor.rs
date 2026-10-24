@@ -62,8 +62,6 @@ pub struct Compositor {
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     filters: filter::Runtime,
     mip_pipelines: MipPipelines,
-    /// Counts `render` and `render_into` calls, so a chain is built once per call.
-    calls: u64,
 }
 
 impl Compositor {
@@ -321,6 +319,7 @@ impl Compositor {
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         drop(submitting);
+        target.mark_changed();
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -507,7 +506,6 @@ impl Compositor {
             staged: Vec::new(),
             filters,
             mip_pipelines,
-            calls: 0,
         }
     }
 
@@ -696,7 +694,6 @@ impl Compositor {
     /// stages the frame holds after this and every other step that can fail, so an
     /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
-        self.calls = self.calls.wrapping_add(1);
         color::validate(scene.background)?;
         self.prepare(scene)?;
         self.ensure_vertex_buffer()?;
@@ -721,13 +718,14 @@ impl Compositor {
         })
     }
 
-    /// Rebuilds the mip chain of each image a 3D item draws, once per image and call,
-    /// and an upload only when it was rewritten since (ADR-0050 decision 5).
+    /// Rebuilds the mip chain of each image a 3D item draws, only when the image changed
+    /// since its last build (ADR-0050 decision 5): an upload rewritten, a layer drawn
+    /// into, an import handed a new frame.
     fn record_mips(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene<'_>) {
         for draw in self.draws.iter().filter(|draw| draw.mips) {
             let image = scene.items[draw.index].image;
             let mips = self.mips_of(image);
-            if mips.claim(image, self.calls) {
+            if mips.claim(image) {
                 mips.record(encoder, &self.mip_pipelines, image);
             }
         }

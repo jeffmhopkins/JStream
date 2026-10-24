@@ -5,10 +5,11 @@
 //! with trilinear filtering and 16× anisotropy, clamped to what the adapter offers. The
 //! chain lives on the [`Image`] and goes with it, so a source never placed in 3D has none.
 //!
-//! It is rebuilt on the GPU at most once per `render` or `render_into` call: an upload
-//! when it was rewritten since the last build, and a layer or an import every call that
-//! draws it in 3D, since a filter, a nested scene or the platform can change those
-//! without this crate seeing it.
+//! It is rebuilt on the GPU only when its image changed since the last build, so once
+//! per source and frame however many mixes or nested scenes draw it: an upload when it
+//! was rewritten, a layer when `render_into` drew into it, and an import when it was
+//! handed a new frame ([`Image::mark_changed`], which `ResourceCache::import` calls
+//! once per frame).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -114,10 +115,11 @@ pub(crate) struct Mips {
     targets: Vec<wgpu::TextureView>,
     /// Level `i`'s input for level `i + 1`: its view and the linear sampler.
     inputs: Vec<wgpu::BindGroup>,
-    /// The upload generation of the last build, or [`NEVER`].
+    /// The image's generation at the last build, or [`NEVER`].
     built_generation: AtomicU64,
-    /// The compositor call of the last build, or [`NEVER`].
-    built_call: AtomicU64,
+    /// How many builds were claimed, for the tests.
+    #[cfg(test)]
+    builds: AtomicU64,
 }
 
 /// How many levels a `width` × `height` chain has, down to 1×1.
@@ -183,21 +185,26 @@ impl Mips {
             targets,
             inputs,
             built_generation: AtomicU64::new(NEVER),
-            built_call: AtomicU64::new(NEVER),
+            #[cfg(test)]
+            builds: AtomicU64::new(0),
         }
     }
 
-    /// Whether `image`'s chain needs building in compositor call `call`, and if so marks
-    /// it built.
-    pub(crate) fn claim(&self, image: &Image, call: u64) -> bool {
-        if self.built_call.swap(call, Ordering::Relaxed) == call {
-            return false;
+    /// Whether `image` changed since its chain was last built, and if so marks it built.
+    pub(crate) fn claim(&self, image: &Image) -> bool {
+        let generation = image.generation();
+        let changed = self.built_generation.swap(generation, Ordering::Relaxed) != generation;
+        #[cfg(test)]
+        if changed {
+            self.builds.fetch_add(1, Ordering::Relaxed);
         }
-        if image.is_static() {
-            let generation = image.generation();
-            return self.built_generation.swap(generation, Ordering::Relaxed) != generation;
-        }
-        true
+        changed
+    }
+
+    /// How many builds were claimed.
+    #[cfg(test)]
+    pub(crate) fn builds(&self) -> u64 {
+        self.builds.load(Ordering::Relaxed)
     }
 
     /// Records the passes that rebuild the chain from `image`.

@@ -4,7 +4,9 @@
 
 use jstream_control::protocol::{Call, CallResult, Event, Hello, RequestId, Response, Welcome};
 use jstream_control::{BoxFuture, Control, ControlError, EventStream};
-use jstream_plugin_wasm::{Capabilities, Error, Limits, Plugin, PluginConfig, PluginHost, abi};
+use jstream_plugin_wasm::{
+    Capabilities, Error, Limits, MAX_QUEUED_EVENTS, Plugin, PluginConfig, PluginHost, abi,
+};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -503,4 +505,116 @@ fn a_batch_of_more_commands_than_the_cap_never_reaches_control() {
         .invoke("run", &[1, ok])
         .expect("a batch of exactly the cap fits");
     assert_eq!(fake.calls().len(), 1);
+}
+
+/// A plugin with one entry point per expected input: each traps unless the invocation's
+/// input is exactly its text.
+fn expecting_plugin(expected: &[(&str, &str)]) -> String {
+    let mut data = String::new();
+    let mut funcs = String::new();
+    let mut at = 4096;
+    for (entry, text) in expected {
+        data.push_str(&format!(
+            "(data (i32.const {at}) \"{}\")\n",
+            text.replace('\\', "\\\\").replace('"', "\\\"")
+        ));
+        funcs.push_str(&format!(
+            r#"(func (export "{entry}")
+                (local $i i32)
+                (if (i32.ne (call $input_len) (i32.const {len})) (then unreachable))
+                (call $input_read (i32.const 0))
+                (block $done
+                    (loop $next
+                        (br_if $done (i32.ge_u (local.get $i) (i32.const {len})))
+                        (if (i32.ne (i32.load8_u (local.get $i))
+                                    (i32.load8_u (i32.add (local.get $i) (i32.const {at}))))
+                            (then unreachable))
+                        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                        (br $next))))
+            "#,
+            len = text.len(),
+        ));
+        at += 1024;
+    }
+    format!(
+        r#"(module
+            (import "jstream" "input_len" (func $input_len (result i32)))
+            (import "jstream" "input_read" (func $input_read (param i32)))
+            (memory (export "memory") 1)
+            {data}
+            {funcs})"#
+    )
+}
+
+fn state_changed(rev: u64) -> Event {
+    serde_json::from_value(serde_json::json!({
+        "type": "state.changed",
+        "rev": rev,
+        "client_id": "c1",
+    }))
+    .expect("a valid event")
+}
+
+#[test]
+fn queued_events_reach_the_plugin_as_json_in_order() {
+    let first = serde_json::to_string(&state_changed(1)).expect("serialises");
+    let second = serde_json::to_string(&state_changed(2)).expect("serialises");
+    let wat = expecting_plugin(&[("first", &first), ("second", &second)]);
+    let (plugin, _) = load(&wat, PluginConfig::default());
+    let mut plugin = plugin.expect("the plugin loads");
+    let events = plugin.events();
+    // Queued from another thread, as the engine's event pump would.
+    std::thread::spawn(move || {
+        events.send(state_changed(1));
+        events.send(state_changed(2));
+    })
+    .join()
+    .expect("the sender thread ends");
+    assert_eq!(plugin.events().queued(), 2);
+    assert!(plugin.deliver_event("first").expect("the first event"));
+    assert!(plugin.deliver_event("second").expect("the second event"));
+    assert!(!plugin.deliver_event("first").expect("nothing waits"));
+}
+
+#[test]
+fn a_full_queue_reaches_the_plugin_as_one_events_dropped_notice() {
+    // ADR-0069: at most 1,000 queued events. The 1,001st drops the thousand, so the
+    // plugin is handed `events.dropped` with that count, then the newest event.
+    let full = u64::try_from(MAX_QUEUED_EVENTS).expect("fits");
+    assert_eq!(full, 1_000);
+    let dropped = serde_json::to_string(&Event::EventsDropped { count: full }).expect("serialises");
+    let newest = serde_json::to_string(&state_changed(full)).expect("serialises");
+    let wat = expecting_plugin(&[("dropped", &dropped), ("newest", &newest)]);
+    let (plugin, _) = load(&wat, PluginConfig::default());
+    let mut plugin = plugin.expect("the plugin loads");
+    let events = plugin.events();
+    for rev in 0..=full {
+        events.send(state_changed(rev));
+    }
+    assert!(
+        plugin
+            .deliver_event("dropped")
+            .expect("the notice comes first")
+    );
+    assert!(plugin.deliver_event("newest").expect("then the event kept"));
+    assert!(!plugin.deliver_event("newest").expect("nothing else waits"));
+}
+
+#[test]
+fn a_failed_delivery_still_takes_the_event() {
+    let expected = serde_json::to_string(&state_changed(2)).expect("serialises");
+    let wat = expecting_plugin(&[("only_two", &expected)]);
+    let (plugin, _) = load(&wat, PluginConfig::default());
+    let mut plugin = plugin.expect("the plugin loads");
+    plugin.events().send(state_changed(1));
+    plugin.events().send(state_changed(2));
+    assert!(matches!(
+        plugin.deliver_event("only_two"),
+        Err(Error::Trap(_))
+    ));
+    assert!(
+        plugin
+            .deliver_event("only_two")
+            .expect("the next event is the second")
+    );
 }

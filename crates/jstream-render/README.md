@@ -177,14 +177,16 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    Averaging code values rather than linear light differs from an upload only where
    the filter mixes texels of different colour.
 2. **Mips** (ADR-0050 decision 5). Before the composite pass, each source a visible 3D
-   item draws gets its mip chain rebuilt: an `Rgba16Float` texture with every level down
+   item draws gets its mip chain rebuilt if the source changed since its last build: an `Rgba16Float` texture with every level down
    to 1×1, premultiplied linear. Level 0 copies the source texel for texel, converting
    an import as the composite shader would. Each further level is one pass that samples
    the level above at its own texel centres, so the linear filter averages 2×2 texels.
-   A chain is rebuilt at most once per `render` or `render_into` call. An upload is
-   rebuilt only after `rewrite_rgba8`. A layer or an import is rebuilt every call that
-   draws it in 3D, since a nested scene, a filter or the platform changes it out of
-   sight. A 3D item samples its chain, which is always premultiplied linear (mode 0),
+   Each `Image` counts its changes: `rewrite_rgba8` marks an upload, `render_into` the
+   layer it drew into, and `ResourceCache::import` an import the first time a frame
+   hands it out (or when the key's texture changes). `Image::mark_changed` marks an
+   import the caller keeps outside the cache, whose texture the platform rewrites. So a
+   chain is rebuilt once per source and frame however many mixes or nested scenes draw
+   it, and not at all while its source is unchanged. A 3D item samples its chain, which is always premultiplied linear (mode 0),
    with trilinear filtering and `anisotropy_clamp` 16; wgpu clamps that to 1 on an
    adapter without anisotropic filtering. A source with no 3D placement gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
@@ -649,7 +651,10 @@ p99 error per channel in sRGB 8-bit steps. On lavapipe:
 
 The p99 limit is 40 throughout. C's pattern is much finer than the spike's (one-texel
 rings every 16 texels), which is why its mean is higher than the spike's 1.16. A
-further test checks that an upload's chain is rebuilt after `rewrite_rgba8`.
+further test checks that an upload's chain is rebuilt after `rewrite_rgba8`, one that
+a layer's is rebuilt after `render_into` draws into it and not on a second draw while it
+is unchanged, and one that a cached import drawn by two calls in a frame is rebuilt once
+per frame.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
@@ -743,11 +748,10 @@ a hardware GPU.
 
 - **3D.** The compositor draws ADR-0050 decisions 1, 2, 4, 5 and 6. Open: whether
   rotated 2D items should get edge coverage too, which changes their goldens; whether
-  strongly minified 2D items should get mips; and whether a layer or an import should
-  carry a change count, so its chain is rebuilt only when it changed rather than each
-  call that draws it in 3D. Decision 5 asks for once per source and frame; a source
-  drawn in 3D by two mixes, or inside a nested scene, is rebuilt once per call that
-  draws it. Also open: a cropped 3D item samples the whole source's chain, so at coarser
+  strongly minified 2D items should get mips; and whether `ResourceCache::import` should
+  take the frame's version, so a capture that delivers no new frame in a tick isn't
+  rebuilt that tick (today the cache marks an import changed once per frame). Also
+  open: a cropped 3D item samples the whole source's chain, so at coarser
   levels, and along the anisotropic footprint, texels just past the crop bleed into its
   edge (the UV clamp keeps the sample point inside, not the footprint). Clamping the
   level near the crop, or building the chain from the cropped region, would fix that.

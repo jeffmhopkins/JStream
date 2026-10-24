@@ -68,7 +68,13 @@ instantiates one module with its `PluginConfig` (capabilities and limits) and th
 exported `() -> ()` function, with `input` readable by the plugin. A plugin's calls are
 answered synchronously: the thread running it parks until the `Control` future
 completes, so plugins run on threads that may block, never on an async executor's
-worker. After a trap, fuel exhaustion or a missed deadline the caller decides what to do
+worker. **Events.** `Plugin::events` gives the `EventSender` the engine queues events
+for the plugin with, from any thread; `Plugin::deliver_event(entry)` hands the oldest to
+the plugin, invoking `entry` with the protocol `Event` as JSON for its input. The queue
+holds at most 1,000 events (`MAX_QUEUED_EVENTS`, ADR-0069): an event that finds it full
+drops the queued ones, and the plugin is next handed one `events.dropped` notice with
+their count (overflows before it is handed out add to it), then the events that came
+after, as a WebSocket client that reads too slowly gets. After a trap, fuel exhaustion or a missed deadline the caller decides what to do
 with the plugin. Under #348's decision it disables the plugin until a person
 re-enables it. That policy needs the plugin state event, which is not built yet.
 
@@ -91,16 +97,19 @@ result read outside memory traps; of sixty calls in one invocation the first fif
 across invocations and frees a second later, denied calls don't use it, each edit of a
 batch counts against it, a batch of 51 edits never reaches `Control` while one of 50
 does, and the window admits again as commands age and a cap of zero admits nothing
-(`rate.rs`).
+(`rate.rs`); queued events reach the plugin as JSON in order, from another thread, a
+1,001st event reaches it as one `events.dropped` notice of 1,000 and then itself,
+overflows before a notice is handed out add up, and a failed delivery still takes its
+event (`events.rs`).
 
 **Not here:** finding, installing and listing plugins, the manifest that declares what a
-plugin asks for, the user's grant, delivering engine events to plugins, and reporting a
-failed plugin (an error event, disabling it). Those need protocol commands first
+plugin asks for, the user's grant, pumping the plugin's session's events into its queue
+and choosing which entry handles them, and reporting a failed plugin (an error event, disabling it). Those need protocol commands first
 ([R-ARCH-001](../../docs/RULES.md#R-ARCH-001)), and ADR-0069 (#348) sets the policy. So
 do any limits on what a plugin may write into names and other strings the UI and agents
-show. ADR-0069 decides two more items, which are not built yet: the 1,000-event queue with its
-single `events.dropped` notice, and the `forbidden` error code that a call outside the
-plugin's classes, or past the cap of commands a second, fails with. Until the engine side
+show. ADR-0069 decides one more item, which is not built yet: the `forbidden` error code
+that a call outside the plugin's classes, or past the cap of commands a second, fails
+with. Until the engine side
 answers `forbidden` (#642 adds the code), a call past the cap gets the ABI's own
 `STATUS_LIMITED`.
 
@@ -138,6 +147,8 @@ The statuses, and the result each leaves:
 | `STATUS_FAILED` | 3 | The engine's wire error, as JSON, or `{"message": …}` when the transport failed. |
 | `STATUS_LIMITED` | 4 | `{"limited": {"per_second": <cap>, "commands": <the call's>}}`: the call was granted, but its commands don't fit in what is left of the plugin's cap of commands in the last second. `Control` was not called, and the call doesn't count against the cap. A batch of more edits than the cap always gets this. |
 
-An entry point is any exported function of type `() -> ()`, run by `Plugin::invoke`.
+An entry point is any exported function of type `() -> ()`, run by `Plugin::invoke`, or
+by `Plugin::deliver_event` with one protocol `Event` as JSON for its input (an
+`events.dropped` notice among them after an overflow).
 The host never calls `hello` for a plugin: it lends the plugin a session the host opened,
 and a plugin can't subscribe to events or open the binary channel.
