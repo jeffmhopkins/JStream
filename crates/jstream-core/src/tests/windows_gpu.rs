@@ -158,6 +158,8 @@ fn capture_targets_name_what_wgc_captures() {
     let capture = CaptureBackends {
         cpu: Arc::new(WgcCapture::new()),
         gpu: None,
+        devices: Arc::new(FakeVideoDevices::new(FakeClock::new(Timebase::MILLIS))),
+        codecs: Arc::new(FakeCodecs),
     };
     for spec in [
         CaptureSpec::Display(Some(display.target.clone())),

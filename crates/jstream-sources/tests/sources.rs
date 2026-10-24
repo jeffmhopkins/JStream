@@ -9,7 +9,8 @@
 use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, Reference, Settings};
 use jstream_sources::{
-    AssetRoots, AudioTarget, CaptureSpec, Context, Limits, Registry, SourceError, needs_restart,
+    AssetRoots, AudioTarget, CaptureSpec, Context, Limits, Registry, SourceError, decode_still,
+    needs_restart, webcam_device,
 };
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -106,10 +107,6 @@ fn the_registry_describes_every_builtin_kind_in_order() {
         }
     }
     let ctx = Context::default();
-    assert!(matches!(
-        registry.create("webcam", &Settings::new(), &ctx),
-        Err(SourceError::NotBuilt { kind_id }) if kind_id == "webcam"
-    ));
     for kind_id in ["app_audio", "audio_input", "desktop_audio"] {
         let kind = registry.descriptor(kind_id).expect("an audio kind");
         assert!(kind.audio && !kind.video, "{kind_id}");
@@ -208,7 +205,7 @@ fn a_colour_source_is_one_solid_frame_and_its_colour_is_live() {
 }
 
 #[test]
-fn display_and_window_sources_say_what_to_capture() {
+fn display_window_and_webcam_sources_say_what_to_capture() {
     let registry = Registry::builtin();
     let ctx = Context::default();
     let spec = |kind_id: &str, target: &str| {
@@ -239,6 +236,52 @@ fn display_and_window_sources_say_what_to_capture() {
         spec("window", "hwnd:0x1a2b"),
         CaptureSpec::Window(Some("hwnd:0x1a2b".into()))
     );
+
+    let device = |id: &str| {
+        let settings = complete("webcam", &[("device", json!(id))]);
+        let mut source = registry
+            .create("webcam", &settings, &ctx)
+            .expect("a source");
+        assert!(
+            matches!(source.frame(ms(0)), Err(SourceError::Captured { kind_id: k }) if k == "webcam"),
+            "webcam: frames come from the device"
+        );
+        source.capture().cloned().expect("a capture source")
+    };
+    assert_eq!(device(""), CaptureSpec::Device(None), "the first device");
+    assert_eq!(
+        device("fake-webcam-0"),
+        CaptureSpec::Device(Some("fake-webcam-0".into()))
+    );
+    // A webcam's sound is its device's paired audio (#716); the engine records it.
+    let webcam = registry.descriptor("webcam").expect("webcam");
+    assert!(webcam.video && webcam.audio);
+    assert_eq!(
+        webcam_device("webcam", &complete("webcam", &[])),
+        Some(None),
+        "the first device's pair"
+    );
+    assert_eq!(
+        webcam_device(
+            "webcam",
+            &complete("webcam", &[("device", json!(" fake-webcam-0 "))])
+        ),
+        Some(Some("fake-webcam-0".into()))
+    );
+    assert_eq!(webcam_device("display", &complete("display", &[])), None);
+    for kind in ["display", "window"] {
+        let descriptor = registry.descriptor(kind).expect(kind);
+        assert!(descriptor.video && !descriptor.audio, "{kind}");
+    }
+    assert!(needs_restart(
+        webcam,
+        &complete("webcam", &[]),
+        &complete("webcam", &[("device", json!("fake-webcam-0"))])
+    ));
+    assert!(matches!(
+        registry.create("webcam", &complete("webcam", &[("device", json!(1))]), &ctx),
+        Err(SourceError::Setting { param, .. }) if param == "device"
+    ));
 
     let colour = registry
         .create("color", &complete("color", &[]), &ctx)
@@ -503,6 +546,23 @@ fn an_animated_gif_composites_its_frames_and_loops() {
     );
     assert_eq!(once.next_change(ms(0)), Some(ms(100)));
     assert_eq!(once.next_change(ms(300)), None);
+}
+
+/// A filter's image (a mask) is a file's first frame, even of an animation, and
+/// anything that isn't an image is the same error the `image` kind gives.
+#[test]
+fn a_still_image_is_the_first_frame() {
+    let dir = folder("still");
+    write_gif(&dir.join("anim.gif"), gif::Repeat::Infinite);
+    let bytes = std::fs::read(dir.join("anim.gif")).expect("gif");
+    let still = decode_still(&bytes, "anim.gif", &Limits::default()).expect("decodes");
+    let (red, clear) = ([255, 0, 0, 255], [0, 0, 0, 0]);
+    assert_eq!((still.width, still.height), (2, 2));
+    assert_eq!(still.rgba, [red, red, clear, clear].concat());
+    assert!(matches!(
+        decode_still(b"LUT_3D_SIZE 2", "grade.cube", &Limits::default()),
+        Err(SourceError::UnsupportedFormat { .. })
+    ));
 }
 
 #[test]

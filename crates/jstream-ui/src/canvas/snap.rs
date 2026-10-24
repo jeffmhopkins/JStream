@@ -51,6 +51,27 @@ impl Bounds {
         }
     }
 
+    /// The bounds of several boxes together, or `None` for none.
+    pub fn around<'a>(geometries: impl IntoIterator<Item = &'a ItemGeometry>) -> Option<Bounds> {
+        geometries
+            .into_iter()
+            .map(Bounds::of)
+            .reduce(|a, b| Bounds {
+                left: a.left.min(b.left),
+                top: a.top.min(b.top),
+                right: a.right.max(b.right),
+                bottom: a.bottom.max(b.bottom),
+            })
+    }
+
+    /// Whether these bounds and `other` overlap or touch.
+    pub fn meets(self, other: Bounds) -> bool {
+        self.left <= other.right
+            && other.left <= self.right
+            && self.top <= other.bottom
+            && other.top <= self.bottom
+    }
+
     fn xs(self) -> [f32; 3] {
         [self.left, (self.left + self.right) * 0.5, self.right]
     }
@@ -96,7 +117,11 @@ impl SnapTargets {
     /// How far to shift a moved box so its nearest edge or centre lands on a target, on
     /// each axis (0 where nothing is within `tolerance`), and the guides it lands on.
     pub fn snap_move(&self, geometry: &ItemGeometry, tolerance: f32) -> (f32, f32, Vec<Guide>) {
-        let bounds = Bounds::of(geometry);
+        self.snap_bounds(Bounds::of(geometry), tolerance)
+    }
+
+    /// [`Self::snap_move`] for any bounds, such as a selection's.
+    pub fn snap_bounds(&self, bounds: Bounds, tolerance: f32) -> (f32, f32, Vec<Guide>) {
         let dx = nearest(&self.xs, &bounds.xs(), tolerance).map_or(0.0, |(delta, _)| delta);
         let dy = nearest(&self.ys, &bounds.ys(), tolerance).map_or(0.0, |(delta, _)| delta);
         let snapped = Bounds {

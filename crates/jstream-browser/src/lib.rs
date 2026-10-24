@@ -14,7 +14,7 @@
 //! Windows with the `helper` feature only, which `jstream-browser-helper` turns on, so no
 //! other build downloads or compiles CEF.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-browser/README.md#purpose, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-browser/README.md#purpose, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md, docs/security/threat-model.md#browser
 
 mod audio;
 #[cfg(all(windows, feature = "cef"))]
@@ -26,6 +26,8 @@ mod helper;
 #[cfg(any(test, all(windows, feature = "cef")))]
 mod link;
 mod page;
+#[cfg(any(test, all(windows, feature = "helper")))]
+mod permission;
 mod request;
 #[cfg(any(test, all(windows, any(feature = "cef", feature = "helper"))))]
 mod wire;

@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -86,7 +86,8 @@ Contents:
   `Yuy2` (converted to NV12 by the backend) or `Mjpeg`. MJPEG is a video codec, so it is
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
-  a frame it rejects is dropped and the stream goes on.
+  a frame it rejects is dropped and the stream goes on. The engine gets one decoder per
+  stream from `Codecs::capture_decoder` (below).
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
   process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
@@ -112,9 +113,15 @@ Contents:
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
   as [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md) says.
+  `VideoEncoder::info` names the implementation encoding: it changes only when an
+  encoder falls back before its first packet (a hardware one refusing its first frame,
+  #443).
   `Codecs::on_context` returns the backend on a `GpuContext`, whose video encoders take
   that context's encode targets ([GPU frames](#gpu-frames)); `Ok(None)`, the default,
-  when the backend has no GPU path.
+  when the backend has no GPU path. `Codecs::capture_decoder` makes a `CaptureDecoder`
+  for a capture device's compressed frames (MJPEG), since the codec path decodes them,
+  not the device backend; its default is `Unsupported`, and the engine then opens the
+  device in an uncompressed format.
 - **Media files** (`media_file.rs`,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `MediaDecoders`
   (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
@@ -138,7 +145,7 @@ Contents:
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
-  ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)), not this trait's.
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)), not this trait's.
 - **Stream keys** (`keys.rs`): `StreamKeyStore` (`Send + Sync`), the seam to the OS
   credential store ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `clear`
   and `is_set`, one key per output ID. No error may contain a key. `Secret` carries a
@@ -167,7 +174,7 @@ Contents:
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
   capture device, audio, codec, GPU-interop and media-file backends and its optional
   virtual-camera sink.
-- **Data folder** (`paths.rs`, [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)):
+- **Data folder** (`paths.rs`, [ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)):
   `paths::data_dir`, the one folder every host keeps its state in. It is a folder named
   `data` beside the exe when a file named `portable` sits there (so the app can run from
   a USB stick), and otherwise the platform's per-user data folder: `%APPDATA%\JStream`
@@ -199,7 +206,8 @@ Contents:
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
   (dropping it stops it; a test watches it through a `FakeVcamProbe`),
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
-  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
+  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, which
+  `FakeCodecs::capture_decoder` makes for MJPEG (all-zero NV12 frames), plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
   `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA
   frames whose colour tells them apart, seeking to the key frame before as a real
@@ -222,10 +230,10 @@ Contents:
 
 **Not yet:** a virtual camera that takes GPU frames (Windows capture delivers them
 through `WgcCapture::on_gpu`, the engine composites them, and Windows' H.264 encoder
-takes encode targets), an engine that opens `Backends::video_devices` (the field is
-filled, with `MfVideoDevices` on Windows and `MfMjpegDecoder` as its `CaptureDecoder`,
-but no source uses it, so `stats.tick` doesn't report `frames_undecodable`), an MJPEG
-`Codec` variant, and encoder selection by vendor ID for an encoder that reports no
+takes encode targets), `frames_undecodable` in `stats.tick` (the engine's `webcam`
+source opens `Backends::video_devices`, with `MfCodecs`' `MfMjpegDecoder` as its
+`CaptureDecoder` on Windows, but drop counts don't include it), an MJPEG `Codec`
+variant, and encoder selection by vendor ID for an encoder that reports no
 adapter LUID.
 
 <a id="gpu-frames"></a>
@@ -238,14 +246,23 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 → NV12 → encoder with no CPU copy). The types below are built in this crate, and the
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
-**Frame lifetime** below describes. `jstream-render` composites one scene on
-that device when the engine has one, sampling capture frames there, and the frames a
+**Frame lifetime** below describes. `jstream-render` composites one scene, or a
+transition between two, on that device when the engine has one, sampling capture frames there, and the frames a
 browser source's page paints on it, and opens its own (hardware adapter first, the
 software one as the fallback) when it does not. It has the NV12 pass that can render
 into an encode target's plane views (`Nv12Converter`). Windows' video encoders take
 encode targets on the context they reached through `Codecs::on_context`, and the
 engine's render thread converts each video mix's composite into the next of that mix's
 ring of them and pushes it to the mix's sessions on that path.
+On Linux, `LinuxGpu` opens the device on Vulkan, and the portal capture
+(`PortalCapture::on_context`) imports PipeWire's DMA-BUF frames there and copies each
+into a ring of RGBA textures of its own on the context's queue, so its frames need no
+fence. Its encode targets are NV12 images exported as DMA-BUFs, whose `FrameSync`
+signals the context's timeline semaphore after render's write; the VA-API encoder it
+reached through `Codecs::on_context` imports each one as a surface and waits for that
+value. A device that can't export them has none. On one whose render node no VA-API
+encoder runs on, `Codecs::on_context` gives no GPU encoder, and the engine encodes CPU
+frames ([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -268,11 +285,17 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
 - **`GpuInterop`** (`Send + Sync`), one per platform, in `Backends`:
   - `open_device()` returns a **`GpuContext`**: the `wgpu::Adapter`, `Device` and `Queue`,
     opened on the **media adapter**, plus an `AdapterId` (the LUID on Windows).
-    - The media adapter is the one that drives the captured display, with
-      `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
-      engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, hardware adapter first with the software one as the fallback. On a hybrid-GPU machine where sharing an
-      adapter isn't possible, the platform says so (ARCH step 6).
+    - On Windows the media adapter is the one that drives the captured display, with
+      `TEXTURE_FORMAT_NV12`, as S1 chose it, and on a hybrid-GPU machine where sharing
+      an adapter isn't possible, the platform says so (ARCH step 6). On Linux
+      (`LinuxGpu`) it is a guess: a hardware Vulkan adapter, DMA-BUF importers first,
+      then integrated before discrete, with NV12 only where it can export encode
+      targets. A capture whose frames don't import on it falls back to CPU frames, and
+      an encoder on another GPU leaves the context without GPU encode, so a hybrid
+      machine is not reported.
+    - `jstream-render` uses this device when the engine has one, so capture, render and
+      encode share one adapter. With no interop it opens its own, hardware adapter first
+      with the software one as the fallback.
     - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
       allocation), so the engine can tell whether a texture is on the context a
       compositor runs on. wgpu's own `Device` equality is per instance and can't.

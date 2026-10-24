@@ -9,6 +9,8 @@
 //! input through unchanged.
 
 mod cube;
+pub use cube::{Lut, LutError};
+pub use lut::lut_image;
 mod lut;
 mod mask;
 

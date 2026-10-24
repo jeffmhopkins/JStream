@@ -29,7 +29,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
-- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`):
+- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`,
+  its audio in `mock/audio.rs` and its folders and labels in `mock/organise.rs`):
   `MockEngine` and `MockControl`, an in-memory implementation for developing and
   testing clients without the engine, which they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
@@ -106,14 +107,15 @@ its own, and is used with default features off.
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
 `dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
-mixes, buses, sends and hotkey bindings in memory, with an
+mixes, buses, sends, hotkey bindings, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but the transition ones (below), with the
+  checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -122,8 +124,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - reorder and `item.move` indices out of range (`item.move` into another scene may
     name one past its top);
   - a placement edit's `scene_id` naming a scene other than the item's own;
-  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
-    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive or
+    not finite or that the compositor can't draw (`ItemGeometry::check_drawable`; any
+    other 3D is accepted, as the engine does from protocol 0.34), and a
+    canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source or a video
     mix shows, or either while a source's settings refer to it;
   - nesting cycles from `item.add`, `item.set_source` and `item.move`;
@@ -161,7 +165,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB;
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
-    `Action::bind_problem` refuses and a missing named scene or output, in that order, and
+    `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`
+    exists), in that order, and
     `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
     profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.
 
@@ -173,7 +178,16 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
   cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
-  `internal`, and its refused deletes carry no `blockers`;
+  `internal`, and its refused deletes carry no `blockers`, except a folder's and a
+  label's. The folder, label and metadata edits
+  ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`, `label.*`,
+  `scene.set_folder`, `scene.set_meta` and `source.set_meta`, in `mock/organise.rs`)
+  make the graph's checks with the protocol's own `check_color`, `check_icon` and
+  `SceneMeta::problem`: a missing parent, folder or label, a folder inside itself, a
+  label listed twice, and no deleting a folder that holds a scene or folder or a label a
+  source carries (with the graph's `blockers`). Reads report the folders, labels and
+  each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
+  a scene's or source's delete restores its folder and metadata;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -255,13 +269,20 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - `state.changed` events carrying the request ID (and `cause` for an undo or redo), and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
-- the program scene with the engine's rules
+- the program and preview scenes with the engine's rules
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
-  (`not_found` for a missing scene, no `rev`), `studio.get`, and `studio.changed` for a
-  switch and after a batch, undo or redo that creates the first scene or deletes the
-  program scene;
+  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.get`,
+  and `studio.changed` for each and after a batch, undo or redo that creates the first
+  scene or deletes the program or preview scene. The mock knows only the initial `cut`
+  preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every
+  switch cuts and reports it, a switch naming another preset is `not_found`, and the
+  `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
+  `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`;
+- the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
+  `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
+  stream opened while it is on gets first;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.

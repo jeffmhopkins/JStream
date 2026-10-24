@@ -16,13 +16,16 @@ mod hal;
 #[cfg(any(target_os = "macos", test))]
 mod layout;
 #[cfg(any(target_os = "macos", test))]
-mod permission;
+pub(crate) mod permission;
 #[cfg(any(target_os = "macos", test))]
 mod process;
 #[cfg(target_os = "macos")]
 mod stream;
 #[cfg(target_os = "macos")]
 mod tap;
+
+#[cfg(target_os = "macos")]
+pub(crate) use layout::rate_hz;
 
 use jstream_platform::{AudioInputTarget, PlatformError};
 
@@ -107,8 +110,8 @@ mod backend {
     }
 
     /// Audio I/O through Core Audio (ADR-0063 §4): it lists devices, records inputs and
-    /// plays on outputs through the HAL. Desktop and application audio, which need
-    /// process taps, are refused before 14.2 and report `Unsupported` after, for now.
+    /// plays on outputs through the HAL. Desktop and application audio need process taps:
+    /// they are refused before 14.2, and from 14.2 on are recorded through a tap (`tap`).
     ///
     /// Recording an input needs the Microphone permission: without it macOS would record
     /// silence, so opening one checks it first and asks macOS to prompt once.
