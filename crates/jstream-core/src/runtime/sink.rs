@@ -605,6 +605,35 @@ mod tests {
         assert_eq!(last.body[5..], [0, 0, 0, 3, 0x65, 0x88, 0x84]);
     }
 
+    /// The same for a recording: the later bare keyframe reaches the file as it is.
+    #[test]
+    fn a_later_bare_keyframe_is_recorded_without_stand_in_sets() {
+        let dir = std::env::temp_dir().join(format!("jstream-sink-bare-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("show.mp4");
+        let _ = fs::remove_file(&path);
+        let mut sink = Sink::open(
+            Destination::Record(path.clone()),
+            &info(Codec::H264),
+            Arc::new(AtomicBool::new(true)),
+        )
+        .expect("open");
+        let drops = AtomicU64::new(0);
+        sink.forward(&h264_keyframe(true), &drops).expect("first");
+        let later = MediaTime::new(3_000, Timebase::MPEG_90K);
+        let bare = h264_keyframe(false).data().to_vec();
+        let later = Packet::new(Codec::H264, true, later, later, bare).expect("packet");
+        sink.forward(&later, &drops).expect("later");
+        sink.finish();
+        let file = fs::read(&path).expect("recording");
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(drops.into_inner(), 0);
+        assert!(
+            !file.windows(STAND_IN_SPS.len()).any(|w| w == STAND_IN_SPS),
+            "no stand-in SPS anywhere in the file"
+        );
+    }
+
     /// MP4 recording is H.264 only for now, so another codec fails the start with a
     /// reason, before any file is opened.
     #[test]
