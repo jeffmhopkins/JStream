@@ -13,6 +13,7 @@ mod merge;
 pub(crate) mod parse;
 mod progress;
 mod summary;
+mod test_list;
 
 use std::collections::BTreeMap;
 use std::io::Write as _;
@@ -2039,6 +2040,65 @@ mod tests {
             .map(|d| (d.path.as_str(), d.warning))
             .collect();
         assert_eq!(unmatched, vec![("A.md", false), ("D.md", true)]);
+    }
+
+    /// DOCS#rules: a `test:` entry must name a test, or a module of tests, that exists;
+    /// a crate on the crate map that doesn't exist yet makes it pending (#735).
+    #[test]
+    fn test_entries_must_name_a_test() {
+        let rule = |id: &str, test: &str| {
+            format!(
+                "<a id=\"{id}\"></a>\n### {id}: Thing\n<!-- @rule\nstatus = \"active\"\nenforced_by = [\"test:{test}\"]\napplies_to = [\"crates/**\"]\n-->\nRule.\n\n"
+            )
+        };
+        let rules = format!(
+            "<!-- @doc\nid = \"R\"\nkind = \"normative\"\nstatus = \"active\"\n-->\n{}{}{}{}{}{}{}",
+            rule("R-X-001", "jstream_a::tests::works"),
+            rule("R-X-002", "jstream_a::tests"),
+            rule("R-X-003", "jstream_a::works"),
+            rule("R-X-004", "jstream_planned::anything"),
+            rule("R-X-005", "jstream_typo::works"),
+            // An existing crate is named by its package, not its directory (review N2).
+            rule("R-X-006", "jstream_b_dir::works"),
+            rule("R-X-007", "jstream_b_pkg::works"),
+        );
+        let arch = "<!-- @doc\nid = \"ARCH\"\nstatus = \"active\"\n-->\n<a id=\"crate-map\"></a>\n## Crates\n<!-- @section\ncovers = [\"crates/**\"]\n-->\n`jstream-a` and `jstream-planned`.\n";
+        let mut files = REGISTRIES.to_vec();
+        files.extend([
+            ("docs/R.md", rules.as_str()),
+            ("docs/ARCHITECTURE.md", arch),
+            (
+                "crates/jstream-a/Cargo.toml",
+                "[package]\nname = \"jstream-a\"\n",
+            ),
+            (
+                "crates/jstream-a/src/lib.rs",
+                "//! Docs: docs/ARCHITECTURE.md#crate-map\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn works() {}\n}\n",
+            ),
+            (
+                "crates/jstream-b-dir/Cargo.toml",
+                "[package]\nname = \"jstream-b-pkg\"\n",
+            ),
+            (
+                "crates/jstream-b-dir/src/lib.rs",
+                "//! Docs: docs/ARCHITECTURE.md#crate-map\n#[test]\nfn works() {}\n",
+            ),
+        ]);
+        let f = Fixture::new("test-entries", &files);
+        let bad = f.diags("`enforced_by` entry `test:");
+        assert_eq!(bad.len(), 3, "{bad:?}");
+        assert!(
+            bad[2].contains("R-X-006") && bad[2].contains("`jstream_b_dir`"),
+            "{bad:?}"
+        );
+        assert!(
+            bad[0].contains("R-X-003") && bad[0].contains("names no test"),
+            "{bad:?}"
+        );
+        assert!(
+            bad[1].contains("R-X-005") && bad[1].contains("`jstream_typo`"),
+            "{bad:?}"
+        );
     }
 
     /// R-DOC-008: crate roots list exactly the sections covering the crate; whole-doc
