@@ -304,6 +304,57 @@ mod tests {
         assert!(kept(&delay).is_empty(), "held frames aren't scratch layers");
     }
 
+    /// #369: a draw keeps its uniform buffers between calls. New settings rewrite them in
+    /// place and draw the new look, and another input draws as a fresh filter does, with
+    /// no new buffers. A multi-pass kind's second call makes none either.
+    #[test]
+    fn a_draw_keeps_its_uniform_buffers_between_calls() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const DARK: [u8; 4] = [64, 64, 64, 255];
+        const G: [u8; 4] = [0, 255, 0, 255];
+        let made = |filter: &VideoFilter| filter.scratch().made_buffers();
+        let mut correction = super::filter("color_correction", serde_json::json!({}));
+        let input = image(&opened, 2, &[DARK, DARK]);
+        let first = super::run(&mut opened, &mut correction, &input, 0.0);
+        near(&first, 0, 0, DARK, 1);
+        assert_eq!(made(&correction), 2, "one draw: two buffers");
+        let again = super::run(&mut opened, &mut correction, &input, 0.5);
+        assert_eq!(again, first, "the same draw from the kept buffers");
+        assert_eq!(made(&correction), 2, "no buffers made for the same draw");
+
+        correction.set_settings(&super::settings(
+            "color_correction",
+            serde_json::json!({"brightness": 0.25}),
+        ));
+        let brighter = super::run(&mut opened, &mut correction, &input, 0.0);
+        let lit = brighter.pixel(0, 0).expect("in the snapshot");
+        assert!(lit[0] > DARK[0] + 20, "new settings draw: {lit:?}");
+        assert_eq!(made(&correction), 2, "new settings rewrite the buffers");
+
+        let other = image(&opened, 2, &[G, G]);
+        let green = super::run(&mut opened, &mut correction, &other, 0.0);
+        let mut fresh = super::filter("color_correction", serde_json::json!({"brightness": 0.25}));
+        let expected = super::run(&mut opened, &mut fresh, &other, 0.0);
+        assert_eq!(
+            green, expected,
+            "the kept buffers draw the other input as a new filter does"
+        );
+        assert_eq!(made(&correction), 2, "another input: no new buffers");
+
+        let mut outline = super::filter("outline", serde_json::json!({"width": 2.0}));
+        let _ = super::run(&mut opened, &mut outline, &input, 0.0);
+        let after_first = made(&outline);
+        assert!(after_first > 2, "outline draws more than once");
+        let _ = super::run(&mut opened, &mut outline, &input, 0.0);
+        assert_eq!(
+            made(&outline),
+            after_first,
+            "a steady multi-pass call makes no buffers"
+        );
+    }
+
     /// Every kind is a unique `video_filter` with valid defaults and a pass that its
     /// defaults build.
     #[test]
