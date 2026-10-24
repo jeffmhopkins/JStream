@@ -84,6 +84,7 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
 | `browser` | [2](#main) | main |
 | `youtube` | [3](#main) | main |
 | `preview` | [12](#main) | main |
+| `audio` | [18](#main) | main |
 | `vcam-owner` | [6](#prs) | wave/m1-3 |
 | `token-acl` | [7](#prs) | wave/m1-3 |
 | `crash` | [13](#prs) | wave/m1-3 |
@@ -223,6 +224,15 @@ nothing, by design). **Pass:** the preview shows under the canvas boxes with H.2
 follows committed edits and scene switches; after a slow moment it recovers at the next
 keyframe, within 2 s; and a decoder failure falls back to JPEG, not "No preview".
 
+### 18. Audio sources on real devices (closes #778)
+
+C5's audio input, desktop audio and application audio sit on the WASAPI backend, whose
+device tests need a microphone and speakers. On `main`:
+`cargo test -p jstream-platform-windows --features hw-tests -- --ignored audio::device_tests --test-threads=1`.
+The last test plays a quiet 440 Hz tone. **Pass:** all five pass: devices with one default
+each, the input format, this process's loopback, the default input on the media clock, and
+the default output's loopback.
+
 <a id="m3-2"></a>
 ## From wave/m3-2, now on main
 <!-- @section
@@ -259,7 +269,9 @@ wave once it has merged.
 1. On `wave/m1-3`, run the `vcam_smoke` check in
    [jstream-vcam-windows › Hardware check](../../crates/jstream-vcam-windows/README.md#hardware-check).
    **Pass:** the camera shows the producer's frames, not the colour bars, and `vcam.log`
-   has no `OpenSharedHandleByName` or owner failure.
+   has no `OpenSharedHandleByName` or owner failure. The same report answers G2's pacing
+   rerun (closes #777): `samples per producer frame` is above 0 and at most about 1
+   (1.05), since the DLL paces samples to 30 fps.
 2. Restart the producer while Frame Server still holds the old control block.
    **Pass:** it starts (Windows' read-back DACL passes `security::check`).
 3. Optional: pre-create `Local\JStream-VCam-Control` from another account, or with an

@@ -193,9 +193,9 @@ prs = [166]
 id = "A3"
 milestone = "M1a"
 title = "Daemon goes live on Windows"
-status = "hardware"
+status = "done"
 prs = [226]
-note = "Windows 11 Pro N run (#333); the maintainer chose not to set up an N-edition VM, so #333 stays open to keep the gap on record"
+note = "the maintainer waived the Windows 11 Pro N run: there is no N-edition VM, and #333 stays open to keep the gap on record"
 
 [[item]]
 id = "A6"
@@ -405,7 +405,7 @@ milestone = "M1b"
 title = "Audio sources"
 status = "hardware"
 prs = [238]
-note = "audio hardware tests"
+note = "the WASAPI device tests on real devices (#778, item 18 of the Windows hardware pass)"
 
 [[item]]
 id = "C3"
@@ -564,7 +564,7 @@ milestone = "M1c"
 title = "vcam media source DLL"
 status = "hardware"
 prs = [174, 195, 200, 229]
-note = "pacing rerun"
+note = "the pacing rerun (#777, with item 6 of the Windows hardware pass)"
 
 [[item]]
 id = "G3a"

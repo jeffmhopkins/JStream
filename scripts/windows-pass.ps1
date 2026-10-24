@@ -106,7 +106,8 @@ $Tasks = @(
     @{ Id = 'browser';        Src = 'main';  Issues = '#341';            Fn = 'Browser';       Title = 'Browser page check, refused requests';          Needs = 'MSVC tools, CMake, Ninja' }
     @{ Id = 'youtube';        Src = 'main';  Issues = '#337 (part)';     Fn = 'YouTube';       Title = 'YouTube live without OAuth';                    Needs = '-YouTubeUrl, -YouTubeKeyFile, you in YouTube Studio' }
     @{ Id = 'preview';        Src = 'main';  Issues = '#380';            Fn = 'Preview';       Title = 'Canvas H.264 preview in the desktop app';       Needs = 'trunk, wasm-bindgen, you' }
-    @{ Id = 'vcam-owner';     Src = 'm1-3';  Issues = '#546 (#540)';     Fn = 'VcamOwner';     Title = 'Virtual camera owner and DACL checks';          Needs = 'administrator (UAC), Camera app, you' }
+    @{ Id = 'audio';          Src = 'main';  Issues = '#778';            Fn = 'Audio';         Title = 'WASAPI device tests (C5 audio sources)';        Needs = 'a microphone and speakers' }
+    @{ Id = 'vcam-owner';     Src = 'm1-3';  Issues = '#546 (#540), #777'; Fn = 'VcamOwner';     Title = 'Virtual camera owner and DACL checks';          Needs = 'administrator (UAC), Camera app, you' }
     @{ Id = 'token-acl';      Src = 'm1-3';  Issues = '#546 (#548)';     Fn = 'TokenAcl';      Title = 'User-only token and log files';                 Needs = '' }
     @{ Id = 'crash';          Src = 'm1-3';  Issues = '#557, #546 (#662)'; Fn = 'Crash';       Title = 'Crash reports: Windows build and tests';        Needs = '' }
     @{ Id = 'vcam-register';  Src = 'm1-3';  Issues = '#563';            Fn = 'VcamRegister';  Title = 'Opt-in virtual camera registration';            Needs = 'administrator (UAC), Camera app, you' }
@@ -956,6 +957,13 @@ function Test-Preview {
     } finally { Stop-Native $app }
 }
 
+function Test-Audio {
+    $code = Invoke-Cargo 'main' @('test', '--release', '-p', 'jstream-platform-windows', '--features', 'hw-tests', '--',
+        '--ignored', 'audio::device_tests', '--test-threads=1', '--nocapture') 'audio-tests'
+    $names = @(Get-TestNames 'main' @('-p', 'jstream-platform-windows', '--features', 'hw-tests') 'audio-list' | Where-Object { $_ -match '^audio::device_tests::' })
+    Check ($code -eq 0 -and $names.Count -ge 5) 'WASAPI device tests' "exit $code; $($names.Count) tests: $(($names | ForEach-Object { $_ -replace '^audio::device_tests::' }) -join ', ')"
+}
+
 function Test-VcamOwner {
     if (-not (Build 'm1-3' @('jstream-vcam-windows') @('--example', 'vcam_smoke'))) { return }
     if (-not (Build 'm1-3' @('jstream-vcam-windows'))) { return }
@@ -981,6 +989,11 @@ regsvr32 /s '$test\jstream_vcam_windows.dll'
         Write-Text (Join-Path $OutDir 'vcam-smoke-1.txt') ($r.Out + $r.Err)
         $verdict = ($r.Out -split "`n" | Where-Object { $_ -match 'verdict' } | Select-Object -First 1)
         Check ($r.Code -eq 0 -and $verdict -match 'reached|pass|ok') 'vcam_smoke' "exit $($r.Code); $verdict"
+        # G2's pacing (#777): samples go out at 30 fps, so no faster than the producer's frames.
+        if ($r.Out -match 'samples per producer frame: ([0-9.]+)') {
+            $perFrame = [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
+            Check ($perFrame -gt 0 -and $perFrame -le 1.05) 'vcam pacing' "samples per producer frame $perFrame (pass: above 0, at most 1.05)"
+        } else { Fail 'vcam pacing' 'the report has no samples-per-producer-frame line' }
         Ask 'producer frames' 'Did the Camera app show dark teal with a moving white bar (not the colour bars)?'
         if (Ready 'Next: the producer restarts for 15 s while Frame Server still holds the old control block. Keep the Camera app on "JStream Virtual Camera".') {
             Go 'Producer restarted (15 s): if the Camera app''s picture froze or went away, pick "JStream Virtual Camera" again now.'
