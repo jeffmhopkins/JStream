@@ -10,8 +10,8 @@
 
 use jstream_platform::media::{ChannelLayout, Codec, PixelFormat};
 use jstream_platform::{
-    AudioEncoderConfig, HardwarePreference, PlatformError, RateControl, VideoDecoderConfig,
-    VideoEncoderConfig,
+    AudioEncoderConfig, CodecInfo, CodecRole, HardwarePreference, PlatformError, RateControl,
+    VideoDecoderConfig, VideoEncoderConfig,
 };
 
 use crate::fourcc::{cv_pixel_format, fourcc};
@@ -172,6 +172,75 @@ pub fn vt_decoder_settings(
     })
 }
 
+/// `kVTCouldNotFindVideoDecoderErr`: no decoder matches the specification.
+const VT_NO_DECODER: i32 = -12906;
+/// `kVTVideoDecoderNotAvailableNowErr`: the decoder exists but can't be had now.
+const VT_DECODER_NOT_AVAILABLE_NOW: i32 = -12913;
+
+/// The name a VideoToolbox decoder reports, in [`vt_decoder_list`] and once opened:
+/// `VideoToolbox H.264 decoder (hardware)`, or `(software)` for Apple's software one.
+pub fn vt_decoder_name(codec: Codec, hardware: bool) -> String {
+    let codec = match codec {
+        Codec::Hevc => "HEVC",
+        _ => "H.264",
+    };
+    let kind = if hardware { "hardware" } else { "software" };
+    format!("VideoToolbox {codec} decoder ({kind})")
+}
+
+/// The decoders `Codecs::list` reports on macOS: for H.264 and HEVC, a hardware one
+/// when `hardware_supported` (`VTIsHardwareDecodeSupported`) says so for its Core Media
+/// codec type, and Apple's software one, which is always there.
+pub fn vt_decoder_list(hardware_supported: impl Fn(u32) -> bool) -> Vec<CodecInfo> {
+    let mut list = Vec::new();
+    for (codec, codec_type) in [(Codec::H264, CM_H264), (Codec::Hevc, CM_HEVC)] {
+        let kinds: &[bool] = if hardware_supported(codec_type) {
+            &[true, false]
+        } else {
+            &[false]
+        };
+        for &hardware in kinds {
+            list.push(CodecInfo {
+                name: vt_decoder_name(codec, hardware),
+                codec,
+                role: CodecRole::VideoDecoder,
+                hardware,
+            });
+        }
+    }
+    list
+}
+
+/// Whether a decoder for `settings` will use hardware, as far as is known before its
+/// session opens, given `VTIsHardwareDecodeSupported` for its codec type (`supported`).
+/// The open session says for certain.
+///
+/// # Errors
+/// [`PlatformError::Unsupported`] when the preference requires hardware and this Mac
+/// has no hardware decoder for the codec, so `HardwarePreference::Require` fails when
+/// the decoder is made, not at its first keyframe.
+pub fn vt_decoder_hardware(
+    settings: &VtDecoderSettings,
+    codec: Codec,
+    supported: bool,
+) -> Result<bool, PlatformError> {
+    if settings.require_hardware && !supported {
+        let name = vt_decoder_name(codec, true);
+        return Err(PlatformError::Unsupported {
+            what: format!("a {name} on this Mac (VTIsHardwareDecodeSupported is false)"),
+        });
+    }
+    Ok(settings.enable_hardware && supported)
+}
+
+/// Whether a `VTDecompressionSessionCreate` status means no decoder matched the
+/// specification, which under `HardwarePreference::Require` is no hardware decoder for
+/// this stream (its profile or size, say). Any other status is the call failing, such as
+/// on a bad parameter set, and is reported as that.
+pub fn vt_no_decoder(status: i32) -> bool {
+    matches!(status, VT_NO_DECODER | VT_DECODER_NOT_AVAILABLE_NOW)
+}
+
 /// What an AAC-LC `AudioConverter` is opened with for one [`AudioEncoderConfig`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AacSettings {
@@ -238,15 +307,17 @@ mod backend {
         VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
     };
 
+    use super::vt_decoder_list;
     use crate::audiotoolbox::{AtAacEncoder, aac_encoder_info};
     use crate::videotoolbox::{VtEncoder, list_encoders};
-    use crate::vtdecoder::VtDecoder;
+    use crate::vtdecoder::{VtDecoder, hardware_decode_supported};
 
     /// Codecs through VideoToolbox and AudioToolbox (ADR-0063 §6, §7). It lists and opens
     /// VideoToolbox's H.264 and HEVC encoders, which take CPU frames for now, opens its
     /// H.264 and HEVC decoders, which deliver CPU frames, and lists and opens
-    /// AudioToolbox's AAC-LC encoder. Decoders aren't listed: VideoToolbox has no list
-    /// of them, and opening one is the test.
+    /// AudioToolbox's AAC-LC encoder. VideoToolbox has no list of decoders, so the list
+    /// has the H.264 and HEVC ones: a hardware one where `VTIsHardwareDecodeSupported`
+    /// says there is one, and Apple's software one ([`vt_decoder_list`]).
     #[derive(Debug, Default)]
     pub struct VideoToolboxCodecs;
 
@@ -260,6 +331,7 @@ mod backend {
     impl Codecs for VideoToolboxCodecs {
         fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
             let mut list = list_encoders()?;
+            list.extend(vt_decoder_list(hardware_decode_supported));
             list.push(aac_encoder_info());
             Ok(list)
         }
@@ -298,10 +370,24 @@ mod tests {
     };
 
     use super::{
-        AUDIO_AAC, CM_H264, CM_HEVC, VtBitRate, aac_settings, vt_decoder_settings,
-        vt_encoder_settings,
+        AUDIO_AAC, CM_H264, CM_HEVC, VtBitRate, aac_settings, vt_decoder_hardware, vt_decoder_list,
+        vt_decoder_settings, vt_encoder_settings, vt_no_decoder,
     };
     use crate::fourcc::{CV_420V, CV_BGRA, CV_X420};
+
+    /// The statuses `vt_no_decoder` matches are VideoToolbox's own (#657 review N2).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn no_decoder_statuses_match_videotoolbox() {
+        use objc2_video_toolbox::{
+            kVTCouldNotFindVideoDecoderErr, kVTVideoDecoderNotAvailableNowErr,
+        };
+        assert_eq!(super::VT_NO_DECODER, kVTCouldNotFindVideoDecoderErr);
+        assert_eq!(
+            super::VT_DECODER_NOT_AVAILABLE_NOW,
+            kVTVideoDecoderNotAvailableNowErr
+        );
+    }
 
     fn video(codec: Codec, input_format: PixelFormat) -> VideoEncoderConfig {
         VideoEncoderConfig {
@@ -449,6 +535,62 @@ mod tests {
                 "{codec:?} to {format:?}"
             );
         }
+    }
+
+    #[test]
+    fn decoders_are_listed_by_what_has_hardware() {
+        let names = |list: Vec<jstream_platform::CodecInfo>| {
+            list.into_iter()
+                .map(|info| {
+                    assert_eq!(info.role, jstream_platform::CodecRole::VideoDecoder);
+                    assert_eq!(info.name.contains("(hardware)"), info.hardware);
+                    (info.codec, info.hardware)
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            names(vt_decoder_list(|_| true)),
+            [
+                (Codec::H264, true),
+                (Codec::H264, false),
+                (Codec::Hevc, true),
+                (Codec::Hevc, false)
+            ]
+        );
+        assert_eq!(
+            names(vt_decoder_list(|t| t == CM_H264)),
+            [
+                (Codec::H264, true),
+                (Codec::H264, false),
+                (Codec::Hevc, false)
+            ]
+        );
+        assert_eq!(
+            names(vt_decoder_list(|_| false)),
+            [(Codec::H264, false), (Codec::Hevc, false)]
+        );
+    }
+
+    #[test]
+    fn a_required_hardware_decoder_is_checked_when_made() {
+        let settings = |hardware| {
+            vt_decoder_settings(&decoder(Codec::Hevc, PixelFormat::Nv12, hardware))
+                .expect("settings")
+        };
+        let require = settings(HardwarePreference::Require);
+        assert!(matches!(
+            vt_decoder_hardware(&require, Codec::Hevc, false),
+            Err(PlatformError::Unsupported { what }) if what.contains("HEVC decoder (hardware)")
+        ));
+        assert!(vt_decoder_hardware(&require, Codec::Hevc, true).expect("hardware"));
+        let prefer = settings(HardwarePreference::Prefer);
+        assert!(vt_decoder_hardware(&prefer, Codec::Hevc, true).expect("prefer"));
+        assert!(!vt_decoder_hardware(&prefer, Codec::Hevc, false).expect("software"));
+        let avoid = settings(HardwarePreference::Avoid);
+        assert!(!vt_decoder_hardware(&avoid, Codec::Hevc, true).expect("avoid"));
+        // Only a missing decoder is "no hardware decoder"; a bad parameter set is not.
+        assert!(vt_no_decoder(-12906) && vt_no_decoder(-12913));
+        assert!(!vt_no_decoder(-12909) && !vt_no_decoder(0));
     }
 
     #[test]
