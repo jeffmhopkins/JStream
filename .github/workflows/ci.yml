@@ -10,8 +10,9 @@ name: ci
 
 # Linux only. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
 # after-review.yml, which runs on main and, on a PR, once review passes (ADR-0054).
-# A PR into a `wave/*` branch runs only the quick jobs (fmt, Linux clippy, docs,
-# lint-deps, gate-test, pr-title); the wave's own PR into main runs everything (ADR-0055).
+# A PR into a `wave/*` branch runs the quick jobs (fmt, Linux clippy, docs, lint-deps,
+# gate-test, pr-title) and the Linux tests (ADR-0070); it skips doc, deny and wasm, which
+# the wave's own PR into main runs with everything else (ADR-0055).
 on:
   pull_request:
     # ready_for_review: draft PRs skip every job below, so CI runs when a draft is marked ready.
@@ -51,9 +52,13 @@ jobs:
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # The macOS platform crate, type-checked for Apple Silicon from Linux, so a macOS-only
+      # compile error shows before review (ADR-0063 §14). Its bindings need no Apple SDK.
+      - run: rustup target add aarch64-apple-darwin
+      - run: cargo clippy -p jstream-platform-macos --all-targets --locked --target aarch64-apple-darwin -- -D warnings
 
   test:
-    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
@@ -105,6 +110,7 @@ jobs:
   # then a trunk build. trunk and the wasm-bindgen CLI are downloaded at pinned versions
   # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
   # `ui-e2e` and `dist-ui` in after-review.yml pin the same versions: change them together.
+  # The debug bundle's wasm must fit under the cap jstream-server serves files up to (#678).
   wasm:
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
@@ -140,6 +146,31 @@ jobs:
       - name: Build the UI
         working-directory: crates/jstream-ui
         run: trunk build --locked --offline
+      - name: The wasm fits under the server's file cap
+        working-directory: crates/jstream-ui
+        run: |
+          set -euo pipefail
+          # Read from the server, not restated: `const MAX_FILE_BYTES: u64 = <MiB> << 20;`.
+          mib=$(sed -nE 's/^const MAX_FILE_BYTES: u64 = ([0-9]+) << 20;$/\1/p' ../jstream-server/src/ui.rs)
+          if [ -z "$mib" ]; then
+            echo "::error::MAX_FILE_BYTES in crates/jstream-server/src/ui.rs is no longer \`<MiB> << 20\`: update this step"
+            exit 1
+          fi
+          limit=$((mib << 20))
+          shopt -s nullglob
+          files=(dist/*_bg.wasm)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::trunk build left no dist/*_bg.wasm"
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            size=$(stat -c %s "$f")
+            echo "$f: $size bytes (cap $limit)"
+            if [ "$size" -gt "$limit" ]; then
+              echo "::error::$f is $size bytes, over jstream-server's $mib MiB file cap, so the server refuses it and ui-e2e fails"
+              exit 1
+            fi
+          done
 
   pr-title:
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft

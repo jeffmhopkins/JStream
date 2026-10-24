@@ -168,16 +168,25 @@ pub enum PanelId {
     Mixer,
     /// The outputs.
     Outputs,
+    /// Studio mode (preview, program, Transition and Cut) and the transition presets.
+    Transitions,
+    /// Align, distribute and arrange the selected items.
+    Transform,
+    /// The selected item's source's filter chains.
+    Filters,
 }
 
 impl PanelId {
     /// Every panel, in the View menu's order.
-    pub const ALL: [PanelId; 5] = [
+    pub const ALL: [PanelId; 8] = [
         PanelId::Scenes,
         PanelId::Objects,
         PanelId::Inspector,
+        PanelId::Transform,
+        PanelId::Filters,
         PanelId::Mixer,
         PanelId::Outputs,
+        PanelId::Transitions,
     ];
 
     /// The panel's title, on its tab and in the View menu.
@@ -188,6 +197,9 @@ impl PanelId {
             PanelId::Inspector => "Inspector",
             PanelId::Mixer => "Audio mixer",
             PanelId::Outputs => "Outputs",
+            PanelId::Transitions => "Transitions",
+            PanelId::Transform => "Transform",
+            PanelId::Filters => "Filters",
         }
     }
 
@@ -199,6 +211,9 @@ impl PanelId {
             PanelId::Inspector => "inspector",
             PanelId::Mixer => "mixer",
             PanelId::Outputs => "outputs",
+            PanelId::Transitions => "transitions",
+            PanelId::Transform => "transform",
+            PanelId::Filters => "filters",
         }
     }
 
@@ -206,8 +221,8 @@ impl PanelId {
     pub fn home(self) -> Zone {
         match self {
             PanelId::Scenes | PanelId::Objects => Zone::Left,
-            PanelId::Inspector => Zone::Right,
-            PanelId::Mixer | PanelId::Outputs => Zone::Bottom,
+            PanelId::Inspector | PanelId::Transform | PanelId::Filters => Zone::Right,
+            PanelId::Mixer | PanelId::Outputs | PanelId::Transitions => Zone::Bottom,
         }
     }
 
@@ -276,22 +291,29 @@ pub struct Layout {
 /// outer right.
 const SIZES: [f64; 8] = [260.0, 140.0, 300.0, 140.0, 170.0, 340.0, 190.0, 280.0];
 
-/// The default layout: Scenes over Scene objects on the left, the inspector on the
-/// right, and the mixer and outputs along the bottom.
+/// The default layout: Scenes over Scene objects on the left, the inspector over the
+/// Filters and Transform panels (one group, Filters shown) on the right, and the mixer and
+/// the outputs (with Transitions as a second tab) along the bottom.
 pub fn editing() -> Arrangement {
     use PanelId::*;
     arrangement(
         SIZES,
         &[
             (Zone::Left, vec![(vec![Scenes], 1.0), (vec![Objects], 1.0)]),
-            (Zone::Right, vec![(vec![Inspector], 2.0)]),
-            (Zone::Bottom, vec![(vec![Mixer], 1.0), (vec![Outputs], 1.0)]),
+            (
+                Zone::Right,
+                vec![(vec![Inspector], 2.0), (vec![Filters, Transform], 1.0)],
+            ),
+            (
+                Zone::Bottom,
+                vec![(vec![Mixer], 1.0), (vec![Outputs, Transitions], 1.0)],
+            ),
         ],
     )
 }
 
-/// The layout for streaming: Scenes on the left, the mixer under the canvas, and the
-/// outputs on the right.
+/// The layout for streaming: Scenes on the left, the mixer and Transitions under the
+/// canvas, and the outputs on the right.
 pub fn live() -> Arrangement {
     use PanelId::*;
     let mut sizes = SIZES;
@@ -301,7 +323,10 @@ pub fn live() -> Arrangement {
         sizes,
         &[
             (Zone::Left, vec![(vec![Scenes], 1.0)]),
-            (Zone::CanvasBottom, vec![(vec![Mixer], 1.0)]),
+            (
+                Zone::CanvasBottom,
+                vec![(vec![Mixer], 1.0), (vec![Transitions], 1.0)],
+            ),
             (Zone::Right, vec![(vec![Outputs], 1.0)]),
         ],
     )
@@ -782,8 +807,8 @@ mod tests {
             shape(&dock),
             vec![
                 (Zone::Left, vec![vec![Scenes], vec![Objects]]),
-                (Zone::Right, vec![vec![Inspector]]),
-                (Zone::Bottom, vec![vec![Mixer], vec![Outputs]]),
+                (Zone::Right, vec![vec![Inspector], vec![Filters, Transform]]),
+                (Zone::Bottom, vec![vec![Mixer], vec![Outputs, Transitions]]),
             ]
         );
         assert_eq!(dock.size(Zone::Left), 300.0);
@@ -801,7 +826,9 @@ mod tests {
         let group = dock.group(mixer).expect("group");
         assert_eq!(group.tabs, [Mixer, Outputs]);
         assert_eq!(group.active, Outputs);
-        assert_eq!(dock.groups(Zone::Bottom).len(), 1);
+        // Transitions stays behind in the group Outputs left.
+        assert_eq!(dock.groups(Zone::Bottom).len(), 2);
+        assert_eq!(dock.groups(Zone::Bottom)[1].tabs, [Transitions]);
         assert_eq!(dock.current, "Editing (modified)");
         // Only once.
         dock.close(Scenes);
@@ -820,9 +847,14 @@ mod tests {
                 (Zone::Left, vec![vec![Objects]]),
                 (
                     Zone::Right,
-                    vec![vec![Scenes], vec![Inspector], vec![Mixer]]
+                    vec![
+                        vec![Scenes],
+                        vec![Inspector],
+                        vec![Mixer],
+                        vec![Filters, Transform]
+                    ]
                 ),
-                (Zone::Bottom, vec![vec![Outputs]]),
+                (Zone::Bottom, vec![vec![Outputs, Transitions]]),
             ]
         );
     }
@@ -841,8 +873,12 @@ mod tests {
     fn dropping_on_a_zone_appends_and_empties_are_removed() {
         let mut dock = Dock::new();
         assert!(dock.place(Inspector, Target::End(Zone::OuterRight)));
-        assert!(dock.groups(Zone::Right).is_empty());
+        assert_eq!(dock.groups(Zone::Right).len(), 1);
         assert_eq!(dock.groups(Zone::OuterRight)[0].tabs, [Inspector]);
+        assert!(dock.place(Transform, Target::End(Zone::OuterRight)));
+        assert_eq!(dock.groups(Zone::Right)[0].tabs, [Filters]);
+        assert!(dock.place(Filters, Target::End(Zone::OuterRight)));
+        assert!(dock.groups(Zone::Right).is_empty());
     }
 
     #[test]
@@ -862,7 +898,10 @@ mod tests {
         assert!(!dock.shown(Inspector));
         assert_eq!(dock.current, "Editing (modified)");
         dock.toggle(Inspector);
-        assert_eq!(dock.groups(Zone::Right)[0].tabs, [Inspector]);
+        assert_eq!(
+            dock.groups(Zone::Right).last().expect("group").tabs,
+            [Inspector]
+        );
         dock.close(Mixer);
         dock.show(Mixer);
         assert_eq!(
@@ -880,12 +919,14 @@ mod tests {
         assert!(dock.group(scenes).expect("group").collapsed);
         dock.click_tab(scenes, Scenes);
         assert!(!dock.group(scenes).expect("group").collapsed);
+        // Collapsing isn't a layout change.
+        assert_eq!(dock.current, "Editing");
+        dock.close(Transform);
+        dock.close(Filters);
         let inspector = id_of(&dock, Inspector);
         assert!(!dock.collapsible(inspector));
         dock.click_tab(inspector, Inspector);
         assert!(!dock.group(inspector).expect("group").collapsed);
-        // Collapsing isn't a layout change.
-        assert_eq!(dock.current, "Editing");
     }
 
     #[test]
@@ -939,7 +980,7 @@ mod tests {
             shape(&dock),
             vec![
                 (Zone::Left, vec![vec![Scenes]]),
-                (Zone::CanvasBottom, vec![vec![Mixer]]),
+                (Zone::CanvasBottom, vec![vec![Mixer], vec![Transitions]]),
                 (Zone::Right, vec![vec![Outputs]]),
             ]
         );

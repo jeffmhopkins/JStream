@@ -85,6 +85,8 @@ fn create(scene: &str) -> Edit {
     }
 }
 
+/// A `webcam` source with complete settings: the mock engine stores settings as sent,
+/// while the engine fills in defaults, so a parity script sends them all.
 fn webcam() -> Edit {
     Edit::SourceCreate {
         source_id: SourceId::new("webcam"),
@@ -92,7 +94,9 @@ fn webcam() -> Edit {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
-        settings: Default::default(),
+        settings: [("device".to_owned(), serde_json::Value::from(""))]
+            .into_iter()
+            .collect(),
         duplicated_from: None,
     }
 }
@@ -1097,6 +1101,238 @@ fn live(gesture_id: &str, values: Vec<Edit>) -> Call {
     }
 }
 
+/// The idempotency key of the organise script's scene-and-source delete, which the test
+/// checks applied: a refused one would compare equal on both sides and test nothing.
+const ORGANISED_DELETE: &str = "organised-delete";
+
+/// The differential script's folder, label and metadata calls (ADR-0024 §3 and §4, #387),
+/// run after the rest on scene `z` and sources `cam` and `tagged`: each check that
+/// refuses one, what the reads report, the in-use deletes, undo and redo, and a filed
+/// scene's and a labelled source's delete, applied and then undone with their metadata.
+fn organise_script() -> Vec<Call> {
+    use jstream_protocol::{FolderId, LabelId, SceneMeta, SourceMeta};
+    fn one(edit: Edit) -> Call {
+        Call::Batch(Batch::single(edit))
+    }
+    fn folder(id: &str, parent: Option<&str>) -> Edit {
+        Edit::FolderCreate {
+            folder_id: FolderId::new(id),
+            name: format!("Folder {id}"),
+            parent: parent.map(FolderId::new),
+        }
+    }
+    fn label(id: &str, color: &str, icon: Option<&str>) -> Edit {
+        Edit::LabelCreate {
+            label_id: LabelId::new(id),
+            name: format!("Label {id}"),
+            color: color.into(),
+            icon: icon.map(str::to_owned),
+        }
+    }
+    fn labelled(labels: &[&str]) -> Edit {
+        Edit::SourceSetMeta {
+            source_id: SourceId::new("cam"),
+            meta: SourceMeta {
+                labels: labels.iter().map(|l| LabelId::new(*l)).collect(),
+                favourite: true,
+            },
+        }
+    }
+    fn scene_meta(icon: Option<&str>, color: Option<&str>) -> Edit {
+        Edit::SceneSetMeta {
+            scene_id: SceneId::new("z"),
+            meta: SceneMeta {
+                icon: icon.map(str::to_owned),
+                color: color.map(str::to_owned),
+                favourite: true,
+                show_in_multiview: false,
+            },
+        }
+    }
+    let read = |query: Query| Call::Query { query };
+    let undo = || {
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Undo,
+        ))
+    };
+    let redo = || {
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Redo,
+        ))
+    };
+    vec![
+        Call::Batch(edits(vec![
+            folder("outer", None),
+            folder("inner", Some("outer")),
+            label("sponsor", "#ff8800", None),
+            label("camera", "#00FF00", Some("mic")),
+        ])),
+        // Refused: a missing parent, a taken ID, an empty ID, a blank name, a folder
+        // inside itself, a colour, an icon, a missing label and one listed twice.
+        one(folder("x", Some("ghost"))),
+        one(folder("outer", None)),
+        one(folder("", None)),
+        one(Edit::FolderRename {
+            folder_id: FolderId::new("outer"),
+            name: " ".into(),
+        }),
+        one(Edit::FolderSetParent {
+            folder_id: FolderId::new("outer"),
+            parent: Some(FolderId::new("inner")),
+        }),
+        one(Edit::FolderSetParent {
+            folder_id: FolderId::new("outer"),
+            parent: Some(FolderId::new("outer")),
+        }),
+        one(label("x", "orange", None)),
+        one(label("sponsor", "#000000", None)),
+        one(Edit::LabelUpdate {
+            label_id: LabelId::new("sponsor"),
+            name: "Sponsor".into(),
+            color: "#ff8800".into(),
+            icon: Some("x".repeat(65)),
+        }),
+        one(labelled(&["ghost"])),
+        one(labelled(&["sponsor", "sponsor"])),
+        one(scene_meta(Some(""), None)),
+        one(scene_meta(None, Some("#12345"))),
+        one(Edit::SceneSetFolder {
+            scene_id: SceneId::new("z"),
+            folder_id: Some(FolderId::new("ghost")),
+        }),
+        one(Edit::LabelReorder {
+            label_id: LabelId::new("camera"),
+            index: 2,
+        }),
+        // Applied, then read back, undone and redone.
+        Call::Batch(edits(vec![
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("z"),
+                folder_id: Some(FolderId::new("inner")),
+            },
+            scene_meta(Some("star"), Some("#123456")),
+            labelled(&["sponsor", "camera"]),
+            Edit::FolderReorder {
+                folder_id: FolderId::new("inner"),
+                index: 0,
+            },
+            Edit::LabelReorder {
+                label_id: LabelId::new("camera"),
+                index: 0,
+            },
+            Edit::LabelUpdate {
+                label_id: LabelId::new("sponsor"),
+                name: "Sponsor".into(),
+                color: "#FF8800".into(),
+                icon: Some("star".into()),
+            },
+            Edit::FolderRename {
+                folder_id: FolderId::new("outer"),
+                name: "Shows".into(),
+            },
+        ])),
+        read(Query::SceneList),
+        read(Query::SourceList),
+        read(Query::StateGet),
+        undo(),
+        read(Query::StateGet),
+        redo(),
+        // In use: a folder with a scene, a folder with a folder, a label a source carries.
+        one(Edit::FolderDelete {
+            folder_id: FolderId::new("inner"),
+        }),
+        one(Edit::FolderDelete {
+            folder_id: FolderId::new("outer"),
+        }),
+        one(Edit::LabelDelete {
+            label_id: LabelId::new("sponsor"),
+        }),
+        // A copy carries the source's metadata.
+        one(Edit::SourceDuplicate {
+            source_id: SourceId::new("cam"),
+            new_source_id: SourceId::new("cam_2"),
+            name: "Cam 2".into(),
+        }),
+        read(Query::SourceList),
+        undo(),
+        // A source only `z` places, carrying a label: deleting `z` and then it applies
+        // (the test checks that it does), and undoing that restores the scene's folder
+        // and metadata and the source's labels. Then the source goes again.
+        Call::Batch(edits(vec![
+            Edit::SourceCreate {
+                source_id: SourceId::new("tagged"),
+                name: "Tagged".into(),
+                kind: SourceKind::Builtin {
+                    kind: "webcam".into(),
+                },
+                // Complete settings, as `webcam()` sends: the mock stores them as sent.
+                settings: [("device".to_owned(), serde_json::Value::from(""))]
+                    .into_iter()
+                    .collect(),
+                duplicated_from: None,
+            },
+            add("z", "iz2", "tagged"),
+            Edit::SourceSetMeta {
+                source_id: SourceId::new("tagged"),
+                meta: SourceMeta {
+                    labels: vec![LabelId::new("sponsor")],
+                    favourite: true,
+                },
+            },
+        ])),
+        Call::Batch(
+            edits(vec![
+                Edit::SceneDelete {
+                    scene_id: SceneId::new("z"),
+                },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("tagged"),
+                },
+            ])
+            .with_idempotency_key(IdempotencyKey::new(ORGANISED_DELETE)),
+        ),
+        read(Query::StateGet),
+        undo(),
+        read(Query::StateGet),
+        undo(),
+        // Emptying `inner` still leaves `outer` holding it, so this batch is refused
+        // whole; emptied in order, the folders and labels go, and undo brings them back
+        // in order.
+        Call::Batch(edits(vec![
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("z"),
+                folder_id: None,
+            },
+            labelled(&[]),
+            Edit::FolderDelete {
+                folder_id: FolderId::new("outer"),
+            },
+        ])),
+        Call::Batch(edits(vec![
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("z"),
+                folder_id: None,
+            },
+            labelled(&[]),
+            Edit::FolderDelete {
+                folder_id: FolderId::new("inner"),
+            },
+            Edit::FolderDelete {
+                folder_id: FolderId::new("outer"),
+            },
+            Edit::LabelDelete {
+                label_id: LabelId::new("camera"),
+            },
+            Edit::LabelDelete {
+                label_id: LabelId::new("sponsor"),
+            },
+        ])),
+        read(Query::StateGet),
+        undo(),
+        read(Query::StateGet),
+    ]
+}
+
 #[test]
 fn the_engine_answers_like_the_mock() {
     fn normalize(event: Event) -> Event {
@@ -1289,6 +1525,7 @@ fn the_engine_answers_like_the_mock() {
             },
         },
     ];
+    let script: Vec<Call> = script.into_iter().chain(organise_script()).collect();
 
     let engine = parity_engine().with_output(OutputId::new("yt"));
     let real = connected(&engine);
@@ -1304,6 +1541,13 @@ fn the_engine_answers_like_the_mock() {
         let got = comparable(block_on(real.call(call.clone())).map(|r| r.result));
         let want = comparable(block_on(mock.call(call.clone())).map(|r| r.result));
         assert_eq!(got, want, "{call:?}");
+        if matches!(&call, Call::Batch(b) if b.idempotency_key == Some(IdempotencyKey::new(ORGANISED_DELETE)))
+        {
+            assert!(
+                got.is_ok(),
+                "the organised scene and source delete applies: {got:?}"
+            );
+        }
     }
     assert_eq!(engine.rev(), mock_engine.rev());
     let real_events: Vec<Event> = drain(&mut real_events).into_iter().map(normalize).collect();
@@ -1432,8 +1676,14 @@ fn output_start_publishes_fake_audio_and_video() {
     }
     assert!(saw_media, "expected script, a video NAL and raw AAC");
     let stats = engine.output_stats().expect("stats");
-    assert!(stats.video.received >= 1, "video frames accepted");
-    assert!(stats.audio.received >= 1, "audio blocks accepted");
+    assert!(
+        stats.video.received >= 1,
+        "video frames accepted: {stats:?}"
+    );
+    assert!(
+        stats.audio.received >= 1,
+        "audio blocks accepted: {stats:?}"
+    );
     assert!(stats.readbacks >= 1, "the CPU path read a frame back");
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
@@ -1840,6 +2090,20 @@ fn output_start_returns_after_a_panicking_teardown() {
         thread::sleep(Duration::from_millis(20));
     }
     assert!(failed, "publish failure left the output running");
+    // `failed` settles before the watcher drops the pipeline, and a start that comes
+    // while the program stage is still alive shares it instead of waiting, so the
+    // restart would never see the panicking teardown (the first macOS run, #520).
+    // Wait for the stream's drop to fire; the start below then races the unwinding
+    // teardown's `draining`, which is what this test is about.
+    let mut dropped = false;
+    for _ in 0..500 {
+        if !armed.load(Ordering::Acquire) {
+            dropped = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(dropped, "the first pipeline never dropped its audio stream");
 
     let engine = engine.with_publish(Box::new(RecordingPublish::new()));
     let restart = connected(&engine);
@@ -1854,10 +2118,6 @@ fn output_start_returns_after_a_panicking_teardown() {
     let restarted = restart_thread.join().expect("restart thread");
     restarted.expect("second output.start");
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
-    assert!(
-        !armed.load(Ordering::Acquire),
-        "the first pipeline never dropped its audio stream"
-    );
 }
 
 /// Dropping the last engine handle stops a running pipeline. The publish watcher
@@ -4165,8 +4425,8 @@ mod cpu_pipeline {
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
 
-    /// A publish target whose send, once `stalled`, blocks until `release` fires (or
-    /// 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
+    /// A publish target whose next send, once `stalled`, blocks until `release` fires
+    /// (or 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
     /// send has blocked (`blocked`) and when the output thread has finished it
     /// (`finished`), so the test waits on those instead of on the clock.
     struct StuckPeer {
@@ -4179,7 +4439,10 @@ mod cpu_pipeline {
 
     impl LivePublish for StuckPeer {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
-            if self.stalled.load(Ordering::Acquire) {
+            // One send stalls; once released, the rest go through. A packet can make
+            // more than one tag (the first H.264 keyframe brings its sequence header),
+            // and a second stall would outlast the test's wait for the thread to end.
+            if self.stalled.swap(false, Ordering::AcqRel) {
                 self.blocked.store(true, Ordering::Release);
                 let _ = self.release.recv_timeout(Duration::from_secs(30));
             }

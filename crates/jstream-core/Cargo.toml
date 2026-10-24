@@ -38,9 +38,9 @@ jstream-platform.workspace = true
 jstream-plugin-proto.workspace = true
 jstream-protocol.workspace = true
 jstream-render.workspace = true
-# The built-in source kinds and their descriptors (ADR-0031, ADR-0025).
+# The built-in source kinds and their descriptors (ADR-0061, ADR-0025).
 jstream-sources.workspace = true
-# PNG for `video.snapshot` (ADR-0031). Encoding only; deflate stays pure Rust.
+# PNG for `video.snapshot` (ADR-0061). Encoding only; deflate stays pure Rust.
 png.workspace = true
 # Settings values: the audio filter kinds' defaults and the mixer kernels read from them
 # (ADR-0025, ADR-0026), the CLAP kinds' parameter defaults, and saved collection files in
@@ -51,6 +51,14 @@ thiserror.workspace = true
 jstream-youtube.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# The audit log and the collection file are created with a user-only DACL, and an
+# existing audit log is refused if its DACL lets other users in (#547). Windows only:
+# Unix uses the file mode. Only these two helpers; platform backends stay injected. The
+# ignored hardware test of the GPU capture path (`src/tests/windows_gpu.rs`) also uses
+# it: the engine on WGC capture and the platform's DX12 device.
+jstream-platform-windows.workspace = true
 
 [dev-dependencies]
 # The mock engine, for a differential test: the same calls must get the same answers.
@@ -70,9 +78,3 @@ jstream-protocol = { workspace = true, features = ["fixtures"] }
 zune-jpeg.workspace = true
 # The built-in kinds' snapshot, reviewed like an API diff (ADR-0025).
 insta.workspace = true
-
-[target.'cfg(windows)'.dev-dependencies]
-# The ignored hardware test of the GPU capture path (`src/tests/windows_gpu.rs`): the
-# engine on WGC capture and the platform's DX12 device. Tests only; the engine itself
-# never names a platform crate.
-jstream-platform-windows.workspace = true

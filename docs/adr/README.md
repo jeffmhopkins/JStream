@@ -45,7 +45,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0028](0028-audio-model-v2.md) | Audio model v2: bus matrix with faders, scene-following audio, keys, meters | accepted | maintainer |  |
 | [ADR-0029](0029-transitions.md) | Transitions | accepted | maintainer |  |
 | [ADR-0030](0030-studio-state-and-scene-switching.md) | Studio state and scene switching | accepted | agent |  |
-| [ADR-0031](0031-source-types-and-decoding-scope.md) | Source types for v1 and decoding scope | accepted | maintainer |  |
+| [ADR-0031](0031-source-types-and-decoding-scope.md) | Source types for v1 and decoding scope | superseded | maintainer | [ADR-0061](0061-source-types-and-decoding-scope-v2.md) |
 | [ADR-0032](0032-live-edits-and-undo.md) | Live parameter edits and undo on the wire | accepted | agent |  |
 | [ADR-0034](0034-youtube-interaction-scope-v2.md) | YouTube interaction scope v2 | superseded | maintainer | [ADR-0041](0041-youtube-interaction-scope-v3.md) |
 | [ADR-0035](0035-clap-plugins-out-of-process.md) | CLAP audio plugins, out of process | accepted | maintainer |  |
@@ -73,8 +73,16 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0057](0057-server-answers-credential-calls.md) | The server answers the credential calls, and actions may answer with data | accepted | agent |  |
 | [ADR-0058](0058-youtube-sign-in-with-a-jstream-client.md) | YouTube sign-in with JStream's own OAuth client, for people only | accepted | maintainer |  |
 | [ADR-0059](0059-mcp-annotations-and-remote-text.md) | MCP tool annotations, and third-party text marked as data | accepted | agent |  |
+| [ADR-0060](0060-linux-platform-support.md) | Linux platform support: portal and PipeWire capture, VA-API encode | accepted | maintainer |  |
+| [ADR-0061](0061-source-types-and-decoding-scope-v2.md) | Source types and decoding scope v2: Linux's software H.264 and AAC | accepted | maintainer |  |
+| [ADR-0062](0062-aac-lc-encoder-patent-check.md) | AAC-LC encoder patent check: may JStream ship its own encoder? | accepted | maintainer |  |
+| [ADR-0063](0063-macos-platform-support.md) | macOS platform support: ScreenCaptureKit, Core Audio taps, VideoToolbox | accepted | maintainer |  |
 | [ADR-0064](0064-nested-scene-folders.md) | Nested scene folders | accepted | agent |  |
 | [ADR-0065](0065-scene-chains-and-item-effects.md) | Scene filter chains and item effects | accepted | agent |  |
 | [ADR-0066](0066-portable-windows-distribution-v2.md) | Portable Windows distribution v2: an optional virtual camera, registered from an administrators-only copy | accepted | maintainer |  |
+| [ADR-0067](0067-shared-crash-reports.md) | Crash reports live in one crate, jstream-crash, with no global state | accepted | agent |  |
+| [ADR-0068](0068-item-effects-in-v1.md) | Item effects are in v1 | accepted | maintainer |  |
 | [ADR-0069](0069-wasm-plugin-limits-and-capabilities.md) | WASM plugin resource limits and the Control calls a plugin may make | accepted | maintainer |  |
+| [ADR-0070](0070-wave-prs-run-linux-tests.md) | PRs into a wave run the Linux tests | accepted | agent |  |
+| [ADR-0073](0073-sources-drawn-at-their-shown-size.md) | Sources drawn at the size they are shown | accepted | agent |  |
 <!-- @generated end adr-index -->

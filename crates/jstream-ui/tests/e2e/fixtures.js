@@ -86,3 +86,65 @@ export async function showPanel(page, name) {
 export async function rev(page) {
   return Number(await page.locator('header.app-header').getAttribute('data-rev'));
 }
+
+/** Opens the Add source dialog from the Scene objects panel's right-click menu, on the
+ * Scene type with `scene: true`, and returns it. */
+export async function openAddSource(page, { scene = false } = {}) {
+  // Just under the last row, on the panel's own space: a right-click on a row opens the
+  // item's menu instead.
+  const panel = page.locator('.sources-panel');
+  const box = await panel.boundingBox();
+  const last = await panel.locator('li.row').last().boundingBox();
+  const y = last ? last.y + last.height + 6 - box.y : box.height - 12;
+  await panel.click({ button: 'right', position: { x: 12, y } });
+  await page
+    .getByRole('menu', { name: 'Context menu' })
+    .getByRole('menuitem', { name: scene ? 'Add scene as source…' : 'Add source…' })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Add source' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** Nests scene `name` in the selected scene, through the Add source dialog: an item
+ * covering the canvas. */
+export async function nestScene(page, name) {
+  const dialog = await openAddSource(page, { scene: true });
+  await dialog.getByRole('radio', { name }).check();
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
+/** Makes the engine list and describe `kinds`, each a descriptor as `kind.describe`
+ * reports it, which the mock engine can't: the page's WebSocket goes through a route that
+ * answers `kind.list` and `kind.describe` for them and passes every other message on.
+ * Call it before `connect`. */
+export async function describeKinds(page, kinds) {
+  const answer = (id, result) => JSON.stringify({ type: 'response', id, result: { kind: 'query', result } });
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      let query = null;
+      let id = null;
+      if (typeof message === 'string') {
+        try {
+          const parsed = JSON.parse(message);
+          id = parsed.id;
+          query = parsed.call?.kind === 'query' ? parsed.call.query : null;
+        } catch {
+          // Not JSON: pass it on.
+        }
+      }
+      const described = kinds.find((k) => k.kind_id === query?.kind_id);
+      if (query?.type === 'kind.list') {
+        const list = kinds.map(({ kind_id, category, name, version }) => ({ kind_id, category, name, version }));
+        ws.send(answer(id, { type: 'kind.list', kinds: list }));
+      } else if (query?.type === 'kind.describe' && described) {
+        ws.send(answer(id, { type: 'kind.describe', kind: described, settings_schema: {} }));
+      } else {
+        server.send(message);
+      }
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+}
