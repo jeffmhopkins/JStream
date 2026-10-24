@@ -113,9 +113,16 @@ impl CaptureKind {
                                it. Empty captures the first device listed."
                 .into(),
         });
+        let mut params = vec![target];
+        // A webcam has no pointer to show; a display or window capture may leave it out.
+        if flavor != Flavor::Device {
+            let mut show_cursor = param("show_cursor", "Show cursor", ParamType::Bool, json!(true));
+            show_cursor.description = Some("Whether the pointer shows in the capture.".into());
+            params.push(show_cursor);
+        }
         Self {
             descriptor: KindDescriptor {
-                params: vec![target],
+                params,
                 // A webcam's paired audio is its sound; a display or window has none.
                 ..kind(id, name, true, flavor == Flavor::Device)
             },
@@ -146,11 +153,21 @@ impl SourceKind for CaptureKind {
     }
 
     fn create(&self, settings: &Settings, _: &Context) -> Result<Box<dyn Source>, SourceError> {
+        let show_cursor = match self.flavor {
+            Flavor::Device => true,
+            Flavor::Display | Flavor::Window => setting(settings, "show_cursor")?
+                .as_bool()
+                .ok_or_else(|| SourceError::Setting {
+                    param: "show_cursor".into(),
+                    reason: "must be a boolean".into(),
+                })?,
+        };
         Ok(Box::new(CaptureSource {
             kind_id: self.descriptor.kind_id.clone(),
             descriptor: self.descriptor.clone(),
             settings: settings.clone(),
             spec: self.spec(settings)?,
+            show_cursor,
         }))
     }
 }
@@ -161,6 +178,7 @@ struct CaptureSource {
     descriptor: KindDescriptor,
     settings: Settings,
     spec: CaptureSpec,
+    show_cursor: bool,
 }
 
 impl Source for CaptureSource {
@@ -186,5 +204,9 @@ impl Source for CaptureSource {
 
     fn capture(&self) -> Option<&CaptureSpec> {
         Some(&self.spec)
+    }
+
+    fn show_cursor(&self) -> bool {
+        self.show_cursor
     }
 }

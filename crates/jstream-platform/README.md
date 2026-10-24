@@ -60,7 +60,23 @@ Contents:
   `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
   `Capture::on_context` returns the backend on a `GpuContext`'s device, whose captures
   deliver `Gpu` frames, or `None` (the default) when it has no GPU path; the engine
-  then keeps CPU frames.
+  then keeps CPU frames. `Capture::start_with` starts a capture with `CaptureOptions`
+  (the default is `start`'s). `CaptureOptions::for_source` names the source a capture
+  is for, so a backend that keeps a grant per source (the ScreenCast portal's restore
+  token, [ADR-0060](../../docs/adr/0060-linux-platform-support.md) §3) keeps each
+  source's apart, and `Capture::forget_source` drops it when the source is deleted, once
+  its captures have stopped (best effort: a grant file that can't be removed stays). By
+  default `start_with` ignores its options and calls `start`, and `forget_source` does
+  nothing. `CaptureOptions::with_cursor(CursorCapture::Metadata)` asks for the pointer
+  beside the frames instead of drawn into them (`Drawn`, the default): the stream's
+  `CaptureStream::cursor` then gives it as of the newest `latest`, as a
+  `CaptureCursor` (`Shown` with a `CursorImage`, straight-alpha RGBA, and its top-left
+  in the frame's pixels; `Hidden`; or `NotSent`, the default, from a stream that draws
+  it in or doesn't capture it). A backend that can't send it draws it in.
+  `CursorCapture::Hidden` leaves the pointer out altogether (the stream's `cursor` stays
+  `NotSent`); a backend that can't leave it out draws it in. `draw_cursor`
+  (`cursor.rs`) blends a shown pointer into a `Bgra8` or `Rgba8` CPU frame, clipped to
+  it.
 - **Video capture devices** (webcams and capture cards,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
@@ -72,11 +88,13 @@ Contents:
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
   a frame it rejects is dropped and the stream goes on. The engine gets one decoder per
   stream from `Codecs::capture_decoder` (below).
-- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes
+- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
+  process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
   format an input target would open in (`input_format`, so the engine can build the
   handler for it before opening), and opens input (microphone, output loopback,
-  process loopback) and output streams. Each stream calls an
+  process loopback: a process and its children on Windows, the one process on macOS)
+  and output streams. Each stream calls an
   engine-supplied `AudioInputHandler` or `AudioOutputHandler` on the backend's real-time
   audio thread, so handlers must not allocate, lock, block or log
   ([R-RT-001](../../docs/RULES.md#R-RT-001)). An `AudioPacket` carries interleaved `f32`
@@ -236,6 +254,15 @@ into an encode target's plane views (`Nv12Converter`). Windows' video encoders t
 encode targets on the context they reached through `Codecs::on_context`, and the
 engine's render thread converts each video mix's composite into the next of that mix's
 ring of them and pushes it to the mix's sessions on that path.
+On Linux, `LinuxGpu` opens the device on Vulkan, and the portal capture
+(`PortalCapture::on_context`) imports PipeWire's DMA-BUF frames there and copies each
+into a ring of RGBA textures of its own on the context's queue, so its frames need no
+fence. Its encode targets are NV12 images exported as DMA-BUFs, whose `FrameSync`
+signals the context's timeline semaphore after render's write; the VA-API encoder it
+reached through `Codecs::on_context` imports each one as a surface and waits for that
+value. A device that can't export them has none. On one whose render node no VA-API
+encoder runs on, `Codecs::on_context` gives no GPU encoder, and the engine encodes CPU
+frames ([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -258,11 +285,17 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
 - **`GpuInterop`** (`Send + Sync`), one per platform, in `Backends`:
   - `open_device()` returns a **`GpuContext`**: the `wgpu::Adapter`, `Device` and `Queue`,
     opened on the **media adapter**, plus an `AdapterId` (the LUID on Windows).
-    - The media adapter is the one that drives the captured display, with
-      `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
-      engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, hardware adapter first with the software one as the fallback. On a hybrid-GPU machine where sharing an
-      adapter isn't possible, the platform says so (ARCH step 6).
+    - On Windows the media adapter is the one that drives the captured display, with
+      `TEXTURE_FORMAT_NV12`, as S1 chose it, and on a hybrid-GPU machine where sharing
+      an adapter isn't possible, the platform says so (ARCH step 6). On Linux
+      (`LinuxGpu`) it is a guess: a hardware Vulkan adapter, DMA-BUF importers first,
+      then integrated before discrete, with NV12 only where it can export encode
+      targets. A capture whose frames don't import on it falls back to CPU frames, and
+      an encoder on another GPU leaves the context without GPU encode, so a hybrid
+      machine is not reported.
+    - `jstream-render` uses this device when the engine has one, so capture, render and
+      encode share one adapter. With no interop it opens its own, hardware adapter first
+      with the software one as the fallback.
     - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
       allocation), so the engine can tell whether a texture is on the context a
       compositor runs on. wgpu's own `Device` equality is per instance and can't.

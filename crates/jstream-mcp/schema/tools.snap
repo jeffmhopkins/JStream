@@ -453,6 +453,75 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "The classes, hosts and folders the person granted it."
+                  },
+                  "path": {
+                    "description": "The plugin's package: its manifest and module.",
+                    "type": "string"
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The ID to install it under."
+                  },
+                  "type": {
+                    "const": "plugin.install",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "path",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin\ndisabled because an update asks for more (`needs_grant`) stays disabled until a\ngrant covers the difference and it is re-enabled. For a person only, like\n`plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't\ninstalled.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "Its new grant."
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.grant",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a\nlimit or traps, and never re-enables it by itself. Succeeds for one already\nenabled. Fails with `not_found` for a plugin that isn't installed, and\n`action_failed` for one whose update asks for more than its grant. For a person\nonly, like `plugin.install`.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
                 "properties": {
                   "on": {
@@ -941,7 +1010,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -2752,7 +2821,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "ItemGeometry": {
-            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
             "properties": {
               "center": {
                 "$ref": "#/$defs/Vec2",
@@ -3010,6 +3079,63 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "PluginClass": {
+            "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
+            "oneOf": [
+              {
+                "const": "read",
+                "description": "Every query but the never-granted ones, `kind.*` and `delete.plan`. Always\ngranted.",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "description": "The scene, item, source, filter, transition, bus, send, hotkey, canvas and studio\nedits, live parameter edits (`live.*`), and undo and redo on the plugin's own\nsession.",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "description": "What changes what is on air: `scene.switch`.",
+                "type": "string"
+              },
+              {
+                "const": "outputs",
+                "description": "`output.start` and `output.stop` on outputs that already exist.",
+                "type": "string"
+              }
+            ]
+          },
+          "PluginGrant": {
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach:\na call's URLs and files must be within `hosts` and `folders`.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "properties": {
+              "classes": {
+                "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/PluginClass"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "folders": {
+                "description": "The folders the person picked for it, as absolute paths on the engine's machine,\nbesides its own private data folder. Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "hosts": {
+                "description": "The hosts the plugin may reach, each as `scheme://host:port` (`http`, `https`,\n`ws` or `wss`). Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "PluginId": {
+            "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
+            "type": "string"
           },
           "PreviewCodec": {
             "description": "How a preview stream's pictures are encoded.",
@@ -5251,6 +5377,75 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "The classes, hosts and folders the person granted it."
+                  },
+                  "path": {
+                    "description": "The plugin's package: its manifest and module.",
+                    "type": "string"
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The ID to install it under."
+                  },
+                  "type": {
+                    "const": "plugin.install",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "path",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin\ndisabled because an update asks for more (`needs_grant`) stays disabled until a\ngrant covers the difference and it is re-enabled. For a person only, like\n`plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't\ninstalled.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "Its new grant."
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.grant",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a\nlimit or traps, and never re-enables it by itself. Succeeds for one already\nenabled. Fails with `not_found` for a plugin that isn't installed, and\n`action_failed` for one whose update asks for more than its grant. For a person\nonly, like `plugin.install`.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
                 "properties": {
                   "on": {
@@ -5739,7 +5934,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -7550,7 +7745,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "ItemGeometry": {
-            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
             "properties": {
               "center": {
                 "$ref": "#/$defs/Vec2",
@@ -7808,6 +8003,63 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "PluginClass": {
+            "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
+            "oneOf": [
+              {
+                "const": "read",
+                "description": "Every query but the never-granted ones, `kind.*` and `delete.plan`. Always\ngranted.",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "description": "The scene, item, source, filter, transition, bus, send, hotkey, canvas and studio\nedits, live parameter edits (`live.*`), and undo and redo on the plugin's own\nsession.",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "description": "What changes what is on air: `scene.switch`.",
+                "type": "string"
+              },
+              {
+                "const": "outputs",
+                "description": "`output.start` and `output.stop` on outputs that already exist.",
+                "type": "string"
+              }
+            ]
+          },
+          "PluginGrant": {
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach:\na call's URLs and files must be within `hosts` and `folders`.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "properties": {
+              "classes": {
+                "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/PluginClass"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "folders": {
+                "description": "The folders the person picked for it, as absolute paths on the engine's machine,\nbesides its own private data folder. Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "hosts": {
+                "description": "The hosts the plugin may reach, each as `scheme://host:port` (`http`, `https`,\n`ws` or `wss`). Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "PluginId": {
+            "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
+            "type": "string"
           },
           "PreviewCodec": {
             "description": "How a preview stream's pictures are encoded.",
@@ -8395,7 +8647,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "ItemGeometry": {
-            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
             "properties": {
               "center": {
                 "$ref": "#/$defs/Vec2",
@@ -8779,7 +9031,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -9677,6 +9929,75 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "The classes, hosts and folders the person granted it."
+                  },
+                  "path": {
+                    "description": "The plugin's package: its manifest and module.",
+                    "type": "string"
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The ID to install it under."
+                  },
+                  "type": {
+                    "const": "plugin.install",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "path",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin\ndisabled because an update asks for more (`needs_grant`) stays disabled until a\ngrant covers the difference and it is re-enabled. For a person only, like\n`plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't\ninstalled.",
+                "properties": {
+                  "grant": {
+                    "$ref": "#/$defs/PluginGrant",
+                    "description": "Its new grant."
+                  },
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.grant",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id",
+                  "grant"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a\nlimit or traps, and never re-enables it by itself. Succeeds for one already\nenabled. Fails with `not_found` for a plugin that isn't installed, and\n`action_failed` for one whose update asks for more than its grant. For a person\nonly, like `plugin.install`.",
+                "properties": {
+                  "plugin_id": {
+                    "$ref": "#/$defs/PluginId",
+                    "description": "The plugin."
+                  },
+                  "type": {
+                    "const": "plugin.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
                 "properties": {
                   "on": {
@@ -10165,7 +10486,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -11972,7 +12293,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "ItemGeometry": {
-            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
             "properties": {
               "center": {
                 "$ref": "#/$defs/Vec2",
@@ -12230,6 +12551,63 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "PluginClass": {
+            "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
+            "oneOf": [
+              {
+                "const": "read",
+                "description": "Every query but the never-granted ones, `kind.*` and `delete.plan`. Always\ngranted.",
+                "type": "string"
+              },
+              {
+                "const": "edit",
+                "description": "The scene, item, source, filter, transition, bus, send, hotkey, canvas and studio\nedits, live parameter edits (`live.*`), and undo and redo on the plugin's own\nsession.",
+                "type": "string"
+              },
+              {
+                "const": "live",
+                "description": "What changes what is on air: `scene.switch`.",
+                "type": "string"
+              },
+              {
+                "const": "outputs",
+                "description": "`output.start` and `output.stop` on outputs that already exist.",
+                "type": "string"
+              }
+            ]
+          },
+          "PluginGrant": {
+            "description": "What a person grants one plugin (ADR-0069): its capability classes, and the network\nhosts and folders it may reach. A class never widens network or filesystem reach:\na call's URLs and files must be within `hosts` and `folders`.\n\n```json\n{\"classes\": [\"edit\", \"live\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": []}\n```",
+            "properties": {
+              "classes": {
+                "description": "The classes granted, besides `read`, which every plugin has. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/PluginClass"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "folders": {
+                "description": "The folders the person picked for it, as absolute paths on the engine's machine,\nbesides its own private data folder. Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "hosts": {
+                "description": "The hosts the plugin may reach, each as `scheme://host:port` (`http`, `https`,\n`ws` or `wss`). Omitted for none.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "PluginId": {
+            "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
+            "type": "string"
           },
           "PreviewCodec": {
             "description": "How a preview stream's pictures are encoded.",

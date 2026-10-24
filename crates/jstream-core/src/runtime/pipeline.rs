@@ -3334,7 +3334,6 @@ mod tests {
         EncoderProfile, HardwarePreference as ProfileHardware, OutputId,
         RateControl as ProfileRate, VideoCodec, VideoMixId,
     };
-    use jstream_sources::CaptureSpec;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex, mpsc};
     use std::thread;
@@ -3861,7 +3860,7 @@ mod tests {
     fn the_cpu_stand_in_draws_covered_frames_black() {
         struct One<'a>(CaptureImage<'a>);
         impl Captures for One<'_> {
-            fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+            fn frame(&self, _: &crate::snapshot::CaptureKey) -> Option<CaptureFrame<'_>> {
                 Some(CaptureFrame {
                     version: 1,
                     image: self.0,

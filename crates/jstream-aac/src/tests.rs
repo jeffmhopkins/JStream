@@ -326,6 +326,8 @@ fn hostile_input_never_panics_and_stays_in_bounds() {
             } else {
                 WindowShape::Sine
             },
+            // TNS off in a quarter of the rounds.
+            tns: round % 4 != 3,
             ..Config::new(rate, channels, per_channel * u32::from(channels))
         };
         let mut enc = Encoder::new(config).expect("valid");

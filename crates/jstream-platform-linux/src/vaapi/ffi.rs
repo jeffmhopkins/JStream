@@ -12,9 +12,13 @@
 //! Bitfields are packed lowest bit first, as GCC and Clang lay them out on every Linux
 //! ABI JStream supports (x86_64, aarch64).
 //!
+//! The surface attributes and the DRM PRIME descriptor that import an encode target
+//! (`va/va.h`, `va/va_drmcommon.h`) were checked the same way, against the same
+//! release.
+//!
 //! Plain data with no pointers (apart from [`CodedBufferSegment`], which only libva
-//! writes), so it builds on every platform and the parameter builders are tested
-//! everywhere.
+//! writes, and [`GenericValue`], which carries the descriptor's address), so it builds
+//! on every platform and the parameter builders are tested everywhere.
 
 /// `VAStatus`: `int`.
 pub(crate) type Status = i32;
@@ -51,6 +55,29 @@ pub(crate) const CODED_BUF_STATUS_SLICE_OVERFLOW_MASK: u32 = 0x200;
 pub(crate) const SURFACE_RENDERING: i32 = 1;
 /// `VASurfaceSkipped` (`VASurfaceStatus`): the rate controller dropped the frame.
 pub(crate) const SURFACE_SKIPPED: i32 = 8;
+
+/// `VASurfaceAttribType` values, and what goes with them.
+pub(crate) mod surface_attrib {
+    /// `VASurfaceAttribMemoryType`: an integer of `VA_SURFACE_ATTRIB_MEM_TYPE_*` bits.
+    pub(crate) const MEMORY_TYPE: i32 = 6;
+    /// `VASurfaceAttribExternalBufferDescriptor`: a pointer to the descriptor.
+    pub(crate) const EXTERNAL_BUFFER_DESCRIPTOR: i32 = 7;
+    /// `VA_SURFACE_ATTRIB_SETTABLE`.
+    pub(crate) const SETTABLE: u32 = 0x2;
+    /// `VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2`: a [`super::DrmPrimeSurfaceDescriptor`].
+    pub(crate) const MEM_TYPE_DRM_PRIME_2: i32 = 0x4000_0000;
+}
+
+/// `VAGenericValueType` values.
+pub(crate) mod generic {
+    /// `VAGenericValueTypeInteger`.
+    pub(crate) const INTEGER: i32 = 1;
+    /// `VAGenericValueTypePointer`.
+    pub(crate) const POINTER: i32 = 3;
+}
+
+/// `DRM_FORMAT_NV12` (`drm_fourcc.h`): the same four characters as [`FOURCC_NV12`].
+pub(crate) const DRM_FORMAT_NV12: u32 = 0x3231_564E;
 
 /// `VAConfigAttribType` values.
 pub(crate) mod attrib {
@@ -300,6 +327,133 @@ pub(crate) struct CodedBufferSegment {
     pub(crate) va_reserved: [u32; 4],
 }
 
+/// The value union of `VAGenericValue`: `int32_t i`, `float f`, `void *p` or a
+/// function pointer. Only `i` and `p` are written here.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) union GenericValueUnion {
+    pub(crate) i: i32,
+    pub(crate) p: *mut core::ffi::c_void,
+}
+
+/// `VAGenericValue`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) struct GenericValue {
+    pub(crate) kind: i32,
+    pub(crate) value: GenericValueUnion,
+}
+
+/// `VASurfaceAttrib`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) struct SurfaceAttrib {
+    pub(crate) kind: i32,
+    pub(crate) flags: u32,
+    pub(crate) value: GenericValue,
+}
+
+impl SurfaceAttrib {
+    /// A settable integer attribute.
+    pub(crate) fn integer(kind: i32, i: i32) -> Self {
+        Self {
+            kind,
+            flags: surface_attrib::SETTABLE,
+            value: GenericValue {
+                kind: generic::INTEGER,
+                value: GenericValueUnion { i },
+            },
+        }
+    }
+
+    /// A settable pointer attribute.
+    pub(crate) fn pointer(kind: i32, p: *mut core::ffi::c_void) -> Self {
+        Self {
+            kind,
+            flags: surface_attrib::SETTABLE,
+            value: GenericValue {
+                kind: generic::POINTER,
+                value: GenericValueUnion { p },
+            },
+        }
+    }
+}
+
+/// One DRM object of a [`DrmPrimeSurfaceDescriptor`].
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DrmObject {
+    pub(crate) fd: i32,
+    pub(crate) size: u32,
+    pub(crate) drm_format_modifier: u64,
+}
+
+/// One layer of a [`DrmPrimeSurfaceDescriptor`].
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DrmLayer {
+    pub(crate) drm_format: u32,
+    pub(crate) num_planes: u32,
+    pub(crate) object_index: [u32; 4],
+    pub(crate) offset: [u32; 4],
+    pub(crate) pitch: [u32; 4],
+}
+
+/// `VADRMPRIMESurfaceDescriptor`: a surface made of DMA-BUFs, to import with
+/// `vaCreateSurfaces`. libva doesn't close the descriptors.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DrmPrimeSurfaceDescriptor {
+    pub(crate) fourcc: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) num_objects: u32,
+    pub(crate) objects: [DrmObject; 4],
+    pub(crate) num_layers: u32,
+    pub(crate) layers: [DrmLayer; 4],
+}
+
+/// An NV12 surface held in one DMA-BUF: its Y and CbCr planes at their offsets and
+/// pitches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Nv12Object {
+    pub(crate) fd: i32,
+    pub(crate) size: u32,
+    pub(crate) modifier: u64,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) offsets: [u32; 2],
+    pub(crate) pitches: [u32; 2],
+}
+
+impl DrmPrimeSurfaceDescriptor {
+    /// `object` as libva imports it: one object, and one NV12 layer of two planes in
+    /// it (the composed form, which `vaExportSurfaceHandle` also gives).
+    pub(crate) fn nv12(object: Nv12Object) -> Self {
+        let mut desc = Self {
+            fourcc: FOURCC_NV12,
+            width: object.width,
+            height: object.height,
+            num_objects: 1,
+            num_layers: 1,
+            ..Self::default()
+        };
+        desc.objects[0] = DrmObject {
+            fd: object.fd,
+            size: object.size,
+            drm_format_modifier: object.modifier,
+        };
+        desc.layers[0] = DrmLayer {
+            drm_format: DRM_FORMAT_NV12,
+            num_planes: 2,
+            object_index: [0; 4],
+            offset: [object.offsets[0], object.offsets[1], 0, 0],
+            pitch: [object.pitches[0], object.pitches[1], 0, 0],
+        };
+        desc
+    }
+}
+
 /// `VAImageFormat`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -428,10 +582,79 @@ const _: () = {
     assert!(offset_of!(Image, offsets) == 80);
     assert!(offset_of!(Image, component_order) == 100);
     assert!(align_of::<Image>() == 4);
+    assert!(size_of::<DrmObject>() == 16);
+    assert!(size_of::<DrmLayer>() == 56);
+    assert!(size_of::<DrmPrimeSurfaceDescriptor>() == 312);
+    assert!(offset_of!(DrmPrimeSurfaceDescriptor, objects) == 16);
+    assert!(offset_of!(DrmPrimeSurfaceDescriptor, num_layers) == 80);
+    assert!(offset_of!(DrmPrimeSurfaceDescriptor, layers) == 84);
     #[cfg(target_pointer_width = "64")]
     {
+        assert!(size_of::<GenericValue>() == 16);
+        assert!(offset_of!(GenericValue, value) == 8);
+        assert!(size_of::<SurfaceAttrib>() == 24);
+        assert!(offset_of!(SurfaceAttrib, value) == 8);
         assert!(size_of::<CodedBufferSegment>() == 48);
         assert!(offset_of!(CodedBufferSegment, buf) == 16);
         assert!(offset_of!(CodedBufferSegment, next) == 24);
     }
 };
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DRM_FORMAT_NV12, DrmPrimeSurfaceDescriptor, FOURCC_NV12, Nv12Object, SurfaceAttrib,
+        generic, surface_attrib,
+    };
+
+    #[test]
+    fn an_nv12_target_imports_as_one_object_and_one_layer() {
+        let desc = DrmPrimeSurfaceDescriptor::nv12(Nv12Object {
+            fd: 7,
+            size: 1920 * 1088 * 3 / 2,
+            modifier: 0,
+            width: 1920,
+            height: 1080,
+            offsets: [0, 1920 * 1088],
+            pitches: [1920, 1920],
+        });
+        assert_eq!(
+            (desc.fourcc, desc.width, desc.height),
+            (FOURCC_NV12, 1920, 1080)
+        );
+        assert_eq!((desc.num_objects, desc.num_layers), (1, 1));
+        assert_eq!(
+            (desc.objects[0].fd, desc.objects[0].drm_format_modifier),
+            (7, 0)
+        );
+        assert_eq!(desc.objects[0].size, 1920 * 1088 * 3 / 2);
+        let layer = desc.layers[0];
+        assert_eq!((layer.drm_format, layer.num_planes), (DRM_FORMAT_NV12, 2));
+        assert_eq!(layer.object_index, [0; 4]);
+        assert_eq!(layer.offset, [0, 1920 * 1088, 0, 0]);
+        assert_eq!(layer.pitch, [1920, 1920, 0, 0]);
+        // The unused entries stay zero, as libva expects.
+        assert_eq!(desc.objects[1..], [Default::default(); 3]);
+        assert_eq!(desc.layers[1..], [Default::default(); 3]);
+    }
+
+    #[test]
+    fn surface_attributes_are_settable_and_typed() {
+        let memory = SurfaceAttrib::integer(
+            surface_attrib::MEMORY_TYPE,
+            surface_attrib::MEM_TYPE_DRM_PRIME_2,
+        );
+        assert_eq!(memory.flags, surface_attrib::SETTABLE);
+        assert_eq!(memory.value.kind, generic::INTEGER);
+        // SAFETY: `integer` wrote `i`.
+        assert_eq!(unsafe { memory.value.value.i }, 0x4000_0000);
+        let mut desc = DrmPrimeSurfaceDescriptor::default();
+        let pointer = SurfaceAttrib::pointer(
+            surface_attrib::EXTERNAL_BUFFER_DESCRIPTOR,
+            (&raw mut desc).cast(),
+        );
+        assert_eq!(pointer.value.kind, generic::POINTER);
+        // SAFETY: `pointer` wrote `p`.
+        assert_eq!(unsafe { pointer.value.value.p }, (&raw mut desc).cast());
+    }
+}

@@ -303,6 +303,42 @@ fn display_window_and_webcam_sources_say_what_to_capture() {
 }
 
 #[test]
+fn a_capture_source_shows_the_cursor_unless_told_not_to() {
+    let registry = Registry::builtin();
+    let ctx = Context::default();
+    for kind_id in ["display", "window"] {
+        let shown = registry
+            .create(kind_id, &complete(kind_id, &[]), &ctx)
+            .expect("a source");
+        assert!(
+            shown.show_cursor(),
+            "{kind_id}: shown by default, as before"
+        );
+        let hidden = complete(kind_id, &[("show_cursor", json!(false))]);
+        let source = registry.create(kind_id, &hidden, &ctx).expect("a source");
+        assert!(!source.show_cursor(), "{kind_id}: off");
+
+        let descriptor = registry.descriptor(kind_id).expect("the kind");
+        assert!(
+            needs_restart(descriptor, &complete(kind_id, &[]), &hidden),
+            "{kind_id}: the capture starts again with the new setting"
+        );
+        let bad = complete(kind_id, &[("show_cursor", json!("no"))]);
+        assert!(matches!(
+            registry.create(kind_id, &bad, &ctx),
+            Err(SourceError::Setting { param, .. }) if param == "show_cursor"
+        ));
+    }
+    let colour = registry
+        .create("color", &complete("color", &[]), &ctx)
+        .expect("a source");
+    assert!(
+        colour.show_cursor(),
+        "the default for a source that isn't captured"
+    );
+}
+
+#[test]
 fn a_colour_source_rejects_bad_settings() {
     let registry = Registry::builtin();
     let ctx = Context::default();
