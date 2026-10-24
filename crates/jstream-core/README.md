@@ -1500,7 +1500,10 @@ pointers between messages, so it does not keep the engine alive: dropping
 the last engine handle and its sessions joins the pipeline. `output_stats` is then
 empty. `failed` counts as idle, and a later start needs a new one-shot target or an opener. That
 start waits until a failed program stage has finished joining, so the new devices do
-not overlap the old teardown; it never joins a program stage that has failed. The same holds when a
+not overlap the old teardown; it never joins a program stage that has failed. A stage that
+has not failed is not waited on, even while a failed output's teardown still holds it: an
+output's own failure (a publish error, say) leaves the stage up until that output's
+pipeline lets go of it last, and a start in that window shares it. The same holds when a
 start fails after `launch` returned threads (a failure reported before `active`, or
 the watcher not starting): `failed` is emitted, and the next start waits until that
 pipeline has joined. A stop's join that takes the program stage down also holds off
