@@ -43,7 +43,7 @@ use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock, MediaDecoders};
 use jstream_protocol::{AssetRoot, FilterChain, Settings, SourceId, SourceKind};
 use jstream_sources::{
@@ -126,6 +126,9 @@ impl Eq for LiveAudio {}
 struct Entry {
     kind: String,
     settings: Settings,
+    /// The density its frames are drawn at (ADR-0073), as asked for last: every build
+    /// asks for it.
+    density: f32,
     /// The build asked for last. Only its result is installed.
     ticket: u64,
     running: Option<Running>,
@@ -147,6 +150,10 @@ struct Running {
     planned: u64,
     /// The texture it showed last, for a source that paints on the GPU.
     shown_gpu: Option<(GpuFrame, Frame)>,
+    /// Its own size, which its frames are placed at, for a kind that draws them at a
+    /// density ([`Source::set_density`]); `None` for the others, which are never built
+    /// again for one.
+    extent: Option<FrameSize>,
 }
 
 /// One source to build.
@@ -154,6 +161,7 @@ pub(crate) struct Job {
     source_id: SourceId,
     kind: String,
     settings: Settings,
+    density: f32,
     ticket: u64,
     registry: Arc<Registry>,
     ctx: Context,
@@ -178,6 +186,8 @@ pub(crate) struct Built {
     source_id: SourceId,
     ticket: u64,
     result: Result<Box<dyn Source>, SourceError>,
+    /// What [`Source::set_density`] returned, asked on the thread after creating it.
+    extent: Option<FrameSize>,
 }
 
 impl Default for LiveSources {
@@ -343,6 +353,7 @@ impl LiveSources {
             let entry = self.entries.entry(source.id().clone()).or_insert(Entry {
                 kind: String::new(),
                 settings: Settings::new(),
+                density: 1.0,
                 ticket: 0,
                 running: None,
             });
@@ -357,6 +368,7 @@ impl LiveSources {
                 source_id: source.id().clone(),
                 kind: entry.kind.clone(),
                 settings: entry.settings.clone(),
+                density: entry.density,
                 ticket: entry.ticket,
                 registry: Arc::clone(&self.registry),
                 ctx: self.ctx.clone(),
@@ -474,6 +486,7 @@ impl LiveSources {
                 shown: None,
                 planned: plan,
                 shown_gpu: None,
+                extent: built.extent,
             }),
             // A kind that is described but not built yet draws what it drew before C1b:
             // a `display` source shows the pipeline's capture.
@@ -517,6 +530,49 @@ impl LiveSources {
     /// The current time on the clock sources run on.
     pub(crate) fn now(&self) -> MediaTime {
         self.worker.now()
+    }
+
+    /// Draws each source in `scales` ([`Shot::scales`](crate::snapshot::Shot::scales))
+    /// at the density its most enlarged item needs to stay sharp (ADR-0073), for a kind
+    /// that draws at a density. Drawing again can take as long as building, so it is a
+    /// build on the thread, at the new density, and the source shows its old frame until
+    /// that is installed. Densities go up or down in quarter steps of a doubling, so a
+    /// small change in scale builds nothing, and a source waits for the build it has in
+    /// flight before it is asked for another: the plan that installs it measures again.
+    pub(crate) fn densities(&mut self, scales: &BTreeMap<SourceId, f32>) {
+        let mut jobs = Vec::new();
+        for (id, &scale) in scales {
+            let Some(entry) = self.entries.get_mut(id) else {
+                continue;
+            };
+            let Some(running) = &entry.running else {
+                continue;
+            };
+            if running.extent.is_none() || running.ticket != entry.ticket {
+                continue;
+            }
+            let density = density_for(scale);
+            if density == entry.density {
+                continue;
+            }
+            self.tickets += 1;
+            entry.density = density;
+            entry.ticket = self.tickets;
+            jobs.push(Job {
+                source_id: id.clone(),
+                kind: entry.kind.clone(),
+                settings: entry.settings.clone(),
+                density,
+                ticket: entry.ticket,
+                registry: Arc::clone(&self.registry),
+                ctx: self.ctx.clone(),
+            });
+        }
+        if !jobs.is_empty() {
+            self.start();
+            lock(&self.worker.queue).jobs.extend(jobs);
+            self.worker.wake.notify_all();
+        }
     }
 
     /// Starts a plan of the program mix: the [`look`](Self::look) calls until the next
@@ -593,6 +649,10 @@ impl LiveSources {
             _ => {
                 *versions = versions.saturating_add(1);
                 let frame = Frame::from_video(Arc::clone(&video), *versions)?;
+                let frame = match running.extent {
+                    Some(extent) => frame.placed_at(extent),
+                    None => frame,
+                };
                 running.shown = Some((video, frame.clone()));
                 frame
             }
@@ -860,11 +920,17 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                 }
             }
             Next::Build(job) => {
-                let result = job.registry.create(&job.kind, &job.settings, &job.ctx);
+                let mut result = job.registry.create(&job.kind, &job.settings, &job.ctx);
+                // Drawn at its density here, off the collection lock, as it was created.
+                let extent = result
+                    .as_mut()
+                    .ok()
+                    .and_then(|source| source.set_density(job.density));
                 let built = Built {
                     source_id: job.source_id,
                     ticket: job.ticket,
                     result,
+                    extent,
                 };
                 let alive = host.upgrade().map(|host| host.install(built)).is_some();
                 lock(&worker.queue).building -= 1;
@@ -875,6 +941,18 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
             }
         }
     }
+}
+
+/// The density a source drawn `scale` times enlarged is drawn at: 1 up to a scale of 1,
+/// then the next quarter step of a doubling at or above it (1.19, 1.41, 1.68, 2 and so
+/// on), up to [`jstream_sources::MAX_DENSITY`].
+fn density_for(scale: f32) -> f32 {
+    if scale.is_nan() || scale <= 1.0 {
+        return 1.0;
+    }
+    let steps = (scale.log2() * 4.0).ceil();
+    2f32.powf(steps / 4.0)
+        .clamp(1.0, jstream_sources::MAX_DENSITY)
 }
 
 /// How long to wait from `now` until `due`: at least a millisecond, so a wait never
@@ -910,5 +988,23 @@ impl MediaClock for SystemClock {
     fn now(&self) -> MediaTime {
         let micros = i64::try_from(self.origin.elapsed().as_micros()).unwrap_or(i64::MAX);
         MediaTime::new(micros, Timebase::MICROS)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::density_for;
+
+    #[test]
+    fn a_density_is_the_next_quarter_step_of_a_doubling() {
+        for scale in [f32::NAN, -3.0, 0.0, 0.5, 1.0] {
+            assert_eq!(density_for(scale), 1.0, "{scale}");
+        }
+        assert_eq!(density_for(1.01), 2f32.powf(0.25));
+        assert_eq!(density_for(2.0), 2.0);
+        assert_eq!(density_for(2.1), 2f32.powf(1.25));
+        assert_eq!(density_for(6.0), 2f32.powf(2.75));
+        assert_eq!(density_for(9.0), jstream_sources::MAX_DENSITY);
+        assert_eq!(density_for(f32::INFINITY), jstream_sources::MAX_DENSITY);
     }
 }

@@ -599,12 +599,8 @@ impl Compositor {
                     detail: format!("{} is not a finite value in 0..=1", item.opacity),
                 });
             }
-            let quad = place::quad(
-                item.image.width(),
-                item.image.height(),
-                item.placement,
-                item.crop,
-            )?;
+            let (width, height) = item.image.extent();
+            let quad = place::quad(width, height, item.placement, item.crop)?;
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }
