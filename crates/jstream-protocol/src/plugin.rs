@@ -458,7 +458,8 @@ pub enum Reach {
 /// - every asset reference (`{"type":"asset",…}`) is a [`Reach::File`] under the
 ///   `absolute` root, and [`Reach::Unchecked`] under `collection` or `app`;
 /// - every string value that starts as an absolute URL does, `scheme://` after
-///   [`url_text`]'s clean-up, is a [`Reach::Host`] when it parses as an `http`, `https`,
+///   the clean-up a URL parser or the engine applies (outer spaces, control characters
+///   and white space trimmed, tabs and newlines removed), is a [`Reach::Host`] when it parses as an `http`, `https`,
 ///   `ws` or `wss` URL with a host and no credentials, and [`Reach::Unchecked`] otherwise.
 ///   Text with a `://` later in it ("Follow me at https://…") is no URL a parser or
 ///   the engine would load, so it reaches nothing.
