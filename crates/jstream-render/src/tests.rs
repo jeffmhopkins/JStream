@@ -186,6 +186,48 @@ fn crop_keeps_the_uncut_texels() {
 }
 
 #[test]
+fn an_image_is_placed_at_its_extent() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    // 8x4 texels, each row red for its first quarter and green for the rest, standing
+    // for a 4x2 image (ADR-0071): it places as 4x2, and its crop counts in those pixels.
+    let mut pixels = Vec::new();
+    for _row in 0..4 {
+        for x in 0..8 {
+            let rgba = if x < 4 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 255, 0, 255]
+            };
+            pixels.extend_from_slice(&rgba);
+        }
+    }
+    let mut image = opened.compositor.upload_rgba8(8, 4, &pixels).unwrap();
+    assert_eq!(image.extent(), (8, 4));
+    image.set_extent(FrameSize::new(4, 2).unwrap());
+    assert_eq!((image.width(), image.height()), (8, 4));
+    // One extent pixel off the left is two texels: what is left is one pixel of red
+    // and two of green, three pixels wide.
+    let items = [item(
+        &image,
+        Placement::IDENTITY,
+        Crop {
+            left: 1,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        },
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 4, 2, Color::BLACK, &items);
+    near(&snapshot, 0, 0, [255, 0, 0, 255], 0);
+    near(&snapshot, 1, 1, [0, 255, 0, 255], 0);
+    near(&snapshot, 2, 0, [0, 255, 0, 255], 0);
+    near(&snapshot, 3, 1, [0, 0, 0, 255], 0);
+}
+
+#[test]
 fn integer_scale_covers_the_destination() {
     let Some(mut opened) = open() else {
         return;

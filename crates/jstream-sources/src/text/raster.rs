@@ -14,8 +14,20 @@ use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::ops::Range;
 
-/// Lays `text` out with `style` in `font`, then draws it. Returns the frame's size and
-/// its packed RGBA8 pixels, straight alpha.
+/// What [`render`] draws.
+pub(crate) struct Drawn {
+    /// The frame's size in pixels.
+    pub(crate) size: FrameSize,
+    /// The size the frame stands for: its size at a density of 1, which it is placed at
+    /// (ADR-0071).
+    pub(crate) extent: FrameSize,
+    /// Packed RGBA8, straight alpha.
+    pub(crate) rgba: Vec<u8>,
+}
+
+/// Lays `text` out with `style` in `font`, then draws it `density` times as many pixels
+/// each way as `style` sizes it: the layout, its line breaks and the frame's own size
+/// (its [`Drawn::extent`]) are the same at any density, and only the drawing is finer.
 ///
 /// # Errors
 /// [`SourceError::Setting`] naming `text` when the drawn text would be larger than
@@ -24,8 +36,10 @@ pub(crate) fn render(
     font: &FontRef<'_>,
     text: &str,
     style: &Style,
+    density: f32,
     limits: &Limits,
-) -> Result<(FrameSize, Vec<u8>), SourceError> {
+) -> Result<Drawn, SourceError> {
+    let k = density;
     // `size` is the em size in pixels, which is skrifa's pixels per em.
     let size = Size::new(style.size);
     let metrics = font.metrics(size, LocationRef::default());
@@ -69,11 +83,12 @@ pub(crate) fn render(
         };
         let baseline = metrics.ascent + line_step * i as f32;
         for (id, x) in line {
-            let mut pen = Pen::new(x + offset, baseline);
+            // Drawn at the density: positions and the em size scaled alike.
+            let mut pen = Pen::new((x + offset) * k, baseline * k);
             // A glyph with no outline (a space) or one the font can't draw adds no ink.
             let drawn = outlines.get(id).map(|g| {
                 g.draw(
-                    DrawSettings::unhinted(size, LocationRef::default()),
+                    DrawSettings::unhinted(Size::new(style.size * k), LocationRef::default()),
                     &mut pen,
                 )
             });
@@ -87,20 +102,27 @@ pub(crate) fn render(
     }
 
     // The frame holds the text box with its padding, and every glyph's ink with the
-    // outline around it, which may reach past the box.
+    // outline around it, which may reach past the box. Its bounds are whole pixels at a
+    // density of 1, its extent, and the drawing covers them `k` times over.
     let pad = style.padding as f32;
     let reach = style.outline_width as f32;
     let (mut left, mut top) = (-pad, -pad);
     let (mut right, mut bottom) = (box_width + pad, box_height + pad);
     for glyph in &glyphs {
-        left = left.min(glyph.min.x - reach);
-        top = top.min(glyph.min.y - reach);
-        right = right.max(glyph.max.x + reach);
-        bottom = bottom.max(glyph.max.y + reach);
+        left = left.min(glyph.min.x / k - reach);
+        top = top.min(glyph.min.y / k - reach);
+        right = right.max(glyph.max.x / k + reach);
+        bottom = bottom.max(glyph.max.y / k + reach);
     }
     let (left, top) = (left.floor(), top.floor());
-    let width = side(right.ceil() - left, limits)?;
-    let height = side(bottom.ceil() - top, limits)?;
+    let extent = FrameSize::new(
+        side(right.ceil() - left, limits)?,
+        side(bottom.ceil() - top, limits)?,
+    )?;
+    let width = side((extent.width() as f32 * k).ceil(), limits)?;
+    let height = side((extent.height() as f32 * k).ceil(), limits)?;
+    let (left, top) = (left * k, top * k);
+    let reach = reach * k;
     // The output and the fill coverage, and with an outline its distance field. The
     // distance transform's working rows and each glyph's raster are smaller.
     let per_pixel: u64 = if style.outline_width > 0 { 12 } else { 8 };
@@ -126,7 +148,11 @@ pub(crate) fn render(
         px = over(premultiplied(style.color, coverage), px);
         rgba.extend_from_slice(&straight(px));
     }
-    Ok((FrameSize::new(width, height)?, rgba))
+    Ok(Drawn {
+        size: FrameSize::new(width, height)?,
+        extent,
+        rgba,
+    })
 }
 
 /// Splits one paragraph's glyphs (ID, advance, whether it is a space) into lines no
@@ -223,10 +249,14 @@ impl Pen {
     /// Rasterises the glyph and adds its coverage to `fill`, a `w` by `h` frame whose
     /// top left is at `frame` in layout pixels.
     fn draw(&self, fill: &mut [f32], w: usize, h: usize, frame: Point) {
-        // Whole pixels, so each raster pixel lands on one frame pixel.
-        let corner = point(self.min.x.floor(), self.min.y.floor());
-        let gw = (self.max.x.ceil() - corner.x) as usize;
-        let gh = (self.max.y.ceil() - corner.y) as usize;
+        // Whole pixels from the frame's corner, which a density puts between pixels,
+        // so each raster pixel lands on one frame pixel.
+        let corner = point(
+            (self.min.x - frame.x).floor() + frame.x,
+            (self.min.y - frame.y).floor() + frame.y,
+        );
+        let gw = (self.max.x - corner.x).ceil() as usize;
+        let gh = (self.max.y - corner.y).ceil() as usize;
         if gw == 0 || gh == 0 {
             // A flat outline covers nothing.
             return;
@@ -242,7 +272,10 @@ impl Pen {
                 }
             }
         }
-        let (gx, gy) = ((corner.x - frame.x) as usize, (corner.y - frame.y) as usize);
+        let (gx, gy) = (
+            (corner.x - frame.x).round() as usize,
+            (corner.y - frame.y).round() as usize,
+        );
         raster.for_each_pixel_2d(|x, y, c| {
             let (x, y) = (gx + x as usize, gy + y as usize);
             if x < w && y < h {

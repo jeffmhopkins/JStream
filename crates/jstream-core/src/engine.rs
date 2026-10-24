@@ -2718,7 +2718,8 @@ impl State {
     /// to re-plan then. The program mix shows the program scene (ADR-0030), or the
     /// transition running toward it (ADR-0029), whose length in milliseconds it returns;
     /// a transition that has ended is let go. The shot lists the displays and windows the
-    /// program and every mix capture.
+    /// program and every mix capture. A source the shot shows enlarged is drawn again at
+    /// the density that keeps it sharp, when its kind can be (ADR-0071).
     fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
@@ -2744,6 +2745,7 @@ impl State {
             &assets,
         );
         live.end_plan();
+        live.densities(&planning.shot.scales());
         if let Some(sound) = live.take_audio() {
             audio.sync_live(sound);
         }

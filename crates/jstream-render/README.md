@@ -15,7 +15,7 @@ a single canvas.
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0071-sources-drawn-at-their-shown-size.md", "crates/jstream-platform/README.md#gpu-frames"]
 -->
 
 One scene, composited on the GPU with wgpu
@@ -46,7 +46,14 @@ and calls this crate.
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
 
   Both depend on the image's size, which is runtime state, so the compositor evaluates
-  the placement on every `render`.
+  the placement on every `render`. That size is the image's **extent**
+  (`Image::extent`): its pixel size, unless the caller set another with
+  `Image::set_extent` or `ResourceCache::set_extent`, for an image drawn with more
+  pixels than the size it stands for, such as a text source drawn sharp for an
+  enlarged item
+  ([ADR-0071](../../docs/adr/0071-sources-drawn-at-their-shown-size.md)). Crops, a
+  legacy scale and a fit mode's aspect ratio all count in the extent, and the texture
+  is sampled across it.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
@@ -348,7 +355,7 @@ across the quad are correct; a non-neutral 3D field would need perspective-corre
 UVs, and is refused until M3.
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
-quad. For a source of size `(sw, sh)` and crop `(left, top, right, bottom)` that
+quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
 function:
 
 - takes `cw = sw - left - right`, `ch = sh - top - bottom`, and skips when either is

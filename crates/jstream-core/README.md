@@ -902,6 +902,23 @@ context the page shows its stand-in, transparent. `LiveSources::audio` lists eve
 running source's own audio (`Source::audio`, heard whether or not it is shown) for
 *Audio sources*.
 
+A source the program mix shows enlarged is drawn at a density, when its kind can be
+(`Source::set_density`, the `text` kind,
+[ADR-0071](../../docs/adr/0071-sources-drawn-at-their-shown-size.md)). After each plan
+`Shot::scales` measures how much each frame its passes draw is enlarged: canvas pixels
+per pixel of the frame's extent, from the placements the collection holds (not a
+gesture's live values, so a drag is measured once it commits), the most of any item, in
+the program's passes and the video mixes'. A source a video chain runs over counts as 1,
+since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
+into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 8) and,
+when that differs from the source's density, queues a build at it: the thread creates the
+source and sets its density there, and `install` keeps the extent it returned. The
+source's frames then reach the plan as `Frame`s placed at that extent, and `compose`
+gives their upload that extent (`ResourceCache::set_extent`), as the chains give their
+layers their input's. A source with a build in flight is not asked for another; the plan
+that installs it measures again. A source drawn only in a transition's tracks, or not at
+all, keeps its density.
+
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, and each running source's own
 audio, or none while the source's audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live

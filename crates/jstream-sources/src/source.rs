@@ -2,7 +2,7 @@
 
 use crate::{AudioScopes, CaptureSpec, MediaAudio, SourceError};
 use jstream_browser::BrowserBackend;
-use jstream_media::{AudioFormat, MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_media::{AudioFormat, FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame, MediaDecoders};
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
 use std::fs::File;
@@ -61,6 +61,19 @@ pub trait Source: Send {
     /// [`SourceError::NotLive`] when a non-live parameter changed, and
     /// [`SourceError::Setting`] when a value doesn't have its descriptor's type.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
+
+    /// Asks the source to draw its frames `density` times as many pixels each way as its
+    /// own size, so an item that shows it enlarged stays sharp (ADR-0071,
+    /// docs/adr/0071-sources-drawn-at-their-shown-size.md). Returns that own size, the
+    /// size its frames are placed at whatever their pixels, for a kind that draws at a
+    /// density; `None`, the default, for a kind whose frames are their own size whatever
+    /// is asked. Drawing again can take as long as an update. The `text` kind draws at
+    /// densities from 1 to [`MAX_DENSITY`](crate::MAX_DENSITY), lower when
+    /// the frame would be over its limits.
+    fn set_density(&mut self, density: f32) -> Option<FrameSize> {
+        let _ = density;
+        None
+    }
 
     /// What the platform captures for this source, for a `display` or `window` source;
     /// `None`, the default, for a source that makes its own frames. A capture source's
