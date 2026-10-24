@@ -76,3 +76,5 @@ jstream-protocol = { workspace = true, features = ["fixtures"] }
 # Decodes the preview stream's JPEGs in its tests; already in the tree for the image
 # source (`jstream-sources`).
 zune-jpeg.workspace = true
+# The built-in kinds' snapshot, reviewed like an API diff (ADR-0025).
+insta.workspace = true
