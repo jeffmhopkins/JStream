@@ -222,7 +222,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    crop too (#641). The item's UVs and UV bounds are mapped into the chain's. An image
    keeps a chain per crop it is drawn with, the four most recently used. Each further
    level is one pass that samples the level above at its own texel centres, so the
-   linear filter averages 2×2 texels. Each `Image` counts its changes, and a chain is
+   linear filter averages 2×2 texels. Each `Image` counts its changes (its clones share
+   the count and the chains, as they share the texture), and a chain is
    rebuilt when the count moved since its last build: `rewrite_rgba8` marks an upload,
    `render_into` the layer it drew into, and `ResourceCache::import` an import it hands
    a new frame (one whose hold or info, its presentation time included, differs from
@@ -324,7 +325,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
-| Mip chains (one per crop, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D with that crop; dropped with it, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
+| Mip chains (one per crop, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `Nv12Converter` pipelines and layout | The converter |
