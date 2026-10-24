@@ -200,21 +200,25 @@ own folder or below it, compared by name and again after resolving links; popups
 shown. The control server refuses a page's WebSocket upgrade, since its `Origin` is
 foreign or `null`.
 
-**Controls (in flight, #549):** a page from a public origin is also refused loopback,
-private, link-local and local-name targets, redirects to them included, unless its
-source sets `local_network`.
+**Controls (#549, #721):** a page from a public origin is also refused loopback,
+private, link-local and local-name targets, redirects to them included, unless it is
+the source's own origin and the source sets `local_network`. It is decided per request
+by the origin that makes it, so the opt-in never covers a third-party frame, and a
+file or blank page whose main frame navigates to the web loses its own access.
 
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt except
-Chromium's local network access one, which it grants only to a page its request policy
-already lets make local requests (`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
+Chromium's local network access one, which it grants only to a requesting origin its
+request policy already lets make local requests (`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
 a focused page's clipboard writes, never reaches that handler; the helper never focuses a
 page or sends it input (#347).
 The local-network refusal reads only the URL's host: a public name that resolves to a
 local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes it, and so does any
-request the helper's request handler doesn't see, such as a service worker's. Chromium's
+request the helper's request handler doesn't see, such as a service worker's. CEF
+names opaque origins alike, so a sandboxed or `data:` frame that a third-party frame
+inside a local file page creates counts as the file page's (#721). Chromium's
 Local Network Access checks see both at the network layer and ask that permission
-handler first, so for a page that didn't opt in they are refused there; that Chromium
+handler first, so for an origin the policy refuses they are refused there; that Chromium
 enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run
 (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).

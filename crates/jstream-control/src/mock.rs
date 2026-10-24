@@ -3321,6 +3321,9 @@ mod tests {
                 Edit::SourceDelete {
                     source_id: SourceId::new("mic"),
                 },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("screen"),
+                },
                 Edit::OutputSetEncoder {
                     output_id: OutputId::new("yt"),
                     profile_id: Some(EncoderProfileId::new("hq")),
@@ -3616,6 +3619,7 @@ mod tests {
                 ("desk", "Desktop"),
                 ("mic", "Microphone"),
                 ("mic_copy", "Microphone copy"),
+                ("screen", "Screen"),
             ]
         );
         assert_eq!(sources[3].kind, sources[2].kind);

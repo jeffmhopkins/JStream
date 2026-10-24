@@ -44,7 +44,7 @@ mod youtube_chat;
 
 pub use audio::AudioTarget;
 pub use browser::opens_browser;
-pub use capture::CaptureSpec;
+pub use capture::{CaptureSpec, webcam_device};
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use error::SourceError;
 pub use image::{StillImage, decode_still};

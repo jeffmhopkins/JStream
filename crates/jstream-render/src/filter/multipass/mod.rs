@@ -25,6 +25,31 @@ mod outline;
 mod pixelate;
 mod video_delay;
 
+/// A `size` x `size` transparent frame with an opaque `colour` square at `at..at + side`
+/// on both axes: a shape for the tests of the filters that draw around one.
+#[cfg(test)]
+fn square(
+    opened: &crate::tests::Opened,
+    size: u32,
+    at: u32,
+    side: u32,
+    colour: [u8; 4],
+) -> crate::image::Image {
+    let pixels: Vec<[u8; 4]> = (0..size)
+        .flat_map(|y| {
+            (0..size).map(move |x| {
+                let inside = |v: u32| (at..at + side).contains(&v);
+                if inside(x) && inside(y) {
+                    colour
+                } else {
+                    [0, 0, 0, 0]
+                }
+            })
+        })
+        .collect();
+    crate::filter::testing::image(opened, size, &pixels)
+}
+
 use jstream_protocol::{KindDescriptor, Settings};
 
 use crate::error::RenderError;
