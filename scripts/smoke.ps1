@@ -53,12 +53,19 @@ param(
 Set-StrictMode -Version 3
 $ErrorActionPreference = 'Stop'
 
+# A refusal before the run: the message on stderr, then exit 2. Not Write-Error, which
+# throws under ErrorActionPreference Stop before `exit 2` runs, so the script exited 1.
+function Stop-Usage([string]$Message) {
+    [Console]::Error.WriteLine("smoke.ps1: $Message")
+    exit 2
+}
+
 $OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or $IsWindows
 $Exe = ''
 if ($OnWindows) { $Exe = '.exe' }
 # PowerShell 5.1 has no $IsMacOS; it runs only on Windows.
 if (-not $OnWindows -and $IsMacOS) {
-    Write-Error 'macOS: going live is checked by hand, #644'; exit 2
+    Stop-Usage 'macOS: going live is checked by hand, #644'
 }
 $Repo = Split-Path -Parent $PSScriptRoot
 # The output the run creates. Its key lives in Credential Manager as
@@ -67,14 +74,14 @@ $OutputId = 'smoke_test'
 # The local sink's stream key: a placeholder, not a secret.
 $SinkKey = 'smoke'
 
-if ($RtmpUrl -and -not $KeyFile) { Write-Error '-RtmpUrl needs -KeyFile'; exit 2 }
-if ($KeyFile -and -not $RtmpUrl) { Write-Error '-KeyFile needs -RtmpUrl'; exit 2 }
+if ($RtmpUrl -and -not $KeyFile) { Stop-Usage '-RtmpUrl needs -KeyFile' }
+if ($KeyFile -and -not $RtmpUrl) { Stop-Usage '-KeyFile needs -RtmpUrl' }
 if ($RtmpUrl -and -not $OnWindows) {
-    Write-Error '-RtmpUrl needs Windows: on Linux the daemon does not publish yet'; exit 2
+    Stop-Usage '-RtmpUrl needs Windows: on Linux the daemon does not publish yet'
 }
 if ($KeyFile) {
     if (-not (Test-Path -LiteralPath $KeyFile -PathType Leaf)) {
-        Write-Error "-KeyFile: no such file: $KeyFile"; exit 2
+        Stop-Usage "-KeyFile: no such file: $KeyFile"
     }
     $KeyFile = (Resolve-Path -LiteralPath $KeyFile).Path
 }
