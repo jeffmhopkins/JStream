@@ -2101,6 +2101,47 @@ mod tests {
         );
     }
 
+    /// DOCS#rules: a `lint:` entry must be set above `allow` in `[workspace.lints]`, and a
+    /// `deny:` entry must name a section of `deny.toml` (#740).
+    #[test]
+    fn lint_and_deny_entries_must_be_configured() {
+        let rule = |id: &str, entry: &str| {
+            format!(
+                "<a id=\"{id}\"></a>\n### {id}: Thing\n<!-- @rule\nstatus = \"active\"\nenforced_by = [\"{entry}\"]\napplies_to = [\"crates/**\"]\n-->\nRule.\n\n"
+            )
+        };
+        let rules = format!(
+            "<!-- @doc\nid = \"R\"\nkind = \"normative\"\nstatus = \"active\"\n-->\n{}{}{}{}{}{}{}{}{}",
+            rule("R-X-001", "lint:missing_docs"),
+            rule("R-X-002", "lint:clippy::unwrap_used"),
+            rule("R-X-003", "lint:clippy::print_stdout"),
+            rule("R-X-004", "lint:clippy::not_configured"),
+            rule("R-X-005", "lint:unwrap_used"),
+            rule("R-X-006", "deny:bans"),
+            rule("R-X-007", "deny:nope"),
+            // A tool other than clippy has its own table (#742 review B1).
+            rule("R-X-008", "lint:rustdoc::broken_intra_doc_links"),
+            rule("R-X-009", "lint:broken_intra_doc_links"),
+        );
+        let cargo = "[workspace]\nmembers = []\n\n[workspace.lints.rust]\nmissing_docs = \"warn\"\n\n[workspace.lints.clippy]\nunwrap_used = { level = \"deny\", priority = 1 }\nprint_stdout = \"allow\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"warn\"\n";
+        let deny = "[advisories]\nversion = 2\n\n[bans]\nmultiple-versions = \"warn\"\n";
+        let mut files = REGISTRIES.to_vec();
+        files.extend([
+            ("docs/R.md", rules.as_str()),
+            ("Cargo.toml", cargo),
+            ("deny.toml", deny),
+        ]);
+        let f = Fixture::new("lint-deny-entries", &files);
+        let bad = f.diags("`enforced_by` entry `");
+        let ids: Vec<&str> = bad.iter().filter_map(|d| d.split('`').nth(1)).collect();
+        // `print_stdout` is `allow`; `unwrap_used` is a clippy lint, not a rustc one.
+        assert_eq!(
+            ids,
+            ["R-X-003", "R-X-004", "R-X-005", "R-X-007", "R-X-009"],
+            "{bad:?}"
+        );
+    }
+
     /// R-DOC-008: crate roots list exactly the sections covering the crate; whole-doc
     /// references (ADRs) are allowed anywhere; every reference must resolve; retired docs
     /// create no obligations.
