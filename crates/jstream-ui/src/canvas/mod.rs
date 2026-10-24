@@ -20,6 +20,7 @@ pub mod transform;
 
 use crate::app::SessionContext;
 use crate::dock::PanelId;
+use crate::item_menu;
 use crate::menu::{Entry, Menus};
 use crate::panels::add_source::AddSourceDialog;
 use crate::store::Studio;
@@ -618,11 +619,38 @@ pub fn Canvas() -> impl IntoView {
     // A right-click opens the canvas menu: the frame's, or the margin's around it.
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
+    let item_cx = item_menu::Context::from_page();
     let on_context = move |event: ev::MouseEvent| {
         let Some(menus) = menus else {
             return;
         };
-        let on_frame = canvas_at(event.client_x(), event.client_y())
+        let at = canvas_at(event.client_x(), event.client_y());
+        // On an item: the selected items' menu, after selecting the item alone unless it
+        // is already selected.
+        let hit = at.and_then(|(_, point)| {
+            layout.with_untracked(|l| {
+                let l = l.as_ref()?;
+                let hit = transform::topmost_at(l.boxes(), point)?.clone();
+                Some((l.scene.as_ref()?.0.clone(), hit))
+            })
+        });
+        if let (Some(cx), Some((scene_id, hit))) = (item_cx, hit) {
+            if !chosen.get_untracked().contains(&hit) {
+                studio.select_item(Some(hit));
+            }
+            let items = chosen.get_untracked();
+            let entries = item_menu::entries(
+                cx,
+                &scene_id,
+                &items,
+                item_menu::Scope::Canvas(Rc::new(select_all)),
+            );
+            if !entries.is_empty() {
+                menus.open(&event, entries);
+                return;
+            }
+        }
+        let on_frame = at
             .zip(layout.with_untracked(|l| l.as_ref().map(|l| l.canvas)))
             .is_some_and(|((_, p), canvas)| {
                 p.x >= 0.0

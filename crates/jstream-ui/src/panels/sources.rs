@@ -1,12 +1,14 @@
 //! The sources list: the selected scene's items, top of the stack first, each named by
 //! the source it places. An item is selected for the properties form, shown or hidden,
 //! moved up or down the stack, or removed from the scene; its source is renamed, or
-//! deleted everywhere through `delete.plan`. A right-click opens the panel's menu, whose
-//! Add source opens the Add source dialog (`add_source.rs`).
+//! deleted everywhere through `delete.plan`. A right-click on a row opens the selected
+//! items' menu (`item_menu.rs`), and one on the panel's empty space opens the panel's
+//! menu, whose Add source opens the Add source dialog (`add_source.rs`).
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
 use crate::app::SessionContext;
+use crate::item_menu;
 use crate::menu::{Entry, Menus};
 use crate::panels::add_source::AddSourceDialog;
 use crate::panels::confirm::{Confirm, Pending};
@@ -63,6 +65,7 @@ pub fn Sources() -> impl IntoView {
     let pending = RwSignal::new(None::<Pending>);
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
+    let item_cx = item_menu::Context::from_page();
 
     let scene = move || studio.selection.with(|s| s.scene.clone());
     let all_rows = move || {
@@ -183,9 +186,29 @@ pub fn Sources() -> impl IntoView {
             let name = name.clone();
             move |_| ask_delete(id.clone(), name.clone())
         };
+        // A right-click on the row opens the selected items' menu, after selecting the
+        // item alone unless it is already selected.
+        let on_row_context = {
+            let id = item_id.clone();
+            move |event: leptos::ev::MouseEvent| {
+                let (Some(menus), Some(cx), Some(scene_id)) = (menus, item_cx, scene()) else {
+                    return;
+                };
+                if !studio.selection.with_untracked(|s| s.contains(&id)) {
+                    studio.select_item(Some(id.clone()));
+                }
+                let items: Vec<ItemId> = studio
+                    .selection
+                    .with_untracked(|s| s.items().cloned().collect());
+                let entries = item_menu::entries(cx, &scene_id, &items, item_menu::Scope::Objects);
+                if !entries.is_empty() {
+                    menus.open(&event, entries);
+                }
+            }
+        };
         let shown = name.clone();
         view! {
-            <li class="row" class:selected=selected class:hidden=!visible>
+            <li class="row" class:selected=selected class:hidden=!visible on:contextmenu=on_row_context>
                 <button
                     class="eye"
                     title=if visible { "Hide" } else { "Show" }

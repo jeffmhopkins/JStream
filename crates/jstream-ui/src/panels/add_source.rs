@@ -207,6 +207,12 @@ const ORDER: [&str; 13] = [
     "spectrum",
 ];
 
+/// Whether a source of this built-in kind draws a picture: every kind but the
+/// audio-only ones. A kind the prototype doesn't know is taken to have one.
+pub fn has_picture(kind: &str) -> bool {
+    known(kind).is_none_or(|(.., native)| native.is_some())
+}
+
 /// The types to offer: every source kind `kind.list` reported, the kinds of existing
 /// sources it didn't (which can be placed again but not created), then Scene, grouped
 /// and in the prototype's order. A kind the prototype lacks goes under Other, by name,
@@ -927,6 +933,12 @@ mod tests {
         assert_eq!(types[1].description, "A webcam or capture card.");
         assert_eq!(types[1].icon, "webcam");
         assert_eq!(types[2].native, None, "audio input has no picture");
+        assert!(!has_picture("audio_input"));
+        assert!(has_picture("webcam"));
+        assert!(
+            has_picture("youtube_chat"),
+            "an unknown kind is taken to draw"
+        );
         // An engine that lists no kinds still offers Scene.
         assert_eq!(names(&catalogue(&[], &[])), [("Scene", Category::Scenes)]);
     }

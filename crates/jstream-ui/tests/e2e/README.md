@@ -35,7 +35,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   Basic, the token as the password, as a person's browser does when the daemon serves
   the UI; the connect form's token field can then stay empty. `connect` opens the page
   and connects; `disconnect` disconnects through the header's File menu;
-  `openAddSource` opens the Add source dialog from the Scene objects panel's menu and
+  `openAddSource` opens the Add source dialog from the Scene objects panel's menu, by a
+  right-click just under its last row, and
   `nestScene` nests a scene through it; `rev` reads the revision the header last heard
   of; `showPanel` makes sure a docked panel's tab is the shown one.
 - **Console errors fail a test.** Every console error and uncaught exception on a
@@ -99,7 +100,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   panel's menu opens the Add source dialog, which places the seed's Backdrop again as
   a reference 40 px down and right, selected (the mock lists no kinds, so its Color
   type can't create); a scene nests once and isn't offered again, and the backdrop
-  cancels the dialog.
+  cancels the dialog. An item row's menu lists the item menu's lines, Send to back
+  restacks in one edit and Stretch to canvas fills the canvas; on the canvas the menu
+  ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
+  items get a counted head with the duplicates disabled, and Remove from scene removes
+  both; a nested scene's menu opens it; a scene row's Rename renames, and the Scenes
+  panel's New scene adds one with its name field focused.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
   preview goes to program with Transition, and the old program scene comes back on
   preview; Transition and Cut are off while preview is the program scene; a value the

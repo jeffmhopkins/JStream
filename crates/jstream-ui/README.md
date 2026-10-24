@@ -57,7 +57,9 @@ Contents ([Design](#design) explains the choices):
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
-  `Menus`, the context that opens it with a list of `Entry`s), `dialog.rs` (`Modal`, the
+  `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
+  selected items' entries, which the canvas and the sources list share, with the
+  layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`, the
   modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
   (`sources.rs`), the Add source dialog (`add_source.rs`: `AddSource` and the
@@ -148,8 +150,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   with a check, a shortcut hint or a submenu, heads and separators) at the pointer, and
   the menu keeps itself on screen, opens submenus on hover or the right arrow, moves
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
-  Escape or Tab. The canvas opens the empty canvas or margin menu, and the sources list
-  opens its panel's menu. `dialog.rs` is the modal frame: Escape and the backdrop
+  Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
+  sources lists their panels' menus, and a scene row its scene's (Rename, New scene and
+  Delete scene work; the rest waits on folders, keyframes, transitions and the scene
+  Properties dialog). A right-click on an item, on the canvas or its row, selects it
+  unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
+  (the Inspector, for now), the Audio check (`source.set_audio`), layer order
+  (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
+  canvas and Reset rotation (`item.set_geometry`), Clear crop, Duplicate as reference
+  (`item.add` of the same source, 40 pixels down and right, just above the original)
+  or as clone (`source.duplicate` first), and Remove from scene, each one batch. A
+  nested scene and an audio-only source get the prototype's shorter menus; the first
+  can be opened. The scene and object lists fill their dock group, so the space under
+  their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the backdrop
   cancel, and Enter presses the button marked `data-primary`. The Add source dialog
   (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the source
   kinds `kind.list` reports, under the prototype's groups, names, icons and
@@ -331,7 +344,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
-  the Add source dialog's types and edits, the menu's placement and keys, the form's
+  the Add source dialog's types and edits, the menu's placement and keys, the item
+  menu's layer moves and arrangements, the form's
   sections, parsing and checks); only the components
   themselves need a browser.
 - **Debug bundle size.** A leptos view's type spells out every element and closure
@@ -424,8 +438,8 @@ browser, and `mod.rs` is the component.
   upright box's resized edges snap the same way. Ctrl moves without snapping, a
   rotated box never snaps, and the Snapping button in the floating tools (top right)
   turns it off. So does the canvas's right-click menu: on the frame it offers Select
-  all, the snapping toggle and Add source, and on the margin around the frame the
-  scene's menu ([Design](#design)).
+  all, the snapping toggle and Add source, on the margin around the frame the scene's
+  menu, and on an item the selected items' menu ([Design](#design)).
 - **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
   draws the gesture locally, and on release one batch with an `item.set_geometry` per
   item it changed commits it, so each gesture (and each nudge) is one undo step. The

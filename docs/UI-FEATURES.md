@@ -57,8 +57,8 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
 | [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 9 | 4 | 1 | 4 | 0 |
-| [Context menus](#menus) | 8 | 0 | 3 | 3 | 2 | 0 |
+| [Canvas](#canvas) | 18 | 10 | 4 | 0 | 4 | 0 |
+| [Context menus](#menus) | 8 | 0 | 5 | 1 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 1 | 2 | 2 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
 | [Scene objects panel](#objects) | 9 | 1 | 3 | 4 | 1 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **30** | **28** | **38** | **33** | **1** |
+| **Total** | **130** | **31** | **30** | **35** | **33** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -164,7 +164,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Move/resize and Snapping are built; Crop waits on CV-08. |
 | CV-12 | Nudge | Arrows move 1px, Shift 10px. | ✅ | |
 | CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | 🟡 | Selects the item and shows the Inspector, since the Properties dialog (DL-02) isn't built yet; a reference doesn't open its source separately. |
-| CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ⬜ | |
+| CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ✅ | On an item, the selected items' menu, after selecting the item alone unless it was selected; on the frame and the margin, theirs ([CM-02](#menus)). |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend and no 3D yet (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | 🔒 | Keyframe scenes in the protocol are K1. |
 | CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | 🔒 | E2b (#317). |
@@ -173,20 +173,21 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 <a id="menus"></a>
 ## Context menus
 <!-- @section
-covers = ["crates/jstream-ui/src/menu.rs"]
+covers = ["crates/jstream-ui/src/menu.rs", "crates/jstream-ui/src/item_menu.rs"]
 -->
 
 Spec: [workspace › context menus](../design/ui-prototype/spec-workspace.md#context-menus-and-submenus).
-One right-click menu at a time (`menu.rs`): the canvas and the Scene objects panel open
-theirs; the item, scene row and Scenes panel menus are still to build.
+One right-click menu at a time (`menu.rs`). The canvas, the Scenes and Scene objects
+panels and their rows open theirs; the selected items' menu (`item_menu.rs`) is the same
+on the canvas and in Scene objects but for its last lines.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | 🟡 | Built but for the colour swatch column, which comes with the label menus that use it. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
-| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | The empty canvas and margin menus are built. On the margin, Pop out, Transition in and out, Scene properties and Edit scene filters show disabled until [DL-07](#dialogs), [CM-07](#menus), [DL-03](#dialogs) and [FL-06](#filters). A right-click on an item opens the empty canvas menu until the item menu is built. |
-| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | ⬜ | Transitions, keyframes and folders are 🔒 until T1 and K1; the menu shows what the engine supports. |
-| CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | ⬜ | |
-| CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Scene objects' menu is built; New group (OB-04) and Paste (decision register D43) show disabled. The Scenes panel's menu is still to build. |
+| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties shows the Inspector until [DL-02](#dialogs). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions, Edit filters and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus), [FL-06](#filters) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
+| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Rename, New scene and Delete scene work, Rename and Delete though the prototype shows them disabled. Transitions and keyframes wait on T1 and K1, folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
+| CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | 🟡 | The selected items' menu of [CM-02](#menus), ending with Add source and New group instead of Select all; New group waits on [OB-04](#objects). |
+| CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built. New folder ([SC-06](#scenes)), New group ([OB-04](#objects)) and the two Pastes (decision register D43) show disabled. |
 | CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
 | CM-07 | Transition in/out submenus | Default (preset), then each preset, then "Manage presets…". | 🔒 | T1 (#260). |
 | CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🔒 | K1 (#319). |
@@ -224,7 +225,7 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-02 | "program" badge | The scene on program shows "program" in red after its name. | 🟡 | Built as a "Program" pill; restyle. |
 | SC-03 | Search | "Search scenes" filters by name, keeping parents of matches. | ⬜ | |
 | SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Reordering exists as ▲/▼ buttons. Into a folder is `scene.set_folder` (SC-06). |
-| SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | 🟡 | Built today with inline controls (double-click rename, ✕, "New scene name" field); they move to menus and keys. |
+| SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | 🟡 | Rename, New scene and Delete scene are in the right-click menus ([CM-03](#menus), [CM-05](#menus)), and still in the inline controls (double-click rename, ✕, "New scene name" field) until the restyle; F2 and Del have no key handlers, as in the prototype. |
 | SC-06 | Folders | Folders organise scenes; collapsible. | ⬜ | `folder.*` and `scene.set_folder`; folders nest ([ADR-0024](adr/0024-scene-structure.md) §3, [ADR-0064](adr/0064-nested-scene-folders.md), #323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | 🔒 | K1. |
 | SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | ⬜ | `label.*`, `source.set_meta` and `scene.set_meta` (ADR-0024 §4, #323). |
@@ -249,7 +250,7 @@ Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-obj
 | OB-06 | Drag to reorder and group | Drag before, after or into a group. | ⬜ | Reorder exists as ▲/▼. |
 | OB-07 | Search | "Search objects". | ⬜ | |
 | OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ✅ | Shift-click adds a row or takes it out; every selected item's row is highlighted. |
-| OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | 🟡 | Add source is the dialog (DL-06), from the panel's right-click menu. Remove and delete are still inline controls. |
+| OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | 🟡 | Add source is the dialog (DL-06), from the panel's right-click menu, and Remove from scene is also in the item menu ([CM-04](#menus)). Delete everywhere is still an inline control. |
 
 <a id="inspector"></a>
 ## Inspector

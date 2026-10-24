@@ -287,6 +287,10 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .zone.horizontal .group-body.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
 .zone.horizontal .group-body.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 .dock-panel[hidden] { display: none; }
+/* The scene and object lists fill their group, so the space under the rows is the
+   panel's own and opens its right-click menu. */
+.dock-panel:not([hidden]):has(> .scenes-panel, > .sources-panel) { display: flex; flex-direction: column; min-height: 100%; }
+.dock-panel > .scenes-panel, .dock-panel > .sources-panel { flex: 1 0 auto; }
 /* The tab is the panel's title. */
 .dock-panel > section:first-child > h2:first-child, .dock-panel > h2:first-child { display: none; }
 

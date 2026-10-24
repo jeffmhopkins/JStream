@@ -3,7 +3,7 @@
 // and adding through the dialog. The mock engine lists no kinds, so the dialog offers the
 // Color type of the seed's Backdrop (placed again, not created) and Scene; creating a
 // source of a new kind is covered natively.
-import { test, expect, connect, openAddSource, rev } from '../fixtures.js';
+import { test, expect, connect, openAddSource, nestScene, rev } from '../fixtures.js';
 
 /** The open right-click menu. */
 function menu(page) {
@@ -128,4 +128,110 @@ test('a scene is nested once, and a nested one is not offered again', async ({ p
   // The backdrop cancels.
   await page.mouse.click(5, 5);
   await expect(dialog).toBeHidden();
+});
+
+/** The rows of the Scene objects panel, top of the stack first. */
+function rows(page) {
+  return page.locator('.sources-panel li.row');
+}
+
+/** Places the seed's Backdrop a second time, as a reference on top of the stack. */
+async function placeBackdropAgain(page) {
+  const dialog = await openAddSource(page);
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(rows(page)).toHaveCount(2);
+}
+
+test('an item row has the item menu, which restacks and arranges', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await placeBackdropAgain(page);
+  await rows(page).first().click({ button: 'right' });
+  expect(await labels(page)).toEqual([
+    'Properties…',
+    'Edit filters…',
+    'Pop out',
+    'Bring to front',
+    'Bring forward',
+    'Send backward',
+    'Send to back',
+    'Center on canvas',
+    'Fit to canvas',
+    'Stretch to canvas',
+    'Reset rotation',
+    'Clear crop',
+    'Crop',
+    'Duplicate as reference',
+    'Duplicate as clone',
+    'Remove from scene',
+    'Add source…',
+    'New group',
+  ]);
+  await expect(menu(page).getByRole('menuitem', { name: 'Clear crop' })).toBeDisabled();
+
+  // Send to back: the right-clicked reference goes under the original, still selected.
+  const startRev = await rev(page);
+  await menu(page).getByRole('menuitem', { name: 'Send to back' }).click();
+  await expect.poll(() => rev(page)).toBe(startRev + 1);
+  await expect(rows(page).last()).toHaveClass(/selected/);
+
+  // Stretch to canvas, from the row's menu again.
+  await rows(page).last().click({ button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Stretch to canvas' }).click();
+  await expect(page.locator('.stage-overlay .readout text')).toHaveText('1920 × 1080');
+});
+
+test('the canvas item menu duplicates, and selects several', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  // The seed's Backdrop is the 640 × 360 box in the middle of the canvas.
+  const middle = await onScreen(page, 960, 540);
+  await page.mouse.click(middle.x, middle.y, { button: 'right' });
+  await expect(rows(page).first()).toHaveClass(/selected/);
+  // On the canvas, the menu ends with Select all.
+  expect((await labels(page)).slice(-2)).toEqual(['Remove from scene', 'Select all']);
+  await menu(page).getByRole('menuitem', { name: 'Duplicate as clone' }).click();
+  await expect(rows(page)).toHaveCount(2);
+  await expect(rows(page).first()).toContainText('Backdrop copy');
+  await expect(rows(page).first()).toHaveClass(/selected/);
+
+  // With both selected, the menu counts them and can't duplicate.
+  await page.mouse.click(middle.x, middle.y, { button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Select all' }).click();
+  await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(2);
+  await rows(page).first().click({ button: 'right' });
+  await expect(menu(page).locator('.ctx-head')).toHaveText('2 items selected');
+  await expect(menu(page).getByRole('menuitem', { name: 'Duplicate as reference' })).toBeDisabled();
+  await menu(page).getByRole('menuitem', { name: 'Remove from scene' }).click();
+  await expect(rows(page)).toHaveCount(0);
+});
+
+test('a nested scene has its own menu, which opens it', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await nestScene(page, 'Intro');
+  await rows(page).first().click({ button: 'right' });
+  expect(await labels(page)).toContain('Open nested scene');
+  await menu(page).getByRole('menuitem', { name: 'Open nested scene' }).click();
+  await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Intro' })).toHaveClass(/selected/);
+});
+
+test('the Scenes panel menus add and rename scenes', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const intro = page.locator('.scenes-panel li.row').filter({ hasText: 'Intro' });
+  await intro.click({ button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Rename' }).click();
+  const field = page.locator('.scenes-panel input.rename');
+  await field.fill('Opening');
+  await field.press('Enter');
+  await expect(page.locator('.scenes-panel li.row .row-main')).toHaveText(['Opening', 'Main']);
+
+  // Under the rows, the panel's own menu: New scene adds one with its name open.
+  const panel = page.locator('.scenes-panel');
+  const box = await panel.boundingBox();
+  const last = await panel.locator('li.row').last().boundingBox();
+  await panel.click({ button: 'right', position: { x: 12, y: last.y + last.height + 6 - box.y } });
+  expect(await labels(page)).toEqual(['New scene', 'New folder', 'Paste scene']);
+  await menu(page).getByRole('menuitem', { name: 'New scene' }).click();
+  await expect(field).toBeFocused();
+  await field.fill('Break');
+  await field.press('Enter');
+  await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Break' })).toHaveClass(/selected/);
 });

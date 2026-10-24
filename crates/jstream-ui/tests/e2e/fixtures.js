@@ -90,9 +90,13 @@ export async function rev(page) {
 /** Opens the Add source dialog from the Scene objects panel's right-click menu, on the
  * Scene type with `scene: true`, and returns it. */
 export async function openAddSource(page, { scene = false } = {}) {
+  // Just under the last row, on the panel's own space: a right-click on a row opens the
+  // item's menu instead.
   const panel = page.locator('.sources-panel');
   const box = await panel.boundingBox();
-  await panel.click({ button: 'right', position: { x: 12, y: box.height - 12 } });
+  const last = await panel.locator('li.row').last().boundingBox();
+  const y = last ? last.y + last.height + 6 - box.y : box.height - 12;
+  await panel.click({ button: 'right', position: { x: 12, y } });
   await page
     .getByRole('menu', { name: 'Context menu' })
     .getByRole('menuitem', { name: scene ? 'Add scene as source…' : 'Add source…' })
