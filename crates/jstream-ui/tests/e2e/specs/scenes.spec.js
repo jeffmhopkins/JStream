@@ -64,6 +64,11 @@ test('F2 renames a scene, and a drag reorders it', async ({ page, context, daemo
   await page.keyboard.press('F2');
   const field = page.locator('.scenes-panel input.rename');
   await expect(field).toBeFocused();
+  // Del in the field deletes a character, not the scene (that would ask first).
+  await field.press('Home');
+  await field.press('Delete');
+  await expect(field).toHaveValue('ntro');
+  await expect(field).toBeFocused();
   await field.fill('Opening');
   await field.press('Enter');
   await expect(sceneNames(page)).toHaveText(['Opening', 'Main']);
@@ -129,6 +134,17 @@ test('an item is hidden, placed again and removed', async ({ page, daemon }) => 
   const [top, bottom] = await ids();
   await dragRow(page, items(page).last(), items(page).first(), 'before');
   await expect.poll(ids).toEqual([bottom, top]);
+
+  // Del while renaming edits the name, not the scene: the item stays.
+  await items(page).first().locator('.row-main').click();
+  await items(page).first().locator('.row-main').press('F2');
+  const name = page.locator('.sources-panel input.rename').first();
+  await expect(name).toBeFocused();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Delete');
+  await expect(name).toHaveValue('ackdrop');
+  await page.keyboard.press('Escape');
+  await expect(items(page)).toHaveCount(2);
 
   // Del removes the selected row's item from the scene.
   await items(page).first().locator('.row-main').click();

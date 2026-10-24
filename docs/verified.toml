@@ -4077,13 +4077,13 @@ stamp = { hash = "b3:c95a41e1312203e6", by = "agent:claude-x1", note = "Re-read 
 stamp = { hash = "b3:36a7c374e562a4d5", by = "agent:ui-parity", note = "Re-read after the round 1 fixes: Add source now opens a new source's Properties dialog after the batch is accepted and the dialog waits for the source; OK sends only what changed since opening (draft_patch against the opening snapshot); Enter blurs the field before OK. The bullets now say so." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:2eb61b68f6ba0235", by = "agent:ui-parity", note = "Scenes and sources bullet rewritten for the tree rows (program badge, hover program button, type icons, italics, eye, search, favourites filter, drag reorder counted in the whole list, F2, Del, double click to Properties); the menus bullet adds Show in preview and Delete source everywhere; native tests list adds the trees' search and drop index. Checked against scenes.rs, sources.rs and tree.rs." }
+stamp = { hash = "b3:9c7a0659a17edd78", by = "agent:ui-parity", note = "Review fix: F2 and Del in the Scenes and sources bullet still hold; the rename field now stops its keys reaching the row, and a source placed twice renames in the one row F2 opened." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:b1a10394f3e64fc6", by = "agent:ui-parity", note = "source_properties.rs changes only its module doc; the Properties dialog bullet's 'Defaults empties it' and OK sending only changes since opening still match the code." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:d8d433a01de6871c", by = "agent:ui-parity", note = "Scenes and sources bullet rewritten for the tree rows (program badge, hover program button, type icons, italics, eye, search, favourites filter, drag reorder counted in the whole list, F2, Del, double click to Properties); the menus bullet adds Show in preview and Delete source everywhere; native tests list adds the trees' search and drop index. Checked against scenes.rs, sources.rs and tree.rs." }
+stamp = { hash = "b3:351a85ef36c475d9", by = "agent:ui-parity", note = "Review fix: F2 and Del in the Scenes and sources bullet still hold; the rename field now stops its keys reaching the row, and a source placed twice renames in the one row F2 opened." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/studio.rs"]
 stamp = { hash = "b3:1d6734980c77b098", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304 adds the Studio mode bullet and names the bar in Routing and Shell; merging wave/m1-3 (main sync #571) boxed state.get's transitions, which studio.rs unboxes in load without any behaviour change; re-read the bullet against studio.rs; holds" }
@@ -4092,7 +4092,7 @@ stamp = { hash = "b3:1d6734980c77b098", by = "agent:claude@session_016SaCkMFyjjx
 stamp = { hash = "b3:75c67103f7f49da3", by = "agent:claude-ui-features", note = "Added the Transform panel bullet (unrotated boxes as the prototype; selection bounds with two or more and Align to on Selection, else canvas; distribute in centre order keeping first and last; Center as a block; Fit/Stretch upright; Match to the primary, doing nothing while the primary is still a legacy item, as transform.rs's press now returns no edits then; plan() then one item.set_geometry batch, item.set_crop for Clear crop; legacy items skipped). Workspace bullet: seven panels with Transform, rewrapped with no wording change; dock.rs's Editing puts Transform under the Inspector and its home zone is Right; workspace.rs maps it; mod.rs adds the module. lib.rs only adds UI-FEATURES#transform to its Docs line. style.css adds .transform, .segmented, .tool-grid and .arrange-grid rules through classes, so the Styles/CSP bullet holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/tree.rs"]
-stamp = { hash = "b3:545886997a47a58f", by = "agent:ui-parity", note = "Scenes and sources bullet rewritten for the tree rows (program badge, hover program button, type icons, italics, eye, search, favourites filter, drag reorder counted in the whole list, F2, Del, double click to Properties); the menus bullet adds Show in preview and Delete source everywhere; native tests list adds the trees' search and drop index. Checked against scenes.rs, sources.rs and tree.rs." }
+stamp = { hash = "b3:39e96f218d801c50", by = "agent:ui-parity", note = "Review fix: F2 and Del in the Scenes and sources bullet still hold; the rename field now stops its keys reaching the row, and a source placed twice renames in the one row F2 opened." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
@@ -4194,13 +4194,13 @@ stamp = { hash = "b3:c95a41e1312203e6", by = "agent:claude-x1", note = "Re-read 
 stamp = { hash = "b3:36a7c374e562a4d5", by = "agent:ui-parity", note = "Round 1 fixes touch live.rs, mod.rs, dialog.rs, add_source.rs, source_properties.rs and properties.rs internals only; the contents list still names each module and its role." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:2eb61b68f6ba0235", by = "agent:ui-parity", note = "Panels entry now names tree.rs (search, favourites filter, star, drag reordering, tested natively); icons.rs only gains the prototype's remaining icons and named(); the rest of the list holds." }
+stamp = { hash = "b3:9c7a0659a17edd78", by = "agent:ui-parity", note = "Review fix only: RenameField keeps its keys from the rows, sources.rs renames by item, dropped_at drops a dead insert; the contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:b1a10394f3e64fc6", by = "agent:ui-parity", note = "source_properties.rs changes only its module doc (Defaults resets the values the dialog opened with); the contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:d8d433a01de6871c", by = "agent:ui-parity", note = "Panels entry now names tree.rs (search, favourites filter, star, drag reordering, tested natively); icons.rs only gains the prototype's remaining icons and named(); the rest of the list holds." }
+stamp = { hash = "b3:351a85ef36c475d9", by = "agent:ui-parity", note = "Review fix only: RenameField keeps its keys from the rows, sources.rs renames by item, dropped_at drops a dead insert; the contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/studio.rs"]
 stamp = { hash = "b3:1d6734980c77b098", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304 adds studio.rs to the Panels bullet beside the wave's panels; merging wave/m1-3 (main sync #571) boxed state.get's transitions, which studio.rs now unboxes; re-read; the list still matches panels/mod.rs and app.rs; holds" }
@@ -4209,7 +4209,7 @@ stamp = { hash = "b3:1d6734980c77b098", by = "agent:claude@session_016SaCkMFyjjx
 stamp = { hash = "b3:75c67103f7f49da3", by = "agent:claude-ui-features", note = "Panels bullet adds transform.rs (Transform: align, distribute and arrange the selected items); mod.rs adds the module and re-export; dock.rs adds PanelId::Transform (key 'transform', home Right) and puts it under the Inspector in Editing; workspace.rs maps it in panel_view; lib.rs's Docs line adds UI-FEATURES#transform. transform.rs's Match doing nothing while the primary item is legacy is below this bullet's level. The Dock and Workspace bullets stay true at this level." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/tree.rs"]
-stamp = { hash = "b3:545886997a47a58f", by = "agent:ui-parity", note = "Panels entry now names tree.rs (search, favourites filter, star, drag reordering, tested natively); icons.rs only gains the prototype's remaining icons and named(); the rest of the list holds." }
+stamp = { hash = "b3:39e96f218d801c50", by = "agent:ui-parity", note = "Review fix only: RenameField keeps its keys from the rows, sources.rs renames by item, dropped_at drops a dead insert; the contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
@@ -4263,7 +4263,7 @@ stamp = { hash = "b3:0d8073cb5bcd806f", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:20b9b4a77efd2dee", by = "agent:ui-parity", note = "Checked fixtures.js: openAddSource right-clicks just under the last row of Scene objects and nestScene goes through it; the other helpers are as described." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scenes.spec.js"]
-stamp = { hash = "b3:ad1347ad71e5aace", by = "agent:ui-parity", note = "Fixtures unchanged; scenes.spec.js gains a local dragRow helper and menus.spec.js one more expected menu line, neither of which the harness section describes." }
+stamp = { hash = "b3:3dfde726426d66ff", by = "agent:ui-parity", note = "scenes.spec.js adds checks within its tests; fixtures unchanged and the harness section holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/studio.spec.js"]
 stamp = { hash = "b3:8e569ea9d822dd54", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304's studio.spec.js uses the harness's connect and showPanel (Transitions is a tab behind Outputs); docking.spec.js expects the sixth panel; harness text unchanged and accurate; holds" }
@@ -4281,7 +4281,7 @@ stamp = { hash = "b3:adf0e4e847f64861", by = "agent:deps-thread", note = "Re-rea
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:298dfa537fe076bd", by = "agent:ui-parity", note = "Scenes and sources bullet rewritten for scenes.spec.js (badge and caption, F2 rename and drag reorder followed by a second client, search and favourites filter, eye, drag restack and Del); the menus bullet adds Delete source everywhere…, as menus.spec.js now expects." }
+stamp = { hash = "b3:ea33913061d98087", by = "agent:ui-parity", note = "Scenes and sources bullet adds Del inside a rename field deleting a character, for a scene and for one placement of a twice-placed source, as scenes.spec.js now checks." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:b348474fc3d7553c", by = "agent:ui-parity", note = "Checked each spec against its bullet: canvas live.set and live.cancel checks and the double click opening Properties, the new menus and properties specs, and inspector and transform now adding their second item through the Add source dialog and a nested scene." }
@@ -4305,7 +4305,7 @@ stamp = { hash = "b3:0d8073cb5bcd806f", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:20b9b4a77efd2dee", by = "agent:ui-parity", note = "Checked each spec against its bullet: canvas live.set and live.cancel checks and the double click opening Properties, the new menus and properties specs, and inspector and transform now adding their second item through the Add source dialog and a nested scene." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scenes.spec.js"]
-stamp = { hash = "b3:ad1347ad71e5aace", by = "agent:ui-parity", note = "Scenes and sources bullet rewritten for scenes.spec.js (badge and caption, F2 rename and drag reorder followed by a second client, search and favourites filter, eye, drag restack and Del); the menus bullet adds Delete source everywhere…, as menus.spec.js now expects." }
+stamp = { hash = "b3:3dfde726426d66ff", by = "agent:ui-parity", note = "Scenes and sources bullet adds Del inside a rename field deleting a character, for a scene and for one placement of a twice-placed source, as scenes.spec.js now checks." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/studio.spec.js"]
 stamp = { hash = "b3:8e569ea9d822dd54", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304's Studio mode bullet now runs on the Transitions tab and drops the canvas-follows-program check (the wave's canvas follows the selected scene); Docking names Transitions beside Outputs; 29 tests pass locally against Chromium; holds" }
@@ -5094,10 +5094,10 @@ stamp = { hash = "b3:c7c695f9d00a1e78", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:7df7cc27107035f6", by = "agent:ui-parity", note = "Re-read OB-01 to OB-09 against sources.rs and tree.rs: caption and icons, eye, italics for shared sources, drag reorder (groups wait), search, and Add, Del or Remove from scene, and Delete source everywhere; covers adds tree.rs." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:d8d433a01de6871c", by = "agent:ui-parity", note = "Re-read OB-01 to OB-09 against sources.rs and tree.rs: caption and icons, eye, italics for shared sources, drag reorder (groups wait), search, and Add, Del or Remove from scene, and Delete source everywhere; covers adds tree.rs." }
+stamp = { hash = "b3:351a85ef36c475d9", by = "agent:ui-parity", note = "OB rows hold after the review fix: F2 renames in the row it was pressed in, and Del in the field doesn't remove the item; tree.rs only drops a dead insert." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/tree.rs"]
-stamp = { hash = "b3:545886997a47a58f", by = "agent:ui-parity", note = "Re-read OB-01 to OB-09 against sources.rs and tree.rs: caption and icons, eye, italics for shared sources, drag reorder (groups wait), search, and Add, Del or Remove from scene, and Delete source everywhere; covers adds tree.rs." }
+stamp = { hash = "b3:39e96f218d801c50", by = "agent:ui-parity", note = "OB rows hold after the review fix: F2 renames in the row it was pressed in, and Del in the field doesn't remove the item; tree.rs only drops a dead insert." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/store.rs"]
 stamp = { hash = "b3:1eaaeb7eb4113ea5", by = "agent:claude-ui-features", note = "OB-08 now built: sources.rs highlights every selected row (Selection::contains) and Shift-click toggles (Studio::toggle_item), and the canvas shares the same Selection from store.rs. Other OB rows unaffected." }
@@ -5112,10 +5112,10 @@ stamp = { hash = "b3:c95a41e1312203e6", by = "agent:claude-x1", note = "Re-read 
 stamp = { hash = "b3:2fa1a7342e5bfdbd", by = "agent:ui-parity", note = "Re-read SC-01 to SC-10 against scenes.rs and tree.rs: icons, program badge, search, drag reorder (folders wait), F2/Del/menus rename and delete, favourite star and the favourites-only filter (labels wait), and SC-10's hover program button; covers adds tree.rs." }
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:2eb61b68f6ba0235", by = "agent:ui-parity", note = "Re-read SC-01 to SC-10 against scenes.rs and tree.rs: icons, program badge, search, drag reorder (folders wait), F2/Del/menus rename and delete, favourite star and the favourites-only filter (labels wait), and SC-10's hover program button; covers adds tree.rs." }
+stamp = { hash = "b3:9c7a0659a17edd78", by = "agent:ui-parity", note = "SC-05 holds after the review fix (Del in the rename field no longer reaches the row); tree.rs only drops a dead insert from dropped_at." }
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/tree.rs"]
-stamp = { hash = "b3:545886997a47a58f", by = "agent:ui-parity", note = "Re-read SC-01 to SC-10 against scenes.rs and tree.rs: icons, program badge, search, drag reorder (folders wait), F2/Del/menus rename and delete, favourite star and the favourites-only filter (labels wait), and SC-10's hover program button; covers adds tree.rs." }
+stamp = { hash = "b3:39e96f218d801c50", by = "agent:ui-parity", note = "SC-05 holds after the review fix (Del in the rename field no longer reaches the row); tree.rs only drops a dead insert from dropped_at." }
 
 ["UI-FEATURES#summary"."body"]
 stamp = { hash = "b3:c9e8f7a1aab67016", by = "agent:ui-parity", note = "Recounted every area by script: theme 3/3/1/0/1, scenes 4/3/1/2/0, objects 6/1/1/1/0, keyboard 1/3/1/2/0; total 130 = 51 built, 31 partial, 15 to build, 32 need the engine, 1 decision." }

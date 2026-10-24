@@ -77,7 +77,8 @@ fn rows(collection: &Collection, scene_id: &SceneId) -> Vec<Row> {
 pub fn Sources() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
-    let renaming = RwSignal::new(None::<SourceId>);
+    // The row being renamed, by item: a source placed twice is renamed in one row.
+    let renaming = RwSignal::new(None::<ItemId>);
     let pending = RwSignal::new(None::<Pending>);
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
@@ -176,7 +177,7 @@ pub fn Sources() -> impl IntoView {
             move || studio.selection.with(|s| s.contains(&id))
         };
         let is_renaming = {
-            let id = source_id.clone();
+            let id = item_id.clone();
             move || renaming.with(|r| r.as_ref() == Some(&id))
         };
         // A click selects the item alone; Shift-click adds it to the selection or takes
@@ -217,11 +218,11 @@ pub fn Sources() -> impl IntoView {
         // F2 renames the source, Del removes the item from the scene, as the menu's
         // hints say.
         let on_key = {
-            let (item, source) = (item_id.clone(), source_id.clone());
+            let item = item_id.clone();
             move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
                 "F2" => {
                     event.prevent_default();
-                    renaming.set(Some(source.clone()));
+                    renaming.set(Some(item.clone()));
                 }
                 "Delete" => {
                     event.prevent_default();

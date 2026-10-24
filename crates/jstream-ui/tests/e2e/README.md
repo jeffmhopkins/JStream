@@ -64,11 +64,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
   program scene's "program" badge, selected, and its item listed under the scene's
   caption; putting a scene on program, which a second client follows; F2 renaming a
-  scene in place and a drag reordering the scenes, which a second client follows and
+  scene in place (Del inside the field deletes a character, not the scene) and a drag reordering the scenes, which a second client follows and
   which doesn't select the dragged row; the search boxes and the favourites filter
   with its count, Favorites only and Clear; hiding and showing an item with its eye,
   placing an existing source again through the Add source dialog, a drag restacking the
-  two items and Del removing one; selecting an item opens its properties. The mock engine lists no kinds and makes
+  two items, F2 renaming one of the two placements of a source (Del there edits the
+  name, not the scene) and Del removing one; selecting an item opens its properties. The mock engine lists no kinds and makes
   no delete plans, so new-kind sources, the properties form's fields and deletes are
   tested natively.
 - **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start

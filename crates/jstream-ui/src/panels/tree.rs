@@ -180,13 +180,12 @@ pub fn dropped_at<T: PartialEq>(order: &[T], moved: &T, target: &T, side: Side) 
     if moved == target {
         return None;
     }
-    let mut rest: Vec<&T> = order.iter().filter(|e| *e != moved).collect();
+    let rest: Vec<&T> = order.iter().filter(|e| *e != moved).collect();
     let at = rest.iter().position(|e| *e == target)?;
     let to = match side {
         Side::Before => at,
         Side::After => at + 1,
     };
-    rest.insert(to, moved);
     (to != from).then(|| u32::try_from(to).unwrap_or(u32::MAX))
 }
 
