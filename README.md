@@ -54,7 +54,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `██████████` 97% | 36 | 1 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `█████████░` 92% | 23 | 1 | 1 |
+| [M2: UI](ROADMAP.md#m2) | `█████████░` 92% | 23 | 0 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 5 | 1 | 7 |
 
 109 of 120 items are merged; 12 of those still wait on a run on Windows hardware.
@@ -69,11 +69,11 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A3 | Daemon goes live on Windows | M1a | 🧪 Windows run | Windows 11 Pro N run (#333) | #226 |
 | A4 | Go-live runbook and smoke | M1a | 🧪 Windows run | smoke script run | #234 |
 | A6b | Daemon YouTube wiring | M1a | 👤 maintainer, then 🧪 Windows run | #312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
-| C4c | Webcam source (CPU path, MJPEG on Windows, paired audio) | M1b | 🧪 Windows run | landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending | #654, #658, #726 |
+| C4c | Webcam source (CPU path, MJPEG on Windows, paired audio) | M1b | 🧪 Windows run | landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam) | #654, #658, #726 |
 | C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
 | C3 | Display and window capture sources | M1b | 🧪 Windows run | #365 landed with wave/m1-2 (#545); Windows run #378 | #365 |
 | C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
-| V0 | Video filter chain runtime | M1b | 🔨 build | part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #717, #730 |
+| V0 | Video filter chain runtime | M1b | 🔨 build | part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #730 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
 | G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
@@ -157,7 +157,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C6 | Nested scene rendering | ✅ merged | #147 |
 | C4a | Video device trait | ✅ merged | #158 |
 | C4b | Media Foundation webcam backend | ✅ merged | #177, #225, #227 |
-| C4c | Webcam source (CPU path, MJPEG on Windows, paired audio) | 🧪 merged, Windows run pending: landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending | #654, #658, #726 |
+| C4c | Webcam source (CPU path, MJPEG on Windows, paired audio) | 🧪 merged, Windows run pending: landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam) | #654, #658, #726 |
 | C1a | Sources crate: color, image | ✅ merged | #179, #217 |
 | C1b | Sources render live | ✅ merged | #222 |
 | C2 | Text source | ✅ merged | #221 |
@@ -170,7 +170,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | D2 | Buses and send matrix | ✅ merged | #192 |
 | D4 | No-allocation test | ✅ merged | #191 |
 | D7b | Filter chains in the mixer | ✅ merged | #231 |
-| V0 | Video filter chain runtime | 🔍 in review: part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #717, #730 |
+| V0 | Video filter chain runtime | 🔍 in review: part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #730 |
 | D5 | Audio in the protocol | ✅ merged | #240 |
 | D6 | when_shown activity gain | ✅ merged | #299 |
 | E1 | Render snapshots, GPU lifetime | ✅ merged | #172, #215 |
@@ -236,7 +236,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | T1 | Studio mode and transitions | ✅ merged: #260 landed with wave/m1-3 (#754) | #260 |
 | T1u | Studio-mode UI | ✅ merged: #304 landed with wave/m1-3 (#754) | #304 |
 | E2 | Video mixes | ✅ merged | #259 |
-| E2b | Privacy screen and encoder sharing key | 🔍 in review: on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
+| E2b | Privacy screen and encoder sharing key | ⏳ planned: on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
 | D8 | Master and output audio chains | ✅ merged | #249, #303 |
 | D8p | Audio chain protocol fields | ✅ merged | #303 |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |

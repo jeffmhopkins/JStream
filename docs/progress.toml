@@ -376,7 +376,7 @@ milestone = "M1b"
 title = "Webcam source (CPU path, MJPEG on Windows, paired audio)"
 status = "hardware"
 prs = [654, 658, 726]
-note = "landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending"
+note = "landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam)"
 
 [[item]]
 id = "C1a"
@@ -470,7 +470,7 @@ id = "V0"
 milestone = "M1b"
 title = "Video filter chain runtime"
 status = "review"
-prs = [595, 607, 626, 717, 730]
+prs = [595, 607, 626, 712, 717, 730]
 note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
 needs = ["build"]
 
@@ -776,7 +776,7 @@ prs = [259]
 id = "E2b"
 milestone = "M2"
 title = "Privacy screen and encoder sharing key"
-status = "review"
+status = "planned"
 prs = [317]
 note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build"
 needs = ["build"]
