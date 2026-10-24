@@ -35,6 +35,22 @@ pub(crate) enum Alpha {
     /// edges clean; the shader then divides by alpha, decodes sRGB and multiplies by
     /// alpha again in linear light.
     PremultipliedSrgb,
+    /// Opaque sRGB (imports of a captured frame), decoded by the sampler with alpha read
+    /// as 1 whatever the texture holds, as the CPU capture path ignores it (#451).
+    Opaque,
+}
+
+impl Alpha {
+    /// The shaders' number for this mode: how they turn a filtered sample into
+    /// premultiplied linear light.
+    pub(crate) fn shader_mode(self) -> f32 {
+        match self {
+            Alpha::Premultiplied => 0.0,
+            Alpha::Straight => 1.0,
+            Alpha::PremultipliedSrgb => 2.0,
+            Alpha::Opaque => 3.0,
+        }
+    }
 }
 
 /// Which [`crate::Compositor`] made an image. The image keeps a clone, so the allocation
@@ -62,6 +78,10 @@ pub(crate) struct Maker<'a> {
 /// redraws the same images does not allocate one. An image only draws in the
 /// [`crate::Compositor`] that made it; another one refuses it with
 /// [`RenderError::Invalid`].
+///
+/// A clone shares the same texture, so a filter can read a layer the caller keeps (a
+/// scene that a `scene_mask` reads); the texture lives until its last clone is dropped.
+#[derive(Clone)]
 pub struct Image {
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
@@ -304,10 +324,10 @@ fn write_texels(
     Ok(())
 }
 
-/// An import of `texture` read with `alpha`, `Straight` or `PremultipliedSrgb`. A
-/// straight import must be `Rgba8UnormSrgb` or `Bgra8UnormSrgb`, so sampling decodes
-/// it; a premultiplied one `Rgba8Unorm` or `Bgra8Unorm`, so sampling returns the code
-/// values the shader unpremultiplies before decoding.
+/// An import of `texture` read with `alpha`, `Straight`, `Opaque` or `PremultipliedSrgb`.
+/// A straight or opaque import must be `Rgba8UnormSrgb` or `Bgra8UnormSrgb`, so sampling
+/// decodes it; a premultiplied one `Rgba8Unorm` or `Bgra8Unorm`, so sampling returns the
+/// code values the shader unpremultiplies before decoding.
 pub(crate) fn import(
     maker: &Maker<'_>,
     texture: wgpu::Texture,
@@ -317,7 +337,9 @@ pub(crate) fn import(
     use wgpu::TextureFormat as F;
     let format = texture.format();
     let accepted = match alpha {
-        Alpha::Straight => matches!(format, F::Rgba8UnormSrgb | F::Bgra8UnormSrgb),
+        Alpha::Straight | Alpha::Opaque => {
+            matches!(format, F::Rgba8UnormSrgb | F::Bgra8UnormSrgb)
+        }
         Alpha::PremultipliedSrgb => matches!(format, F::Rgba8Unorm | F::Bgra8Unorm),
         Alpha::Premultiplied => false,
     };

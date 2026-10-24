@@ -1,0 +1,358 @@
+//! Transitions on the control thread (ADR-0029): which preset a switch uses, and the
+//! plan the render thread samples.
+//!
+//! [`resolve`] picks a switch's preset: the one the switch names, else the new scene's
+//! `transition_in`, else the old scene's `transition_out`, else the default. A `cut`, a
+//! zero duration, or a preset whose kind this engine lacks becomes no [`Run`]: the switch
+//! shows the new scene on the next frame.
+//!
+//! [`plan`] pairs what is on screen with the new scene's items and returns one
+//! [`Track`] per item in drawing order: everything leaving first, then the new scene
+//! bottom to top. `move` pairs items placing the same source, the k-th placement with the
+//! k-th in stacking order, unless either one's glide is `never`; `fade` pairs nothing.
+//! Everything else appears or disappears with its effect. The render thread only samples
+//! the tracks (R-RT-002).
+
+use std::sync::Arc;
+
+use jstream_graph::Graph;
+use jstream_media::MediaTime;
+use jstream_protocol::{
+    Easing, EntityKind, FADE, Glide, ItemTransition, MOVE, ProtocolError, SceneId, SourceId,
+    TransitionEffect, TransitionPresetId, TransitionStarted,
+};
+use jstream_render::transition::{Effect, Endpoint, Timing, Track};
+
+use crate::snapshot::SourceRef;
+
+/// What a running transition does: its preset, resolved.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Run {
+    pub(crate) preset_id: TransitionPresetId,
+    pub(crate) pairs: bool,
+    pub(crate) duration_ms: u32,
+    pub(crate) easing: Easing,
+    pub(crate) unmatched: TransitionEffect,
+    pub(crate) stagger_ms: u32,
+}
+
+/// The preset a switch from `from` to `to` uses (ADR-0029 §2), and what it runs: `None`
+/// for a cut. Fails with `not_found` when `named` is not a preset.
+pub(crate) fn resolve(
+    graph: &Graph,
+    from: Option<&SceneId>,
+    to: &SceneId,
+    named: Option<&TransitionPresetId>,
+) -> Result<(TransitionPresetId, Option<Run>), ProtocolError> {
+    let state = graph.state();
+    if let Some(id) = named
+        && state.preset(id).is_none()
+    {
+        return Err(ProtocolError::NotFound {
+            entity: EntityKind::Transition,
+            id: id.as_str().to_owned(),
+        });
+    }
+    let id = named
+        .or_else(|| state.scene(to).and_then(|scene| scene.transition_in()))
+        .or_else(|| {
+            from.and_then(|from| state.scene(from))
+                .and_then(|scene| scene.transition_out())
+        })
+        .unwrap_or_else(|| state.default_preset())
+        .clone();
+    let Some(preset) = state.preset(&id) else {
+        return Ok((id, None));
+    };
+    // `cut`, and any kind this engine can't run (a pack that isn't installed), cut.
+    let pairs = match preset.kind() {
+        MOVE => true,
+        FADE => false,
+        _ => return Ok((id, None)),
+    };
+    if preset.duration_ms() == 0 {
+        return Ok((id, None));
+    }
+    let settings = preset.settings();
+    let stagger_ms = settings
+        .get("stagger_ms")
+        .and_then(|value| value.as_u64())
+        .and_then(|ms| u32::try_from(ms).ok())
+        .unwrap_or(0);
+    let run = Run {
+        preset_id: id.clone(),
+        pairs,
+        duration_ms: preset.duration_ms(),
+        easing: preset.easing(),
+        unmatched: TransitionEffect::from_setting(settings.get("unmatched")),
+        stagger_ms,
+    };
+    Ok((id, Some(run)))
+}
+
+/// One item as it is on screen, or as it will be: what it shows, the source it pairs by,
+/// where it is, and its transition settings.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Visual {
+    pub(crate) image: SourceRef,
+    /// The source the item places, which pairing matches.
+    pub(crate) source_id: SourceId,
+    pub(crate) at: Endpoint,
+    /// The size of the image in pixels, which bounds its crop, when known.
+    pub(crate) size: Option<[u32; 2]>,
+    pub(crate) settings: ItemTransition,
+}
+
+/// What a transition starts from: a scene, planned from the collection as it is now, or
+/// the items that were on screen when it retargeted a running one.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum From {
+    Scene(SceneId),
+    OnScreen(Arc<[Visual]>),
+}
+
+/// A transition in progress, kept in the studio state.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Running {
+    pub(crate) from: From,
+    pub(crate) to: SceneId,
+    /// When it started, on the media clock.
+    pub(crate) start: MediaTime,
+    pub(crate) run: Run,
+}
+
+impl Running {
+    /// Milliseconds from its start to `at`.
+    pub(crate) fn elapsed_ms(&self, at: MediaTime) -> f32 {
+        elapsed_ms(self.start, at)
+    }
+}
+
+/// Milliseconds from `start` to `at`, on the same clock.
+pub(crate) fn elapsed_ms(start: MediaTime, at: MediaTime) -> f32 {
+    ((at.as_secs_f64() - start.as_secs_f64()) * 1000.0) as f32
+}
+
+/// The planned transition: each item's track in drawing order, with what it shows.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Planned {
+    pub(crate) tracks: Vec<(Visual, Track)>,
+    /// When the last item is done, in milliseconds from the start.
+    pub(crate) end_ms: f32,
+}
+
+impl Planned {
+    /// What is on screen `elapsed_ms` after the start, as the starting point of a
+    /// transition that retargets this one: every item still drawn, with the settings of
+    /// the placement it came from.
+    pub(crate) fn on_screen(&self, elapsed_ms: f32, canvas: [f32; 2]) -> Vec<Visual> {
+        self.tracks
+            .iter()
+            .filter_map(|(visual, track)| {
+                track.sample(elapsed_ms, canvas).map(|at| Visual {
+                    at,
+                    ..visual.clone()
+                })
+            })
+            .collect()
+    }
+}
+
+fn effect(effect: TransitionEffect, unmatched: TransitionEffect) -> Effect {
+    match effect.resolve(unmatched) {
+        TransitionEffect::Scale => Effect::Scale,
+        TransitionEffect::Slide => Effect::Slide,
+        TransitionEffect::None => Effect::None,
+        _ => Effect::Fade,
+    }
+}
+
+/// Pairs `from` (what is on screen) with `to` (the new scene's items, bottom first) as
+/// `run` says, and returns the tracks in drawing order: the items leaving, then the new
+/// scene's.
+///
+/// An item's progress starts after its delay plus, for the new scene's items,
+/// `stagger_ms` × its index; a pair follows the new item's settings. The transition ends
+/// when its last item does.
+pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run) -> Planned {
+    let duration_ms = run.duration_ms as f32;
+    let timing = |settings: &ItemTransition, delay_ms: f32| Timing {
+        delay_ms,
+        duration_ms,
+        easing: settings.easing.resolve(run.easing),
+    };
+    let mut used = vec![false; from.len()];
+    let mut arriving = Vec::with_capacity(to.len());
+    for (index, item) in to.iter().enumerate() {
+        let delay_ms = item.settings.delay_ms as f32 + index as f32 * run.stagger_ms as f32;
+        let partner = (run.pairs && item.settings.glide == Glide::Auto)
+            .then(|| {
+                from.iter().enumerate().position(|(j, f)| {
+                    !used[j] && f.source_id == item.source_id && f.settings.glide == Glide::Auto
+                })
+            })
+            .flatten();
+        let track = match partner {
+            Some(j) => {
+                used[j] = true;
+                Track::Pair {
+                    from: from[j].at,
+                    to: item.at,
+                    timing: timing(&item.settings, delay_ms),
+                    source: item.size,
+                }
+            }
+            None => Track::Appear {
+                to: item.at,
+                effect: effect(item.settings.appear, run.unmatched),
+                timing: timing(&item.settings, delay_ms),
+            },
+        };
+        arriving.push((item.clone(), track));
+    }
+    let mut tracks: Vec<(Visual, Track)> = from
+        .iter()
+        .zip(&used)
+        .filter(|(_, used)| !**used)
+        .map(|(item, _)| {
+            let track = Track::Disappear {
+                from: item.at,
+                effect: effect(item.settings.disappear, run.unmatched),
+                timing: timing(&item.settings, item.settings.delay_ms as f32),
+            };
+            (item.clone(), track)
+        })
+        .collect();
+    tracks.extend(arriving);
+    let end_ms = tracks
+        .iter()
+        .map(|(_, track)| track.end_ms())
+        .fold(0.0, f32::max);
+    Planned { tracks, end_ms }
+}
+
+/// What `studio.changed` reports for a switch that resolved `preset_id` and runs for
+/// `end_ms` (`None` for a cut, reported as 0).
+pub(crate) fn started(preset_id: TransitionPresetId, end_ms: Option<f32>) -> TransitionStarted {
+    TransitionStarted {
+        preset_id,
+        duration_ms: end_ms.map_or(0, |ms| ms.max(0.0).ceil() as u32),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Planned, Run, Visual, plan};
+    use crate::snapshot::SourceRef;
+    use jstream_protocol::{
+        Easing, Glide, ItemGeometry, ItemTransition, Size, SourceId, TransitionEffect,
+        TransitionPresetId, Vec2,
+    };
+    use jstream_render::Crop;
+    use jstream_render::transition::{Effect, Endpoint, Track};
+
+    fn visual(source: &str, x: f32) -> Visual {
+        Visual {
+            image: SourceRef::Frame(SourceId::new(source)),
+            source_id: SourceId::new(source),
+            at: Endpoint {
+                geometry: ItemGeometry::try_new(
+                    Vec2::new(x, 100.0).expect("finite"),
+                    Size::try_new(10.0, 10.0).expect("positive"),
+                )
+                .expect("valid"),
+                crop: Crop::NONE,
+                opacity: 1.0,
+            },
+            size: None,
+            settings: ItemTransition::default(),
+        }
+    }
+
+    fn run(pairs: bool) -> Run {
+        Run {
+            preset_id: TransitionPresetId::new("p"),
+            pairs,
+            duration_ms: 500,
+            easing: Easing::Linear,
+            unmatched: TransitionEffect::Scale,
+            stagger_ms: 100,
+        }
+    }
+
+    fn kinds(planned: &Planned) -> Vec<(String, &'static str)> {
+        planned
+            .tracks
+            .iter()
+            .map(|(visual, track)| {
+                let kind = match track {
+                    Track::Pair { .. } => "pair",
+                    Track::Appear { .. } => "appear",
+                    Track::Disappear { .. } => "disappear",
+                };
+                (visual.source_id.to_string(), kind)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn move_pairs_the_kth_placement_of_a_source_with_the_kth() {
+        let from = [visual("cam", 0.0), visual("logo", 1.0), visual("cam", 2.0)];
+        let to = [visual("cam", 10.0), visual("bg", 11.0)];
+        let planned = plan(&from, &to, &run(true));
+        assert_eq!(
+            kinds(&planned),
+            [
+                ("logo".into(), "disappear"),
+                ("cam".into(), "disappear"),
+                ("cam".into(), "pair"),
+                ("bg".into(), "appear"),
+            ]
+        );
+        // The first `cam` paired: the second is the one leaving.
+        let Track::Disappear { from: leaving, .. } = planned.tracks[1].1 else {
+            panic!("not leaving");
+        };
+        assert_eq!(leaving.geometry.center.x.get(), 2.0);
+        // `bg` is index 1: 100 ms of stagger, then 500 ms.
+        assert_eq!(planned.end_ms, 600.0);
+        let Track::Appear { effect, .. } = planned.tracks[3].1 else {
+            panic!("not appearing");
+        };
+        assert_eq!(effect, Effect::Scale, "the preset's unmatched effect");
+    }
+
+    #[test]
+    fn fade_and_glide_never_pair_nothing() {
+        let from = [visual("cam", 0.0)];
+        let to = [visual("cam", 10.0)];
+        assert_eq!(
+            kinds(&plan(&from, &to, &run(false))),
+            [("cam".into(), "disappear"), ("cam".into(), "appear")]
+        );
+        let mut never = visual("cam", 10.0);
+        never.settings.glide = Glide::Never;
+        assert_eq!(
+            kinds(&plan(&from, &[never], &run(true))),
+            [("cam".into(), "disappear"), ("cam".into(), "appear")]
+        );
+    }
+
+    #[test]
+    fn retargeting_starts_from_what_is_on_screen() {
+        let from = [visual("cam", 0.0)];
+        let to = [visual("cam", 100.0)];
+        let mut linear = run(true);
+        linear.stagger_ms = 0;
+        let planned = plan(&from, &to, &linear);
+        let on_screen = planned.on_screen(250.0, [1920.0, 1080.0]);
+        assert_eq!(on_screen.len(), 1);
+        assert_eq!(on_screen[0].at.geometry.center.x.get(), 50.0);
+        // Going back pairs the half-way item with the original one.
+        let back = plan(&on_screen, &from, &linear);
+        let Track::Pair { from: start, .. } = back.tracks[0].1 else {
+            panic!("not paired");
+        };
+        assert_eq!(start.geometry.center.x.get(), 50.0);
+    }
+}

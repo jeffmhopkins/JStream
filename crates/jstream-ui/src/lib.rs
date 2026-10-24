@@ -3,21 +3,25 @@
 //! serves it over HTTP and the desktop app shows it in a Tauri webview. Like every client
 //! it never links the engine (R-ARCH-003).
 //!
-//! It holds connecting and the session (`session`), the shell and its routing (`app`),
+//! It holds connecting and the session (`session`), the shell (`app`), the header bar
+//! (`header`), the dock model (`dock`) and the workspace that draws it (`workspace`),
 //! the state the panels share (`store`), the panels (`panels`), the pairing panel
 //! (`pairing`) and the preview canvas (`canvas`).
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/UI-FEATURES.md#theme, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking, docs/UI-FEATURES.md#canvas, docs/UI-FEATURES.md#dialogs, docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects, docs/UI-FEATURES.md#inspector, docs/UI-FEATURES.md#mixer, docs/UI-FEATURES.md#outputs, docs/UI-FEATURES.md#keyboard, docs/UI-FEATURES.md#beyond, docs/adr/0045-leptos-web-ui.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/UI-FEATURES.md#theme, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking, docs/UI-FEATURES.md#canvas, docs/UI-FEATURES.md#dialogs, docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects, docs/UI-FEATURES.md#inspector, docs/UI-FEATURES.md#transform, docs/UI-FEATURES.md#mixer, docs/UI-FEATURES.md#outputs, docs/UI-FEATURES.md#keyboard, docs/UI-FEATURES.md#beyond, docs/adr/0045-leptos-web-ui.md
 
 #![forbid(unsafe_code)]
 
 pub mod app;
 pub mod canvas;
+pub mod dock;
+pub mod header;
 pub mod host;
 pub mod pairing;
 pub mod panels;
 pub mod session;
 pub mod store;
+pub mod workspace;
 
 pub use app::{App, SessionContext};
 

@@ -33,7 +33,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Web UI** (`ui.rs`): the UI bundle's files from `ServerConfig::ui_dir`, with their
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
-  origins, connection limits, the MCP switch and its limits, the UI directory, the
+  origins, connection limits, the ping interval and liveness timeout, the MCP switch and its limits, the UI directory, the
   device file, the `tls` flag, the `pairing` switch) and `Token`, the control token.
 - **Devices** (`devices.rs`): the paired devices, the open pairing code, and the device
   file that keeps the devices' token digests
@@ -55,7 +55,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   limit on how many failed credentials are logged.
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
-  its events, and the cap on calls in flight.
+  its events, the cap on calls in flight, and the pings that close a connection that
+  went silent.
 - **Preview frames** (`preview.rs`): the session's binary channel, queued per
   connection and sent as WebSocket binary messages, dropping up to the next keyframe
   when the client reads slowly.
@@ -142,7 +143,7 @@ value is hashed with BLAKE3 too, and the two 32-byte digests are compared with
 `blake3::Hash`'s constant-time equality. So the compare reveals nothing about the
 token: not where the two differ, and not its length.
 
-**Connection limits.** Four bounds keep one client, or a crowd of them, from holding
+**Connection limits.** Five bounds keep one client, or a crowd of them, from holding
 the server's resources. Each is a `ServerConfig` field, and `ServerConfig::new` sets
 the default:
 
@@ -152,10 +153,14 @@ the default:
 | `max_connections` | 32 open WebSocket connections | An upgrade that passes the checks above gets 503 and no session. The slot is taken just before the upgrade and freed when the connection ends. |
 | `header_read_timeout` | 10 s from accept to an accepted upgrade request | The connection is dropped, unanswered. |
 | `handshake_timeout` | 10 s from accept to a successful `hello` | The connection is closed with close code 1008 (see *Sessions*). |
+| `liveness_timeout` | 45 s without hearing from a WebSocket client, which is pinged every `ping_interval` (15 s) | The connection is closed with close code 1008 and its session dropped (see *Sessions*). |
 
-`Server::bind` refuses a zero limit or timeout, and a zero `max_mcp_sessions` or
-`mcp_idle_timeout` (see *MCP over streamable HTTP*), with `ServerError::InvalidLimit` before opening the
-socket, since the server would refuse or drop everything.
+`Server::bind` refuses a zero limit or timeout, a zero `ping_interval`, and a zero
+`max_mcp_sessions` or `mcp_idle_timeout` (see *MCP over streamable HTTP*), with
+`ServerError::InvalidLimit` before opening the socket, since the server would refuse or
+drop everything. It refuses a `liveness_timeout` no longer than `ping_interval` with
+`ServerError::LivenessTimeout`, since an idle client that answers every ping would
+still be closed.
 
 The TCP cap and the header-read timeout are kept on the socket, by the listener
 (`listener.rs`). The cap counts every accepted stream until it is dropped, so it also
@@ -274,8 +279,11 @@ its own from a short code instead of the control token.
   hourly.
 - **The device file.** With `ServerConfig::device_file` set (`jstream-daemon` sets it
   beside the token file), the devices (ID, name, digest, paired and last-used times) are
-  kept there as JSON, written through a temporary file and renamed, user-only on Unix;
-  `Server::bind` refuses a file others can read (`ServerError::DeviceFile`). Without it,
+  kept there as JSON, written through a temporary file and renamed, user-only (mode
+  `0600` on Unix; on Windows a protected DACL for SYSTEM and the user, from
+  `jstream_platform_windows::create_private_file`, #344); `Server::bind` refuses a file
+  others may access (`ServerError::DeviceFile`): on Windows, one
+  `check_private_file` refuses. Without it,
   devices last as long as the server.
 - **Listing and revoking.** `device.list` answers each device's ID, name, and when it was
   paired and last used. `device.revoke` forgets one and closes its open WebSocket
@@ -359,7 +367,7 @@ task speaks the envelope
   room (`KeyframeGate`), so what the client receives decodes. The session's own queue
   is bounded the same way, so a slow client holds a few pictures and nothing more.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
-  `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
+  `state.changed`, `studio.changed` and `privacy.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the
   protocol README's example. An event can arrive before the answer that reveals the
   mapping, so while calls are in flight it is held back, with every event after it to
@@ -387,11 +395,21 @@ task speaks the envelope
   message text.
 - The connection ends when the client closes it, when the session's event stream ends
   (the engine went away; close code 1001), when the session reports `Disconnected`
-  (close code 1011), or when the server shuts down. Dropping the session expires the
+  (close code 1011), when the server shuts down, or when the client goes silent (see
+  *Liveness* below). Dropping the session expires the
   client's open live-value gestures
-  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). A connection that dies
-  without a close keeps them until a read or write on the socket fails: the
-  ping-based liveness check ADR-0032 asks for is not built yet.
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)).
+- **Liveness.** A connection that dies without a close (a laptop lid shut, a network
+  gone) may not fail a read or write for a long time, so the task checks it, as
+  ADR-0032 asks. It pings the client every `ping_interval` (15 s), and anything it
+  reads from the client counts as hearing from it: a message, or the pong a live
+  client's WebSocket layer answers with. A connection not heard from within
+  `liveness_timeout` (45 s) is closed with code 1008 (`no answer to pings in time`) and
+  its session dropped, which expires its gestures. While the task itself has stopped
+  reading (a reply backlog or 64 calls in flight, see *Slow clients*), the silence
+  doesn't count, since a pong would wait unread behind the requests; it counts again
+  from when reading resumes. A ping goes before the next queued message, once the send
+  in progress completes. The client's own pings are answered by the WebSocket layer.
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
@@ -527,7 +545,9 @@ connection tasks; `futures-util` to split the socket, run calls concurrently
 for the token and device-token digests; `tracing` for the spans and events above; `jstream-mcp` for the
 MCP server behind `/mcp`; `serde_json` for the pairing exchange and the device file;
 `getrandom` for MCP session IDs, pairing codes and device tokens, already in the tree through
-tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is in the tree, so no `ring` or `rustls`.
+tungstenite's `rand` and used by `jstream-daemon` for its token; on Windows only,
+`jstream-platform-windows` for the device file's user-only DACL and its check (#344):
+the server forbids `unsafe`, and the daemon links that crate anyway. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
 
