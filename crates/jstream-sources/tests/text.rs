@@ -490,3 +490,34 @@ fn a_density_over_the_limits_is_lowered() {
     let (dense, _) = size(&source.frame(ms(0)).expect("a frame"));
     assert!(dense <= 300 && dense >= w * 2, "drew {dense} wide from {w}");
 }
+
+/// The extent a density returns is the frame's size at a density of 1, for every text,
+/// size, outline and density: an extent a pixel off made the engine rebuild a fitted
+/// text forever, between two densities (review B1 on #781).
+#[test]
+fn the_extent_is_the_size_at_a_density_of_1() {
+    let densities: Vec<f32> = (1..=12).map(|step| 2f32.powf(step as f32 / 4.0)).collect();
+    for text in ["1234567890", "Hi", "Crisp\ntext", "Ångström façade"] {
+        for px in [9.0, 12.0, 13.5, 17.0, 24.0, 31.0, 40.0] {
+            for outline in [0, 2] {
+                let patch = [
+                    ("text", json!(text)),
+                    ("size", json!(px)),
+                    ("outline_width", json!(outline)),
+                ];
+                let mut source = Registry::builtin()
+                    .create("text", &settings(&patch), &Context::default())
+                    .expect("a text source");
+                let plain = size(&source.frame(ms(0)).expect("a frame"));
+                for &density in &densities {
+                    let extent = source.set_density(density).expect("a density");
+                    assert_eq!(
+                        (extent.width(), extent.height()),
+                        plain,
+                        "{text:?} at {px} px, outline {outline}, density {density}"
+                    );
+                }
+            }
+        }
+    }
+}
