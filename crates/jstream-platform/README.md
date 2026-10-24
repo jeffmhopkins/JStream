@@ -78,11 +78,13 @@ Contents:
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
   a frame it rejects is dropped and the stream goes on.
-- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes
+- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
+  process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
   format an input target would open in (`input_format`, so the engine can build the
   handler for it before opening), and opens input (microphone, output loopback,
-  process loopback) and output streams. Each stream calls an
+  process loopback: a process and its children on Windows, the one process on macOS)
+  and output streams. Each stream calls an
   engine-supplied `AudioInputHandler` or `AudioOutputHandler` on the backend's real-time
   audio thread, so handlers must not allocate, lock, block or log
   ([R-RT-001](../../docs/RULES.md#R-RT-001)). An `AudioPacket` carries interleaved `f32`
@@ -235,6 +237,11 @@ into an encode target's plane views (`Nv12Converter`). Windows' video encoders t
 encode targets on the context they reached through `Codecs::on_context`, and the
 engine's render thread converts each video mix's composite into the next of that mix's
 ring of them and pushes it to the mix's sessions on that path.
+On Linux, `LinuxGpu` opens the device on Vulkan, and the portal capture
+(`PortalCapture::on_context`) imports PipeWire's DMA-BUF frames there and copies each
+into a ring of RGBA textures of its own on the context's queue, so its frames need no
+fence; Linux has no encode targets yet, since its encoders take CPU frames
+([jstream-platform-linux](../jstream-platform-linux/README.md#purpose)).
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -257,11 +264,15 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
 - **`GpuInterop`** (`Send + Sync`), one per platform, in `Backends`:
   - `open_device()` returns a **`GpuContext`**: the `wgpu::Adapter`, `Device` and `Queue`,
     opened on the **media adapter**, plus an `AdapterId` (the LUID on Windows).
-    - The media adapter is the one that drives the captured display, with
-      `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
-      engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, hardware adapter first with the software one as the fallback. On a hybrid-GPU machine where sharing an
-      adapter isn't possible, the platform says so (ARCH step 6).
+    - On Windows the media adapter is the one that drives the captured display, with
+      `TEXTURE_FORMAT_NV12`, as S1 chose it, and on a hybrid-GPU machine where sharing
+      an adapter isn't possible, the platform says so (ARCH step 6). On Linux
+      (`LinuxGpu`) it is a guess: a hardware Vulkan adapter, DMA-BUF importers first,
+      then integrated before discrete, opened without NV12. A capture whose frames
+      don't import on it falls back to CPU frames, so a hybrid machine is not reported.
+    - `jstream-render` uses this device when the engine has one, so capture, render and
+      encode share one adapter. With no interop it opens its own, hardware adapter first
+      with the software one as the fallback.
     - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
       allocation), so the engine can tell whether a texture is on the context a
       compositor runs on. wgpu's own `Device` equality is per instance and can't.
