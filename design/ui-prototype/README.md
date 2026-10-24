@@ -28,11 +28,38 @@ survives outside that artifact.
 | `Panel.dc.html` | Every panel's contents (Scenes, Scene objects, Inspector, Filters, Transitions, Mixer, Outputs, chat, stats…). Imported by `Docking.dc.html`. |
 | `Main.dc.html`, `CanvasFirst.dc.html`, `ShowControl.dc.html` | Directions A, B and C from the first round, kept for comparison. C was rejected. |
 | `canvas.json` | Board layout for the Design canvas. |
+| [`jstream-prototype.html`](jstream-prototype.html) | All of the above in one self-contained file, for sharing ([Standalone file](#standalone)). Generated; don't edit it in the repo. |
+| `standalone/` | What builds that file: `build.py`, the page shell and `runtime.js`, a small stand-in for the canvas runtime. |
+| [`spec-workspace.md`](spec-workspace.md), [`spec-panels.md`](spec-panels.md) | What `Docking.dc.html` and `Panel.dc.html` do, written as requirements with line references. [UI features](../../docs/UI-FEATURES.md) tracks which of them the real UI has. |
 
 Each `.dc.html` is a Design Component: HTML markup with `{{…}}` bindings and
 `<sc-for>` / `<sc-if>` blocks, plus a `class Component extends DCLogic` script whose
-`renderVals()` supplies the bindings. They render only inside the Design canvas runtime.
-To keep working on them, publish them back to the artifact (or a copy of it).
+`renderVals()` supplies the bindings. They render inside the Design canvas runtime, or in
+a plain browser through [`jstream-prototype.html`](#standalone). To keep working on them in
+the canvas, publish them back to the artifact (or a copy of it).
+
+<a id="standalone"></a>
+## Standalone file
+<!-- @section
+-->
+
+`jstream-prototype.html` is the whole prototype in one file, made to be shared: send it to
+someone, or have them download it from the repo, and they open it by double-click. It
+needs no build, no server and no network; the components, styles and runtime are inlined.
+It opens on the dockable workspace (D). The small switcher at the bottom left, or the
+address hash (`#A`, `#B`, `#C`, `#D`), opens the other directions.
+
+Each component sits in the file as two blocks, its markup (`text/x-dc-markup`) and its
+`Component` class (`text/x-dc-logic`), copied unchanged from its `.dc.html`. Someone
+iterating on a shared copy edits those blocks and reloads the page. To change the
+prototype in the repo, edit the `.dc.html` files and rebuild:
+
+```sh
+python3 design/ui-prototype/standalone/build.py
+```
+
+The text uses IBM Plex when it is installed and the system font otherwise, since the
+file can't fetch web fonts offline.
 
 <a id="settles"></a>
 ## What the prototype proposes

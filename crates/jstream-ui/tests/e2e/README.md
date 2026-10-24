@@ -34,7 +34,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   token, so tests share no state and run in parallel. The browser signs in with HTTP
   Basic, the token as the password, as a person's browser does when the daemon serves
   the UI; the connect form's token field can then stay empty. `connect` opens the page
-  and connects; `inspectorPage` opens one of the inspector's tabs.
+  and connects; `disconnect` disconnects through the header's File menu; `rev` reads the
+  revision the header last heard of; `showPanel` makes sure a docked panel's tab is the
+  shown one.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -52,8 +54,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 -->
 
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
-  connects with the browser's credentials; the status bar shows the URL, protocol and
-  revision; disconnecting returns to the form with the token field empty; a refused
+  connects with the browser's credentials; the header's File menu shows the URL and
+  protocol and closes on Escape, and the header carries the revision; disconnecting returns to the form with the token field empty; a refused
   upgrade shows its reason; the token never appears in the page, its storage or its
   cookies. A URL the page's policy refuses shows a reason and re-enables Connect,
   although Chromium sends that socket an `error` event and no `close` (#305).
@@ -64,14 +66,51 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   item; selecting an item opens its properties. The mock engine lists no kinds and makes
   no delete plans, so new-kind sources, the properties form's fields and deletes are
   tested natively.
-- **Outputs** (`outputs.spec.js`, on the inspector's Outputs page): adding a stream and a recording; a stream can't start
+- **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start
   or go live until its key is set; the key field empties on save and the key never
-  appears in the page; go live and end stream; clearing the key; deleting; editing the
+  appears in the page; go live and end stream; the header's Record starts and stops a
+  recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
-- **Canvas** (`canvas.spec.js`): the program scene's box is drawn where the seed put it;
-  a drag sends nothing until the drop, then one edit that undo and redo reverse; arrow
-  keys nudge (Shift by 10) and Ctrl+Z undoes; a second client sees a move.
+- **Docking** (`docking.spec.js`): the Editing layout's zones (Transform under the
+  Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
+  menu hiding and adding a panel at the end of its home zone, and the layout marked
+  "(modified)"; dragging a tab onto a tab strip groups it, and onto an empty zone,
+  which shows while dragging, docks it there; a lone panel collapses by its title,
+  closes on a second click of its ×, and doesn't collapse once it is alone in its
+  zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
+  the Layout menu switches to Live and resets to Editing.
+- **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
+  it, under the scene's caption; a click on the box selects its row in the sources list
+  and shows the size readout, a click on empty canvas clears both, and selecting another
+  scene in the list switches the canvas to it; a Ctrl drag sends nothing until the drop
+  and shows the top-left readout meanwhile, then one edit that Ctrl+Z and Ctrl+Shift+Z
+  reverse; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
+  (Shift by 10) and Ctrl+Z undoes; a second client sees a move; a marquee started on
+  the margin selects the box it touches and Escape clears it; with a second item
+  placed, Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
+  canvas takes one out and Shift-click on its row in the sources list adds it back; a
+  double click brings the closed Inspector back showing the item, and a double click
+  on the canvas tools over an item leaves the selection alone.
+- **Inspector** (`inspector.spec.js`): the selected Backdrop's X, Y, W, H and Rotation;
+  a new width with the W/H link on scales the height and the canvas readout follows,
+  and with it off the other side stays; a stepper is one edit Ctrl+Z on the canvas
+  undoes; arrow keys step (Ctrl by 10), Escape drops typed text, a drag across the
+  field is sent once on release, and text that isn't a number sends nothing while `−`
+  and `,` are read; crop (with the folded "cropped" hint), opacity and the favourite
+  star are sent; with no item selected the scene's object count, uses and Transition
+  in and out show, and a second selected item shows "+1". The mock engine doesn't
+  implement `scene.set_transitions`, so choosing one isn't run.
+- **Transform** (`transform.spec.js`): the summary and the disabled buttons with
+  nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
+  Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
+  changes; with two items, Selection on, Distribute off, and Match width and height
+  giving both the primary item's size.
+- **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
+  preview goes to program with Transition, and the old program scene comes back on
+  preview; Transition and Cut are off while preview is the program scene; a value the
+  preset form refused keeps the preset from being added. The mock engine refuses
+  preset edits, so the edits the preset form sends are tested natively.
 
 <a id="running"></a>
 ## Running them

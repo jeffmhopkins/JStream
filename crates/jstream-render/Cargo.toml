@@ -20,6 +20,8 @@ jstream-media.workspace = true
 jstream-platform.workspace = true
 # The shared 0.3 placement. Layer 1, so a layer-2 compositor may call it (R-ARCH-002).
 jstream-protocol.workspace = true
+# Filter settings values and the video filter descriptors' defaults (ADR-0025).
+serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 # Backends are additive (R-RS-010): Vulkan for lavapipe, DX12 for WARP, Metal on macOS.
@@ -27,6 +29,8 @@ tracing.workspace = true
 wgpu = { workspace = true, features = ["vulkan", "dx12", "metal", "wgsl"] }
 
 [dev-dependencies]
+# The video filter kinds' snapshot, reviewed like an API diff (ADR-0025).
+insta.workspace = true
 criterion.workspace = true
 
 [[bench]]

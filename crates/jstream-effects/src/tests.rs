@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use crate::{FieldType, KindChange, Pack, PackError, PackWatcher};
 
-const PRELUDE: &str = include_str!("../tests/fixtures/host-prelude.wgsl");
+const PRELUDE: &str = jstream_render::FILTER_PRELUDE;
 
 const MANIFEST: &str = r##"
 [pack]
@@ -420,6 +420,32 @@ fn shaders_are_checked_against_the_contract() {
             "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> { return p.missing; }\n",
             "line 2:",
         ),
+        // #349: memory a fragment shader has no business holding.
+        (
+            "huge-local",
+            "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n\
+             var a: array<f32, 1000000>;\n    a[0] = 1.0;\n    return src(in.uv) * a[0];\n}\n",
+            "uses a 4000000-byte value",
+        ),
+        (
+            "huge-constructed",
+            "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n\
+             let a = array<f32, 5000>();\n    return src(in.uv) * a[1];\n}\n",
+            "uses a 20000-byte value",
+        ),
+        (
+            "private-total",
+            "var<private> a: array<vec4<f32>, 600>;\nvar<private> b: array<vec4<f32>, 600>;\n\
+             @fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> { return src(in.uv) + a[0] + b[0]; }\n",
+            "declares 19200 bytes of `var<private>` globals",
+        ),
+        (
+            "locals-total",
+            "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n\
+             var a: array<vec4<f32>, 600>;\n    var b: array<vec4<f32>, 600>;\n\
+             return src(in.uv) + a[0] + b[0];\n}\n",
+            "`fs` declares 19200 bytes of local variables",
+        ),
     ];
     for (name, wgsl, expect) in cases {
         let message = error(name, MANIFEST, wgsl);
@@ -431,6 +457,10 @@ fn shaders_are_checked_against_the_contract() {
     let manifest = MANIFEST.replacen(r#"id = "flicker""#, r#"id = "loop""#, 1);
     let message = error("reserved", &manifest, SCANLINES);
     assert!(message.contains("generated `Params`"), "{message}");
+
+    // A lookup table within the limit loads.
+    let table = format!("const LUT = array<vec4<f32>, 256>();\n{SCANLINES}");
+    load("lut-ok", MANIFEST, &table).expect("a 4 KiB table is within MAX_VALUE_BYTES");
 }
 
 #[test]
@@ -570,4 +600,104 @@ fn the_watcher_hot_reloads_packs() {
     std::fs::remove_dir_all(&third).expect("remove third");
     assert_eq!(watcher.poll().kinds.len(), 4);
     assert_eq!(watcher.packs().count(), 0);
+}
+
+/// The test compositor, or `None` (a skip) where no adapter exists outside CI.
+fn compositor() -> Option<jstream_render::Compositor> {
+    match jstream_render::Compositor::open(jstream_render::OpenOptions::headless()) {
+        Ok(compositor) => Some(compositor),
+        Err(err) if err.is_no_adapter() && std::env::var_os("CI").is_none() => None,
+        Err(err) => panic!("opening the compositor failed: {err}"),
+    }
+}
+
+/// `image` placed 1:1 on a transparent canvas of its size, read back as sRGB RGBA8.
+fn read(compositor: &mut jstream_render::Compositor, image: &jstream_render::Image) -> Vec<u8> {
+    use jstream_render::{Color, Crop, Item, Placement, Scene};
+    let items = [Item {
+        image,
+        placement: Placement::IDENTITY,
+        crop: Crop::NONE,
+        opacity: 1.0,
+        visible: true,
+    }];
+    let scene = Scene {
+        canvas: jstream_media::FrameSize::new(image.width(), image.height()).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &items,
+    };
+    let output = compositor.render(&scene, true).expect("render");
+    let snapshot = output.pixels().expect("readback requested");
+    (0..image.height())
+        .flat_map(|y| (0..image.width()).map(move |x| (x, y)))
+        .flat_map(|(x, y)| snapshot.pixel(x, y).expect("inside"))
+        .collect()
+}
+
+fn near(got: &[u8], expected: &[u8], tol: u8) {
+    assert_eq!(got.len(), expected.len());
+    for (g, e) in got.iter().zip(expected) {
+        assert!(g.abs_diff(*e) <= tol, "got {got:?}, expected {expected:?}");
+    }
+}
+
+#[test]
+fn an_effect_draws_through_the_render_harness_and_reloads() {
+    let Some(mut compositor) = compositor() else {
+        return;
+    };
+    let temp = Temp::new("draw");
+    retro(&temp.0, MANIFEST, SCANLINES);
+    let pack = Pack::load(&temp.0, PRELUDE).expect("pack loads");
+    let scan = pack.effect("retro/scanlines").expect("scanlines");
+    let input = compositor
+        .upload_rgba8(1, 2, &[255, 255, 255, 255, 255, 255, 255, 255])
+        .expect("upload");
+    let clock = jstream_render::FilterClock { seconds: 0.0 };
+
+    // One line, half strength, a white tint: linear 0.5 is sRGB 188.
+    let mut filter = scan.video_filter(&settings(&[
+        ("strength", json!(0.5)),
+        ("tint", json!("#ffffff")),
+        ("lines", json!(1)),
+    ]));
+    let out = compositor
+        .apply_filter(&mut filter, &input, clock)
+        .expect("apply");
+    near(
+        &read(&mut compositor, &out),
+        &[188, 188, 188, 255, 188, 188, 188, 255],
+        2,
+    );
+
+    // Settings change in place: the default red, half-transparent tint.
+    filter.set_settings(&settings(&[("strength", json!(0.0)), ("lines", json!(1))]));
+    let out = compositor
+        .apply_filter(&mut filter, &input, clock)
+        .expect("apply");
+    near(
+        &read(&mut compositor, &out),
+        &[255, 0, 0, 255, 255, 0, 0, 255],
+        2,
+    );
+
+    // A reload with new WGSL under the same kind ID draws the new shader.
+    write(
+        &temp.0.join("scanlines.wgsl"),
+        &SCANLINES.replace(
+            "return vec4<f32>(c.rgb * dark * p.tint.rgb, c.a);",
+            "return vec4<f32>(0.0, 0.0, c.a * dark, c.a);",
+        ),
+    );
+    let reloaded = Pack::load(&temp.0, PRELUDE).expect("pack reloads");
+    let mut filter = reloaded.effects()[0].video_filter(&Settings::default());
+    let out = compositor
+        .apply_filter(&mut filter, &input, clock)
+        .expect("apply");
+    // The defaults: 240 lines put both pixels on even (darkened) rows.
+    near(
+        &read(&mut compositor, &out),
+        &[0, 0, 188, 255, 0, 0, 188, 255],
+        2,
+    );
 }

@@ -1,5 +1,5 @@
 // Connecting to the engine that served the page, and leaving it.
-import { test, expect, connect, rev } from '../fixtures.js';
+import { test, expect, connect, disconnect, rev } from '../fixtures.js';
 
 test('the form offers the serving engine and connects with the browser credentials', async ({ page, daemon }) => {
   await page.goto(daemon.url);
@@ -9,10 +9,14 @@ test('the form offers the serving engine and connects with the browser credentia
   await expect(page.getByLabel('Control token')).toHaveValue('');
   await page.getByRole('button', { name: 'Connect' }).click();
 
-  const bar = page.locator('.status-bar');
-  await expect(bar.getByRole('button', { name: 'Disconnect' })).toBeVisible();
-  await expect(bar).toContainText(`ws://${host}/api/v1/ws`);
-  await expect(bar).toContainText(/protocol \d+\.\d+/);
+  const header = page.locator('header.app-header');
+  await header.getByRole('button', { name: 'File' }).click();
+  const menu = page.getByRole('menu', { name: 'File' });
+  await expect(menu.getByRole('menuitem', { name: 'Disconnect' })).toBeVisible();
+  await expect(menu).toContainText(`ws://${host}/api/v1/ws`);
+  await expect(menu).toContainText(/Protocol\s*\d+\.\d+/);
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
   // The seed is one batch and one scene switch.
   expect(await rev(page)).toBeGreaterThan(0);
 });
@@ -21,7 +25,7 @@ test('disconnecting returns to the form without the token', async ({ page, daemo
   await page.goto(daemon.url);
   await page.getByLabel('Control token').fill(daemon.token);
   await page.getByLabel('Control token').press('Enter');
-  await page.getByRole('button', { name: 'Disconnect' }).click();
+  await disconnect(page);
 
   await expect(page.getByRole('button', { name: 'Connect' })).toBeEnabled();
   await expect(page.getByLabel('Control token')).toHaveValue('');
@@ -63,7 +67,7 @@ test('the token never reaches the page or its storage', async ({ page, daemon })
   await page.goto(daemon.url);
   await page.getByLabel('Control token').fill(daemon.token);
   await page.getByRole('button', { name: 'Connect' }).click();
-  await expect(page.getByRole('button', { name: 'Disconnect' })).toBeVisible();
+  await expect(page.locator('header.app-header')).toBeVisible();
 
   expect(await page.content()).not.toContain(daemon.token);
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));

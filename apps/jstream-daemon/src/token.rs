@@ -6,9 +6,10 @@
 //! surrounding whitespace.
 
 use anyhow::{Context, bail};
+use jstream_crash::Secrets;
 use jstream_server::Token;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::fs::{self, File};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Random bytes in a new token: 256 bits.
@@ -35,11 +36,13 @@ pub fn device_file(token_file: &Path) -> PathBuf {
 /// Reads the token in `path`, or creates the file with a new token if there is none.
 ///
 /// An existing file must hold a valid token (visible ASCII, after trimming whitespace)
-/// and, on Unix, must give group and others no permission at all. A new file is
-/// created atomically (it never replaces a file created meanwhile), user-only on Unix
-/// (mode 0600); on Windows it gets its directory's ACL. The token is registered with
-/// the crash reports' redaction.
-pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
+/// and must be user-only: on Unix it gives group and others no permission at all; on
+/// Windows its owner is the user, SYSTEM or Administrators and its DACL grants no one
+/// else real access (#344, `jstream_platform_windows::check_private_file`). A new file
+/// is created atomically (it never replaces a file created meanwhile) and user-only:
+/// mode 0600 on Unix, a protected DACL for SYSTEM and the user on Windows. The token is
+/// registered with the crash reports' redaction (`secrets`).
+pub fn load_or_create(path: &Path, secrets: &Secrets) -> anyhow::Result<(Token, Provenance)> {
     // Drawn first, so a failing random source leaves no empty file behind.
     let token = new_token()?;
     match create_new(path) {
@@ -51,7 +54,7 @@ pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
                     format!("could not write the token file `{}`", path.display())
                 });
             }
-            crate::crash::register_secret(&token);
+            secrets.register(&token);
             let token = Token::new(token).context("invariant: a hex token is valid")?;
             Ok((token, Provenance::Created))
         }
@@ -61,20 +64,26 @@ pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
             if error.kind() == io::ErrorKind::AlreadyExists
                 || fs::symlink_metadata(path).is_ok() =>
         {
-            Ok((read_existing(path)?, Provenance::Existing))
+            Ok((read_existing(path, secrets)?, Provenance::Existing))
         }
         Err(error) => Err(error)
             .with_context(|| format!("could not create the token file `{}`", path.display())),
     }
 }
 
-/// Opens a new file at `path`, failing with `AlreadyExists` if anything is there.
+/// Opens a new user-only file at `path`, failing with `AlreadyExists` if anything is
+/// there.
 fn create_new(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(path)
+    #[cfg(windows)]
+    return jstream_platform_windows::create_private_file(path);
+    #[cfg(not(windows))]
+    {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        options.open(path)
+    }
 }
 
 fn write_token(mut file: File, token: &str) -> io::Result<()> {
@@ -91,7 +100,7 @@ fn new_token() -> anyhow::Result<String> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn read_existing(path: &Path) -> anyhow::Result<Token> {
+fn read_existing(path: &Path, secrets: &Secrets) -> anyhow::Result<Token> {
     let shown = path.display();
     let metadata =
         fs::metadata(path).with_context(|| format!("could not read the token file `{shown}`"))?;
@@ -110,7 +119,17 @@ fn read_existing(path: &Path) -> anyhow::Result<Token> {
             );
         }
     }
-    let text = fs::read_to_string(path)
+    let mut file =
+        File::open(path).with_context(|| format!("could not read the token file `{shown}`"))?;
+    #[cfg(windows)]
+    if let Err(why) = jstream_platform_windows::check_private_file(&file) {
+        bail!(
+            "the token file `{shown}` may be accessible to other users: {why}; make it \
+             user-only or delete it to get a new token"
+        );
+    }
+    let mut text = String::new();
+    file.read_to_string(&mut text)
         .with_context(|| format!("could not read the token file `{shown}`"))?;
     let token = text.trim();
     if token.is_empty() {
@@ -118,13 +137,14 @@ fn read_existing(path: &Path) -> anyhow::Result<Token> {
     }
     let valid = Token::new(token)
         .with_context(|| format!("the token file `{shown}` holds no valid token"))?;
-    crate::crash::register_secret(token);
+    secrets.register(token);
     Ok(valid)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Provenance, device_file, load_or_create, new_token};
+    use jstream_crash::Secrets;
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -139,8 +159,18 @@ mod tests {
         dir
     }
 
-    /// Writes `text` to a user-only file, as a user would prepare one.
+    /// Writes `text` to a new user-only file, as a user would prepare one: mode 0600 on
+    /// Unix, and on Windows a protected DACL, since the scratch folder's inherited
+    /// entries may let other users read it (CI's runner grants `BUILTIN\Users` read), and
+    /// such a file is refused before its contents are looked at.
     fn write_private(path: &Path, text: &str) {
+        #[cfg(windows)]
+        {
+            use std::io::Write;
+            let mut file = jstream_platform_windows::create_private_file(path).expect("created");
+            file.write_all(text.as_bytes()).expect("written");
+        }
+        #[cfg(not(windows))]
         fs::write(path, text).expect("written");
         #[cfg(unix)]
         {
@@ -173,11 +203,16 @@ mod tests {
     fn a_missing_file_is_created_and_then_reused() {
         let dir = scratch("reuse");
         let path = dir.join("token");
-        let (_, provenance) = load_or_create(&path).expect("created");
+        let created = Secrets::new();
+        let (_, provenance) = load_or_create(&path, &created).expect("created");
         assert_eq!(provenance, Provenance::Created);
         let written = fs::read_to_string(&path).expect("readable");
         assert!(written.ends_with('\n'));
         assert_eq!(written.trim().len(), 64);
+        assert!(
+            created.is_registered(written.trim()),
+            "a new token is redacted from crash reports"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -185,8 +220,13 @@ mod tests {
             assert_eq!(mode & 0o777, 0o600, "user-only");
         }
 
-        let (_, provenance) = load_or_create(&path).expect("reused");
+        let reused = Secrets::new();
+        let (_, provenance) = load_or_create(&path, &reused).expect("reused");
         assert_eq!(provenance, Provenance::Existing);
+        assert!(
+            reused.is_registered(written.trim()),
+            "a reused token is redacted from crash reports"
+        );
         assert_eq!(
             fs::read_to_string(&path).expect("readable"),
             written,
@@ -200,24 +240,51 @@ mod tests {
         let dir = scratch("refused");
         let empty = dir.join("empty");
         write_private(&empty, "  \n");
-        let error = load_or_create(&empty).expect_err("empty");
+        let error = load_or_create(&empty, &Secrets::new()).expect_err("empty");
         assert!(error.to_string().contains("is empty"), "{error}");
 
         let spaced = dir.join("spaced");
         write_private(&spaced, "two words\n");
-        let error = load_or_create(&spaced).expect_err("not a token");
+        let error = load_or_create(&spaced, &Secrets::new()).expect_err("not a token");
         assert!(
             error.to_string().contains("holds no valid token"),
             "{error:#}"
         );
         assert_eq!(fs::read_to_string(&spaced).expect("kept"), "two words\n");
 
-        let error = load_or_create(&dir).expect_err("a directory");
+        let error = load_or_create(&dir, &Secrets::new()).expect_err("a directory");
         assert!(error.to_string().contains("not a regular file"), "{error}");
 
         let missing_dir = dir.join("missing").join("token");
-        let error = load_or_create(&missing_dir).expect_err("no parent directory");
+        let error = load_or_create(&missing_dir, &Secrets::new()).expect_err("no parent directory");
         assert!(error.to_string().contains("could not create"), "{error}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// #344: a token file whose DACL lets everyone read it is refused, and one this
+    /// daemon created passes.
+    #[cfg(windows)]
+    #[test]
+    fn a_file_other_users_can_read_is_refused_on_windows() {
+        let dir = scratch("dacl");
+        let path = dir.join("token");
+        let (_, provenance) = load_or_create(&path, &Secrets::new()).expect("created");
+        assert_eq!(provenance, Provenance::Created);
+        let (_, provenance) = load_or_create(&path, &Secrets::new()).expect("its own DACL passes");
+        assert_eq!(provenance, Provenance::Existing);
+
+        // Everyone (S-1-1-0) may read it now.
+        let granted = std::process::Command::new("icacls")
+            .arg(&path)
+            .args(["/grant", "*S-1-1-0:R"])
+            .output()
+            .expect("icacls runs");
+        assert!(granted.status.success(), "{granted:?}");
+        let error = load_or_create(&path, &Secrets::new()).expect_err("everyone can read it");
+        assert!(
+            error.to_string().contains("accessible to other users"),
+            "{error}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -229,11 +296,12 @@ mod tests {
         let path = dir.join("token");
         fs::write(&path, "s3cret-T0ken\n").expect("written");
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).expect("chmod");
-        let error = load_or_create(&path).expect_err("group and others can read it");
+        let error =
+            load_or_create(&path, &Secrets::new()).expect_err("group and others can read it");
         assert!(error.to_string().contains("mode 644"), "{error}");
 
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).expect("chmod");
-        let (_, provenance) = load_or_create(&path).expect("user-only now");
+        let (_, provenance) = load_or_create(&path, &Secrets::new()).expect("user-only now");
         assert_eq!(provenance, Provenance::Existing);
         let _ = fs::remove_dir_all(&dir);
     }

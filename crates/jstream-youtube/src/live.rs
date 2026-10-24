@@ -317,7 +317,7 @@ impl LiveClient {
     }
 
     /// Sends one API call with a fresh token, refreshing and retrying once on a 401.
-    fn call<T: DeserializeOwned>(
+    pub(crate) fn call<T: DeserializeOwned>(
         &mut self,
         method: Method,
         path: &str,
@@ -437,7 +437,7 @@ fn parse<T: DeserializeOwned>(
     })
 }
 
-fn first<T>(page: Page<T>, kind: &'static str, id: &str) -> Result<T, YoutubeError> {
+pub(crate) fn first<T>(page: Page<T>, kind: &'static str, id: &str) -> Result<T, YoutubeError> {
     page.items
         .into_iter()
         .next()
@@ -447,7 +447,7 @@ fn first<T>(page: Page<T>, kind: &'static str, id: &str) -> Result<T, YoutubeErr
         })
 }
 
-fn non_empty(id: &str) -> Result<String, YoutubeError> {
+pub(crate) fn non_empty(id: &str) -> Result<String, YoutubeError> {
     if id.is_empty() {
         return Err(YoutubeError::InvalidArgument {
             reason: "an ID is empty",
@@ -1149,7 +1149,7 @@ fn secret<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Secret>, D::Error> {
 }
 
 /// A uint64, which Google's JSON sends as a string, accepting a number too.
-fn u64_or_string<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
+pub(crate) fn u64_or_string<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum Raw {
