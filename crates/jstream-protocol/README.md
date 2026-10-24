@@ -171,8 +171,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.35 because of
-  WASM plugins ([Plugins](#design): `plugin.install`, `plugin.grant`, `plugin.enable`,
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.36 because of
+  the `show_cursor` setting of the `display` and `window` kinds (whether the pointer
+  shows in the capture; on by default, which is what those kinds did before); 0.35
+  added WASM plugins ([Plugins](#design): `plugin.install`, `plugin.grant`, `plugin.enable`,
   `plugin.state_changed`, the `forbidden` error and the `plugin` entity kind); 0.34 made
   the engine accept non-neutral 3D (`tilt_deg`, `turn_deg`, `depth_px` and
   `perspective_px`, which earlier minors rejected with `invalid_argument`, are stored and
@@ -278,8 +280,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":35},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":35},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":36},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":36},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}

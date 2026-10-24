@@ -67,24 +67,37 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
-            params: vec![ParamDescriptor {
-                id: "target".into(),
-                ty: ParamType::String {
-                    multiline: false,
-                    max_len: 1024,
-                },
-                default: serde_json::Value::from(""),
-                label: "Display".into(),
-                description: Some(
-                    "The ID of the display to capture, as `capture.targets` lists it. Empty \
+            params: vec![
+                ParamDescriptor {
+                    id: "target".into(),
+                    ty: ParamType::String {
+                        multiline: false,
+                        max_len: 1024,
+                    },
+                    default: serde_json::Value::from(""),
+                    label: "Display".into(),
+                    description: Some(
+                        "The ID of the display to capture, as `capture.targets` lists it. Empty \
                      captures the primary display."
-                        .into(),
-                ),
-                group: None,
-                advanced: false,
-                visible_if: None,
-                live: false,
-            }],
+                            .into(),
+                    ),
+                    group: None,
+                    advanced: false,
+                    visible_if: None,
+                    live: false,
+                },
+                ParamDescriptor {
+                    id: "show_cursor".into(),
+                    ty: ParamType::Bool,
+                    default: serde_json::Value::from(true),
+                    label: "Show cursor".into(),
+                    description: Some("Whether the pointer shows in the capture.".into()),
+                    group: None,
+                    advanced: false,
+                    visible_if: None,
+                    live: false,
+                },
+            ],
         },
         KindDescriptor {
             kind_id: "desktop_audio".into(),
@@ -1993,9 +2006,12 @@ fn screen() -> SourceInfo {
         kind: SourceKind::Builtin {
             kind: "display".into(),
         },
-        settings: [("target".to_owned(), serde_json::Value::from(""))]
-            .into_iter()
-            .collect(),
+        settings: [
+            ("target".to_owned(), serde_json::Value::from("")),
+            ("show_cursor".to_owned(), serde_json::Value::from(true)),
+        ]
+        .into_iter()
+        .collect(),
         audio: None,
         ..cam()
     }

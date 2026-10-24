@@ -445,6 +445,8 @@ settings refer to a later one must produce exactly the checked-in
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); the fixture with its `webcam` sources'
 settings taken out (as saved before the kind had a `device`) loading to the same state;
+the fixture with its `display` source's `show_cursor` taken out (as saved before 0.36)
+loading to the same state;
 a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none, and one without
 `video_mixes` or any `video_mix` likewise; a file without `sends`, `buses` or source

@@ -14,8 +14,8 @@ use jstream_platform::media::{
 };
 use jstream_platform::nv12::{bgra_to_nv12, even_size};
 use jstream_platform::{
-    Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, GpuContext,
-    PlatformError, VideoSurface,
+    Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
+    CursorCapture, GpuContext, PlatformError, VideoSurface,
 };
 use windows::Foundation::TypedEventHandler;
 use windows::Graphics::Capture::{
@@ -120,6 +120,17 @@ impl Capture for WgcCapture {
     }
 
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.start_with(target, &CaptureOptions::default())
+    }
+
+    /// As [`start`](Capture::start). WGC can't send the pointer apart from the frames, so
+    /// [`CursorCapture::Metadata`] draws it in; [`CursorCapture::Hidden`] turns the
+    /// session's cursor capture off.
+    fn start_with(
+        &self,
+        target: &CaptureTarget,
+        options: &CaptureOptions,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
         hold_mta_for_the_process()?;
         let mta = MtaUsage::new()?;
         let resolved = resolve(target)?;
@@ -131,6 +142,7 @@ impl Capture for WgcCapture {
         Ok(Box::new(WgcStream::start(
             resolved,
             self.gpu.as_ref(),
+            cursor_captured(options.cursor),
             mta,
         )?))
     }
@@ -139,6 +151,12 @@ impl Capture for WgcCapture {
     fn on_context(&self, context: &GpuContext) -> Result<Option<Arc<dyn Capture>>, PlatformError> {
         Ok(Some(Arc::new(Self::on_gpu(context)?)))
     }
+}
+
+/// Whether the session draws the pointer for `cursor`: only [`CursorCapture::Hidden`]
+/// leaves it out.
+fn cursor_captured(cursor: CursorCapture) -> bool {
+    cursor != CursorCapture::Hidden
 }
 
 /// Keeps the process's multithreaded apartment until the process exits, from the first
@@ -736,6 +754,7 @@ impl WgcStream {
     fn start(
         resolved: Resolved,
         gpu: Option<&CaptureGpu>,
+        cursor: bool,
         mta: MtaUsage,
     ) -> Result<Self, PlatformError> {
         let item = create_item(&resolved)?;
@@ -761,9 +780,10 @@ impl WgcStream {
             .CreateCaptureSession(&item)
             .os("Direct3D11CaptureFramePool::CreateCaptureSession")?;
         // Best effort: older builds lack these properties (the border needs Windows 11,
-        // the cursor setting Windows 10 2004), and they then keep their defaults.
+        // the cursor setting Windows 10 2004), and they then keep their defaults: no
+        // border setting, and the pointer drawn in even when it should be left out.
         let _ = session.SetIsBorderRequired(false);
-        let _ = session.SetIsCursorCaptureEnabled(true);
+        let _ = session.SetIsCursorCaptureEnabled(cursor);
         let shared = Arc::new(Shared {
             mailbox: Mailbox::new(),
             failure: OnceLock::new(),
@@ -893,7 +913,17 @@ mod tests {
     };
     use windows::core::w;
 
-    use super::{Resolved, Source, not_found_if_gone, target_gone};
+    use super::{Resolved, Source, cursor_captured, not_found_if_gone, target_gone};
+
+    /// Only `Hidden` turns the session's cursor capture off; WGC can't send the pointer
+    /// apart, so `Metadata` draws it in.
+    #[test]
+    fn only_a_hidden_cursor_is_left_out() {
+        use jstream_platform::CursorCapture;
+        assert!(cursor_captured(CursorCapture::Drawn));
+        assert!(cursor_captured(CursorCapture::Metadata));
+        assert!(!cursor_captured(CursorCapture::Hidden));
+    }
 
     /// A message-only window: a real window handle that needs no display or desktop.
     pub(super) fn message_window() -> HWND {

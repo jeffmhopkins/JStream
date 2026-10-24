@@ -13,6 +13,7 @@ use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
+use crate::forget::ForgetSources;
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
@@ -380,6 +381,7 @@ impl Engine {
             state
                 .live
                 .set_media(Arc::clone(&backends.media), state.graph.state());
+            state.forget = ForgetSources::spawn(Arc::clone(&backends.capture));
         }
         let host = self.host();
         let vcam = backends.vcam.take();
@@ -2230,6 +2232,9 @@ struct State {
     studio: Studio,
     /// The privacy screen. Runtime state, like `studio`: not part of `rev`.
     privacy: Privacy,
+    /// Forgets the capture backend's grant for each deleted source, once there are
+    /// backends ([`ForgetSources`]).
+    forget: Option<ForgetSources>,
 }
 
 impl State {
@@ -2485,6 +2490,12 @@ impl State {
                 && self.graph.state().source(source_id).is_none()
             {
                 self.frames.remove(source_id);
+                // The capture backend's grant for it (the portal's restore token) goes
+                // too, so a new source given its ID asks again. Its capture, if one
+                // runs, stops when the render thread takes the next snapshot.
+                if let Some(forget) = &self.forget {
+                    forget.forget(source_id.clone());
+                }
             }
         }
         // Edits that deleted the program scene, or created the first scene, move
