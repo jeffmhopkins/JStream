@@ -5,8 +5,6 @@
 struct Params {
     // Premultiplied linear.
     color: vec4<f32>,
-    inset_x: i32,
-    inset_y: i32,
     shape_origin: vec2<f32>,
     shape_size: vec2<f32>,
     scale: f32,
@@ -18,7 +16,7 @@ struct Params {
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    let top = placed(out_px(in.pos), vec2<i32>(p.inset_x, p.inset_y));
+    let top = load_edge(out_px(in.pos), 1u);
     let f = in.pos.xy - p.shape_origin;
     var a = 0.0;
     if (all(f >= vec2<f32>(0.0)) && all(f < p.shape_size)) {

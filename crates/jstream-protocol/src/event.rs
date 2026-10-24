@@ -6,6 +6,7 @@ use crate::history::HistoryDirection;
 use crate::id::{ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId};
 use crate::live::LiveOutcome;
 use crate::plugin::{PluginDisabledReason, PluginState};
+use crate::transition::TransitionStarted;
 use crate::youtube::{HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -42,16 +43,38 @@ pub enum Event {
         /// Its new state.
         state: OutputState,
     },
-    /// The scene on program changed: after a `scene.switch`, or after a batch, undo or
-    /// redo deleted the program scene (program moves to the first remaining scene) or
-    /// created the collection's first scene (it goes on program). Studio state is runtime state
-    /// (ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits
-    /// comes first.
+    /// The scene on program or on preview changed: after a `scene.switch` or a
+    /// `studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives
+    /// way to the first remaining scene) or created the collection's first scene (it goes
+    /// on program and on preview). Studio state is runtime state (ADR-0030), so the event
+    /// carries no `rev`; a `state.changed` for the same edits comes first.
     #[serde(rename = "studio.changed")]
     StudioChanged {
         /// The scene now on program. Omitted when the collection has no scene left.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
+        /// The scene now on preview. Omitted when the collection has no scene left, and
+        /// by a server older than 0.30.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preview_scene: Option<SceneId>,
+        /// The transition a `scene.switch` started: the preset the engine chose and how
+        /// long it runs. Omitted when program did not change by a switch.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transition: Option<TransitionStarted>,
+        /// The client whose request caused it.
+        client_id: ClientId,
+        /// That client's request ID, so it can match the event to its own response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<RequestId>,
+    },
+    /// The privacy screen was turned on or off with `privacy.set` (ADR-0027 §4). It is
+    /// runtime state, so the event carries no `rev`. A client that subscribes while the
+    /// screen is on gets `privacy.changed` first, naming the client that turned it on
+    /// and no `request_id`, so no client shows it as off.
+    #[serde(rename = "privacy.changed")]
+    PrivacyChanged {
+        /// Whether the privacy screen now covers the outputs.
+        on: bool,
         /// The client whose request caused it.
         client_id: ClientId,
         /// That client's request ID, so it can match the event to its own response.
@@ -193,6 +216,7 @@ impl Event {
             Event::MetersTick { .. } => Some("meters.tick"),
             Event::PluginStateChanged { .. } => Some("plugin.state_changed"),
             Event::StudioChanged { .. } => Some("studio.changed"),
+            Event::PrivacyChanged { .. } => Some("privacy.changed"),
             Event::Unknown => None,
         }
     }

@@ -81,6 +81,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.list", Class(R)),
     ("delete.plan", Class(R)),
     ("capture.targets", Class(R)),
+    ("privacy.get", Class(R)),
     // The pixels of a user's capture could leak through any granted host; with no
     // filesystem grant there is nowhere safe for them.
     ("video.snapshot", N),
@@ -94,6 +95,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.set_role", Class(E)),
     ("scene.delete", Class(E)),
     ("scene.reorder", Class(E)),
+    ("scene.set_folder", Class(E)),
+    ("scene.set_meta", Class(E)),
+    ("scene.set_transitions", Class(E)),
     ("item.add", Class(E)),
     ("item.remove", Class(E)),
     ("item.move", Class(E)),
@@ -105,12 +109,14 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.set_opacity", Class(E)),
     ("item.set_blend", Class(E)),
     ("item.set_source", Class(E)),
+    ("item.set_transition", Class(E)),
     ("source.create", Class(E)),
     ("source.rename", Class(E)),
     ("source.set_settings", Class(E)),
     ("source.duplicate", Class(E)),
     ("source.delete", Class(E)),
     ("source.set_audio", Class(E)),
+    ("source.set_meta", Class(E)),
     ("filter.add", Class(E)),
     ("filter.remove", Class(E)),
     ("filter.set_enabled", Class(E)),
@@ -138,6 +144,20 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("video_mix.update", N),
     ("video_mix.delete", N),
     ("output.set_video_mix", N),
+    // Not named in any class by ADR-0069 either, so "never" until a PR places them.
+    ("folder.create", N),
+    ("folder.rename", N),
+    ("folder.set_parent", N),
+    ("folder.reorder", N),
+    ("folder.delete", N),
+    ("label.create", N),
+    ("label.update", N),
+    ("label.reorder", N),
+    ("label.delete", N),
+    ("transition.create", N),
+    ("transition.update", N),
+    ("transition.delete", N),
+    ("transition.set_default", N),
     // Actions.
     ("live.set", Class(E)),
     ("live.cancel", Class(E)),
@@ -158,6 +178,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // Not named in any class, so "never" until a PR places them.
     ("preview.unsubscribe", N),
     ("audio.reset_loudness", N),
+    ("studio.set_preview", N),
+    // The privacy screen covers what is on air; a plugin never lifts it.
+    ("privacy.set", N),
     // A person installs, grants and re-enables plugins; a plugin never does (G1).
     ("plugin.install", N),
     ("plugin.grant", N),
@@ -679,6 +702,7 @@ mod tests {
     fn a_hotkey_needs_the_class_of_the_action_it_binds() {
         let switch = bind(Action::SceneSwitch {
             scene_id: SceneId::new("a"),
+            preset_id: None,
         });
         assert_eq!(
             plugin_classes(&switch),

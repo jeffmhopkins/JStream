@@ -7,13 +7,20 @@
 //! straight sRGB (a captured frame), or premultiplied sRGB code values (a browser page),
 //! which the shader converts to premultiplied linear after the filter.
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 
+use jstream_media::VideoFrameInfo;
 use jstream_platform::{FrameSync, GpuFrame};
 
 use crate::color::srgb_channel_to_linear;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
+use crate::mips::{Mips, Region};
+
+/// How many mip chains an image keeps, one per crop it was placed in 3D with, the most
+/// recently used first. An animated crop makes a chain per crop, so older ones go.
+const MAX_CHAINS: usize = 4;
 
 /// The format uploaded images are stored in: premultiplied linear light.
 pub(crate) const UPLOAD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -35,6 +42,22 @@ pub(crate) enum Alpha {
     /// edges clean; the shader then divides by alpha, decodes sRGB and multiplies by
     /// alpha again in linear light.
     PremultipliedSrgb,
+    /// Opaque sRGB (imports of a captured frame), decoded by the sampler with alpha read
+    /// as 1 whatever the texture holds, as the CPU capture path ignores it (#451).
+    Opaque,
+}
+
+impl Alpha {
+    /// The shaders' number for this mode: how they turn a filtered sample into
+    /// premultiplied linear light.
+    pub(crate) fn shader_mode(self) -> f32 {
+        match self {
+            Alpha::Premultiplied => 0.0,
+            Alpha::Straight => 1.0,
+            Alpha::PremultipliedSrgb => 2.0,
+            Alpha::Opaque => 3.0,
+        }
+    }
 }
 
 /// Which [`crate::Compositor`] made an image. The image keeps a clone, so the allocation
@@ -62,6 +85,10 @@ pub(crate) struct Maker<'a> {
 /// redraws the same images does not allocate one. An image only draws in the
 /// [`crate::Compositor`] that made it; another one refuses it with
 /// [`RenderError::Invalid`].
+///
+/// A clone shares the same texture, so a filter can read a layer the caller keeps (a
+/// scene that a `scene_mask` reads); the texture lives until its last clone is dropped.
+#[derive(Clone)]
 pub struct Image {
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
@@ -73,6 +100,20 @@ pub struct Image {
     /// The render-target view of a layer, kept so drawing into it again allocates no
     /// view. `None` for uploads and imports, which are never drawn into.
     target: Option<wgpu::TextureView>,
+    /// How many times the texels have changed: an upload rewritten, a layer drawn into,
+    /// or an import given a new frame ([`Self::mark_changed`]). A mip chain is rebuilt
+    /// when this moved since its last build (ADR-0050 decision 5), so once per change,
+    /// however many calls draw it.
+    generation: Arc<AtomicU64>,
+    /// The last frame an import was given, by its hold and its info, so the same frame
+    /// given again is not a change. A platform may hand out one hold for every frame it
+    /// writes into a texture (the Windows capture ring keeps one per slot), so the hold
+    /// alone can't tell frames apart; the info carries the presentation time. `Weak`, so
+    /// the allocation it compares by can't be reused while it is held here.
+    last_frame: Option<(Weak<dyn FrameSync>, VideoFrameInfo)>,
+    /// Mip chains, one per crop the image was placed in 3D with, most recently used
+    /// first, at most [`MAX_CHAINS`].
+    mips: Arc<Mutex<Vec<Arc<Mips>>>>,
 }
 
 impl Image {
@@ -96,6 +137,52 @@ impl Image {
         &self.bind_group
     }
 
+    /// Says that the texels changed where this crate can't see it: the platform wrote a
+    /// new frame into an imported texture. A 3D placement's mip chains are rebuilt from
+    /// the image only after a change (ADR-0050 decision 5), so the caller marks each new
+    /// frame. [`crate::ResourceCache::import`] does this for each new frame it hands an
+    /// import (not for the same frame shown again); [`crate::Compositor::rewrite_rgba8`]
+    /// and [`crate::Compositor::render_into`] mark an upload and a layer themselves. An
+    /// image never placed in 3D ignores it.
+    pub fn mark_changed(&self) {
+        self.generation.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// How many times the texels have changed, as [`Self::mark_changed`] counts them.
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
+    }
+
+    /// The mip chain of `region`, made by `make` the first time it is asked for. The
+    /// chain stays on the image, and goes when the image does or when [`MAX_CHAINS`]
+    /// newer regions pushed it out.
+    pub(crate) fn chain(&self, region: Region, make: impl FnOnce() -> Mips) -> Arc<Mips> {
+        let mut chains = self.mips.lock().unwrap_or_else(PoisonError::into_inner);
+        let chain = match chains.iter().position(|chain| chain.region() == region) {
+            Some(index) => chains.remove(index),
+            None => Arc::new(make()),
+        };
+        chains.insert(0, Arc::clone(&chain));
+        chains.truncate(MAX_CHAINS);
+        chain
+    }
+
+    /// How many times the image's mip chains were built in all, 0 without one.
+    #[cfg(test)]
+    pub(crate) fn mip_builds(&self) -> u64 {
+        self.chain_builds().1
+    }
+
+    /// How many chains the image keeps, and how many builds they recorded in all.
+    #[cfg(test)]
+    pub(crate) fn chain_builds(&self) -> (usize, u64) {
+        let chains = self.mips.lock().unwrap_or_else(PoisonError::into_inner);
+        (
+            chains.len(),
+            chains.iter().map(|chain| chain.builds()).sum(),
+        )
+    }
+
     pub(crate) fn alpha(&self) -> Alpha {
         self.alpha
     }
@@ -108,10 +195,26 @@ impl Image {
         self.sync.as_ref()
     }
 
-    /// Replaces the hold staged on each frame that draws the image. The cache keeps an
-    /// import across frames and attaches each frame's hold only while that frame uses it.
-    pub(crate) fn set_sync(&mut self, sync: Option<Arc<dyn FrameSync>>) {
-        self.sync = sync;
+    /// Drops the hold staged on each frame that draws the image: the cache attaches a
+    /// frame's hold only while that frame uses the import ([`Self::set_frame`]).
+    pub(crate) fn clear_sync(&mut self) {
+        self.sync = None;
+    }
+
+    /// Attaches `frame`'s hold, staged on each frame that draws the image, and counts a
+    /// change ([`Self::mark_changed`]) unless it is the frame last given: the same hold with
+    /// the same info, as [`GpuFrame`]'s equality has it. A source repeating its last
+    /// frame is not a change; a new frame in the same texture under the same hold is.
+    pub(crate) fn set_frame(&mut self, frame: &GpuFrame) {
+        let sync = frame.sync();
+        let same = self.last_frame.as_ref().is_some_and(|(hold, info)| {
+            std::ptr::addr_eq(hold.as_ptr(), Arc::as_ptr(sync)) && info == frame.info()
+        });
+        if !same {
+            self.mark_changed();
+            self.last_frame = Some((Arc::downgrade(sync), *frame.info()));
+        }
+        self.sync = Some(Arc::clone(sync));
     }
 
     /// Whether this is an import ([`import`]) read with `alpha`.
@@ -241,7 +344,9 @@ pub(crate) fn rewrite(maker: &Maker<'_>, image: &Image, rgba: &[u8]) -> Result<(
         });
     }
     check_bytes(image.width, image.height, rgba)?;
-    write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)
+    write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)?;
+    image.mark_changed();
+    Ok(())
 }
 
 fn check_bytes(width: u32, height: u32, rgba: &[u8]) -> Result<(), RenderError> {
@@ -304,10 +409,10 @@ fn write_texels(
     Ok(())
 }
 
-/// An import of `texture` read with `alpha`, `Straight` or `PremultipliedSrgb`. A
-/// straight import must be `Rgba8UnormSrgb` or `Bgra8UnormSrgb`, so sampling decodes
-/// it; a premultiplied one `Rgba8Unorm` or `Bgra8Unorm`, so sampling returns the code
-/// values the shader unpremultiplies before decoding.
+/// An import of `texture` read with `alpha`, `Straight`, `Opaque` or `PremultipliedSrgb`.
+/// A straight or opaque import must be `Rgba8UnormSrgb` or `Bgra8UnormSrgb`, so sampling
+/// decodes it; a premultiplied one `Rgba8Unorm` or `Bgra8Unorm`, so sampling returns the
+/// code values the shader unpremultiplies before decoding.
 pub(crate) fn import(
     maker: &Maker<'_>,
     texture: wgpu::Texture,
@@ -317,7 +422,9 @@ pub(crate) fn import(
     use wgpu::TextureFormat as F;
     let format = texture.format();
     let accepted = match alpha {
-        Alpha::Straight => matches!(format, F::Rgba8UnormSrgb | F::Bgra8UnormSrgb),
+        Alpha::Straight | Alpha::Opaque => {
+            matches!(format, F::Rgba8UnormSrgb | F::Bgra8UnormSrgb)
+        }
         Alpha::PremultipliedSrgb => matches!(format, F::Rgba8Unorm | F::Bgra8Unorm),
         Alpha::Premultiplied => false,
     };
@@ -414,8 +521,11 @@ fn finish(
         height,
         alpha,
         owner: maker.owner.clone(),
+        last_frame: None,
         sync,
         target: None,
+        generation: Arc::new(AtomicU64::new(0)),
+        mips: Arc::new(Mutex::new(Vec::new())),
     }
 }
 

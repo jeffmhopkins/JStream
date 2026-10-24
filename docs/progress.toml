@@ -371,6 +371,14 @@ status = "done"
 prs = [177, 225, 227]
 
 [[item]]
+id = "C4c"
+milestone = "M1b"
+title = "Webcam source (CPU path, MJPEG on Windows, paired audio)"
+status = "review"
+prs = [654, 658, 726]
+needs = ["build", "wave", "hardware"]
+
+[[item]]
 id = "C1a"
 milestone = "M1b"
 title = "Sources crate: color, image"
@@ -456,6 +464,15 @@ milestone = "M1b"
 title = "Filter chains in the mixer"
 status = "done"
 prs = [231]
+
+[[item]]
+id = "V0"
+milestone = "M1b"
+title = "Video filter chain runtime"
+status = "review"
+prs = [595, 607, 626, 717, 730]
+note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
+needs = ["build"]
 
 [[item]]
 id = "D5"
@@ -548,8 +565,9 @@ prs = [213, 297]
 id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
-status = "done"
-prs = [235]
+status = "hardware"
+prs = [235, 565]
+note = "Windows run (#563)"
 
 [[item]]
 id = "G3d"
@@ -743,8 +761,8 @@ needs = ["build"]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "planned"
-note = "draft #304, on T1"
+status = "review"
+prs = [304]
 needs = ["build"]
 
 [[item]]
@@ -753,6 +771,13 @@ milestone = "M2"
 title = "Video mixes"
 status = "done"
 prs = [259]
+
+[[item]]
+id = "E2b"
+milestone = "M2"
+title = "Privacy screen and encoder sharing key"
+status = "review"
+prs = [317]
 
 [[item]]
 id = "D8"
@@ -782,6 +807,13 @@ milestone = "M2"
 title = "Audio waveform and spectrum sources"
 status = "done"
 prs = [315, 460, 463, 466]
+
+[[item]]
+id = "B11"
+milestone = "M2"
+title = "Folders and labels"
+status = "review"
+prs = [323]
 
 [[item]]
 id = "K1"
@@ -819,10 +851,8 @@ prs = [325]
 id = "E3d"
 milestone = "M3"
 title = "Composite to NV12 on the GPU"
-status = "review"
+status = "done"
 prs = [280]
-note = "#280 merged into wave/m3-2; lands with that wave"
-needs = ["wave"]
 
 [[item]]
 id = "F6"
@@ -837,8 +867,8 @@ id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
-prs = [359, 368, 611, 622]
-note = "effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), landed in wave/m3-3; part 2, the compositor draw (#622, without mips), in review into it; mips and lifting the rejection to build"
+prs = [359, 368, 611, 622, 624, 643]
+note = "effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), and part 2b, mips and anisotropic sampling (#624), landed in wave/m3-3; part 2c, mips rebuilt once per source and frame (#643), in review into it; lifting the rejection (protocol 0.34) to build"
 needs = ["build"]
 
 [[item]]
@@ -852,10 +882,10 @@ prs = [360]
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
-status = "review"
+status = "planned"
 prs = [363, 375, 594]
-note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come"
-needs = ["wave", "maintainer"]
+note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come"
+needs = ["build", "maintainer"]
 
 [[item]]
 id = "CL1"
@@ -871,8 +901,8 @@ id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "review"
-prs = [486, 623, 642]
-note = "#486 merged into wave/m3-2; lands with that wave"
+prs = [486, 623, 642, 722, 725]
+note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722 and the 1,000-event queue #725 are in wave/m3-3; the wire half #642 is in review into wave/m3-3; the engine side to build"
 needs = ["build", "wave"]
 
 [[item]]
@@ -881,7 +911,7 @@ milestone = "M3"
 title = "macOS platform crate"
 status = "review"
 prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639)"
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); in wave/m3-3: the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639)"
 needs = ["wave", "build"]
 
 [[item]]
@@ -889,18 +919,18 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510, 572, 598, 606]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these land with wave/m3-2; ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); the rest of the codec path to build"
+prs = [481, 490, 509, 510, 572, 598, 606, 652]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); in wave/m3-3: ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); the rest of the codec path to build"
 needs = ["wave", "build"]
 
 [[item]]
 id = "LNX2"
 milestone = "M3"
 title = "Linux OpenH264 download (ADR-0061)"
-status = "review"
+status = "planned"
 prs = [536]
-note = "store, check, loader and encoder (#536); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come"
-needs = ["wave", "build"]
+note = "store, check, loader and encoder (#536, landed with wave/m3-2, #663); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come"
+needs = ["build"]
 
 [[item]]
 id = "LNX3"
@@ -908,5 +938,5 @@ milestone = "M3"
 title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
 status = "review"
 prs = [508, 518, 723, 727]
-note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS (#723, more tests #727); intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
+note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) in wave/m3-3; intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
 needs = ["wave", "build"]

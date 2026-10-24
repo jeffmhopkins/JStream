@@ -18,7 +18,8 @@ struct Frame {
     // on the CPU in f64 and passes it in its Params instead.
     time: f32,
     // How the input stores alpha: 0 premultiplied linear, 1 straight (an import),
-    // 2 premultiplied sRGB code values (an imported browser page).
+    // 2 premultiplied sRGB code values (an imported browser page), 3 opaque (an
+    // imported capture, its alpha read as 1).
     alpha: f32,
     // The same for the aux image.
     aux_alpha: f32,
@@ -52,6 +53,9 @@ fn vs(@builtin(vertex_index) index: u32) -> VsOut {
 
 // `c` as premultiplied linear, given its `alpha` mode (see `Frame`).
 fn to_premul_linear(c: vec4<f32>, alpha: f32) -> vec4<f32> {
+    if (alpha > 2.5) {
+        return vec4<f32>(c.rgb, 1.0);
+    }
     if (alpha > 1.5) {
         // Premultiplied code values: a filtered texel keeps rgb <= a, up to rounding.
         let straight = select(vec3<f32>(0.0), min(c.rgb / c.a, vec3<f32>(1.0)), c.a > 0.0);

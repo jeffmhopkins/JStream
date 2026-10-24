@@ -17,6 +17,83 @@ The items are grouped by the build they need, so each build is made once. Some d
 on PRs that haven't merged yet. Run those from the PR's branch, or wait until it merges
 and run them from its wave.
 
+`scripts\windows-pass.ps1` runs every item, each from the commit it needs, and writes one
+report ([The script](#script)). The steps below are what it does, and how to do any of
+them by hand.
+
+<a id="script"></a>
+## The script
+<!-- @section
+covers = ["scripts/windows-pass.ps1", "scripts/windows-pass.bat"]
+-->
+
+From a checkout on the Windows machine, in Windows PowerShell 5.1 or PowerShell 7:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows-pass.ps1
+scripts\windows-pass.bat -List           # the checks, their sources and what they need
+scripts\windows-pass.bat -Only render,nv12
+scripts\windows-pass.bat -Unattended     # only the checks that need no one
+```
+
+- **Sources.** Each check runs from one source: `main`, `wave/m1-3`, or an open PR's head
+  (`pull/<n>/head`). The script fetches each into `refs/jstream-pass/<name>` and checks it
+  out as a detached worktree under `%LOCALAPPDATA%\JStream-windows-pass\src\<name>`, where
+  its build stays for the next run. The checkout the script runs from, its branch and its
+  files are not changed. `-NoBuild` reuses the worktrees as they are, without fetching or building the daemons
+  and apps; the `cargo test` steps, the browser helper and the desktop UI still compile what
+  they need. The source table at
+  the top of the script is the one place to change when a PR merges.
+- **What it asks first.** Every step that changes the machine asks before it runs, and
+  a no is recorded as skipped: anything run as administrator (each is one UAC prompt),
+  registering or unregistering the virtual camera, a forced GPU reset, installing a tool
+  with `cargo install`, and reading the stream key file. The files it creates under
+  `%PUBLIC%` for the ACL checks are removed when the check ends. `-Unattended` declines
+  all of these and skips every question. Its timed steps still run, since their automatic
+  checks need no one: it records the display, and the webcam with its microphone.
+- **Questions.** A check only a person can judge (the Camera app shows the frames, Studio
+  goes live) asks pass, fail or skip where it happens.
+- **When you act.** Every line that needs you starts with a magenta `>>> YOU:` and a beep.
+  A timed step (a recording, the producer, a GPU reset, the unplug test) first says what
+  is coming and waits for Enter; its timer starts only then, with a yellow `>>> NOW:` line
+  saying what to do. Recordings open in VLC when it is installed.
+- **One run at a time.** A lock file in the work folder stops a second run from starting
+  while one is going, since two runs fight over the webcam and the worktrees.
+- **Daemons.** Each daemon it starts has its own token file and log folder in the run
+  folder, drives its checks over MCP as the smoke script does, and is stopped at the end
+  of its check. The graceful stop sends Ctrl-C from a helper process that attaches to the
+  daemon's console.
+- **Report.** The run folder (`%LOCALAPPDATA%\JStream-windows-pass\runs\<time>`, or
+  `-OutDir`) gets `report.md`, `results.json`, every step's log and the recordings. The zip
+  beside it holds the text files only, with the run's tokens replaced by `***`, and the
+  stream key too once you let the YouTube check search the logs for it. Token files, key
+  files and recordings stay out. The script ends by printing the zip's path
+  and a summary, one line per check, to paste back with it. If the run left something on
+  the machine (a virtual camera still registered, the Camera app open), the report and
+  the last lines say what and how to undo it.
+- **Not checked by the script:** what isn't visible outside the engine, such as
+  `OutputStats::readbacks` and `gpu_fallbacks` (it checks the log lines that report the
+  same events), and the items the report lists under "Not in this pass".
+
+| Check | Item | Source |
+|---|---|---|
+| `smoke` | [11](#main) | main |
+| `render` | [1](#main) | main |
+| `nv12` | [5](#m3-2) | main |
+| `media` | [4](#main) | main |
+| `browser` | [2](#main) | main |
+| `youtube` | [3](#main) | main |
+| `preview` | [12](#main) | main |
+| `vcam-owner` | [6](#prs) | wave/m1-3 |
+| `token-acl` | [7](#prs) | wave/m1-3 |
+| `crash` | [13](#prs) | wave/m1-3 |
+| `vcam-register` | [9](#prs) | wave/m1-3 |
+| `gpu-reset` | [10 and 14](#prs) | wave/m1-3 |
+| `private-files` | [8](#prs) | PR #574 |
+| `webcam` | [15](#prs) | PR #726 |
+| `cursor` | [16](#prs) | PR #685 |
+| `clap` | [17](#prs) | PR #573 |
+
 <a id="setup"></a>
 ## Setup
 <!-- @section
@@ -31,9 +108,12 @@ and run them from its wave.
   `spikes/s4-browser/run-s4.ps1` sets up.
 - **Administrator rights** for the virtual camera registration items (one UAC prompt
   each).
-- **Builds, in this order:** `main` (the [On main](#main) items), `wave/m3-2` (the
-  [On wave/m3-2](#m3-2) item), then each open PR's branch in
-  [On open PR branches](#prs).
+- **Builds, in this order:** `main` (the [On main](#main) items and the
+  [wave/m3-2](#m3-2) item, which landed with it), then `wave/m1-3` and each open PR's
+  branch in [On wave/m1-3 and open PR branches](#prs).
+- **Tools** for some items: ffmpeg and ffprobe on `PATH`, `dxcap` from the Graphics Tools
+  optional feature, trunk and the wasm-bindgen CLI, a webcam with a microphone, and a
+  CLAP effect in `C:\Program Files\Common Files\CLAP`.
 
 <a id="moot"></a>
 ## Already done: close without a run
@@ -41,8 +121,8 @@ and run them from its wave.
 -->
 
 These issues already passed on hardware and were left open only until their PR merged.
-Those PRs have since merged and landed in `main`, so the issue can be closed with a
-pointer to its pass comment:
+Those PRs have since merged and landed in `main`, and the issues are closed, each with
+a pointer to its pass comment:
 
 | Issue | Passed on | PR, now in `main` |
 |---|---|---|
@@ -127,14 +207,30 @@ AAC, 6 s).
 3. With a 1 s flash-and-beep sync clip looping: **Pass:** flashes in the recording stay
    1.000 s apart across the wrap (#445 had a 1.067 s step).
 
+### 11. Go-live smoke test and the graceful stop (go-live runbook)
+
+1. `scripts\smoke.ps1 -Release`
+   ([Go-live › Smoke script](go-live.md#smoke)). **Pass:** it ends `SMOKE PASSED`.
+2. Start the daemon, then press Ctrl-C ([Go-live](go-live.md#steps) step 7).
+   **Pass:** it prints `stopped` and exits 0.
+
+### 12. Canvas H.264 preview (#380)
+
+Build the UI with trunk and run the desktop app, as in
+[jstream-desktop](../../apps/jstream-desktop/README.md), with a text, image or media
+source on the program scene (not a display source: the preview draws display capture as
+nothing, by design). **Pass:** the preview shows under the canvas boxes with H.264 in the frames; it
+follows committed edits and scene switches; after a slow moment it recovers at the next
+keyframe, within 2 s; and a decoder failure falls back to JPEG, not "No preview".
+
 <a id="m3-2"></a>
-## On wave/m3-2
+## From wave/m3-2, now on main
 <!-- @section
 -->
 
 ### 5. NV12 encode targets into Media Foundation (closes #492)
 
-E3d (#280) merged into `wave/m3-2`, which hasn't landed in `main`. Build that wave.
+E3d (#280) merged into `wave/m3-2`, which has landed in `main`. Build `main`.
 
 1. `cargo test -p jstream-render -- convert`. **Pass:** the native NV12 plane-view test
    runs (not skipped) and passes.
@@ -150,16 +246,17 @@ E3d (#280) merged into `wave/m3-2`, which hasn't landed in `main`. Build that wa
 Post the GPU, the driver version and the results on #492.
 
 <a id="prs"></a>
-## On open PR branches
+## On wave/m1-3 and open PR branches
 <!-- @section
 -->
 
-Each of these runs a PR that hasn't merged. Use the PR's branch, or its wave once it
-has merged.
+Items 6, 7, 9, 10, 13 and 14 run from `wave/m1-3`, where their PRs have merged; it hasn't
+landed in `main`. The others run a PR that hasn't merged. Use the PR's branch, or its
+wave once it has merged.
 
 ### 6. Virtual camera owner and DACL checks (#546, PR #540)
 
-1. On #540's branch, run the `vcam_smoke` check in
+1. On `wave/m1-3`, run the `vcam_smoke` check in
    [jstream-vcam-windows › Hardware check](../../crates/jstream-vcam-windows/README.md#hardware-check).
    **Pass:** the camera shows the producer's frames, not the colour bars, and `vcam.log`
    has no `OpenSharedHandleByName` or owner failure.
@@ -170,7 +267,7 @@ has merged.
 
 ### 7. User-only token, devices and log files (#546, PR #548)
 
-On #548's branch (stacked on #540):
+On `wave/m1-3`:
 
 1. `jstream-daemon --token-file C:\Users\Public\jstream-token`. **Pass:** `icacls` on the
    new token file lists only SYSTEM and you, with no inherited `(I)` entries. The same
@@ -199,7 +296,7 @@ Items 6 to 8 together close #546.
 
 ### 9. Opt-in virtual camera registration from a Program Files copy (closes #563, PR #565)
 
-Use a built portable folder (`cargo xtask dist`, or the release `jstream-daemon.exe`
+On `wave/m1-3`. Use a built portable folder (`cargo xtask dist`, or the release `jstream-daemon.exe`
 with `jstream_vcam_windows.dll` beside it) in a user-writable folder such as
 `Downloads`.
 
@@ -227,8 +324,8 @@ with `jstream_vcam_windows.dll` beside it) in a user-writable folder such as
 
 ### 10. Mid-run GPU capture fallback (closes #576, PR #569)
 
-On #569's branch (#580, its deadline and panic fix, is stacked on it), with a display
-source on program and the screen changing:
+On `wave/m1-3`, where #569 and #580 (its deadline and panic fix) have merged, with a
+display source on program and the screen changing:
 
 1. Start a recording output and confirm `gpu_captures` rises in `stats.tick`.
 2. Force the GPU path to break mid-run, for example with a driver reset from the
@@ -243,6 +340,51 @@ source on program and the screen changing:
    - no device-removed errors follow the switch, and the D3D12 context drops after the
      imported textures when the output stops, with no leaks (Task Manager's GPU memory
      back to its level before the run).
+
+### 13. Crash reports on Windows (#557, and #662 on #546)
+
+On `wave/m1-3`: `cargo test -p jstream-crash` and `cargo test -p jstream-desktop`.
+**Pass:** both pass. A report from a real panic (redacted, and user-only per #662) needs a
+way to make the daemon or `jstream.exe` panic on purpose, which neither has yet.
+
+### 14. Device-loss recovery under a forced TDR (closes #620, PR #604)
+
+On `wave/m1-3`, in the same run as item 10:
+
+1. After the first `dxcap -forcetdr`. **Pass:** no panic; the output stays `active`; one
+   `warn` names the loss and its reason; WGC carries on with a CPU session.
+2. Force three TDRs within a minute. **Pass:** the third fails the output with the loss
+   count in its error, and the daemon keeps running.
+
+### 15. MJPEG webcam and its paired microphone (#673, #726)
+
+On #726's branch (stacked on `wave/m1-3`, so #658's MJPEG path is in it), with a webcam
+that has a microphone. Close every app that holds the webcam first (the Camera app, Teams,
+Zoom, OBS): a busy webcam fails the device tests with `Busy` and records black.
+
+1. `cargo test -p jstream-platform-windows --features hw-tests -- --ignored video_device --test-threads=1`
+   (one at a time: the tests open the same camera).
+   **Pass:** the device tests pass, the largest MJPEG format included.
+2. A `webcam` source on program, recorded for 10 s. **Pass:** the picture has the right
+   colours, and the webcam's own microphone is in the recording.
+3. Optional: with `JSTREAM_UNPLUG_TEST=1`, the unplug test. **Pass:** it passes.
+
+A corrupt or truncated MJPEG frame (dropped, counted in `frames_undecodable`, the stream
+goes on) isn't forced here.
+
+### 16. CursorCapture::Hidden (part of #690, PR #685)
+
+On #685's branch: `cargo test -p jstream-platform-windows`. **Pass:** it passes,
+`only_a_hidden_cursor_is_left_out` included. The captures with the pointer drawn, hidden
+and as metadata wait for the daemon's `show_cursor` setting (#682).
+
+### 17. CLAP plugin host with the unnamed shared block (PR #573)
+
+On #573's branch, #342's steps again: `jstream-plugin-host scan` on an installed `.clap`
+exits 0 and names it, and on `kernel32.dll` exits 1; the daemon logs
+`scanned the CLAP plugins` with `found` of at least 1; `kind.list` has `clap/<id>` and
+`kind.describe` lists its parameters; no `jstream-plugin-host.exe` is left after the scan
+or after Ctrl-C.
 
 <a id="waiting"></a>
 ## Waiting on a fix

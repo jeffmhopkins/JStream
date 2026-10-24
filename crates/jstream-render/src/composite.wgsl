@@ -12,9 +12,13 @@
 // nearest edge (ADR-0050 decision 6); a 3D item's polygon is drawn pushed out by a pixel so
 // those fringe pixels rasterize. A 2D item's lines are never crossed, so its coverage is 1.
 // `uv_bounds` (u_min, v_min, u_max, v_max) clamps a fringe pixel's texture coordinate to
-// the content, so it never samples a cropped-away texel or one `fill` clips; the
-// gradients come from the unclamped coordinate, so the filter footprint stays right.
-// A 2D item's bounds never clamp.
+// the content, so it never samples a cropped-away texel or one `fill` clips. A 2D item's
+// bounds never clamp. The sample takes the clamped coordinate's own derivatives, which
+// differ from the unclamped one's only at fringe pixels (coverage under a half) and their
+// quad neighbours along the edge, since derivatives are taken across a 2x2 quad: about one
+// row of pixels along a 3D item's edge, where they pick a finer level. `textureSampleGrad` with the unclamped derivatives would keep
+// the fringe's level too, but lavapipe filters explicit gradients isotropically: scenario
+// C measured 18 with it, as with no anisotropy, against 6.2 this way.
 //
 // `mode` says what a filtered sample holds. 0: an uploaded or rendered image, stored
 // premultiplied linear, so the linear filter never mixes in the colour of a transparent
@@ -22,6 +26,7 @@
 // premultiplied after the filter: exact where alpha is 1, a fringe at partly transparent
 // edges. 2: an imported texture of sRGB code values already multiplied by alpha (a
 // browser page), read raw: divided by alpha, decoded, and multiplied by alpha again.
+// 3: an opaque import (a captured frame), decoded by the sampler, its alpha read as 1.
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
@@ -81,9 +86,12 @@ fn edge(e: vec3<f32>, at: vec2<f32>) -> f32 {
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let uv = clamp(in.uv, in.uv_bounds.xy, in.uv_bounds.zw);
-    let c = textureSampleGrad(tex, samp, uv, dpdx(in.uv), dpdy(in.uv));
+    let c = textureSample(tex, samp, uv);
     var rgb = c.rgb;
-    if in.mode > 1.5 {
+    var alpha = c.a;
+    if in.mode > 2.5 {
+        alpha = 1.0;
+    } else if in.mode > 1.5 {
         // Premultiplied code values: a filtered texel keeps rgb <= a, up to rounding.
         let straight = select(vec3<f32>(0.0), min(c.rgb / c.a, vec3<f32>(1.0)), c.a > 0.0);
         rgb = srgb_to_linear(straight) * c.a;
@@ -96,5 +104,5 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         edge(in.e4, at),
     );
     let coverage = clamp(d + 0.5, 0.0, 1.0);
-    return vec4<f32>(rgb, c.a) * (in.opacity * coverage);
+    return vec4<f32>(rgb, alpha) * (in.opacity * coverage);
 }

@@ -38,7 +38,9 @@ Contents:
 - Object names and security: `Scope` (`Global\` or the engine's session, opened from
   session 0 as `Session\<id>\`), the texture, fence and control-block names, the order
   the DLL probes them in, and `sddl_objects`, the DACL that admits only SYSTEM,
-  Administrators, LOCAL SERVICE (Frame Server) and the producing user's SID.
+  Administrators, LOCAL SERVICE (Frame Server) and the producing user's SID. Beside it,
+  `sddl_user_only` (SYSTEM and the user), the DACL the host gives its token, devices
+  and log files on Windows; the two share one builder and its SID check.
 - Not logging: spike S2's log folder, writable by every interactive user, is left out;
   the DLL's logging (ETW or a location a user can't redirect) is decided in
   `jstream-vcam-windows`.

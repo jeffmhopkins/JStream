@@ -15,11 +15,12 @@ use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
-use crate::live::{Built, LiveHost, LiveSources};
+use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
+use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, VcamOut,
@@ -27,11 +28,12 @@ use crate::runtime::{
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
-use crate::studio::Studio;
+use crate::studio::{self, Studio};
+use crate::transition;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
-use jstream_media::FrameSize;
+use jstream_media::{FrameSize, MediaTime};
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, Secret, StreamKeyStore,
 };
@@ -40,7 +42,8 @@ use jstream_protocol::{
     EncoderProfile, EncoderSessionInfo, EntityKind, Event, FilterChain, GestureId, HistoryCall,
     HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
     PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SecretString, SourceId, YoutubeAuth,
+    RtmpTarget, SceneId, SecretString, SourceId, TransitionPresetId, TransitionStarted,
+    YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -747,9 +750,12 @@ impl Engine {
     }
 
     /// Opens an event subscription: the stream, and the weak handle its session keeps
-    /// to end it.
+    /// to end it. While the privacy screen is on, the stream starts with
+    /// `privacy.changed`, so a new client never shows an uncovered picture (ADR-0027 §4).
     pub(crate) fn subscribe(&self) -> (Subscription, QueueRef) {
-        lock(&self.shared.state).subscribers.subscribe()
+        let mut state = lock(&self.shared.state);
+        let first = state.privacy.replay();
+        state.subscribers.subscribe(first)
     }
 
     /// Executes `call` for `client_id`, whose request it is, and wakes the subscribers
@@ -1166,6 +1172,7 @@ impl Engine {
                     .map(|(id, _)| id.clone())
                     .collect(),
                 hardware: own.hardware(),
+                dedicated: own.dedicated(),
             });
         (encoder, count(sessions.len()), hardware)
     }
@@ -1345,6 +1352,7 @@ impl Engine {
                     Arc::clone(&state.render),
                     state.audio.wanted(),
                     canvas_size(&state.graph),
+                    state.privacy.flag(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1659,15 +1667,16 @@ impl Engine {
     /// snapshot thread renders them after that lock is released, so the image shows
     /// open gestures as the output does.
     fn video_snapshot(&self) -> SnapshotReply {
-        let (snapshot, live, rev) = {
+        let (snapshot, live, rev, at) = {
             let state = lock(&self.shared.state);
             (
                 state.render.load(),
                 state.render.load_live(),
                 state.graph.rev(),
+                state.live.now(),
             )
         };
-        self.shared.snapshots.request(snapshot, live, rev)
+        self.shared.snapshots.request(snapshot, live, rev, at)
     }
 
     /// The render hub the pipeline's render thread reads, for tests.
@@ -1742,9 +1751,10 @@ impl Drop for SettleOnDrop<'_> {
 }
 
 /// Which encoder sessions `output_id` shares: the video mix it shows with that mix's
-/// size and rate now, and its profile with that profile's encoding now. An output with
-/// no mix, or one the host declared, gets the program at the program stage's size and base
-/// rate; one with no profile the engine's default.
+/// size and rate now, its profile with that profile's encoding now, and the output
+/// itself when it has its own video chain, so it shares with no one (ADR-0027 §3). An
+/// output with no mix, or one the host declared, gets the program at the program
+/// stage's size and base rate; one with no profile the engine's default.
 fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     let state = graph.state();
     let output = state.output(output_id);
@@ -1763,9 +1773,13 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
                 size: jstream_media::FrameSize::new(spec.resolution.width, spec.resolution.height)
                     .ok(),
                 divisor: spec.fps_divisor,
+                owner: None,
             }
         });
-    (mix, profile_id, profile)
+    let owner = output
+        .filter(|output| output.has_video_chain())
+        .map(|_| output_id.clone());
+    (MixKey { owner, ..mix }, profile_id, profile)
 }
 
 /// Whether `output_id` starts with its own audio encode: it has an audio chain
@@ -2214,6 +2228,8 @@ struct State {
     stale_keys: BTreeSet<OutputId>,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
+    /// The privacy screen. Runtime state, like `studio`: not part of `rev`.
+    privacy: Privacy,
 }
 
 impl State {
@@ -2494,7 +2510,7 @@ impl State {
             wake,
         );
         if moved {
-            self.emit_studio(client_id, request_id, wake);
+            self.emit_studio(client_id, request_id, None, wake);
         }
     }
 
@@ -2527,13 +2543,16 @@ impl State {
                 self.routing.reset_loudness();
                 return Ok(CallResult::action());
             }
-            Action::SceneSwitch { scene_id } => {
-                if self.studio.switch(self.graph.state(), &scene_id)? {
-                    // The program mix shows the new scene from the next frame: a cut.
-                    // Its `when_shown` audio follows, ramping over one mixer block.
-                    self.publish_render();
-                    self.route_audio();
-                    self.emit_studio(client_id, request_id, wake);
+            Action::SceneSwitch {
+                scene_id,
+                preset_id,
+            } => {
+                self.switch(client_id, request_id, scene_id, preset_id.as_ref(), wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::StudioSetPreview { scene_id } => {
+                if self.studio.set_preview(self.graph.state(), &scene_id)? {
+                    self.emit_studio(client_id, request_id, None, wake);
                 }
                 return Ok(CallResult::action());
             }
@@ -2547,6 +2566,20 @@ impl State {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
                 });
+            }
+            Action::PrivacySet { on } => {
+                // The render thread covers the next frame it draws: it reads the flag.
+                if self.privacy.set(on, client_id) {
+                    self.subscribers.emit(
+                        &Event::PrivacyChanged {
+                            on,
+                            client_id: client_id.clone(),
+                            request_id: Some(request_id.clone()),
+                        },
+                        wake,
+                    );
+                }
+                return Ok(CallResult::Action { result: None });
             }
             other => return Err(not_implemented(other.name())),
         };
@@ -2562,8 +2595,9 @@ impl State {
         Ok(CallResult::action())
     }
 
-    /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
-    /// `live.list` the open gestures, and `studio.get` the studio state.
+    /// Collection reads go to `Graph::query`; `output.status` reads the outputs,
+    /// `live.list` the open gestures, `studio.get` the studio state and `privacy.get`
+    /// the privacy screen.
     fn query(&self, query: &Query) -> Result<CallResult, ProtocolError> {
         let result = match self.graph.query(query) {
             Some(result) => result?,
@@ -2583,19 +2617,102 @@ impl State {
                 },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
+                    preview_scene: self.studio.preview().cloned(),
                 },
                 Query::DeviceList => return Err(served_by_the_server(query.name())),
+                Query::PrivacyGet => QueryResult::PrivacyGet {
+                    on: self.privacy.on(),
+                },
                 other => return Err(not_implemented(other.name())),
             },
         };
         Ok(CallResult::Query { result })
     }
 
-    /// `studio.changed` with the scene now on program, caused by `request_id`.
-    fn emit_studio(&mut self, client_id: &ClientId, request_id: &RequestId, wake: &mut Vec<Waker>) {
+    /// `scene.switch`: puts `scene_id` on program with the transition its preset runs
+    /// (ADR-0029). A switch while a transition runs retargets it: the new one starts from
+    /// what is on screen now. Switching to the scene already on program (or already
+    /// transitioning onto it) changes nothing and emits nothing.
+    fn switch(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        scene_id: SceneId,
+        named: Option<&TransitionPresetId>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        studio::exists(self.graph.state(), &scene_id)?;
+        let from_scene = self.studio.program().cloned();
+        let (preset_id, run) =
+            transition::resolve(&self.graph, from_scene.as_ref(), &scene_id, named)?;
+        if from_scene.as_ref() == Some(&scene_id) {
+            return Ok(());
+        }
+        let now = self.live.now();
+        let running = match (run, from_scene) {
+            (Some(run), Some(from_scene)) => {
+                let from = match self.studio.running() {
+                    Some(running) => {
+                        let Self {
+                            graph,
+                            frames,
+                            frame_versions,
+                            live,
+                            ..
+                        } = self;
+                        let assets = live.filter_assets();
+                        let visuals = snapshot::on_screen(
+                            graph,
+                            running,
+                            now,
+                            &mut |id| match frames.get(id) {
+                                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                                None => live.look(id, now, frame_versions),
+                            },
+                            &assets,
+                        );
+                        transition::From::OnScreen(visuals.into())
+                    }
+                    None => transition::From::Scene(from_scene),
+                };
+                Some(transition::Running {
+                    from,
+                    to: scene_id.clone(),
+                    start: now,
+                    run,
+                })
+            }
+            // Nothing on program yet: there is nothing to transition from.
+            _ => None,
+        };
+        self.studio.switch(scene_id, running);
+        let end_ms = self.publish_render();
+        // The new scene's `when_shown` audio follows at the switch, ramping over one
+        // mixer block; it doesn't follow the transition's timing yet (D29).
+        self.route_audio();
+        self.emit_studio(
+            client_id,
+            request_id,
+            Some(transition::started(preset_id, end_ms)),
+            wake,
+        );
+        Ok(())
+    }
+
+    /// `studio.changed` with the scenes now on program and preview, caused by
+    /// `request_id`, and the transition a switch started.
+    fn emit_studio(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        transition: Option<TransitionStarted>,
+        wake: &mut Vec<Waker>,
+    ) {
         self.subscribers.emit(
             &Event::StudioChanged {
                 program_scene: self.studio.program().cloned(),
+                preview_scene: self.studio.preview().cloned(),
+                transition,
                 client_id: client_id.clone(),
                 request_id: Some(request_id.clone()),
             },
@@ -2606,10 +2723,11 @@ impl State {
     /// Re-plans the program mix and the scene each video mix shows at the current time,
     /// and publishes them if they draw something new. A source's stored frame wins over
     /// its live one. The live sources are told when the plan's next frame change is due,
-    /// to re-plan then. The program mix shows the program scene (ADR-0030). The shot lists
-    /// the displays and windows the program and every mix capture. Returns the render
-    /// generation current afterwards.
-    fn publish_render(&mut self) -> u64 {
+    /// to re-plan then. The program mix shows the program scene (ADR-0030), or the
+    /// transition running toward it (ADR-0029), whose length in milliseconds it returns;
+    /// a transition that has ended is let go. The shot lists the displays and windows the
+    /// program and every mix capture.
+    fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
             frames,
@@ -2622,18 +2740,27 @@ impl State {
         } = self;
         let now = live.now();
         live.begin_plan();
-        let (shot, wake) =
-            snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
+        let assets = live.filter_assets();
+        let planning = snapshot::plan_with(
+            graph,
+            studio.program(),
+            studio.running().map(|running| (running, now)),
+            &mut |id| match frames.get(id) {
                 Some(frame) => Some(Look::Frame(frame.clone(), None)),
                 None => live.look(id, now, frame_versions),
-            });
+            },
+            &assets,
+        );
         live.end_plan();
         if let Some(sound) = live.take_audio() {
             audio.sync_live(sound);
         }
-        let generation = render.publish(shot);
-        live.wake_at(wake);
-        generation
+        if planning.finished {
+            studio.finish();
+        }
+        render.publish(planning.shot);
+        live.wake_at(planning.wake);
+        planning.end_ms
     }
 
     /// Opens or updates `client_id`'s gesture with `values` (ADR-0032). They are checked
@@ -2787,12 +2914,14 @@ impl PreviewSource for Shared {
         Arc<crate::runtime::RenderSnapshot>,
         Arc<crate::snapshot::LiveParams>,
         Rev,
+        MediaTime,
     ) {
         let state = lock(&self.state);
         (
             state.render.load(),
             state.render.load_live(),
             state.graph.rev(),
+            state.live.now(),
         )
     }
 }
@@ -2804,6 +2933,13 @@ impl LiveHost for Shared {
         if state.live.install(built) {
             // A source built with audio of its own is recorded from now on.
             state.audio.sync(state.graph.state(), state.live.audio());
+            state.publish_render();
+        }
+    }
+
+    fn install_asset(&self, loaded: LoadedAsset) {
+        let mut state = lock(&self.state);
+        if state.live.install_asset(loaded) {
             state.publish_render();
         }
     }

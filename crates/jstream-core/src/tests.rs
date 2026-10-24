@@ -11,6 +11,7 @@ mod history;
 mod live_values;
 mod preview;
 mod sources;
+mod transitions;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
 mod youtube;
@@ -21,7 +22,7 @@ use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, GestureId,
     Hello, IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION,
     ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole,
-    SourceId, SourceKind, parity,
+    SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -84,6 +85,8 @@ fn create(scene: &str) -> Edit {
     }
 }
 
+/// A `webcam` source with complete settings: the mock engine stores settings as sent,
+/// while the engine fills in defaults, so a parity script sends them all.
 fn webcam() -> Edit {
     Edit::SourceCreate {
         source_id: SourceId::new("webcam"),
@@ -91,7 +94,9 @@ fn webcam() -> Edit {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
-        settings: Default::default(),
+        settings: [("device".to_owned(), serde_json::Value::from(""))]
+            .into_iter()
+            .collect(),
         duplicated_from: None,
     }
 }
@@ -137,6 +142,7 @@ fn switch_call(scene: &str) -> Call {
     Call::Action {
         action: Action::SceneSwitch {
             scene_id: SceneId::new(scene),
+            preset_id: None,
         },
     }
 }
@@ -674,6 +680,8 @@ fn events_reach_every_subscriber_in_order() {
         },
         Event::StudioChanged {
             program_scene: Some(SceneId::new("a")),
+            preview_scene: Some(SceneId::new("a")),
+            transition: None,
             client_id: agent.client_id().expect("agent"),
             request_id: Some(by_agent.id),
         },
@@ -709,15 +717,29 @@ fn scene_switch_changes_program_without_an_edit() {
     let agent = connected(&engine);
     let mut events = user.events();
     let program = |control: &dyn Control| match query(control, Query::StudioGet) {
-        Ok(QueryResult::StudioGet { program_scene }) => program_scene,
+        Ok(QueryResult::StudioGet { program_scene, .. }) => program_scene,
         other => panic!("not a studio result: {other:?}"),
     };
+    // A switch reports the preset it ran: the initial `cut`, which takes no time.
     let switched =
         |scene: &str, client: &InProcessControl, request: RequestId| Event::StudioChanged {
             program_scene: Some(SceneId::new(scene)),
+            preview_scene: Some(SceneId::new("a")),
+            transition: Some(TransitionStarted {
+                preset_id: TransitionPresetId::new("cut"),
+                duration_ms: 0,
+            }),
             client_id: client.client_id().expect("connected"),
             request_id: Some(request),
         };
+    // Batches move program and preview by themselves, with no transition.
+    let moved = |scene: &str, client: &InProcessControl, request: RequestId| Event::StudioChanged {
+        program_scene: Some(SceneId::new(scene)),
+        preview_scene: Some(SceneId::new(scene)),
+        transition: None,
+        client_id: client.client_id().expect("connected"),
+        request_id: Some(request),
+    };
     assert_eq!(program(&user), None);
     assert_eq!(
         code(&block_on(agent.call(switch_call("a"))).expect_err("no scene yet")),
@@ -740,7 +762,7 @@ fn scene_switch_changes_program_without_an_edit() {
                 request_id: Some(built.id.clone()),
                 cause: None,
             },
-            switched("a", &user, built.id),
+            moved("a", &user, built.id),
         ]
     );
     assert_eq!(program(&agent), Some(SceneId::new("a")));
@@ -786,7 +808,7 @@ fn scene_switch_changes_program_without_an_edit() {
     .expect("delete");
     let seen = drain(&mut events);
     assert!(matches!(seen[0], Event::StateChanged { rev: Rev(3), .. }));
-    assert_eq!(seen[1..], [switched("a", &agent, deleted.id)]);
+    assert_eq!(seen[1..], [moved("a", &agent, deleted.id)]);
     batch(
         &agent,
         Batch::single(Edit::SceneDelete {
@@ -805,6 +827,67 @@ fn scene_switch_changes_program_without_an_edit() {
         ]
     ));
     assert_eq!(program(&user), None);
+}
+
+fn privacy_call(on: bool) -> Call {
+    Call::Action {
+        action: Action::PrivacySet { on },
+    }
+}
+
+/// `privacy.set` turns the privacy screen on or off without an edit, tells every
+/// subscriber who did it, and says nothing when nothing changed; `privacy.get` reads it.
+/// A client that subscribes while it is on hears `privacy.changed` first, naming the
+/// client that turned it on (ADR-0027 §4).
+#[test]
+fn privacy_set_covers_outputs_without_an_edit() {
+    let engine = Engine::new();
+    let user = connected(&engine);
+    let agent = connected(&engine);
+    let mut events = user.events();
+    let on = |control: &dyn Control| match query(control, Query::PrivacyGet) {
+        Ok(QueryResult::PrivacyGet { on }) => on,
+        other => panic!("not a privacy result: {other:?}"),
+    };
+    assert!(!on(&user));
+    block_on(user.call(privacy_call(false))).expect("already off");
+    assert_eq!(drain(&mut events), vec![]);
+
+    let set = block_on(agent.call(privacy_call(true))).expect("on");
+    assert_eq!(set.result, CallResult::Action { result: None });
+    assert_eq!(engine.rev(), Rev(0), "privacy is not an edit");
+    let turned_on = Event::PrivacyChanged {
+        on: true,
+        client_id: agent.client_id().expect("connected"),
+        request_id: Some(set.id),
+    };
+    assert_eq!(drain(&mut events), vec![turned_on]);
+    assert!(on(&user));
+    block_on(user.call(privacy_call(true))).expect("already on");
+    assert_eq!(drain(&mut events), vec![]);
+
+    let late = connected(&engine);
+    let mut late_events = late.events();
+    assert_eq!(
+        drain(&mut late_events),
+        vec![Event::PrivacyChanged {
+            on: true,
+            client_id: agent.client_id().expect("connected"),
+            request_id: None,
+        }],
+        "a new subscriber hears the screen is on first"
+    );
+
+    let off = block_on(user.call(privacy_call(false))).expect("off");
+    let turned_off = Event::PrivacyChanged {
+        on: false,
+        client_id: user.client_id().expect("connected"),
+        request_id: Some(off.id),
+    };
+    assert_eq!(drain(&mut events), vec![turned_off.clone()]);
+    assert_eq!(drain(&mut late_events), vec![turned_off]);
+    assert!(!on(&agent));
+    assert_eq!(drain(&mut connected(&engine).events()), vec![]);
 }
 
 #[test]
@@ -1018,6 +1101,238 @@ fn live(gesture_id: &str, values: Vec<Edit>) -> Call {
     }
 }
 
+/// The idempotency key of the organise script's scene-and-source delete, which the test
+/// checks applied: a refused one would compare equal on both sides and test nothing.
+const ORGANISED_DELETE: &str = "organised-delete";
+
+/// The differential script's folder, label and metadata calls (ADR-0024 §3 and §4, #387),
+/// run after the rest on scene `z` and sources `cam` and `tagged`: each check that
+/// refuses one, what the reads report, the in-use deletes, undo and redo, and a filed
+/// scene's and a labelled source's delete, applied and then undone with their metadata.
+fn organise_script() -> Vec<Call> {
+    use jstream_protocol::{FolderId, LabelId, SceneMeta, SourceMeta};
+    fn one(edit: Edit) -> Call {
+        Call::Batch(Batch::single(edit))
+    }
+    fn folder(id: &str, parent: Option<&str>) -> Edit {
+        Edit::FolderCreate {
+            folder_id: FolderId::new(id),
+            name: format!("Folder {id}"),
+            parent: parent.map(FolderId::new),
+        }
+    }
+    fn label(id: &str, color: &str, icon: Option<&str>) -> Edit {
+        Edit::LabelCreate {
+            label_id: LabelId::new(id),
+            name: format!("Label {id}"),
+            color: color.into(),
+            icon: icon.map(str::to_owned),
+        }
+    }
+    fn labelled(labels: &[&str]) -> Edit {
+        Edit::SourceSetMeta {
+            source_id: SourceId::new("cam"),
+            meta: SourceMeta {
+                labels: labels.iter().map(|l| LabelId::new(*l)).collect(),
+                favourite: true,
+            },
+        }
+    }
+    fn scene_meta(icon: Option<&str>, color: Option<&str>) -> Edit {
+        Edit::SceneSetMeta {
+            scene_id: SceneId::new("z"),
+            meta: SceneMeta {
+                icon: icon.map(str::to_owned),
+                color: color.map(str::to_owned),
+                favourite: true,
+                show_in_multiview: false,
+            },
+        }
+    }
+    let read = |query: Query| Call::Query { query };
+    let undo = || {
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Undo,
+        ))
+    };
+    let redo = || {
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Redo,
+        ))
+    };
+    vec![
+        Call::Batch(edits(vec![
+            folder("outer", None),
+            folder("inner", Some("outer")),
+            label("sponsor", "#ff8800", None),
+            label("camera", "#00FF00", Some("mic")),
+        ])),
+        // Refused: a missing parent, a taken ID, an empty ID, a blank name, a folder
+        // inside itself, a colour, an icon, a missing label and one listed twice.
+        one(folder("x", Some("ghost"))),
+        one(folder("outer", None)),
+        one(folder("", None)),
+        one(Edit::FolderRename {
+            folder_id: FolderId::new("outer"),
+            name: " ".into(),
+        }),
+        one(Edit::FolderSetParent {
+            folder_id: FolderId::new("outer"),
+            parent: Some(FolderId::new("inner")),
+        }),
+        one(Edit::FolderSetParent {
+            folder_id: FolderId::new("outer"),
+            parent: Some(FolderId::new("outer")),
+        }),
+        one(label("x", "orange", None)),
+        one(label("sponsor", "#000000", None)),
+        one(Edit::LabelUpdate {
+            label_id: LabelId::new("sponsor"),
+            name: "Sponsor".into(),
+            color: "#ff8800".into(),
+            icon: Some("x".repeat(65)),
+        }),
+        one(labelled(&["ghost"])),
+        one(labelled(&["sponsor", "sponsor"])),
+        one(scene_meta(Some(""), None)),
+        one(scene_meta(None, Some("#12345"))),
+        one(Edit::SceneSetFolder {
+            scene_id: SceneId::new("z"),
+            folder_id: Some(FolderId::new("ghost")),
+        }),
+        one(Edit::LabelReorder {
+            label_id: LabelId::new("camera"),
+            index: 2,
+        }),
+        // Applied, then read back, undone and redone.
+        Call::Batch(edits(vec![
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("z"),
+                folder_id: Some(FolderId::new("inner")),
+            },
+            scene_meta(Some("star"), Some("#123456")),
+            labelled(&["sponsor", "camera"]),
+            Edit::FolderReorder {
+                folder_id: FolderId::new("inner"),
+                index: 0,
+            },
+            Edit::LabelReorder {
+                label_id: LabelId::new("camera"),
+                index: 0,
+            },
+            Edit::LabelUpdate {
+                label_id: LabelId::new("sponsor"),
+                name: "Sponsor".into(),
+                color: "#FF8800".into(),
+                icon: Some("star".into()),
+            },
+            Edit::FolderRename {
+                folder_id: FolderId::new("outer"),
+                name: "Shows".into(),
+            },
+        ])),
+        read(Query::SceneList),
+        read(Query::SourceList),
+        read(Query::StateGet),
+        undo(),
+        read(Query::StateGet),
+        redo(),
+        // In use: a folder with a scene, a folder with a folder, a label a source carries.
+        one(Edit::FolderDelete {
+            folder_id: FolderId::new("inner"),
+        }),
+        one(Edit::FolderDelete {
+            folder_id: FolderId::new("outer"),
+        }),
+        one(Edit::LabelDelete {
+            label_id: LabelId::new("sponsor"),
+        }),
+        // A copy carries the source's metadata.
+        one(Edit::SourceDuplicate {
+            source_id: SourceId::new("cam"),
+            new_source_id: SourceId::new("cam_2"),
+            name: "Cam 2".into(),
+        }),
+        read(Query::SourceList),
+        undo(),
+        // A source only `z` places, carrying a label: deleting `z` and then it applies
+        // (the test checks that it does), and undoing that restores the scene's folder
+        // and metadata and the source's labels. Then the source goes again.
+        Call::Batch(edits(vec![
+            Edit::SourceCreate {
+                source_id: SourceId::new("tagged"),
+                name: "Tagged".into(),
+                kind: SourceKind::Builtin {
+                    kind: "webcam".into(),
+                },
+                // Complete settings, as `webcam()` sends: the mock stores them as sent.
+                settings: [("device".to_owned(), serde_json::Value::from(""))]
+                    .into_iter()
+                    .collect(),
+                duplicated_from: None,
+            },
+            add("z", "iz2", "tagged"),
+            Edit::SourceSetMeta {
+                source_id: SourceId::new("tagged"),
+                meta: SourceMeta {
+                    labels: vec![LabelId::new("sponsor")],
+                    favourite: true,
+                },
+            },
+        ])),
+        Call::Batch(
+            edits(vec![
+                Edit::SceneDelete {
+                    scene_id: SceneId::new("z"),
+                },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("tagged"),
+                },
+            ])
+            .with_idempotency_key(IdempotencyKey::new(ORGANISED_DELETE)),
+        ),
+        read(Query::StateGet),
+        undo(),
+        read(Query::StateGet),
+        undo(),
+        // Emptying `inner` still leaves `outer` holding it, so this batch is refused
+        // whole; emptied in order, the folders and labels go, and undo brings them back
+        // in order.
+        Call::Batch(edits(vec![
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("z"),
+                folder_id: None,
+            },
+            labelled(&[]),
+            Edit::FolderDelete {
+                folder_id: FolderId::new("outer"),
+            },
+        ])),
+        Call::Batch(edits(vec![
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("z"),
+                folder_id: None,
+            },
+            labelled(&[]),
+            Edit::FolderDelete {
+                folder_id: FolderId::new("inner"),
+            },
+            Edit::FolderDelete {
+                folder_id: FolderId::new("outer"),
+            },
+            Edit::LabelDelete {
+                label_id: LabelId::new("camera"),
+            },
+            Edit::LabelDelete {
+                label_id: LabelId::new("sponsor"),
+            },
+        ])),
+        read(Query::StateGet),
+        undo(),
+        read(Query::StateGet),
+    ]
+}
+
 #[test]
 fn the_engine_answers_like_the_mock() {
     fn normalize(event: Event) -> Event {
@@ -1050,10 +1365,14 @@ fn the_engine_answers_like_the_mock() {
             },
             Event::StudioChanged {
                 program_scene,
+                preview_scene,
+                transition,
                 request_id,
                 ..
             } => Event::StudioChanged {
                 program_scene,
+                preview_scene,
+                transition,
                 client_id: ClientId::new("client"),
                 request_id,
             },
@@ -1219,6 +1538,7 @@ fn the_engine_answers_like_the_mock() {
             },
         },
     ];
+    let script: Vec<Call> = script.into_iter().chain(organise_script()).collect();
 
     let engine = parity_engine().with_output(OutputId::new("yt"));
     let real = connected(&engine);
@@ -1234,6 +1554,13 @@ fn the_engine_answers_like_the_mock() {
         let got = comparable(block_on(real.call(call.clone())).map(|r| r.result));
         let want = comparable(block_on(mock.call(call.clone())).map(|r| r.result));
         assert_eq!(got, want, "{call:?}");
+        if matches!(&call, Call::Batch(b) if b.idempotency_key == Some(IdempotencyKey::new(ORGANISED_DELETE)))
+        {
+            assert!(
+                got.is_ok(),
+                "the organised scene and source delete applies: {got:?}"
+            );
+        }
     }
     assert_eq!(engine.rev(), mock_engine.rev());
     let real_events: Vec<Event> = drain(&mut real_events).into_iter().map(normalize).collect();
@@ -1362,8 +1689,14 @@ fn output_start_publishes_fake_audio_and_video() {
     }
     assert!(saw_media, "expected script, a video NAL and raw AAC");
     let stats = engine.output_stats().expect("stats");
-    assert!(stats.video.received >= 1, "video frames accepted");
-    assert!(stats.audio.received >= 1, "audio blocks accepted");
+    assert!(
+        stats.video.received >= 1,
+        "video frames accepted: {stats:?}"
+    );
+    assert!(
+        stats.audio.received >= 1,
+        "audio blocks accepted: {stats:?}"
+    );
     assert!(stats.readbacks >= 1, "the CPU path read a frame back");
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
@@ -2309,6 +2642,86 @@ fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
     assert_eq!(at(480, 180), [0, 0, 0, 255]);
 }
 
+/// A geometry's `flip_h` reaches the compositor through the snapshot: a red|green frame
+/// stretched over the whole 64×32 canvas and flipped draws green|red.
+#[test]
+fn video_snapshot_draws_a_flipped_geometry() {
+    let _gpu = one_gpu_test_at_a_time();
+    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
+    use jstream_protocol::{FitMode, ItemGeometry};
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let geometry = ItemGeometry {
+        fit_mode: FitMode::Stretch,
+        flip_h: true,
+        ..ItemGeometry::covering_canvas(64, 32).expect("positive")
+    };
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::CanvasSetSize {
+                    width: 64,
+                    height: 32,
+                },
+                create("main"),
+                webcam(),
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("mirrored"),
+                    source_id: SourceId::new("webcam"),
+                    transform: None,
+                    geometry: Some(geometry),
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("scene");
+    let frame: Vec<u8> = (0..16 * 8)
+        .flat_map(|i| {
+            if i % 16 < 8 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 255, 0, 255]
+            }
+        })
+        .collect();
+    engine
+        .set_source_frame(&SourceId::new("webcam"), 16, 8, &frame)
+        .expect("frame");
+    let shot = match query(&control, Query::VideoSnapshot) {
+        Ok(shot) => shot,
+        Err(error) if error.protocol().is_some_and(is_no_adapter) => {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "CI has no wgpu adapter: {error}"
+            );
+            return;
+        }
+        Err(error) => panic!("video.snapshot failed: {error}"),
+    };
+    let QueryResult::VideoSnapshot {
+        width, height, png, ..
+    } = shot
+    else {
+        panic!("not a snapshot: {shot:?}");
+    };
+    assert_eq!((width, height), (64, 32));
+    let (_, _, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+    let at = |x: usize, y: usize| {
+        let i = (y * 64 + x) * 4;
+        [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+    };
+    assert_eq!(at(8, 16), [0, 255, 0, 255]);
+    assert_eq!(at(56, 16), [255, 0, 0, 255]);
+}
+
 #[test]
 fn a_removed_drop_source_keeps_its_total() {
     let engine = Engine::new();
@@ -2520,11 +2933,11 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push(shot.program().cloned());
-                    inner(shot, live, captures, frames)
+                    inner(shot, live, captures, frames, at)
                 });
                 Ok(draw)
             })
@@ -2574,6 +2987,60 @@ mod cpu_pipeline {
             hub.caught_up(u64::MAX - 1),
             "a stopped render thread holds nothing up"
         );
+    }
+
+    /// `privacy.set` reaches the render thread through its flag, without the
+    /// collection lock: the next ticks draw every mix covered, and uncovered once it is
+    /// off again (ADR-0027 §4).
+    #[test]
+    fn the_render_thread_covers_frames_while_privacy_is_on() {
+        use jstream_protocol::{Action, Call};
+
+        let fakes = fakes();
+        let seen: Arc<Mutex<Vec<bool>>> = Arc::default();
+        let draw: OpenDraw = {
+            let seen = Arc::clone(&seen);
+            Arc::new(move |context| {
+                let seen = Arc::clone(&seen);
+                let mut inner = (cpu_draw())(context)?;
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
+                    seen.lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .extend(frames.iter().filter(|f| f.due).map(|f| f.privacy));
+                    inner(shot, live, captures, frames, at)
+                });
+                Ok(draw)
+            })
+        };
+        let engine = engine(
+            share(&fakes.backends),
+            draw,
+            Box::new(RecordingPublish::new()),
+        );
+        let last = || {
+            seen.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .last()
+                .copied()
+        };
+        let privacy = |on| Call::Action {
+            action: Action::PrivacySet { on },
+        };
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(pump_until(&fakes.clock, &fakes.audio, || last() == Some(false)));
+        block_on(control.call(privacy(true))).expect("privacy on");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(true)),
+            "the next ticks are covered"
+        );
+        block_on(control.call(privacy(false))).expect("privacy off");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(false)),
+            "and uncovered once it is off"
+        );
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
     /// Feeds both inputs and moves the clock on by 50 ms.
@@ -3139,9 +3606,9 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, live, captures, frames)
+                    inner(shot, live, captures, frames, at)
                 });
                 Ok(draw)
             })
@@ -3971,8 +4438,8 @@ mod cpu_pipeline {
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
 
-    /// A publish target whose send, once `stalled`, blocks until `release` fires (or
-    /// 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
+    /// A publish target whose next send, once `stalled`, blocks until `release` fires
+    /// (or 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
     /// send has blocked (`blocked`) and when the output thread has finished it
     /// (`finished`), so the test waits on those instead of on the clock.
     struct StuckPeer {
@@ -3985,7 +4452,10 @@ mod cpu_pipeline {
 
     impl LivePublish for StuckPeer {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
-            if self.stalled.load(Ordering::Acquire) {
+            // One send stalls; once released, the rest go through. A packet can make
+            // more than one tag (the first H.264 keyframe brings its sequence header),
+            // and a second stall would outlast the test's wait for the thread to end.
+            if self.stalled.swap(false, Ordering::AcqRel) {
                 self.blocked.store(true, Ordering::Release);
                 let _ = self.release.recv_timeout(Duration::from_secs(30));
             }
@@ -4364,6 +4834,7 @@ mod cpu_pipeline {
                     profile_id: None,
                     shared_with: vec![OutputId::new(other)],
                     hardware: false,
+                    dedicated: false,
                 }),
                 "{id}"
             );
@@ -4485,9 +4956,9 @@ mod cpu_pipeline {
             Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, live, captures, frames)
+                    inner(shot, live, captures, frames, at)
                 });
                 Ok(draw)
             })
@@ -4732,7 +5203,7 @@ mod cpu_pipeline {
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move |_| {
-            let draw: DrawFn = Box::new(move |_, _, _, frames| {
+            let draw: DrawFn = Box::new(move |_, _, _, frames, _| {
                 for frame in frames.iter_mut().filter(|frame| frame.due) {
                     frame.out.clear();
                     for _ in 0..frame.size.width() as usize * frame.size.height() as usize {
@@ -4883,6 +5354,59 @@ mod cpu_pipeline {
         let log = log.lock().expect("vcam log");
         assert_eq!(log.starts[0].size, FrameSize::new(64, 64).expect("size"));
         assert_eq!(log.pixels[0], ([30, 20, 10, 255], [30, 20, 10, 255]));
+    }
+
+    /// The privacy screen covers a virtual camera: with it on, the camera gets black
+    /// frames from the CPU stand-in, here scaling a 1x1 grey capture to the 64x64
+    /// program, and the program again once it is off (ADR-0027 §4, review N5).
+    #[test]
+    fn a_virtual_camera_is_covered_by_the_privacy_screen() {
+        use crate::snapshot::{CaptureFrame, CaptureImage, Captures};
+        use jstream_protocol::{Action, Call};
+        use jstream_sources::CaptureSpec;
+
+        struct Grey;
+        impl Captures for Grey {
+            fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+                Some(CaptureFrame {
+                    version: 1,
+                    image: CaptureImage::Rgba {
+                        size: FrameSize::new(1, 1).expect("size"),
+                        rgba: &[90, 90, 90, 255],
+                    },
+                })
+            }
+        }
+        let draw: OpenDraw = Arc::new(|context| {
+            let mut inner = (cpu_draw())(context)?;
+            let draw: DrawFn =
+                Box::new(move |shot, live, _, frames, at| inner(shot, live, &Grey, frames, at));
+            Ok(draw)
+        });
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (_engine, control, mut events) =
+            vcam_engine(&fakes, draw, scripted(&log), (64, 64), None);
+        let last = || log.lock().expect("vcam log").pixels.last().copied();
+        let grey = ([90, 90, 90, 255], [90, 90, 90, 255]);
+        let privacy = |on| Call::Action {
+            action: Action::PrivacySet { on },
+        };
+        start_output(&control, &mut events, "cam");
+        assert!(pump_until(&fakes.clock, &fakes.audio, || last() == Some(grey)));
+        block_on(control.call(privacy(true))).expect("privacy on");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                last().is_some_and(|(first, middle)| first[..3] == [0; 3] && middle[..3] == [0; 3])
+            }),
+            "the camera is covered"
+        );
+        block_on(control.call(privacy(false))).expect("privacy off");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(grey)),
+            "and shows the program once it is off"
+        );
+        block_on(control.call(output_call("cam", false))).expect("output.stop");
     }
 
     /// A virtual camera shares the program stage with a stream: both run at once, and
@@ -5499,6 +6023,37 @@ fn scene_switch_is_audited() {
         entries[1].to_json_line().contains(",\"scene_id\":\"b\","),
         "{:?}",
         entries[1].to_json_line()
+    );
+}
+
+/// `privacy.set` is audited like every action, recording whether it turned the screen
+/// on or off; one that changed nothing is recorded too (ADR-0027 §4).
+#[test]
+fn privacy_set_is_audited() {
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new().with_audit(audit.clone());
+    let control = connected(&engine);
+    block_on(control.call(privacy_call(true))).expect("on");
+    block_on(control.call(privacy_call(true))).expect("again");
+    block_on(control.call(privacy_call(false))).expect("off");
+
+    let entries = audit.entries();
+    let seen: Vec<_> = entries
+        .iter()
+        .map(|e| (e.call, e.privacy, (e.rev_before.0, e.rev_after.0), e.error))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("privacy.set", Some(true), (0, 0), None),
+            ("privacy.set", Some(true), (0, 0), None),
+            ("privacy.set", Some(false), (0, 0), None),
+        ]
+    );
+    assert!(
+        entries[2].to_json_line().contains(",\"privacy\":false,"),
+        "{:?}",
+        entries[2].to_json_line()
     );
 }
 

@@ -64,16 +64,25 @@ export const test = base.extend({
 export async function connect(page, daemon) {
   await page.goto(daemon.url);
   await page.getByRole('button', { name: 'Connect' }).click();
-  await expect(page.getByRole('button', { name: 'Disconnect' })).toBeVisible();
+  await expect(page.locator('header.app-header')).toBeVisible();
 }
 
-/** Opens the inspector's page `name` (`Properties`, `Outputs`). */
-export async function inspectorPage(page, name) {
-  await page.getByRole('tab', { name }).click();
+/** Opens the header's File menu and disconnects. */
+export async function disconnect(page) {
+  await page.locator('header.app-header').getByRole('button', { name: 'File' }).click();
+  await page.getByRole('menuitem', { name: 'Disconnect' }).click();
 }
 
-/** The status bar's revision, as a number. */
+/** Shows the docked panel `name` (`Inspector`, `Outputs`): selects its tab if another
+ * tab of its group is shown. A click on a shown lone panel would collapse it, so a shown
+ * one is left alone. */
+export async function showPanel(page, name) {
+  const tab = page.getByRole('tab', { name, exact: true });
+  if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+  await expect(page.getByRole('tabpanel', { name, exact: true })).toBeVisible();
+}
+
+/** The revision the header last heard of, as a number. */
 export async function rev(page) {
-  const text = await page.locator('.status-bar').getByText(/^rev \d+$/).textContent();
-  return Number(text.replace('rev ', ''));
+  return Number(await page.locator('header.app-header').getAttribute('data-rev'));
 }
