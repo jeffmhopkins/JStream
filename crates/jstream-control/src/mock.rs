@@ -2162,8 +2162,8 @@ fn check_canvas_side(value: u32, at: usize, name: &str) -> Result<(), ProtocolEr
     Ok(())
 }
 
-/// Checks a geometry as the engine does (a positive size and perspective, finite
-/// corners; any 3D from protocol 0.34) and returns the deprecated transform view
+/// Checks a geometry as the engine does (a positive size and perspective, and drawable
+/// by `ItemGeometry::check_drawable`; any such 3D from protocol 0.34) and returns the deprecated transform view
 /// `ItemInfo` reports.
 fn geometry_view(geometry: &ItemGeometry, at: usize) -> Result<ItemTransform, ProtocolError> {
     if let Err(err) = geometry.validate() {
@@ -2175,8 +2175,8 @@ fn geometry_view(geometry: &ItemGeometry, at: usize) -> Result<ItemTransform, Pr
         return Err(invalid(at, name, err.to_string()));
     }
     geometry
-        .project()
-        .and_then(|_| geometry.transform_view())
+        .check_drawable()
+        .and_then(|()| geometry.transform_view())
         .map_err(|err| invalid(at, "geometry", err.to_string()))
 }
 

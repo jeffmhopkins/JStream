@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 mod drawn;
 
-pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, NEAR_W};
+pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, MAX_DRAWN_PX, NEAR_W};
 
 /// How the cropped source fills the item's box.
 ///
@@ -73,8 +73,8 @@ impl Size {
 ///
 /// `center`, `size` and `rotation_deg` alone define the box, so selection handles need
 /// no source size. The 3D fields default to neutral (no tilt, turn or depth, and no
-/// perspective). From protocol 0.34 the engine accepts and draws any 3D
-/// ([`Self::drawn_polygon`], ADR-0050); earlier minors rejected a non-neutral value, and
+/// perspective). From protocol 0.34 the engine accepts and draws any 3D it can draw
+/// ([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors rejected a non-neutral value, and
 /// [`Self::is_neutral_3d`] was that check. A negative `size` is rejected, not read as a
 /// flip.
 ///
@@ -166,6 +166,11 @@ pub enum GeometryError {
     /// An input or a computed canvas coordinate is NaN or infinite.
     #[error("a placement coordinate is not finite")]
     NotFinite,
+    /// A 3D item's drawn polygon reaches further than
+    /// [`MAX_DRAWN_PX`](drawn::MAX_DRAWN_PX) from the canvas origin
+    /// ([`ItemGeometry::check_drawable`]).
+    #[error("the item draws too far from the canvas")]
+    TooFar,
 }
 
 /// A point in canvas pixels, x right and y down.

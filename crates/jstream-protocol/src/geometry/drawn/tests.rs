@@ -6,7 +6,7 @@ use super::{DrawnPolygon, DrawnVertex, LocalPoint, NEAR_W};
 use crate::command::{Crop, Vec2};
 use crate::finite::Finite32;
 use crate::geometry::{
-    CanvasPoint, FitMode, ItemGeometry, Placed, Size, rotate_x, rotate_y, rotate_z,
+    CanvasPoint, FitMode, GeometryError, ItemGeometry, Placed, Size, rotate_x, rotate_y, rotate_z,
 };
 
 fn finite(value: f32) -> Finite32 {
@@ -393,5 +393,46 @@ fn a_large_item_edge_on_draws_nothing_and_unplaces_nothing() {
                 "tilt {tilt}, turn {turn}"
             );
         }
+    }
+}
+
+/// A tilted box of `width`×2000 under perspective 800 at `center`, reaching behind the
+/// viewer, so its near-plane clip magnifies its far side up to 256 times.
+fn reaching_behind(center: f32, width: f32) -> ItemGeometry {
+    let mut geometry = ItemGeometry::try_new(
+        Vec2::new(center, 540.0).expect("finite"),
+        Size::try_new(width, 2000.0).expect("positive"),
+    )
+    .expect("geometry");
+    geometry.tilt_deg = finite(60.0);
+    geometry.perspective_px = Some(finite(800.0));
+    geometry
+}
+
+/// An edit stores only a geometry the compositor can draw (#629 round 1 B1): ordinary
+/// 3D, and an item behind the viewer that draws nothing, pass; a huge item clipped at
+/// the near plane, or one centred near f32's limit, does not, though its four corners
+/// project to finite points.
+#[test]
+fn only_a_drawable_geometry_passes_check_drawable() {
+    for (tilt, turn, rotation, depth, p) in CASES {
+        geometry(tilt, turn, rotation, depth, p)
+            .check_drawable()
+            .expect("an ordinary 3D item is drawable");
+    }
+    geometry(0.0, 0.0, 0.0, 5000.0, Some(800.0))
+        .check_drawable()
+        .expect("an item behind the viewer draws nothing, and is drawable");
+    reaching_behind(960.0, 4000.0)
+        .check_drawable()
+        .expect("an item reaching behind the viewer is drawable");
+    for (center, width, error) in [
+        (960.0, 1e37, GeometryError::NotFinite),
+        (3e38, 1e36, GeometryError::NotFinite),
+        (960.0, 1e13, GeometryError::TooFar),
+    ] {
+        let geometry = reaching_behind(center, width);
+        geometry.project().expect("its corners project");
+        assert_eq!(geometry.check_drawable(), Err(error), "{center} {width}");
     }
 }

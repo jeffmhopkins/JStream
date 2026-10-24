@@ -281,8 +281,9 @@ fn transform() -> BoxedStrategy<ItemTransform> {
         .boxed()
 }
 
-/// Mostly a valid flat geometry; sometimes a zero or negative size, a tilt or a
-/// perspective, which placement edits may refuse.
+/// Mostly a valid flat geometry; sometimes a zero or negative size or a non-positive
+/// perspective, which placement edits refuse, or a tilt, a turn or a positive
+/// perspective, which they accept when the item is drawable.
 fn geometry() -> BoxedStrategy<ItemGeometry> {
     let fit = proptest::sample::select(&[FitMode::Fit, FitMode::Fill, FitMode::Stretch][..]);
     let side = prop_oneof![

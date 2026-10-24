@@ -366,7 +366,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and the reserved
   `effects[]`, which a collection file must leave empty. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
-  its `canvas` (protocol 0.11); any 3D geometry is accepted from protocol 0.34. Scenes have
+  its `canvas` (protocol 0.11); any 3D geometry the compositor can draw is accepted from
+  protocol 0.34. Scenes have
   a `role` (`scene` or `group`, set by `scene.create` or `scene.set_role`), and `item.move` moves an item
   to another scene keeping its id, under the same cycle check. The placement edits take
   an optional `scene_id`, accepted only when it names the item's own scene until
@@ -867,7 +868,7 @@ non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn pol
 clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
 analytic edge coverage, sampled from a mip chain of its source (rebuilt on the GPU
 when the source changed, at most once per source and frame) with 16× anisotropic
-filtering. The engine accepts any 3D from protocol 0.34. Opacity is a straight
+filtering. The engine accepts any 3D it can draw from protocol 0.34. Opacity is a straight
 multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into

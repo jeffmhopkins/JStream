@@ -645,4 +645,46 @@ mod tests {
             );
         }
     }
+
+    /// Every geometry an edit may store draws (#629 round 1 B1): a 3D item that
+    /// `check_drawable` accepts, however large or far out, gives a shape for any fit
+    /// mode and crop, not a placement error that would fail its whole frame. The sweep
+    /// reaches past `MAX_DRAWN_PX`, so it covers the largest accepted items.
+    #[test]
+    fn every_drawable_geometry_gives_a_shape() {
+        let mut accepted = 0;
+        for exponent in 2..=14 {
+            let width = 10f32.powi(exponent);
+            for center in [960.0, 1e14, 3e38] {
+                for fit_mode in [FitMode::Fill, FitMode::Fit, FitMode::Stretch] {
+                    let mut geometry = ItemGeometry::try_new(
+                        Vec2::new(center, 540.0).expect("finite"),
+                        Size::try_new(width, 2000.0).expect("positive"),
+                    )
+                    .expect("geometry");
+                    geometry.fit_mode = fit_mode;
+                    geometry.tilt_deg = Finite32::new(60.0).expect("finite");
+                    geometry.turn_deg = Finite32::new(-20.0).expect("finite");
+                    geometry.perspective_px = Some(Finite32::new(800.0).expect("finite"));
+                    if geometry.check_drawable().is_err() {
+                        continue;
+                    }
+                    accepted += 1;
+                    for crop in [
+                        Crop::NONE,
+                        Crop {
+                            left: 3,
+                            top: 1,
+                            right: 5,
+                            bottom: 2,
+                        },
+                    ] {
+                        shape(64, 36, Placement::Geometry(geometry), crop)
+                            .unwrap_or_else(|err| panic!("{width} {center} {fit_mode:?}: {err}"));
+                    }
+                }
+            }
+        }
+        assert!(accepted > 20, "{accepted} accepted");
+    }
 }

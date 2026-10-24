@@ -16,6 +16,12 @@ use super::{CanvasPoint, ContentRect, GeometryError, ItemGeometry, rotate_x, rot
 /// not drawn.
 pub const NEAR_W: f32 = 1.0 / 256.0;
 
+/// How far from the canvas origin, in canvas pixels along either axis, a vertex of an
+/// accepted 3D item's drawn polygon may be ([`ItemGeometry::check_drawable`]). Far past
+/// any canvas, and far enough inside f32's range that the compositor's edge and
+/// push-out arithmetic on such a vertex stays finite.
+pub const MAX_DRAWN_PX: f32 = 1e15;
+
 /// A polygon with less area than this, in square canvas pixels, draws nothing:
 /// too small to see.
 const MIN_AREA: f32 = 0.01;
@@ -190,6 +196,52 @@ impl ItemGeometry {
             *vertex = drawn_vertex(&plane, content, x, y, plane.w(x, y).max(NEAR_W))?;
         }
         Ok((signed_area(polygon.vertices()).abs() > MIN_AREA).then_some(polygon))
+    }
+
+    /// Whether the compositor can draw this geometry, so an edit may store it (ADR-0022:
+    /// stored state never claims what isn't drawn). With neutral 3D that is
+    /// [`Self::project`]'s finite corners. Otherwise the polygon the whole box draws
+    /// ([`Self::drawn_polygon`], which bounds the polygon of any content, since content
+    /// is clipped to the box) must have finite vertices within [`MAX_DRAWN_PX`] of the
+    /// origin: a huge item whose near-plane clip magnifies it 256 times, or a centre near
+    /// f32's limit, would otherwise overflow while it is drawn. An item that draws
+    /// nothing (behind the viewer, edge-on) is drawable.
+    ///
+    /// # Errors
+    /// The same as [`Self::validate`], [`GeometryError::NotFinite`] when a corner or a
+    /// vertex is not finite, or [`GeometryError::TooFar`] when a vertex is past
+    /// [`MAX_DRAWN_PX`].
+    pub fn check_drawable(self) -> Result<(), GeometryError> {
+        self.validate()?;
+        self.project()?;
+        if self.is_neutral_3d() {
+            return Ok(());
+        }
+        let width = self.size.width.get();
+        let height = self.size.height.get();
+        let whole_box = ContentRect {
+            left: -width * 0.5,
+            top: -height * 0.5,
+            width,
+            height,
+            u0: 0.0,
+            v0: 0.0,
+            u1: 1.0,
+            v1: 1.0,
+        };
+        let Some(polygon) = self.drawn_polygon(&whole_box)? else {
+            return Ok(());
+        };
+        let near = |value: f32| value.abs() <= MAX_DRAWN_PX;
+        if polygon
+            .vertices()
+            .iter()
+            .all(|vertex| near(vertex.canvas.x) && near(vertex.canvas.y))
+        {
+            Ok(())
+        } else {
+            Err(GeometryError::TooFar)
+        }
     }
 
     /// The local point that `point` on the canvas shows: the inverse of

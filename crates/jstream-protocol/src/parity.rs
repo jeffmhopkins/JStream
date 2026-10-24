@@ -709,6 +709,23 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             ),
         ),
         (
+            // A tilted item so wide that its near-plane clip lands past MAX_DRAWN_PX.
+            Batch::single(Edit::ItemSetGeometry {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+                geometry: ItemGeometry {
+                    size: Size {
+                        width: finite(1e13),
+                        height: finite(2000.0),
+                    },
+                    tilt_deg: finite(60.0),
+                    perspective_px: Some(finite(800.0)),
+                    ..BOXED
+                },
+            }),
+            invalid("edits.0.geometry", "the item draws too far from the canvas"),
+        ),
+        (
             Batch::single(Edit::CanvasSetSize {
                 width: 0,
                 height: 720,

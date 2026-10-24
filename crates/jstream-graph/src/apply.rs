@@ -807,9 +807,10 @@ fn apply_edit(
 }
 
 /// Checks a geometry an edit stores (ADR-0022): a positive size, a positive perspective
-/// if any, and finite corners. Any 3D is accepted (protocol 0.34, ADR-0050 decision 8):
-/// the compositor draws it, and an item wholly behind the viewer or seen edge-on draws
-/// nothing. Errors name `geometry` or `geometry.<field>`.
+/// if any, and that the compositor can draw it ([`ItemGeometry::check_drawable`]: finite
+/// corners, and for 3D a drawn polygon within `MAX_DRAWN_PX` of the origin). Any such 3D
+/// is accepted (protocol 0.34, ADR-0050 decision 8), and an item wholly behind the
+/// viewer or seen edge-on draws nothing. Errors name `geometry` or `geometry.<field>`.
 fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolError> {
     if let Err(err) = geometry.validate() {
         let name = match err {
@@ -819,10 +820,10 @@ fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolErro
         };
         return Err(invalid(at, name, err.to_string()));
     }
-    // Finite fields can still put a corner past f32's range (a centre near f32::MAX).
+    // Finite fields can still put a corner past f32's range (a centre near f32::MAX), or
+    // a 3D item's near-plane clip far enough out to overflow while it is drawn.
     geometry
-        .project()
-        .map(|_| ())
+        .check_drawable()
         .map_err(|err| invalid(at, "geometry", err.to_string()))
 }
 
