@@ -37,7 +37,7 @@ async function centre(locator) {
 test('the Editing layout docks every panel, and the View menu hides and adds them', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(zone(page, 'Left sidebar').getByRole('tab')).toHaveText(['Scenes', 'Scene objects']);
-  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector', 'Transform']);
+  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector', 'Filters', 'Transform']);
   await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs', 'Transitions']);
   // Empty zones are hidden until a panel is dragged.
   await expect(zone(page, 'Top dock')).toBeHidden();
@@ -52,7 +52,7 @@ test('the Editing layout docks every panel, and the View menu hides and adds the
   await expect(inspector).toHaveText(/add/);
   // The menu stays open; adding puts the panel back at the end of its home zone.
   await inspector.click();
-  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Transform', 'Inspector']);
+  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Filters', 'Transform', 'Inspector']);
   await page.keyboard.press('Escape');
   await expect(page.locator('header.app-header')).toContainText('Layout: Editing (modified)');
 });
@@ -99,6 +99,11 @@ test('a lone panel collapses by its title, and closes on a second click of its Ã
   await expect(close).toHaveAttribute('title', 'Click again to close Transform');
   await close.click();
   await expect(tab(page, 'Transform')).toHaveCount(0);
+  const closeFilters = page.getByRole('button', { name: 'Close Filters' });
+  await tab(page, 'Filters').hover();
+  await closeFilters.click();
+  await closeFilters.click();
+  await expect(tab(page, 'Filters')).toHaveCount(0);
   // The inspector is now alone in its zone, so it doesn't collapse.
   await tab(page, 'Inspector').click();
   await expect(page.getByRole('tabpanel', { name: 'Inspector' })).toBeVisible();

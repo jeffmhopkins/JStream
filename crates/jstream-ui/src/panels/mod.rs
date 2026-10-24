@@ -1,7 +1,9 @@
 //! The shell's panels: the scene list and the sources list on the left, the inspector's
 //! pages (properties, then outputs) on the right, and the audio mixer (`mixer.rs`) along
 //! the bottom. The scene list and the sources list share their search, filter, star and
-//! drag reordering (`tree.rs`). The Add source and Properties dialogs open over them. They read the
+//! drag reordering (`tree.rs`). The Filters panel shows the selected source's filter chains
+//! (`filters.rs`). The Add source, Properties, Add filter and Filter settings dialogs open
+//! over them. They read the
 //! shared state from [`Studio`](crate::store::Studio) context and call the engine through the open session from
 //! [`SessionContext`](crate::app::SessionContext); the mixer reads its own state.
 //!
@@ -9,6 +11,7 @@
 
 pub mod add_source;
 mod confirm;
+pub mod filters;
 mod inspector;
 pub mod mixer;
 pub mod number;
@@ -22,6 +25,7 @@ pub mod transform;
 mod tree;
 
 pub use add_source::AddSource;
+pub use filters::Filters;
 pub use inspector::Inspector;
 pub use mixer::Mixer;
 pub use outputs::Outputs;

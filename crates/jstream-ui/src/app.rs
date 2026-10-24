@@ -8,6 +8,7 @@ use crate::header::Header;
 use crate::menu::{ContextMenu, Menus};
 use crate::panels::AddSource;
 use crate::panels::add_source::AddSourceDialog;
+use crate::panels::filters::{AddFilter, FilterDialogs, FilterSettings};
 use crate::panels::source_properties::{PropertiesDialog, SourceProperties};
 use crate::session::{Session, engine_url_for_page};
 use crate::store::Studio;
@@ -212,6 +213,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(Menus::new());
     provide_context(AddSourceDialog::new());
     provide_context(PropertiesDialog::new());
+    provide_context(FilterDialogs::new());
     view! {
         <div class="shell">
             <Header info=info disconnect=disconnect />
@@ -224,6 +226,8 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             <Workspace />
             <AddSource />
             <SourceProperties />
+            <AddFilter />
+            <FilterSettings />
             <ContextMenu />
         </div>
     }

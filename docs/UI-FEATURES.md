@@ -59,18 +59,18 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 11 | 3 | 0 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 5 | 1 | 2 | 0 |
-| [Dialogs and windows](#dialogs) | 8 | 2 | 1 | 2 | 3 | 0 |
+| [Dialogs and windows](#dialogs) | 8 | 4 | 1 | 0 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 4 | 3 | 1 | 2 | 0 |
 | [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 5 | 2 | 0 | 3 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
-| [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
+| [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **51** | **31** | **15** | **32** | **1** |
+| **Total** | **130** | **58** | **31** | **8** | **32** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -89,10 +89,10 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. |
 | WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
-| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | The prototype's icons are in `icons.rs`; the Add source and Properties dialogs, the canvas tools and the Scenes and Scene objects rows use them. Other panels' rows still use text glyphs (● ○ ↺). |
+| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | The prototype's icons are in `icons.rs`; the Add source, Properties and filter dialogs, the canvas tools, the Scenes and Scene objects rows and the Filters panel use them. Other panels' rows still use text glyphs (● ○ ↺). |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ✅ | `NumberField` (`panels/number.rs`), used by the Inspector; the filters, mixer and dialogs take it as they are rebuilt. A drag shows its value as it goes and is sent once on release, so it is one undo step, where the prototype writes every step. |
 | WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | 🟡 | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", the transitions hint); fold state isn't remembered per title yet, and the Inspector's other users take it as they are built |
-| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | 🟡 | Built for the Scenes and Scene objects rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye and a favourite's star stay shown. The other panels' rows take it as they are rebuilt. |
+| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | 🟡 | Built for the Scenes and Scene objects rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye and a favourite's star stay shown; and for the filter rows' × (`filters.rs`). The other panels' rows take it as they are rebuilt. |
 | WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss, in the prototype's toast colours. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
 
 <a id="header"></a>
@@ -106,7 +106,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. |
-| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | 🟡 | Built for the six panels the UI has; the rest join as they are built. |
+| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | 🟡 | Built for the eight panels the UI has; the rest join as they are built. |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
@@ -122,9 +122,9 @@ covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crat
 -->
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
-The dock is built (`dock.rs`, `workspace.rs`) with the seven panels the UI has: Scenes,
-Scene objects, Inspector (with the pairing panel under the properties), Transform, Audio
-mixer, Outputs and Transitions (studio mode and the presets). The other prototype panels join
+The dock is built (`dock.rs`, `workspace.rs`) with the eight panels the UI has: Scenes,
+Scene objects, Inspector (with the pairing panel under the properties), Transform,
+Filters, Audio mixer, Outputs and Transitions (studio mode and the presets). The other prototype panels join
 the dock, its View menu and its layouts as their rows are built.
 
 | ID | Feature | Requirement | Status | Notes |
@@ -136,7 +136,7 @@ the dock, its View menu and its layouts as their rows are built.
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. |
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Transform under the Inspector, where it shares a group with Filters once that is built; Filters, chat, stats and agent join them as they are built. |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown; chat, stats and agent join them as they are built. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
 
@@ -184,8 +184,8 @@ on the canvas and in Scene objects but for its last lines.
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | 🟡 | Built but for the colour swatch column, which comes with the label menus that use it. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
-| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions, Edit filters and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus), [FL-06](#filters) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
-| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, New scene and Delete scene work, though the prototype shows all but New scene disabled. Transitions and keyframes wait on T1 and K1, folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
+| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)), and Edit filters selects the item and shows the Filters panel ([FL-01](#filters)). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
+| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, New scene and Delete scene work, though the prototype shows all but New scene disabled. Transitions and keyframes wait on T1 and K1, folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), Edit filters on [FL-06](#filters), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
 | CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | 🟡 | The selected items' menu of [CM-02](#menus), ending with Add source and New group instead of Select all; New group waits on [OB-04](#objects). |
 | CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built. New folder ([SC-06](#scenes)), New group ([OB-04](#objects)) and the two Pastes (decision register D43) show disabled. |
 | CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
@@ -203,10 +203,10 @@ Spec: [workspace › dialogs and floating windows](../design/ui-prototype/spec-w
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | DL-01 | Modal dialog frame | Centred dialog over a dim backdrop; Esc and the backdrop cancel, Enter presses the primary button. | ✅ | `dialog.rs`. Enter isn't taken from a text area, a button or a select; from a field, it blurs the field first so its value is committed. The inline delete confirmation stays. |
-| DL-02 | Properties dialog | 860 × 640: Name and the source's settings on the left, its video and audio filters on the right; Defaults, Cancel, OK; settings change only on OK. Opens on double-click and after Add source. | ✅ | Built (`source_properties.rs`): the Inspector's settings form (from `kind.describe`) editing a draft, sent with the name as one batch on OK, holding only what the user changed since it opened; Defaults empties the draft, so OK sends `null` for each value the dialog opened with. Also opened by Properties… in the item menus. The subtitle is the source's name, as the engine names no capture backend. The filter column lists each chain with the eye and remove at once; summaries, reordering, Add filter and the settings dialog come with [FL-02](#filters) to [FL-05](#filters) and [DL-04](#dialogs) and [DL-05](#dialogs). |
+| DL-02 | Properties dialog | 860 × 640: Name and the source's settings on the left, its video and audio filters on the right; Defaults, Cancel, OK; settings change only on OK. Opens on double-click and after Add source. | ✅ | Built (`source_properties.rs`): the Inspector's settings form (from `kind.describe`) editing a draft, sent with the name as one batch on OK, holding only what the user changed since it opened; Defaults empties the draft, so OK sends `null` for each value the dialog opened with. Also opened by Properties… in the item menus. The subtitle is the source's name, as the engine names no capture backend. The filter column is the Filters panel's chains (`filters.rs`), whose changes apply at once: a double-click on a row opens the Filter settings dialog ([DL-04](#dialogs)) over it, and "+ Add filter…" the Add filter dialog ([DL-05](#dialogs)). |
 | DL-03 | Scene properties | Transition in and out, hotkey, background colour, multiview, "Include its audio when nested". | 🔒 | Transitions are T1; hotkeys K1. |
-| DL-04 | Filter settings dialog | Live-preview settings with an on/off switch; Cancel restores; Defaults; Remove. | ⬜ | Needs [filters](#filters). |
-| DL-05 | Add filter dialog | 720 × 520: searchable catalogue grouped by chain and group, details pane, "Uses the scene" picker for scene-input filters. | ⬜ | The catalogue comes from `kind.list`, not the prototype's list. |
+| DL-04 | Filter settings dialog | Live-preview settings with an on/off switch; Cancel restores; Defaults; Remove. | ✅ | `filters.rs`, 460 wide, over the Properties dialog when opened from it: the kind's settings form, each change a `filter.set_settings` at once, the switch a `filter.set_enabled`. Cancel, Escape and the backdrop send one batch putting back the settings and the switch it opened with; Defaults resets every setting but a scene input's scene; Remove sends `filter.remove`. The hint line is the prototype's for the kinds it knows. |
+| DL-05 | Add filter dialog | 720 × 520: searchable catalogue grouped by chain and group, details pane, "Uses the scene" picker for scene-input filters. | ✅ | `filters.rs`. The catalogue is `kind.list`'s filter kinds for the source's chains, not the prototype's wish list: the prototype's groups, names and hints for the kinds it knows, the engine's pixelate, aspect ratio and image mask in the groups they fit, effect-pack kinds under Effect packs and anything else under Other. A kind with a scene setting (the scene mask) needs its scene first, from the scenes that don't show the source. A filter with more than three settings opens DL-04 once added; one with fewer opens in place in the panel. Add is off while the chain holds its eight filters. |
 | DL-06 | Add source dialog | 720 wide: types grouped Capture, Audio, Media and web, Generated, Scenes; "Create new" with a name, or add an existing source as a reference; new sources placed at native size and their Properties opened. | 🟡 | Built and opened from the right-click menus, with the prototype's names, icons and descriptions for the engine's kinds. A kind the prototype doesn't name goes under Other, and a placed source whose kind the engine doesn't list can be added again but not created. Native sizes are the prototype's per-type table, as boxes with the `fit` mode, because the protocol has no source sizes (see [CV-08](#canvas)). A new source's item is selected and its Properties dialog (DL-02) opens once the engine has accepted it; a placement of an existing source is selected with the Inspector shown. A blank name becomes "<type> N", counting that kind's sources. |
 | DL-07 | Pop-out and projectors | A scene or source in a floating window, or full screen on a monitor. | 🔒 | Previews of any scene or source (decision register D36). |
 | DL-08 | Create YouTube stream | Title, description, visibility, latency, start now or schedule, category, DVR, made for kids. | 🔒 | Y4 and the OAuth client ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
@@ -296,19 +296,23 @@ All of it is client-side geometry, sent as `item.set_geometry` edits (`item.set_
 <a id="filters"></a>
 ## Filters
 <!-- @section
+covers = ["crates/jstream-ui/src/panels/filters.rs"]
 -->
 
 Spec: [panels › filters](../design/ui-prototype/spec-panels.md#filters-panel). The protocol
 has source filter chains (`filter.add`, `remove`, `set_enabled`, `set_settings`,
-`reorder`; [ADR-0026](adr/0026-source-filter-chains.md)); the UI shows none of them yet.
+`reorder`; [ADR-0026](adr/0026-source-filter-chains.md)), and the Filters panel
+(`filters.rs`) edits them. The master stage and each output own chains too
+([ADR-0027](adr/0027-program-master-and-output-chains.md)); the panel shows them once the
+Outputs panel can pick them (FL-07).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| FL-01 | Filters panel | For the selected source: separate Video and Audio chains, count per chain, "No video filters." when empty. | ⬜ | |
-| FL-02 | Filter rows | Eye toggle, name (struck through when off), summary, caret; drag to reorder within a chain; × removes. | ⬜ | |
-| FL-03 | Edit in place or in a dialog | Filters with three settings or fewer expand in place; others open the settings dialog; double-click always does. | ⬜ | |
-| FL-04 | Add filter | "+ Add filter…" opens DL-05. | ⬜ | |
-| FL-05 | Settings from descriptors | Each filter's settings come from its kind descriptor ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). | ⬜ | The prototype's catalogue is a wish list; the engine lists audio gain, noise gate, compressor, limiter and delay, and video filters from effect packs. |
+| FL-01 | Filters panel | For the selected source: separate Video and Audio chains, count per chain, "No video filters." when empty. | ✅ | The selected item's source, with its type icon, name and "Applies everywhere this source appears, top to bottom."; a reference shows its source's chains, which it shares. Video unless the source is audio-only, audio when it has a mixer channel and isn't a nested scene. With nothing selected: "Nothing selected" and "Select a source to see its filters.", as scenes own no chains yet (FL-06). |
+| FL-02 | Filter rows | Eye toggle, name (struck through when off), summary, caret; drag to reorder within a chain; × removes. | ✅ | `filter.set_enabled`, `filter.reorder` (a pointer drag, as for the tree rows; a drop on the other chain does nothing) and `filter.remove`. The summary follows F6 from the kind's descriptor: a scene input's scene (or "no scene"), a lone number with its unit, else up to two changed numbers or "defaults". The Properties dialog shows the same rows without the caret. |
+| FL-03 | Edit in place or in a dialog | Filters with three settings or fewer expand in place; others open the settings dialog; double-click always does. | ✅ | In place, the kind's settings form in two columns under the row, each change a `filter.set_settings`. A filter just added opens in place. |
+| FL-04 | Add filter | "+ Add filter…" opens DL-05. | ✅ | Under the chains, and in the Properties dialog. |
+| FL-05 | Settings from descriptors | Each filter's settings come from its kind descriptor ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). | ✅ | The Inspector's form (`properties.rs`) on `kind.describe`'s descriptor. The prototype's catalogue is a wish list; the engine lists gain, noise gate, compressor, limiter and delay, its built-in video filters and effect-pack kinds. A scene setting's select is the form's, listing every scene with None, not F8's "Choose a scene…" over the allowed scenes. |
 | FL-06 | Scene filters | A scene's video chain. | 🔒 | Filter owners are sources only today. |
 | FL-07 | Program and output chains | Master chain on the program output, one chain per output. | 🔒 | D8p (#303), [ADR-0027](adr/0027-program-master-and-output-chains.md). |
 | FL-08 | CLAP plugin filter | Host a CLAP audio effect. | 🔒 | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): hidden until CL1 lands in M3. |

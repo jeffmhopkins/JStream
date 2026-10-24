@@ -114,3 +114,37 @@ export async function nestScene(page, name) {
   await dialog.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(dialog).toBeHidden();
 }
+
+/** Makes the engine list and describe `kinds`, each a descriptor as `kind.describe`
+ * reports it, which the mock engine can't: the page's WebSocket goes through a route that
+ * answers `kind.list` and `kind.describe` for them and passes every other message on.
+ * Call it before `connect`. */
+export async function describeKinds(page, kinds) {
+  const answer = (id, result) => JSON.stringify({ type: 'response', id, result: { kind: 'query', result } });
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      let query = null;
+      let id = null;
+      if (typeof message === 'string') {
+        try {
+          const parsed = JSON.parse(message);
+          id = parsed.id;
+          query = parsed.call?.kind === 'query' ? parsed.call.query : null;
+        } catch {
+          // Not JSON: pass it on.
+        }
+      }
+      const described = kinds.find((k) => k.kind_id === query?.kind_id);
+      if (query?.type === 'kind.list') {
+        const list = kinds.map(({ kind_id, category, name, version }) => ({ kind_id, category, name, version }));
+        ws.send(answer(id, { type: 'kind.list', kinds: list }));
+      } else if (query?.type === 'kind.describe' && described) {
+        ws.send(answer(id, { type: 'kind.describe', kind: described, settings_schema: {} }));
+      } else {
+        server.send(message);
+      }
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+}

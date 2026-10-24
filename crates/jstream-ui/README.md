@@ -69,7 +69,11 @@ Contents ([Design](#design) explains the choices):
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
-  `SourceProperties` and the `PropertiesDialog` context that opens it), the number
+  `SourceProperties` and the `PropertiesDialog` context that opens it), the Filters
+  panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
+  shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
+  them, with the catalogue, the row summaries and the choice of in place or dialog
+  tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (creating, editing and deleting streams, recordings and the virtual camera, their
   stream keys, start and stop, and the pipeline's health), and the calls and
@@ -250,10 +254,27 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   each one the draft dropped (`draft_patch`), as one batch, and closes once the engine
   accepts it;
   Cancel, Escape and the backdrop drop the draft; Defaults empties it. Enter in a
-  field blurs it before pressing OK, so the field's `change` reaches the draft first. A filter's eye
-  (`filter.set_enabled`) and remove (`filter.remove`) apply at once. A double click on
+  field blurs it before pressing OK, so the field's `change` reaches the draft first.
+  The filter chains are the Filters panel's rows (below), which apply at once. A double click on
   an item and Properties… in the item menus open it for the item's source; a nested
   scene's item shows in the Inspector instead, until scenes have their dialog.
+- **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
+  Filters panel shows the primary selected item's source's chains (ADR-0026): video
+  unless the source is audio-only, audio when it has a mixer channel and isn't a
+  nested scene. Each row's eye sends `filter.set_enabled`, its × `filter.remove`, and a
+  drag within its chain `filter.reorder` (the tree rows' pointer drag). Its summary and
+  its settings come from the kind's descriptor, read once per kind and kept; a kind the
+  engine doesn't describe shows its name alone. A filter with three settings or fewer
+  opens the properties form under its row, any other opens the Filter settings dialog,
+  and a double-click always does; each field's change is a one-parameter
+  `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
+  or the backdrop, sends one batch putting back the settings and the switch it opened
+  with; Defaults resets each setting but a scene input's scene. The Add filter dialog
+  offers `kind.list`'s filter kinds for the source's chains under the prototype's
+  groups, names and hints for the kinds it knows, and sends `filter.add` with an ID from
+  `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
+  than three settings. Edit filters… in the item menus selects the item and shows the
+  panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
   prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
@@ -263,9 +284,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
-  shows one panel with its title, or tabs. Panels are the seven the UI has: Scenes,
+  shows one panel with its title, or tabs. Panels are the eight the UI has: Scenes,
   Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
-  Transform, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps
+  Transform, Filters, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps
   each to its component, and a new panel adds a `PanelId` and a line there. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
