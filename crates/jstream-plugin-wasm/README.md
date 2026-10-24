@@ -90,7 +90,8 @@ result read outside memory traps; of sixty calls in one invocation the first fif
 `Control` and the rest are limited without stopping the plugin, a lowered cap holds
 across invocations and frees a second later, denied calls don't use it, each edit of a
 batch counts against it, a batch of 51 edits never reaches `Control` while one of 50
-does, and the window admits again as commands age (`rate.rs`).
+does, and the window admits again as commands age and a cap of zero admits nothing
+(`rate.rs`).
 
 **Not here:** finding, installing and listing plugins, the manifest that declares what a
 plugin asks for, the user's grant, delivering engine events to plugins, and reporting a

@@ -346,7 +346,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |
 | #347 | Browser | No permission policy; no stance on loopback and LAN requests | Medium |
-| #348 | WASM | ADR-0069's capability classes, grants, event queue, command rate and untrusted-output handling are decided but not built (the CPU and memory limits are) | Medium |
+| #348 | WASM | ADR-0069's capability classes, grants, event queue, `forbidden` error and untrusted-output handling are decided but not built (the CPU and memory limits and the command cap are) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | `rtmp://` cleartext, crash-report redaction, redaction test scope | Low |
