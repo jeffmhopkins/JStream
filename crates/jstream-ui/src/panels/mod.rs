@@ -15,6 +15,7 @@ mod properties;
 mod scenes;
 mod sources;
 pub mod studio;
+pub mod transform;
 
 pub use inspector::Inspector;
 pub use mixer::Mixer;
@@ -23,3 +24,4 @@ pub use properties::Properties;
 pub use scenes::Scenes;
 pub use sources::Sources;
 pub use studio::StudioMode;
+pub use transform::Transform;

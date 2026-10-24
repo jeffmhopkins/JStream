@@ -63,14 +63,14 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
 | [Scene objects panel](#objects) | 9 | 1 | 3 | 4 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 5 | 2 | 0 | 3 | 0 |
-| [Transform panel](#transform) | 4 | 0 | 0 | 4 | 0 | 0 |
+| [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **35** | **28** | **34** | **32** | **1** |
+| **Total** | **130** | **39** | **28** | **30** | **32** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -122,9 +122,9 @@ covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crat
 -->
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
-The dock is built (`dock.rs`, `workspace.rs`) with the six panels the UI has: Scenes,
-Scene objects, Inspector (with the pairing panel under the properties), Audio mixer,
-Outputs and Transitions (studio mode and the presets). The other prototype panels join
+The dock is built (`dock.rs`, `workspace.rs`) with the seven panels the UI has: Scenes,
+Scene objects, Inspector (with the pairing panel under the properties), Transform, Audio
+mixer, Outputs and Transitions (studio mode and the presets). The other prototype panels join
 the dock, its View menu and its layouts as their rows are built.
 
 | ID | Feature | Requirement | Status | Notes |
@@ -136,7 +136,7 @@ the dock, its View menu and its layouts as their rows are built.
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. |
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has; Filters, Transform, chat, stats and agent join them as they are built. |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Transform under the Inspector, where it shares a group with Filters once that is built; Filters, chat, stats and agent join them as they are built. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
 
@@ -275,18 +275,19 @@ section, which moves to the Properties dialog (DL-02) when that is built.
 <a id="transform"></a>
 ## Transform panel
 <!-- @section
+covers = ["crates/jstream-ui/src/panels/transform.rs"]
 -->
 
 Spec: [panels › transform](../design/ui-prototype/spec-panels.md#transform-arrange-panel),
 [workspace › transform actions](../design/ui-prototype/spec-workspace.md#sources-duplicates-and-groups) (9.11).
-All of it is client-side geometry sent as `item.set_geometry` edits.
+All of it is client-side geometry, sent as `item.set_geometry` edits (`item.set_crop` for Clear crop).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| TF-01 | Align to | Selection or Canvas. | ⬜ | |
-| TF-02 | Align | Left, centres, right, top, middles, bottom. | ⬜ | |
-| TF-03 | Distribute | Horizontally and vertically, 3 or more selected. | ⬜ | |
-| TF-04 | Arrange | Center on canvas, Fit, Stretch, Match width/height, Rotate 90° left/right, Reset rotation, Clear crop. | ⬜ | |
+| TF-01 | Align to | Selection or Canvas. | ✅ | Selection is off with fewer than two selected, which align to the canvas. |
+| TF-02 | Align | Left, centres, right, top, middles, bottom. | ✅ | On the unrotated boxes, as the prototype does. |
+| TF-03 | Distribute | Horizontally and vertically, 3 or more selected. | ✅ | Equal gaps between edges in centre order; the first and last stay. |
+| TF-04 | Arrange | Center on canvas, Fit, Stretch, Match width/height, Rotate 90° left/right, Reset rotation, Clear crop. | ✅ | Each press is one batch, so one undo step, and sends only the items it changes. Match takes the primary item's size. Clear crop resets `item.set_crop`; crop is in source pixels, so the box stays as it is. |
 
 <a id="filters"></a>
 ## Filters
