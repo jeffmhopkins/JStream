@@ -628,7 +628,7 @@ fn a_session_that_drops_again_at_once_continues_the_outage() {
     assert_eq!(p.state(), LinkState::Reconnecting);
 
     clock.advance(Duration::from_secs(2)); // the second step of the same outage
-    poll_until(&mut p, &mut states, |p| p.state() == LinkState::Active).unwrap();
+    poll_until(&mut p, &mut states, |p| p.stats().reconnects == 2).unwrap();
     servers.hang_up();
     assert!(matches!(
         p.poll(),
@@ -652,8 +652,57 @@ fn a_session_that_drops_again_at_once_continues_the_outage() {
             LinkState::Reconnecting,
             LinkState::Active,
             LinkState::Reconnecting,
-            LinkState::Active,
             LinkState::Failed
+        ]
+    );
+}
+
+/// A server that keeps accepting the publish and dropping it (#746: YouTube with a
+/// stream it can't decode) must not read as live between drops: once a session has
+/// dropped soon after reconnecting, the next one reports `Reconnecting` until it has
+/// stayed up for `stable_after`.
+#[test]
+fn a_flapping_session_reports_reconnecting_until_it_is_stable() {
+    let servers = HeldServers::default();
+    let clock = FakeClock::new();
+    let mut p = ReconnectingPublisher::new(
+        servers.session().unwrap(),
+        servers.connector(),
+        policy(),
+        clock.clock(),
+    );
+    let mut states = States::new();
+    servers.hang_up();
+    p.poll().unwrap();
+    states.record(&p);
+
+    clock.advance(Duration::from_secs(1));
+    poll_until(&mut p, &mut states, |p| p.stats().reconnects == 1).unwrap();
+    assert_eq!(p.state(), LinkState::Active, "one drop is not yet a flap");
+    clock.advance(Duration::from_secs(10));
+    servers.hang_up();
+    p.poll().unwrap(); // lost again within `stable_after`
+    states.record(&p);
+
+    clock.advance(Duration::from_secs(2));
+    poll_until(&mut p, &mut states, |p| p.stats().reconnects == 2).unwrap();
+    assert_eq!(p.state(), LinkState::Reconnecting, "up, but not stable yet");
+    clock.advance(Duration::from_secs(29));
+    p.poll().unwrap();
+    states.record(&p);
+    assert_eq!(p.state(), LinkState::Reconnecting);
+    clock.advance(Duration::from_secs(1)); // `stable_after` up
+    p.poll().unwrap();
+    states.record(&p);
+    assert_eq!(p.state(), LinkState::Active);
+    assert_eq!(
+        states.0,
+        [
+            LinkState::Active,
+            LinkState::Reconnecting,
+            LinkState::Active,
+            LinkState::Reconnecting,
+            LinkState::Active
         ]
     );
 }

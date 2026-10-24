@@ -3,9 +3,9 @@
 //
 // Level 0 is the chain's region of the source (the item's crop) texel for texel: the
 // pass is the region's size and `vs_region` maps it onto the region, so each fragment
-// samples a source texel centre exactly and nothing past the crop is read. `fs_straight`
-// and `fs_srgb` convert an import to premultiplied linear on the way, as the composite
-// shader's modes 1 and 2 do. Each further level samples the one above at its own texel
+// samples a source texel centre exactly and nothing past the crop is read. `fs_straight`,
+// `fs_srgb` and `fs_opaque` convert an import to premultiplied linear on the way, as the
+// composite shader's modes 1 to 3 do. Each further level samples the one above at its own texel
 // centre, which falls between four texels, so the linear filter averages them
 // (`fs_premultiplied`).
 
@@ -62,6 +62,12 @@ fn fs_premultiplied(in: VsOut) -> @location(0) vec4<f32> {
 fn fs_straight(in: VsOut) -> @location(0) vec4<f32> {
     let c = textureSampleLevel(src, samp, in.uv, 0.0);
     return vec4<f32>(c.rgb * c.a, c.a);
+}
+
+@fragment
+fn fs_opaque(in: VsOut) -> @location(0) vec4<f32> {
+    let c = textureSampleLevel(src, samp, in.uv, 0.0);
+    return vec4<f32>(c.rgb, 1.0);
 }
 
 @fragment

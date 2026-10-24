@@ -2,6 +2,7 @@
 //! preferred; this module is the path when interop is absent.
 
 use std::future::Future;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::task::{Context, Poll, Waker};
 
 use jstream_platform::{ContextKey, GpuContext};
@@ -49,6 +50,59 @@ pub(crate) struct Gpu {
     pub max_buffer_size: u64,
     /// The platform context the device came from, or `None` for a device of its own.
     pub context: Option<ContextKey>,
+    /// How the device has failed ([`watch`]).
+    pub faults: Arc<Faults>,
+}
+
+/// What wgpu reported about a device outside any call's result.
+#[derive(Default)]
+pub(crate) struct Faults {
+    /// Why the device was lost: set once, by wgpu's device-lost callback.
+    pub lost: OnceLock<String>,
+    /// The first uncaptured error since the compositor last took it.
+    pub error: Mutex<Option<String>>,
+}
+
+/// Watches `device` for a loss and for uncaptured errors, instead of wgpu's default
+/// handler, which panics on every uncaptured error. A device can be lost on any call
+/// (a driver reset after a hang, Windows' TDR, a removed GPU), and every resource made
+/// on it afterwards is invalid, so each later use is an uncaptured error. wgpu reports
+/// the loss itself on a later poll, so the errors can come first, and a panic there
+/// would end the render thread instead of letting it open a new device (#349). The
+/// first error is kept for [`crate::Compositor::take_error`] and logged once until it is
+/// taken, which `render` does each frame.
+///
+/// wgpu keeps one callback and one handler per device. The compositor is the only code
+/// that sets them, on its own device and on the platform's context (the program stage
+/// opens one compositor on it), so the context's loss is seen here too.
+fn watch(device: &wgpu::Device) -> Arc<Faults> {
+    let faults = Arc::new(Faults::default());
+    let cell = Arc::clone(&faults);
+    device.set_device_lost_callback(move |reason, message| {
+        let why = match reason {
+            wgpu::DeviceLostReason::Destroyed => "destroyed",
+            wgpu::DeviceLostReason::Unknown => "lost by the driver",
+        };
+        let why = if message.is_empty() {
+            why.to_owned()
+        } else {
+            format!("{why}: {message}")
+        };
+        tracing::warn!(reason = %why, "the compositor's GPU device was lost");
+        let _ = cell.lost.set(why);
+    });
+    let cell = Arc::clone(&faults);
+    device.on_uncaptured_error(Arc::new(move |error: wgpu::Error| {
+        let mut first = cell.error.lock().unwrap_or_else(PoisonError::into_inner);
+        if first.is_none() {
+            let error = error.to_string();
+            if cell.lost.get().is_none() {
+                tracing::error!(%error, "uncaptured wgpu error");
+            }
+            *first = Some(error);
+        }
+    }));
+    faults
 }
 
 impl Gpu {
@@ -125,6 +179,7 @@ impl Gpu {
 
     fn bundle(adapter: wgpu::Adapter, device: wgpu::Device, queue: wgpu::Queue) -> Self {
         let limits = device.limits();
+        let faults = watch(&device);
         Self {
             device,
             queue,
@@ -132,6 +187,7 @@ impl Gpu {
             max_texture_dimension_2d: limits.max_texture_dimension_2d,
             max_buffer_size: limits.max_buffer_size,
             context: None,
+            faults,
         }
     }
 

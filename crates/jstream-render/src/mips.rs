@@ -62,6 +62,7 @@ pub(crate) struct MipPipelines {
     premultiplied: wgpu::RenderPipeline,
     straight: wgpu::RenderPipeline,
     srgb: wgpu::RenderPipeline,
+    opaque: wgpu::RenderPipeline,
     next: wgpu::RenderPipeline,
     /// The layout of a chain's region, level 0's second group.
     region_layout: wgpu::BindGroupLayout,
@@ -136,6 +137,7 @@ impl MipPipelines {
             premultiplied: pipeline(&first_layout, "vs_region", "fs_premultiplied"),
             straight: pipeline(&first_layout, "vs_region", "fs_straight"),
             srgb: pipeline(&first_layout, "vs_region", "fs_srgb"),
+            opaque: pipeline(&first_layout, "vs_region", "fs_opaque"),
             next: pipeline(&next_layout, "vs", "fs_premultiplied"),
             region_layout,
             linear: device.create_sampler(&wgpu::SamplerDescriptor {
@@ -315,6 +317,7 @@ impl Mips {
             Alpha::Premultiplied => &pipelines.premultiplied,
             Alpha::Straight => &pipelines.straight,
             Alpha::PremultipliedSrgb => &pipelines.srgb,
+            Alpha::Opaque => &pipelines.opaque,
         };
         for (i, target) in self.targets.iter().enumerate() {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
