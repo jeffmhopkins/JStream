@@ -13,6 +13,8 @@ use crate::{
     ResourceCache, Scene, Snapshot,
 };
 
+mod three_d;
+
 /// A compositor whose device drops before the WARP lock.
 ///
 /// Fields drop in declaration order, so the device is destroyed while the lock is held

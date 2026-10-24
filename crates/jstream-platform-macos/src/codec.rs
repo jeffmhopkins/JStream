@@ -1,15 +1,17 @@
 //! Codecs on macOS: VideoToolbox for video, AudioToolbox for AAC (ADR-0063 §6, §7).
 //!
-//! The platform-independent part turns the engine's encoder configurations into the
-//! settings a `VTCompressionSession` and an AAC `AudioConverter` are opened with, and
-//! refuses what they can't do. On macOS, `VideoToolboxCodecs` lists VideoToolbox's H.264
-//! and HEVC encoders and opens their sessions (`crate::videotoolbox`), and lists and
-//! opens AudioToolbox's AAC-LC converter (`crate::audiotoolbox`). Decoding reports
-//! `Unsupported` until it lands.
+//! The platform-independent part turns the engine's encoder and decoder configurations
+//! into the settings a `VTCompressionSession`, a `VTDecompressionSession` and an AAC
+//! `AudioConverter` are opened with, and refuses what they can't do. On macOS,
+//! `VideoToolboxCodecs` lists VideoToolbox's H.264 and HEVC encoders and opens their
+//! sessions (`crate::videotoolbox`), opens H.264 and HEVC decoders on CPU frames
+//! (`crate::vtdecoder`), and lists and opens AudioToolbox's AAC-LC converter
+//! (`crate::audiotoolbox`).
 
 use jstream_platform::media::{ChannelLayout, Codec, PixelFormat};
 use jstream_platform::{
-    AudioEncoderConfig, HardwarePreference, PlatformError, RateControl, VideoEncoderConfig,
+    AudioEncoderConfig, HardwarePreference, PlatformError, RateControl, VideoDecoderConfig,
+    VideoEncoderConfig,
 };
 
 use crate::fourcc::{cv_pixel_format, fourcc};
@@ -113,6 +115,63 @@ pub fn vt_encoder_settings(
     })
 }
 
+/// What a `VTDecompressionSession` is opened with for one [`VideoDecoderConfig`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VtDecoderSettings {
+    /// The Core Media codec type ([`CM_H264`] or [`CM_HEVC`]).
+    pub codec_type: u32,
+    /// The Core Video pixel format the decoded frames are delivered in.
+    pub pixel_format: u32,
+    /// `kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder`.
+    pub enable_hardware: bool,
+    /// `kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder`.
+    pub require_hardware: bool,
+}
+
+/// The VideoToolbox settings for `config`: H.264 or HEVC, decoded to NV12 or BGRA (and
+/// P010 from HEVC, for 10-bit streams), the formats the compositor takes.
+///
+/// # Errors
+/// [`PlatformError::Unsupported`] for a codec VideoToolbox doesn't decode here (AV1,
+/// audio codecs) or an output format it isn't asked for (I420, RGBA, P010 from H.264).
+pub fn vt_decoder_settings(
+    config: &VideoDecoderConfig,
+) -> Result<VtDecoderSettings, PlatformError> {
+    let codec_type = match config.codec {
+        Codec::H264 => CM_H264,
+        Codec::Hevc => CM_HEVC,
+        other => {
+            return Err(PlatformError::Unsupported {
+                what: format!("{other:?} decoding on macOS (VideoToolbox: H.264 and HEVC)"),
+            });
+        }
+    };
+    let output_ok = match config.output_format {
+        PixelFormat::Nv12 | PixelFormat::Bgra8 => true,
+        PixelFormat::P010 => config.codec == Codec::Hevc,
+        _ => false,
+    };
+    let pixel_format = cv_pixel_format(config.output_format)
+        .filter(|_| output_ok)
+        .ok_or_else(|| PlatformError::Unsupported {
+            what: format!(
+                "{:?} output from a {:?} decoder on macOS",
+                config.output_format, config.codec
+            ),
+        })?;
+    let (enable_hardware, require_hardware) = match config.hardware {
+        HardwarePreference::Prefer => (true, false),
+        HardwarePreference::Require => (true, true),
+        HardwarePreference::Avoid => (false, false),
+    };
+    Ok(VtDecoderSettings {
+        codec_type,
+        pixel_format,
+        enable_hardware,
+        require_hardware,
+    })
+}
+
 /// What an AAC-LC `AudioConverter` is opened with for one [`AudioEncoderConfig`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AacSettings {
@@ -181,16 +240,13 @@ mod backend {
 
     use crate::audiotoolbox::{AtAacEncoder, aac_encoder_info};
     use crate::videotoolbox::{VtEncoder, list_encoders};
-
-    fn not_built(what: &str) -> PlatformError {
-        PlatformError::Unsupported {
-            what: format!("{what} on macOS (not built yet, ADR-0063)"),
-        }
-    }
+    use crate::vtdecoder::VtDecoder;
 
     /// Codecs through VideoToolbox and AudioToolbox (ADR-0063 §6, §7). It lists and opens
-    /// VideoToolbox's H.264 and HEVC encoders, which take CPU frames for now, and
-    /// AudioToolbox's AAC-LC encoder. Decoding reports `Unsupported` until it lands.
+    /// VideoToolbox's H.264 and HEVC encoders, which take CPU frames for now, opens its
+    /// H.264 and HEVC decoders, which deliver CPU frames, and lists and opens
+    /// AudioToolbox's AAC-LC encoder. Decoders aren't listed: VideoToolbox has no list
+    /// of them, and opening one is the test.
     #[derive(Debug, Default)]
     pub struct VideoToolboxCodecs;
 
@@ -226,10 +282,7 @@ mod backend {
             &self,
             config: &VideoDecoderConfig,
         ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
-            Err(not_built(&format!(
-                "{:?} decoding through VideoToolbox",
-                config.codec
-            )))
+            Ok(Box::new(VtDecoder::open(config)?))
         }
     }
 }
@@ -240,11 +293,15 @@ mod tests {
         AudioFormat, ChannelLayout, Codec, FrameSize, PixelFormat, SampleFormat, Timebase,
     };
     use jstream_platform::{
-        AudioEncoderConfig, HardwarePreference, PlatformError, RateControl, VideoEncoderConfig,
+        AudioEncoderConfig, HardwarePreference, PlatformError, RateControl, VideoDecoderConfig,
+        VideoEncoderConfig,
     };
 
-    use super::{AUDIO_AAC, CM_H264, CM_HEVC, VtBitRate, aac_settings, vt_encoder_settings};
-    use crate::fourcc::{CV_420V, CV_X420};
+    use super::{
+        AUDIO_AAC, CM_H264, CM_HEVC, VtBitRate, aac_settings, vt_decoder_settings,
+        vt_encoder_settings,
+    };
+    use crate::fourcc::{CV_420V, CV_BGRA, CV_X420};
 
     fn video(codec: Codec, input_format: PixelFormat) -> VideoEncoderConfig {
         VideoEncoderConfig {
@@ -335,6 +392,61 @@ mod tests {
                     Err(PlatformError::Unsupported { .. })
                 ),
                 "{c:?}"
+            );
+        }
+    }
+
+    fn decoder(
+        codec: Codec,
+        output_format: PixelFormat,
+        hardware: HardwarePreference,
+    ) -> VideoDecoderConfig {
+        VideoDecoderConfig {
+            codec,
+            output_format,
+            hardware,
+        }
+    }
+
+    #[test]
+    fn decoders_map_to_a_decompression_session() {
+        let s = vt_decoder_settings(&decoder(
+            Codec::H264,
+            PixelFormat::Nv12,
+            HardwarePreference::Prefer,
+        ))
+        .expect("settings");
+        assert_eq!((s.codec_type, s.pixel_format), (CM_H264, CV_420V));
+        assert!(s.enable_hardware && !s.require_hardware);
+        let s = vt_decoder_settings(&decoder(
+            Codec::Hevc,
+            PixelFormat::P010,
+            HardwarePreference::Require,
+        ))
+        .expect("settings");
+        assert_eq!((s.codec_type, s.pixel_format), (CM_HEVC, CV_X420));
+        assert!(s.enable_hardware && s.require_hardware);
+        let s = vt_decoder_settings(&decoder(
+            Codec::H264,
+            PixelFormat::Bgra8,
+            HardwarePreference::Avoid,
+        ))
+        .expect("settings");
+        assert_eq!(s.pixel_format, CV_BGRA);
+        assert!(!s.enable_hardware && !s.require_hardware);
+        for (codec, format) in [
+            (Codec::Av1, PixelFormat::Nv12),
+            (Codec::Aac, PixelFormat::Nv12),
+            (Codec::H264, PixelFormat::P010),
+            (Codec::H264, PixelFormat::I420),
+            (Codec::Hevc, PixelFormat::Rgba8),
+        ] {
+            assert!(
+                matches!(
+                    vt_decoder_settings(&decoder(codec, format, HardwarePreference::Prefer)),
+                    Err(PlatformError::Unsupported { .. })
+                ),
+                "{codec:?} to {format:?}"
             );
         }
     }
