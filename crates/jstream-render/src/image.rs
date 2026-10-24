@@ -81,9 +81,11 @@ pub struct Image {
     /// view. `None` for uploads and imports, which are never drawn into.
     target: Option<wgpu::TextureView>,
     /// How many times the texels have changed: an upload rewritten, a layer drawn into,
-    /// or an import given a new frame. A mip chain is rebuilt when this moved since its
-    /// last build (ADR-0050 decision 5), so once per change, however many calls draw it.
-    changes: AtomicU64,
+    /// How many times the texels have changed: an upload rewritten, a layer drawn into,
+    /// or an import given a new frame ([`Self::mark_changed`]). A mip chain is rebuilt
+    /// when this moved since its last build (ADR-0050 decision 5), so once per change,
+    /// however many calls draw it.
+    generation: AtomicU64,
     /// The last frame an import was given, by its hold and its info, so the same frame
     /// given again is not a change. A platform may hand out one hold for every frame it
     /// writes into a texture (the Windows capture ring keeps one per slot), so the hold
@@ -116,15 +118,20 @@ impl Image {
         &self.bind_group
     }
 
-    /// How many times the texels have changed ([`Self::changed`]).
-    pub(crate) fn changes(&self) -> u64 {
-        self.changes.load(Ordering::Relaxed)
+    /// Says that the texels changed where this crate can't see it: the platform wrote a
+    /// new frame into an imported texture. A 3D placement's mip chains are rebuilt from
+    /// the image only after a change (ADR-0050 decision 5), so the caller marks each new
+    /// frame. [`crate::ResourceCache::import`] does this for each new frame it hands an
+    /// import (not for the same frame shown again); [`crate::Compositor::rewrite_rgba8`]
+    /// and [`crate::Compositor::render_into`] mark an upload and a layer themselves. An
+    /// image never placed in 3D ignores it.
+    pub fn mark_changed(&self) {
+        self.generation.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Records that the texels changed, so each mip chain is rebuilt before its next
-    /// draw.
-    pub(crate) fn changed(&self) {
-        self.changes.fetch_add(1, Ordering::Relaxed);
+    /// How many times the texels have changed, as [`Self::mark_changed`] counts them.
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
     }
 
     /// The mip chain of `region`, made by `make` the first time it is asked for. The
@@ -139,6 +146,12 @@ impl Image {
         chains.insert(0, Arc::clone(&chain));
         chains.truncate(MAX_CHAINS);
         chain
+    }
+
+    /// How many times the image's mip chains were built in all, 0 without one.
+    #[cfg(test)]
+    pub(crate) fn mip_builds(&self) -> u64 {
+        self.chain_builds().1
     }
 
     /// How many chains the image keeps, and how many builds they recorded in all.
@@ -170,7 +183,7 @@ impl Image {
     }
 
     /// Attaches `frame`'s hold, staged on each frame that draws the image, and counts a
-    /// change ([`Self::changed`]) unless it is the frame last given: the same hold with
+    /// change ([`Self::mark_changed`]) unless it is the frame last given: the same hold with
     /// the same info, as [`GpuFrame`]'s equality has it. A source repeating its last
     /// frame is not a change; a new frame in the same texture under the same hold is.
     pub(crate) fn set_frame(&mut self, frame: &GpuFrame) {
@@ -179,7 +192,7 @@ impl Image {
             std::ptr::addr_eq(hold.as_ptr(), Arc::as_ptr(sync)) && info == frame.info()
         });
         if !same {
-            self.changed();
+            self.mark_changed();
             self.last_frame = Some((Arc::downgrade(sync), *frame.info()));
         }
         self.sync = Some(Arc::clone(sync));
@@ -313,7 +326,7 @@ pub(crate) fn rewrite(maker: &Maker<'_>, image: &Image, rgba: &[u8]) -> Result<(
     }
     check_bytes(image.width, image.height, rgba)?;
     write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)?;
-    image.changed();
+    image.mark_changed();
     Ok(())
 }
 
@@ -490,7 +503,7 @@ fn finish(
         last_frame: None,
         sync,
         target: None,
-        changes: AtomicU64::new(0),
+        generation: AtomicU64::new(0),
         mips: Mutex::new(Vec::new()),
     }
 }

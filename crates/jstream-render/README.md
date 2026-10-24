@@ -184,15 +184,18 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    crop too (#641). The item's UVs and UV bounds are mapped into the chain's. An image
    keeps a chain per crop it is drawn with, the four most recently used. Each further
    level is one pass that samples the level above at its own texel centres, so the
-   linear filter averages 2×2 texels. A chain is rebuilt when its image's change count
-   moved since its last build: `rewrite_rgba8` bumps an upload's, `render_into` a
-   layer's, and the cache giving an import a new frame (one whose hold or info, its
-   presentation time included, differs from the last one's, since a platform may reuse
-   a hold for every frame it writes into a texture) an import's. So a source drawn in 3D by several items or calls (two mixes, a nested
-   scene) is rebuilt once per change. An image imported directly, outside the cache,
-   keeps the chain of its first 3D draw. A 3D item samples its chain, which is always
-   premultiplied linear (mode 0), with trilinear filtering and `anisotropy_clamp` 16;
-   wgpu clamps that to 1 on an adapter without anisotropic filtering. A source with no 3D placement gets no chain.
+   linear filter averages 2×2 texels. Each `Image` counts its changes, and a chain is
+   rebuilt when the count moved since its last build: `rewrite_rgba8` marks an upload,
+   `render_into` the layer it drew into, and `ResourceCache::import` an import it hands
+   a new frame (one whose hold or info, its presentation time included, differs from
+   the last one's, since a platform may reuse a hold for every frame it writes into a
+   texture), not the same frame shown again. `Image::mark_changed` marks an import the
+   caller keeps outside the cache, whose texture the platform rewrites. So a source
+   drawn in 3D by several items or calls (two mixes, a nested scene) is rebuilt once per
+   change, and not at all while it is unchanged. A 3D item samples its chain, which is
+   always premultiplied linear (mode 0), with trilinear filtering and `anisotropy_clamp`
+   16; wgpu clamps that to 1 on an adapter without anisotropic filtering. A source with
+   no 3D placement gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
@@ -652,8 +655,9 @@ The p99 limit is 40 throughout. C's pattern is much finer than the spike's (one-
 rings every 16 texels), which is why its mean is higher than the spike's 1.16. Further
 tests check:
 - that an upload's chain is rebuilt after `rewrite_rgba8`;
-- that a layer's is built once for two items and two calls, and rebuilt once after
-  `render_into` changes it;
+- that a layer's is rebuilt after `render_into` draws into it and not on a second draw
+  while it is unchanged, and built once for two items and two calls;
+- that a cached import drawn by two calls in a frame is rebuilt once per new frame;
 - that an import's is rebuilt for a new frame from the cache, one under the same hold
   with a later time included, but not for the same frame again;
 - that a 3D item's region is its crop's texels exactly at 1920×1080, where a crop edge

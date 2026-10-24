@@ -10,10 +10,11 @@
 //! item's edge, and clamping to the chain's edge keeps the anisotropic footprint inside
 //! it too (#641). An image keeps one chain per crop it is drawn with.
 //!
-//! A chain is rebuilt on the GPU when its image changed since its last build
-//! ([`Image::changes`]): an upload rewritten, a layer drawn into, or an import given a
-//! new frame. So a source drawn in 3D by several calls (two mixes, a nested scene) is
-//! rebuilt once per change, not once per call (ADR-0050 decision 5).
+//! A chain is rebuilt on the GPU only when its image changed since its last build, so
+//! once per source and frame however many mixes or nested scenes draw it: an upload
+//! when it was rewritten, a layer when `render_into` drew into it, and an import when
+//! it was handed a new frame ([`Image::mark_changed`], which `ResourceCache::import`
+//! calls for each new frame, not for the same frame shown again).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -182,7 +183,7 @@ pub(crate) struct Mips {
     targets: Vec<wgpu::TextureView>,
     /// Level `i`'s input for level `i + 1`: its view and the linear sampler.
     inputs: Vec<wgpu::BindGroup>,
-    /// The image's [`Image::changes`] at the last build, or [`NEVER`].
+    /// The image's generation at the last build, or [`NEVER`].
     built: AtomicU64,
     /// How many times the chain was recorded, for tests.
     #[cfg(test)]
@@ -297,8 +298,8 @@ impl Mips {
     /// Whether the chain needs building from `image`, which changed since the last
     /// build or was never built, and if so marks it built.
     pub(crate) fn claim(&self, image: &Image) -> bool {
-        let changes = image.changes();
-        self.built.swap(changes, Ordering::Relaxed) != changes
+        let generation = image.generation();
+        self.built.swap(generation, Ordering::Relaxed) != generation
     }
 
     /// Records the passes that rebuild the chain from `image`.

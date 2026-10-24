@@ -311,8 +311,7 @@ impl Compositor {
         self.record_composite(&mut encoder, view, scene);
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
-        // A chain of the layer rebuilds before its next 3D draw.
-        target.changed();
+        target.mark_changed();
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -719,7 +718,8 @@ impl Compositor {
     }
 
     /// Rebuilds each mip chain a 3D item draws whose image changed since its last
-    /// build, once however many items and calls draw it (ADR-0050 decision 5).
+    /// build (an upload rewritten, a layer drawn into, an import handed a new frame),
+    /// once however many items and calls draw it (ADR-0050 decision 5).
     fn record_mips(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene<'_>) {
         for draw in &self.draws {
             let Some(mips) = &draw.mips else { continue };

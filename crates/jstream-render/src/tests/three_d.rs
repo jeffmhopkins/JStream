@@ -470,6 +470,85 @@ fn a_rewritten_upload_rebuilds_its_mips() {
     assert_eq!(centre(&again)[..3], [0, 255, 0]);
 }
 
+/// A layer's chain is rebuilt after `render_into` draws into it, and not again while it
+/// is unchanged, however many calls draw it in 3D.
+#[test]
+fn a_layer_rebuilds_its_mips_only_after_it_is_drawn_into() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let layer = compositor.layer(64, 64).expect("a layer");
+    let fill = |compositor: &mut crate::Compositor, rgb: [f32; 3]| {
+        let scene = Scene {
+            canvas: FrameSize::new(64, 64).expect("non-zero"),
+            background: Color::rgb(rgb[0], rgb[1], rgb[2]),
+            items: &[],
+        };
+        compositor.render_into(&scene, &layer).expect("draws into");
+    };
+    let floor = [geometry(
+        (120.0, 75.0),
+        (225.0, 225.0),
+        0.0,
+        75.0,
+        0.0,
+        0.0,
+        Some(250.0),
+    )];
+    let centre = |snapshot: &Snapshot| snapshot.pixel(120, 75).expect("inside");
+    fill(compositor, [1.0, 0.0, 0.0]);
+    let red = draw(compositor, &floor, &layer, Crop::NONE);
+    assert_eq!(centre(&red)[..3], [255, 0, 0]);
+    draw(compositor, &floor, &layer, Crop::NONE);
+    assert_eq!(layer.mip_builds(), 1, "an unchanged layer is not rebuilt");
+    fill(compositor, [0.0, 1.0, 0.0]);
+    let green = draw(compositor, &floor, &layer, Crop::NONE);
+    assert_eq!(centre(&green)[..3], [0, 255, 0]);
+    assert_eq!(layer.mip_builds(), 2);
+}
+
+/// An import drawn in 3D by several calls in one cache frame, as several mixes draw a
+/// capture, is rebuilt once per new frame (ADR-0050 decision 5).
+#[test]
+fn an_import_rebuilds_its_mips_once_per_frame() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let (frame, _) = super::counted_frame(compositor, 64, 64, [0, 0, 255, 255]);
+    let mut cache = crate::ResourceCache::<&'static str>::new();
+    let floor = [geometry(
+        (120.0, 75.0),
+        (225.0, 225.0),
+        0.0,
+        75.0,
+        0.0,
+        0.0,
+        Some(250.0),
+    )];
+    for expected in 1..=2 {
+        // The platform's next frame in the same texture, under a hold of its own.
+        let frame = jstream_platform::GpuFrame::new(
+            frame.texture().clone(),
+            *frame.info(),
+            std::sync::Arc::new(super::CountSync(std::sync::Arc::default())),
+        );
+        cache.begin_frame();
+        for _mix in 0..2 {
+            let image = cache
+                .import(compositor, &"capture", &frame)
+                .expect("imports");
+            let shown = draw(compositor, &floor, image, Crop::NONE);
+            assert_eq!(shown.pixel(120, 75).expect("inside")[..3], [0, 0, 255]);
+        }
+        let image = cache.get(&"capture").expect("cached");
+        assert_eq!(image.mip_builds(), expected, "once per frame");
+        drop(cache.end_frame(compositor));
+    }
+    drop(cache.drain());
+}
+
 /// E: two items through each other, turned 45° each way. They draw in stacking order
 /// whatever their `z`: the upper one covers the lower one wherever they overlap.
 #[test]

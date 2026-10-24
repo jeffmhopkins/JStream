@@ -54,8 +54,13 @@ wasn't granted:
   the host or any plugin loaded on it lives. Linear memory is capped at 64 MiB and tables
   at 10,000 elements by default; `memory.grow` past the cap answers −1, and a module whose memory starts above
   it is refused. One instance, one memory and one table per plugin. The WASM stack is
-  capped at 512 KiB for every plugin. A plugin's configuration can lower each limit,
-  never raise it.
+  capped at 512 KiB for every plugin. A plugin may send at most 50 commands to
+  `Control` in any second (ADR-0069), counted over a sliding window. Every edit of a
+  batch is a command (ADR-0013), as is a call's one action, query or history operation.
+  A granted, well-formed call whose commands don't fit in what is left gets
+  `STATUS_LIMITED` and never reaches `Control`, and the plugin keeps running; a batch of
+  more than 50 edits never fits. A refused call doesn't count, nor does a denied or
+  malformed one. A plugin's configuration can lower each limit, never raise it.
 
 **Running a plugin.** `PluginHost` owns the wasmtime engine. `Plugin::load` compiles and
 instantiates one module with its `PluginConfig` (capabilities and limits) and the
@@ -81,17 +86,23 @@ function miss the default and a lowered deadline, even after the host is dropped
 host call in `start` re-arms the load's deadline, not an invocation's; an endless loop
 runs out of fuel under the default and a lowered budget, in an invocation and in
 `start`; memory can't grow past the default or a lowered cap, nor start above it; a
-result read outside memory traps.
+result read outside memory traps; of sixty calls in one invocation the first fifty reach
+`Control` and the rest are limited without stopping the plugin, a lowered cap holds
+across invocations and frees a second later, denied calls don't use it, each edit of a
+batch counts against it, a batch of 51 edits never reaches `Control` while one of 50
+does, and the window admits again as commands age and a cap of zero admits nothing
+(`rate.rs`).
 
 **Not here:** finding, installing and listing plugins, the manifest that declares what a
 plugin asks for, the user's grant, delivering engine events to plugins, and reporting a
 failed plugin (an error event, disabling it). Those need protocol commands first
 ([R-ARCH-001](../../docs/RULES.md#R-ARCH-001)), and ADR-0069 (#348) sets the policy. So
 do any limits on what a plugin may write into names and other strings the UI and agents
-show. ADR-0069 decides three more items, which are not built yet: the 1,000-event queue
-with its single `events.dropped` notice, the cap of 50 commands a second, and the
-`forbidden` error code that a call past that cap or outside the plugin's classes fails
-with.
+show. ADR-0069 decides two more items, which are not built yet: the 1,000-event queue with its
+single `events.dropped` notice, and the `forbidden` error code that a call outside the
+plugin's classes, or past the cap of commands a second, fails with. Until the engine side
+answers `forbidden` (#642 adds the code), a call past the cap gets the ABI's own
+`STATUS_LIMITED`.
 
 <a id="abi"></a>
 ## Plugin ABI
@@ -111,7 +122,7 @@ only these functions, from the module `jstream`:
 
 | Import | Type | Does |
 |---|---|---|
-| `call` | `(ptr, len: i32) -> i32` | Reads `len` bytes at `ptr` as one protocol `Call` in JSON, checks it against the plugin's capabilities and sends it through `Control`. Answers a status, and keeps a result to read. |
+| `call` | `(ptr, len: i32) -> i32` | Reads `len` bytes at `ptr` as one protocol `Call` in JSON, checks it against the plugin's capabilities and its cap of commands a second (each edit of a batch counts), and sends it through `Control`. Answers a status, and keeps a result to read. |
 | `result_len` | `() -> i32` | The length of the last call's result. |
 | `result_read` | `(ptr: i32)` | Copies the last call's result to `ptr`. |
 | `input_len` | `() -> i32` | The length of the current invocation's input. |
@@ -125,6 +136,7 @@ The statuses, and the result each leaves:
 | `STATUS_DENIED` | 1 | `{"denied": [<names>]}`: the commands not granted. Empty when the call names no command or is of a kind this version doesn't know. `Control` was not called. |
 | `STATUS_MALFORMED` | 2 | The parse error, as text: not UTF-8 JSON for a `Call`, or longer than 1 MiB. `Control` was not called. |
 | `STATUS_FAILED` | 3 | The engine's wire error, as JSON, or `{"message": …}` when the transport failed. |
+| `STATUS_LIMITED` | 4 | `{"limited": {"per_second": <cap>, "commands": <the call's>}}`: the call was granted, but its commands don't fit in what is left of the plugin's cap of commands in the last second. `Control` was not called, and the call doesn't count against the cap. A batch of more edits than the cap always gets this. |
 
 An entry point is any exported function of type `() -> ()`, run by `Plugin::invoke`.
 The host never calls `hello` for a plugin: it lends the plugin a session the host opened,

@@ -866,7 +866,8 @@ top-left at `position`, clockwise rotation about that corner). A geometry with
 non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn polygon,
 clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
 analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
-GPU once per change to the source) with 16× anisotropic filtering. The engine still refuses non-neutral
+GPU once per change to the source, so at most once per source and frame) with 16×
+anisotropic filtering. The engine still refuses non-neutral
 3D. Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
