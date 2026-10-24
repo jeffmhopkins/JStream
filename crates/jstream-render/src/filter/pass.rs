@@ -15,7 +15,7 @@ use jstream_protocol::Settings;
 use crate::error::RenderError;
 use crate::filter::FilterClock;
 use crate::gpu::Gpu;
-use crate::image::{self, Alpha, Image, LAYER_FORMAT, Maker};
+use crate::image::{self, Image, LAYER_FORMAT, Maker};
 
 /// The WGSL every filter shader starts with: the vertex stage, the bindings and the colour
 /// helpers. Effect packs validate against it.
@@ -99,6 +99,10 @@ pub(crate) enum Blend {
     /// Clear the target to transparent and write the shader's output.
     Replace,
     /// Keep the target and draw premultiplied src-over it (a shadow under its shape).
+    #[expect(
+        dead_code,
+        reason = "the harness offers it for a multi-pass kind that draws under its shape; none does yet"
+    )]
     Over,
 }
 
@@ -375,11 +379,7 @@ impl Ctx<'_> {
             });
         }
         let aux = draw.aux.unwrap_or(draw.input);
-        let alpha = |image: &Image| match image.alpha() {
-            Alpha::Premultiplied => 0.0,
-            Alpha::Straight => 1.0,
-            Alpha::PremultipliedSrgb => 2.0,
-        };
+        let alpha = |image: &Image| image.alpha().shader_mode();
         let seconds = (self.clock.seconds.rem_euclid(TIME_WRAP_SECONDS)) as f32;
         let frame = super::params::Uniforms::new()
             .vec2([draw.input.width() as f32, draw.input.height() as f32])

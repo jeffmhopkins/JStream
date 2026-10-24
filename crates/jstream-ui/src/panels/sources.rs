@@ -243,15 +243,23 @@ pub fn Sources() -> impl IntoView {
         } = row;
         let selected = {
             let id = item_id.clone();
-            move || studio.selection.with(|s| s.item.as_ref() == Some(&id))
+            move || studio.selection.with(|s| s.contains(&id))
         };
         let is_renaming = {
             let id = source_id.clone();
             move || renaming.with(|r| r.as_ref() == Some(&id))
         };
+        // A click selects the item alone; Shift-click adds it to the selection or takes
+        // it out, as on the canvas.
         let select = {
             let id = item_id.clone();
-            move |_| studio.select_item(Some(id.clone()))
+            move |event: leptos::ev::MouseEvent| {
+                if event.shift_key() {
+                    studio.toggle_item(&id);
+                } else {
+                    studio.select_item(Some(id.clone()));
+                }
+            }
         };
         let start_rename = {
             let id = source_id.clone();
@@ -440,6 +448,7 @@ mod tests {
             visible,
             opacity: Finite32::ONE,
             blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
         };
         Collection {
             canvas: Canvas {
@@ -456,12 +465,17 @@ mod tests {
                 duplicated_from: None,
                 audio: None,
                 filters: Default::default(),
+                meta: Default::default(),
             }],
             scenes: vec![SceneInfo {
                 scene_id: "main".into(),
                 name: "Main".into(),
                 role: SceneRole::Scene,
+                folder: None,
+                meta: Default::default(),
                 items: vec![item("bottom", "cam", true), item("top", "gone", false)],
+                transition_in: None,
+                transition_out: None,
             }],
             ..Collection::default()
         }

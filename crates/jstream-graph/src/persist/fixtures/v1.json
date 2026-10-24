@@ -27,7 +27,8 @@
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 0.0
+            "depth_px": 0.0,
+            "flip_h": true
           },
           "crop": {
             "left": 0,
@@ -139,7 +140,16 @@
         "kind": "webcam"
       },
       "kind_version": 1,
-      "duplicated_from": "gone"
+      "settings": {
+        "device": ""
+      },
+      "duplicated_from": "gone",
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
     },
     {
       "id": "b_src",
@@ -162,7 +172,16 @@
         "type": "builtin",
         "kind": "webcam"
       },
-      "kind_version": 1
+      "kind_version": 1,
+      "settings": {
+        "device": ""
+      },
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
     },
     {
       "id": "cam_copy",
@@ -172,7 +191,16 @@
         "kind": "webcam"
       },
       "kind_version": 1,
-      "duplicated_from": "cam"
+      "settings": {
+        "device": ""
+      },
+      "duplicated_from": "cam",
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
     },
     {
       "id": "desk",
@@ -233,6 +261,18 @@
         "follow": "when_shown",
         "gain_db": -2.0,
         "muted": true
+      }
+    },
+    {
+      "id": "screen",
+      "name": "Screen",
+      "kind": {
+        "type": "builtin",
+        "kind": "display"
+      },
+      "kind_version": 1,
+      "settings": {
+        "target": ""
       }
     },
     {
@@ -382,6 +422,21 @@
     }
   ],
   "sends": [
+    {
+      "source_id": "aux",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "cam",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "cam_copy",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
     {
       "source_id": "desk",
       "bus_id": "master",

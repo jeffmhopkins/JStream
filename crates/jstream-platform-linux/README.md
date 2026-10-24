@@ -79,8 +79,20 @@ It has:
   modifiers the device can import as a single-plane DMA-BUF and sample
   (`vkGetPhysicalDeviceFormatProperties2` and `…ImageFormatProperties2` through `ash`).
   Multi-plane layouts (Intel CCS, AMD DCC with metadata) are left out, because
-  wgpu-hal's `texture_from_dmabuf_fd` takes one plane. There are no encode targets yet
-  (`encode_target` is `Unsupported`): the encoders take CPU frames.
+  wgpu-hal's `texture_from_dmabuf_fd` takes one plane. Its encode targets
+  (`encode_target`, `gpu/export.rs`) are NV12 images in the `LINEAR` DRM layout with
+  dedicated memory exported as a DMA-BUF (`vkGetMemoryFdKHR`), one object holding both
+  planes. The image lists its view formats (NV12, and the R8 and RG8 plane views),
+  which a mutable-format image in a DRM layout must, and the export check asks about
+  the same image. A device has them when it can export such an image render draws
+  into and samples, has Vulkan 1.2 (timeline semaphores) and wgpu's NV12 and DMA-BUF features,
+  and names its DRM render node (`VK_EXT_physical_device_drm`); otherwise
+  `encode_target` is `Unsupported` and the encoders take CPU frames. A target's
+  `FrameSync` adds a signal of the context's timeline semaphore to the submit that
+  writes it, and the encoder waits for that value. Render hands a target back in
+  `PRESENT` (`PRESENT_SRC_KHR`), not through a release to the foreign queue family; a
+  `LINEAR` image has no compression, so its memory holds the picture whatever the
+  layout.
 - **The D-Bus client** (`dbus.rs`) is the crate's own: the wire format in both byte
   orders, `EXTERNAL` authentication with file descriptor passing, and blocking calls
   with timeouts over the session bus socket. Received messages are untrusted: lengths
@@ -147,11 +159,24 @@ It has:
   hardware H.264 encoders and picks one for a configuration with `choose_encoder`. That
   refuses other codecs and a software-only request (software H.264 is OpenH264's, below),
   and reports a machine with no H.264 encode driver as a missing component with the
-  distributions' packages (ADR-0060 §6). Decoding is out of the ADR's scope.
+  distributions' packages (ADR-0060 §6). Decoding is out of the ADR's scope. Its
+  `on_context`, on a context with encode targets, keeps the encoders whose render node
+  (the node file's device number) is the context's, since the DMA-BUF imports only on
+  the GPU that made it; their sessions take GPU frames, and a software-only request is
+  `Unsupported` there. With none, or on a context without encode targets, it is
+  `Ok(None)`, and on another platform's context `InvalidState`.
 - **The VA-API H.264 session** (`VideoEncoder`) opens its own display on the chosen
   node: a config with the rate-control mode (CBR or VBR, refused if the driver lacks it),
   a context, four input surfaces with a coded buffer each, and three reconstructed
-  surfaces. It takes CPU frames: NV12, or the compositor's RGBA and BGRA converted to
+  surfaces. Opened through `on_context` it takes the context's NV12 encode targets
+  instead: each target's DMA-BUF is imported once as an input surface (`vaCreateSurfaces`
+  with a DRM PRIME 2 descriptor of one object and one two-plane NV12 layer), cached
+  against a weak hold on the target so the encode ring still sees it free, and destroyed
+  once the target is gone. An encode waits up to a second for render's write of the
+  frame, and the session holds the frame until its picture is collected, since the
+  driver reads the surface until then; up to four targets are held that way. Its
+  context's render targets are only the reconstructed surfaces. Otherwise it takes CPU
+  frames: NV12, or the compositor's RGBA and BGRA converted to
   BT.709 limited NV12 by `jstream_platform::nv12`, the Windows encoder's converter,
   written through `vaDeriveImage`, or a staging image and `vaPutImage` where the driver
   can't map its
@@ -212,7 +237,6 @@ Not here yet, in roughly the order they follow:
   once captures follow sources on this wave (it captures the primary display for now);
 - PipeWire audio streams (ADR-0060 §4), including desktop and application audio, and
   choosing between PipeWire and ALSA where both are present;
-- DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
 - V4L2 webcams;
 - the stream-key store.
 
@@ -223,8 +247,11 @@ pods (the DMA-BUF offer was checked byte for byte against libspa's builder), the
 copy, and the H.264 parameters, parameter sets, GOP and upload are
 platform-independent. The GPU interop's tests open a device on a software Vulkan
 adapter where there is no GPU, and skip without one: the frame copy (crop, opaque
-padding, slots reused only once free) and the context checks. DMA-BUF import needs a
-GPU driver, so it is tested only in the `hw-tests` portal capture on the GPU. The Linux ones (the clock, loading libc through the loader,
+padding, slots reused only once free) and the context checks. The VA-API surface
+attributes and DRM PRIME descriptor are checked against libva's layout at compile time
+and built in a test, and render-node numbers are split as glibc does. DMA-BUF import
+and export need a GPU driver, so they are tested only in the `hw-tests` portal capture
+on the GPU and the GPU encode of the context's encode targets. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
 stopping on drop, a capture stream running again after an overrun, loopback refused, an
@@ -237,6 +264,7 @@ recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
 GNOME or KDE session with PipeWire (on the CPU path, and on the GPU path with a Vulkan
-driver that imports DMA-BUFs), VA-API H.264 encodes on a GPU with an encode driver, and
-a second of ALSA's default input on a sound card (`null` isn't paced, so only a real
-device shows real-time recording).
+driver that imports DMA-BUFs), VA-API H.264 encodes on a GPU with an encode driver,
+from CPU frames and from the context's encode targets (which needs the Vulkan and
+VA-API drivers on one render node), and a second of ALSA's default input on a sound
+card (`null` isn't paced, so only a real device shows real-time recording).

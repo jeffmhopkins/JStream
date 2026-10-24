@@ -434,3 +434,22 @@ fn pollster_ready<F: std::future::Future<Output = Result<T, wgpu::RequestDeviceE
         std::task::Poll::Pending => panic!("request_device did not finish inline"),
     }
 }
+
+/// Binding a conversion on a lost device fails with an error, not a panic, so the
+/// render thread can treat it as the loss it is (#695 review B2).
+#[test]
+fn binding_on_a_lost_device_is_an_error() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let c = &opened.compositor;
+    let (w, h) = (4, 2);
+    let texture = source(c.device(), c.queue(), w, h, &pattern(w, h));
+    let converter = Nv12Converter::new(c.device());
+    let planes = converter.planes(size(w, h)).expect("planes");
+    c.device().destroy();
+    assert!(matches!(
+        converter.bind(&texture, &planes.target(), LIMITED),
+        Err(RenderError::Uncaptured { .. })
+    ));
+}
