@@ -374,9 +374,15 @@ lists the branch's notes, after it has committed the merge.
 section that is already fresh, as when a reviewer asks for a better note, without touching
 any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
 at the merge base of `HEAD` and `origin/main`, or of the wave named with
-`--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
-`--merge`, and a section this branch never stamped. It fails when the ledger at that merge
-base doesn't parse, rather than taking every entry for this branch's own.
+`--from wave/<name>`. A PR stacked on another PR's branch names that branch instead,
+`--from <base branch>`, which must be an ancestor of `HEAD` (merge it first), so the base
+PR's entries keep their notes. An entry equal to the one where `HEAD` left `origin/main`
+or any `origin/wave/*` is kept too, so main's or a wave's notes survive when the stacked PR
+has merged them ahead of its base. A bare `--renote` on a stacked PR compares against
+`origin/main` and so rewrites the base PR's entries as well: name the base. It refuses a
+stale section, which needs a re-read and `--note` or `--merge`, and a section this branch
+never stamped. It fails when the ledger at that merge base doesn't parse, rather than
+taking every entry for this branch's own.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
