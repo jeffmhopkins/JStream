@@ -1099,9 +1099,12 @@ function in this crate so the compositor and the UI share one implementation.
   With neutral 3D it is the 2D quad, its texture coordinates clipped to the box.
   `unplace` maps a canvas point back to the local point it shows: a 2×2 solve, in
   `f64`, with nothing returned edge-on or past the near plane. It doesn't check the box,
-  so a hit test compares the point with it. Both allocate nothing, for the render
-  thread. They are pure functions with no wire form, and nothing calls them yet: the
-  compositor's 3D draw and lifting the rejection below are the next X1 parts.
+  so a hit test compares the point with it. `drawn_vertex` gives the vertex of one
+  local point (canvas point, texture coordinate and `w`, as the polygon's own), or
+  nothing past the near plane: the compositor uses it for the corners it pushes out
+  for edge coverage. All three allocate nothing, for the render thread. They are pure
+  functions with no wire form. `jstream-render` draws from them; lifting the rejection
+  below is the next X1 part.
 
 **On the wire (0.11).** ADR-0022 names these additions as 0.4, which had already
 shipped with `events.dropped`, so they ship as 0.11, an additive minor under
