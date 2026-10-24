@@ -433,23 +433,74 @@ fn stale_report(root: &Path) -> Result<BTreeMap<String, Vec<StaleInput>>> {
         let mut list = Vec::new();
         for (input, path) in inputs {
             let Some(p) = &point else { break };
-            let range = format!("{}..{}", p.base, p.theirs);
-            let log = git_ok(root, &["log", "--format=%h %s", &range, "--", &path])?;
             list.push(StaleInput {
                 note: own
                     .get(&key)
                     .and_then(|s| s.get(&input))
                     .and_then(|e| e.note.clone()),
-                commits: String::from_utf8_lossy(&log)
-                    .lines()
-                    .map(str::to_owned)
-                    .collect(),
+                commits: merged_commits(root, p, &[path])?,
                 input,
             });
         }
         out.insert(key, list);
     }
     Ok(out)
+}
+
+/// The commits `point`'s merge brought in that changed any of `paths`, newest first, as
+/// `<hash> <subject>`.
+pub(crate) fn merged_commits(
+    root: &Path,
+    point: &MergePoint,
+    paths: &[String],
+) -> Result<Vec<String>> {
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let range = format!("{}..{}", point.base, point.theirs);
+    let mut args = vec!["log", "--format=%h %s", &range, "--"];
+    args.extend(paths.iter().map(String::as_str));
+    let log = git_ok(root, &args)?;
+    Ok(String::from_utf8_lossy(&log)
+        .lines()
+        .map(str::to_owned)
+        .collect())
+}
+
+/// The PRs named in `<hash> <subject>` lines, from the `(#N)` a squash merge ends its
+/// subject with, in ascending order without repeats. A subject without one names none.
+pub(crate) fn pr_numbers<'a>(commits: impl IntoIterator<Item = &'a String>) -> Vec<u32> {
+    let mut prs: Vec<u32> = commits
+        .into_iter()
+        .filter_map(|c| {
+            let open = c.trim_end().strip_suffix(')')?.rsplit_once("(#")?.1;
+            open.parse().ok()
+        })
+        .collect();
+    prs.sort_unstable();
+    prs.dedup();
+    prs
+}
+
+/// `prs` as `#1, #2`.
+pub(crate) fn pr_list(prs: &[u32]) -> String {
+    prs.iter()
+        .map(|n| format!("#{n}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The PRs among `prs` that `note` doesn't name as `#N`.
+pub(crate) fn unnamed_prs(note: &str, prs: &[u32]) -> Vec<u32> {
+    let named: Vec<u32> = note
+        .split('#')
+        .skip(1)
+        .filter_map(|rest| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            digits.parse().ok()
+        })
+        .collect();
+    prs.iter().copied().filter(|n| !named.contains(n)).collect()
 }
 
 /// After a merge commit: runs `docs migrate` and commits what it changed, if anything, so
@@ -695,6 +746,29 @@ pub(crate) fn input_path(doc: &str, input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #677: the PRs a merge brought in come from the `(#N)` squash subjects end with, and
+    /// a note names one with `#N`.
+    #[test]
+    fn merged_prs_come_from_squash_subjects() {
+        let commits: Vec<String> = [
+            "a1b2c3 docs: fix (#591) ",
+            "d4e5f6 core: frame sync (#581)",
+            "070809 Merge branch 'main' into wave/m1-3",
+            "0a0b0c fix (#12) follow-up",
+            "0d0e0f again (#581)",
+            "101112 not a number (#x)",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        assert_eq!(pr_numbers(&commits), vec![581, 591]);
+        assert_eq!(pr_list(&[581, 591]), "#581, #591");
+        assert_eq!(
+            unnamed_prs("#581's sync is what A says; #5910 too", &[581, 591]),
+            vec![591]
+        );
+        assert!(unnamed_prs("(#581, #591)", &[581, 591]).is_empty());
+    }
 
     const DOC: &str = "<!-- @doc\nid = \"T\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n";
 
