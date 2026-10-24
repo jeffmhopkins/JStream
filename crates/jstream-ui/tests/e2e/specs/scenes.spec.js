@@ -1,8 +1,9 @@
 // The scene and sources lists: the seed's scenes and items, switching program, adding and
-// renaming a scene, showing and hiding an item, placing an existing source and removing
-// it, and a second client seeing the changes. The mock engine lists no kinds and makes
-// no delete plans, so creating a source of a new kind and deleting are covered natively.
-import { test, expect, connect } from '../fixtures.js';
+// renaming a scene, showing and hiding an item, placing an existing source through the
+// Add source dialog and removing it, and a second client seeing the changes. The mock
+// engine lists no kinds and makes no delete plans, so creating a source of a new kind and
+// deleting are covered natively.
+import { test, expect, connect, openAddSource } from '../fixtures.js';
 
 /** The row of scene `name` in the scene list. */
 function scene(page, name) {
@@ -58,9 +59,12 @@ test('an item is hidden, placed again and removed', async ({ page, daemon }) => 
   await backdrop.getByTitle('Show').click();
   await expect(backdrop).not.toHaveClass(/hidden/);
 
-  // Place the same source a second time, from "Existing source".
-  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
-  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  // Place the same source a second time: the Add source dialog's Color type offers it
+  // as a reference.
+  const dialog = await openAddSource(page);
+  await dialog.getByRole('option', { name: 'Color' }).click();
+  await dialog.getByRole('radio', { name: 'Backdrop' }).check();
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(items(page)).toHaveCount(2);
 
   const top = items(page).first();
