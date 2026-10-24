@@ -303,10 +303,14 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Vec<u
             .filter(|(k, e)| theirs.and_then(|t| t.get(*k)) != Some(*e))
             .map(|(k, _)| (k, merge::input_path(doc, k)))
             .collect();
+        let keyed: Vec<(String, String)> = rewritten
+            .iter()
+            .map(|(k, p)| ((*k).clone(), p.clone()))
+            .collect();
+        *reported.borrow_mut() = report_merged_prs(root, &point, key, &keyed, text)?;
         let mut paths: Vec<String> = rewritten.iter().map(|(_, p)| p.clone()).collect();
         paths.sort();
         paths.dedup();
-        *reported.borrow_mut() = report_merged_prs(root, &point, key, &paths, text)?;
         let later = merge::changed_after(root, &point, &paths)?;
         let refused: Vec<String> = rewritten
             .iter()
@@ -356,14 +360,12 @@ fn verify_renote(
             bases.iter().filter_map(|b| b.sections.get(key)).collect();
         if let Some(p) = &point {
             // The entries `renote` rewrites: this branch's own, equal to no base's.
-            let mut paths: Vec<String> = old
+            let own: Vec<(String, String)> = old
                 .iter()
                 .filter(|(k, e)| !stamps.iter().any(|b| b.get(*k) == Some(*e)))
-                .map(|(k, _)| merge::input_path(doc, k))
+                .map(|(k, _)| (k.clone(), merge::input_path(doc, k)))
                 .collect();
-            paths.sort();
-            paths.dedup();
-            *reported.borrow_mut() = report_merged_prs(root, p, key, &paths, note)?;
+            *reported.borrow_mut() = report_merged_prs(root, p, key, &own, note)?;
         }
         ledger::renote(old, &stamps, by, note).with_context(|| {
             format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
@@ -372,18 +374,18 @@ fn verify_renote(
     Ok(reported.into_inner())
 }
 
-/// Prints the PRs `point`'s merge brought in on `paths`, the files of the entries a verify
-/// of `key` rewrites, and those `note` doesn't name, so a note written after a merge
+/// Prints the PRs `point`'s merge brought in on `inputs`, the entries a verify of `key`
+/// rewrites with the files they live in, and those `note` doesn't name, so a note written after a merge
 /// credits each PR whose change it covers (docs/DOCS.md#notes). It only advises: a note may
 /// rightly leave out a PR that changed nothing this section says. Returns the PRs.
 fn report_merged_prs(
     root: &Path,
     point: &merge::MergePoint,
     key: &str,
-    paths: &[String],
+    inputs: &[(String, String)],
     note: &str,
 ) -> Result<Vec<u32>> {
-    let prs = merge::pr_numbers(&merge::merged_commits(root, point, paths)?);
+    let prs = merge::pr_numbers(&merge::merged_commits(root, point, inputs)?);
     if prs.is_empty() {
         return Ok(prs);
     }
@@ -806,7 +808,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                         }
                     }
                     for c in i.commits.iter().take(SHOWN) {
-                        eprintln!("    merged: {c}");
+                        eprintln!("    merged: {}", c.line);
                     }
                     if i.commits.len() > SHOWN {
                         eprintln!("    merged: … and {} more", i.commits.len() - SHOWN);
@@ -1504,11 +1506,88 @@ mod tests {
         assert_eq!(prs, vec![11]);
     }
 
-    /// The subjects of `<hash> <subject>` lines.
-    fn subjects(commits: &[String]) -> Vec<&str> {
+    /// #688: a `dep:` input counts only the merged commits that changed the text it names,
+    /// not every commit to its doc; a wave's landing squash counts as the PRs its body
+    /// lists as well as its own.
+    #[test]
+    fn merged_prs_narrow_dep_inputs_and_expand_waves() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\ndepends_on = [\"D.md#d\"]\n-->\nText.\n";
+        let d = "<!-- @doc\nid = \"D\"\n-->\n<a id=\"d\"></a>\n## D\nDep.\n\n<a id=\"e\"></a>\n## E\nElse.\n";
+        files.extend([("S.md", s), ("D.md", d), ("src/a.rs", "a1\n\n\n\n\na5\n")]);
+        let (origin, work) = origin_and_clone("merged-prs-dep", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        // An earlier wave landed #18 before the branch's base.
+        origin.write("src/old.rs", "old\n");
+        commit_all(
+            &origin,
+            "chore(wave): land wave/m1 (#20)\n\n* feat: old (#18)\n",
+        );
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        let pr = "the branch's a1 edit, which the section text still describes";
+        verify(&work.0, "S#a", "agent:work", pr).expect("S verifies on work");
+        commit_all(&work, "work: a1");
+        // #21 changes only D#e; #22 changes D#d; the wave carried #28 and #29 and changes
+        // a.rs, which the branch changed too. Its body, like GitHub's, lists every commit
+        // on the wave branch with their bodies: #18 again, which the base already has, a
+        // nested squash body, and a subject citing issue #5.
+        origin.write("D.md", &d.replace("Else.", "Else, from main."));
+        commit_all(&origin, "main: e (#21)");
+        origin.write(
+            "D.md",
+            &d.replace("Else.", "Else, from main.")
+                .replace("Dep.", "Dep, from main."),
+        );
+        commit_all(&origin, "main: d (#22)");
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 wave\n");
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
+        commit_all(
+            &origin,
+            "chore(wave): land wave/m2 (#30)\n\n* feat: x (W1) (#28)\n\n* wip\n\n\
+             * feat: old (#18)\n\nCo-Authored-By: A <a@b>\n\n---------\n\n\
+             * fix: y (#5) (#29)\n\n* fix: y (#5)\n\nbody\n",
+        );
+
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert_eq!(m.stale, vec!["S#a".to_owned()], "{m:?}");
+        let point = merge::last_merge(&work.0)
+            .expect("reads")
+            .expect("invariant: merged");
+        let commits = |input: &str, path: &str| {
+            merge::merged_commits(&work.0, &point, &[(input.to_owned(), path.to_owned())])
+                .expect("lists")
+        };
+        assert_eq!(
+            subjects(&commits("dep:D.md#d", "D.md")),
+            vec!["main: d (#22)"]
+        );
+        assert_eq!(merge::pr_numbers(&commits("dep:D.md#e", "D.md")), vec![21]);
+        // A whole-doc dependency counts every change to the doc's body.
+        assert_eq!(
+            merge::pr_numbers(&commits("dep:D.md", "D.md")),
+            vec![21, 22]
+        );
+        assert_eq!(
+            merge::pr_numbers(&commits("file:src/a.rs", "src/a.rs")),
+            vec![28, 29, 30]
+        );
+        let i = &m.inputs["S#a"];
+        assert_eq!(
+            merge::pr_numbers(i.iter().flat_map(|i| &i.commits)),
+            vec![28, 29, 30]
+        );
+        let text = "the wave's a5 edit (#28, #29, #30) is outside what the text says";
+        let prs = verify_merge(&work.0, "S#a", "agent:work", text).expect("S verifies");
+        assert_eq!(prs, vec![28, 29, 30]);
+    }
+
+    /// The subjects of the commits' `<hash> <subject>` lines.
+    fn subjects(commits: &[merge::Commit]) -> Vec<&str> {
         commits
             .iter()
-            .filter_map(|c| c.split_once(' ').map(|(_, s)| s))
+            .filter_map(|c| c.line.split_once(' ').map(|(_, s)| s))
             .collect()
     }
 

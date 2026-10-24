@@ -349,6 +349,14 @@ fn dep_text(dep: &str, by_path: &BTreeMap<&str, &Doc>) -> Option<String> {
     }
 }
 
+/// The text `dep` names in `text`, the content of its file at some revision, as
+/// [`dep_text`] reads it from the working tree; `None` when it doesn't resolve there.
+pub(crate) fn dep_text_in(dep: &str, text: &str) -> Option<String> {
+    let (file, _, _) = split_dep(dep);
+    let doc = super::parse::parse(file, text, &mut Vec::new());
+    dep_text(dep, &BTreeMap::from([(file, &doc)]))
+}
+
 /// A section's inputs, each with its hash, keyed as in the ledger (ADR-0053): `body` for
 /// its own text, `file:<path>` for each tracked file its `covers` match
 /// (`file:<path>#jstream-meta` when hashed as its jstream view), and `dep:<reference>` for
