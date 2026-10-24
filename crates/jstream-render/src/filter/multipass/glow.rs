@@ -69,30 +69,10 @@ impl Pass for Glow {
 
 #[cfg(test)]
 mod tests {
-    use crate::filter::testing::{filter, image, run};
-    use crate::image::Image;
-    use crate::tests::{Opened, near, open};
+    use crate::filter::multipass::square;
+    use crate::filter::testing::{filter, run};
+    use crate::tests::{near, open};
     use serde_json::json;
-
-    const CLEAR: [u8; 4] = [0, 0, 0, 0];
-
-    /// A `size` x `size` transparent frame with an opaque `colour` square at
-    /// `at..at + side` on both axes.
-    fn square(opened: &Opened, size: u32, at: u32, side: u32, colour: [u8; 4]) -> Image {
-        let pixels: Vec<[u8; 4]> = (0..size)
-            .flat_map(|y| {
-                (0..size).map(move |x| {
-                    let inside = |v: u32| (at..at + side).contains(&v);
-                    if inside(x) && inside(y) {
-                        colour
-                    } else {
-                        CLEAR
-                    }
-                })
-            })
-            .collect();
-        image(opened, size, &pixels)
-    }
 
     #[test]
     fn the_glow_surrounds_the_shape_evenly_and_strength_brightens_it() {

@@ -8,7 +8,7 @@
 //! the state the panels share (`store`), the panels (`panels`), the pairing panel
 //! (`pairing`) and the preview canvas (`canvas`).
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/UI-FEATURES.md#theme, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking, docs/UI-FEATURES.md#canvas, docs/UI-FEATURES.md#dialogs, docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects, docs/UI-FEATURES.md#inspector, docs/UI-FEATURES.md#mixer, docs/UI-FEATURES.md#outputs, docs/UI-FEATURES.md#keyboard, docs/UI-FEATURES.md#beyond, docs/adr/0045-leptos-web-ui.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/UI-FEATURES.md#theme, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking, docs/UI-FEATURES.md#canvas, docs/UI-FEATURES.md#dialogs, docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects, docs/UI-FEATURES.md#inspector, docs/UI-FEATURES.md#transform, docs/UI-FEATURES.md#mixer, docs/UI-FEATURES.md#outputs, docs/UI-FEATURES.md#keyboard, docs/UI-FEATURES.md#beyond, docs/adr/0045-leptos-web-ui.md
 
 #![forbid(unsafe_code)]
 

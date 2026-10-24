@@ -110,12 +110,11 @@ impl Pass for Outline {
         if stroke.width <= 0.0 {
             return copy(ctx, input, output);
         }
-        let (ix, iy) = (0, 0);
         let inside = u32::from(stroke.inside);
         let (w, h) = (output.width(), output.height());
         let mut from = ctx.scratch(w, h)?;
         let mut to = ctx.scratch(w, h)?;
-        let params = Uniforms::new().i32(ix).i32(iy).u32(inside).finish();
+        let params = Uniforms::new().u32(inside).finish();
         ctx.draw(&Draw {
             shader: SEED,
             input,
@@ -136,8 +135,6 @@ impl Pass for Outline {
         }
         let params = Uniforms::new()
             .vec4(premultiplied(stroke.color))
-            .i32(ix)
-            .i32(iy)
             .f32(stroke.width)
             .u32(inside)
             .finish();

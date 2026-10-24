@@ -68,14 +68,13 @@ impl Under {
             pad.origin(),
             Edge::Transparent,
         )?;
-        let (ix, iy) = (0, 0);
+        // The output is the input's frame (ADR-0065 §5), so the blurred shape's frame sits
+        // `pad` up and left of it, moved by the offset.
         let params = Uniforms::new()
             .vec4(premultiplied(self.color))
-            .i32(ix)
-            .i32(iy)
             .vec2([
-                (ix - pad.left as i32) as f32 + self.offset.0,
-                (iy - pad.top as i32) as f32 + self.offset.1,
+                self.offset.0 - pad.left as f32,
+                self.offset.1 - pad.top as f32,
             ])
             .vec2([shape_size.0 as f32, shape_size.1 as f32])
             .f32(blurred.scale as f32)
@@ -127,32 +126,14 @@ impl Pass for DropShadow {
 #[cfg(test)]
 mod tests {
     use super::read;
-    use crate::filter::testing::{filter, image, run, settings};
-    use crate::image::Image;
-    use crate::tests::{Opened, near, open, solid};
+    use crate::filter::multipass::square;
+    use crate::filter::testing::{filter, run, settings};
+    use crate::tests::{near, open, solid};
     use serde_json::json;
 
     const CLEAR: [u8; 4] = [0, 0, 0, 0];
     const RED: [u8; 4] = [255, 0, 0, 255];
     const BLUE: [u8; 4] = [0, 0, 255, 255];
-
-    /// A `size` x `size` transparent frame with an opaque `colour` square at
-    /// `at..at + side` on both axes.
-    fn square(opened: &Opened, size: u32, at: u32, side: u32, colour: [u8; 4]) -> Image {
-        let pixels: Vec<[u8; 4]> = (0..size)
-            .flat_map(|y| {
-                (0..size).map(move |x| {
-                    let inside = |v: u32| (at..at + side).contains(&v);
-                    if inside(x) && inside(y) {
-                        colour
-                    } else {
-                        CLEAR
-                    }
-                })
-            })
-            .collect();
-        image(opened, size, &pixels)
-    }
 
     #[test]
     fn settings_map_to_the_copy_and_the_frame_keeps_its_size() {

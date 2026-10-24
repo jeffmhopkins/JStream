@@ -10,7 +10,7 @@ use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, Reference, Settings};
 use jstream_sources::{
     AssetRoots, AudioTarget, CaptureSpec, Context, Limits, Registry, SourceError, decode_still,
-    needs_restart,
+    needs_restart, webcam_device,
 };
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -253,8 +253,26 @@ fn display_window_and_webcam_sources_say_what_to_capture() {
         device("fake-webcam-0"),
         CaptureSpec::Device(Some("fake-webcam-0".into()))
     );
+    // A webcam's sound is its device's paired audio (#716); the engine records it.
     let webcam = registry.descriptor("webcam").expect("webcam");
-    assert!(webcam.video && !webcam.audio);
+    assert!(webcam.video && webcam.audio);
+    assert_eq!(
+        webcam_device("webcam", &complete("webcam", &[])),
+        Some(None),
+        "the first device's pair"
+    );
+    assert_eq!(
+        webcam_device(
+            "webcam",
+            &complete("webcam", &[("device", json!(" fake-webcam-0 "))])
+        ),
+        Some(Some("fake-webcam-0".into()))
+    );
+    assert_eq!(webcam_device("display", &complete("display", &[])), None);
+    for kind in ["display", "window"] {
+        let descriptor = registry.descriptor(kind).expect(kind);
+        assert!(descriptor.video && !descriptor.audio, "{kind}");
+    }
     assert!(needs_restart(
         webcam,
         &complete("webcam", &[]),
