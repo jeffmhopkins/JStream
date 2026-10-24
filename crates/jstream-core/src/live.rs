@@ -126,7 +126,7 @@ impl Eq for LiveAudio {}
 struct Entry {
     kind: String,
     settings: Settings,
-    /// The density its frames are drawn at (ADR-0071), as asked for last: every build
+    /// The density its frames are drawn at (ADR-0073), as asked for last: every build
     /// asks for it.
     density: f32,
     /// The build asked for last. Only its result is installed.
@@ -533,7 +533,7 @@ impl LiveSources {
     }
 
     /// Draws each source in `scales` ([`Shot::scales`](crate::snapshot::Shot::scales))
-    /// at the density its most enlarged item needs to stay sharp (ADR-0071), for a kind
+    /// at the density its most enlarged item needs to stay sharp (ADR-0073), for a kind
     /// that draws at a density. Drawing again can take as long as building, so it is a
     /// build on the thread, at the new density, and the source shows its old frame until
     /// that is installed. Densities go up or down in quarter steps of a doubling, so a

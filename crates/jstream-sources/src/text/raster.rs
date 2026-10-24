@@ -19,7 +19,7 @@ pub(crate) struct Drawn {
     /// The frame's size in pixels.
     pub(crate) size: FrameSize,
     /// The size the frame stands for: its size at a density of 1, which it is placed at
-    /// (ADR-0071).
+    /// (ADR-0073).
     pub(crate) extent: FrameSize,
     /// Packed RGBA8, straight alpha.
     pub(crate) rgba: Vec<u8>,

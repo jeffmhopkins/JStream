@@ -63,8 +63,8 @@ pub trait Source: Send {
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
 
     /// Asks the source to draw its frames `density` times as many pixels each way as its
-    /// own size, so an item that shows it enlarged stays sharp (ADR-0071,
-    /// docs/adr/0071-sources-drawn-at-their-shown-size.md). Returns that own size, the
+    /// own size, so an item that shows it enlarged stays sharp (ADR-0073,
+    /// docs/adr/0073-sources-drawn-at-their-shown-size.md). Returns that own size, the
     /// size its frames are placed at whatever their pixels, for a kind that draws at a
     /// density; `None`, the default, for a kind whose frames are their own size whatever
     /// is asked. Drawing again can take as long as an update. The `text` kind draws at

@@ -228,7 +228,7 @@ impl Chains {
         };
         // Every output layer first, so the draws below read and write the cache
         // without borrowing it mutably. Each is placed at what its input is placed at,
-        // carried through the filters' sizes (ADR-0071), as the input's own size is.
+        // carried through the filters' sizes (ADR-0073), as the input's own size is.
         let mut size = (input.width(), input.height());
         let mut placed = input.extent();
         for filter in running.iter_mut() {

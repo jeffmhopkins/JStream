@@ -904,7 +904,7 @@ running source's own audio (`Source::audio`, heard whether or not it is shown) f
 
 A source the program mix shows enlarged is drawn at a density, when its kind can be
 (`Source::set_density`, the `text` kind,
-[ADR-0071](../../docs/adr/0071-sources-drawn-at-their-shown-size.md)). After each plan
+[ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). After each plan
 `Shot::scales` measures how much each frame its passes draw is enlarged: canvas pixels
 per pixel of the frame's extent, from the placements the collection holds (not a
 gesture's live values, so a drag is measured once it commits), the most of any item, in

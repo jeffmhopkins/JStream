@@ -165,7 +165,7 @@ fn a_text_source_is_built_and_rebuilt() {
 
 /// A text item shown enlarged has its source drawn again with more pixels for the same
 /// size, so it stays sharp, and drawn at its own size again when it is not enlarged
-/// (ADR-0071). The density goes up in quarter steps of a doubling.
+/// (ADR-0073). The density goes up in quarter steps of a doubling.
 #[test]
 fn an_enlarged_text_item_draws_its_source_at_a_density() {
     use jstream_protocol::{Finite32, ItemGeometry, ItemTransform, Size, Vec2};

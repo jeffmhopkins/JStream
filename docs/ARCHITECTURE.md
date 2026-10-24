@@ -913,7 +913,7 @@ transform through `legacy_quad` (crop, scale against the current source size,
 top-left at `position`, clockwise rotation about that corner). Both count in the
 image's extent, its pixel size unless the caller gave another: a source drawn sharp for
 an item that shows it enlarged has more pixels than the size it is placed at
-([ADR-0071](adr/0071-sources-drawn-at-their-shown-size.md)). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+([ADR-0073](adr/0073-sources-drawn-at-their-shown-size.md)). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`

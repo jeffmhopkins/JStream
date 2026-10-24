@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0071-sources-drawn-at-their-shown-size.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -168,7 +168,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`. It is the one kind that draws at a density
-  ([ADR-0071](../../docs/adr/0071-sources-drawn-at-their-shown-size.md)):
+  ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)):
   `set_density(d)` draws the same layout with every length (the em size, the glyphs'
   positions, the outline, the padding) multiplied by `d`, so the frame has `d` times the
   pixels each way and stands for the same size, which `set_density` returns and the

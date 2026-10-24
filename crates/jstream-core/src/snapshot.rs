@@ -92,7 +92,7 @@ pub(crate) struct Frame {
     width: u32,
     height: u32,
     /// The size it is placed at: its own, unless its source draws it at a density
-    /// (ADR-0071), when it has more pixels than that.
+    /// (ADR-0073), when it has more pixels than that.
     extent: [u32; 2],
     pixels: Pixels,
     /// Which `set_source_frame` stored it or which new frame a live source produced,
@@ -982,7 +982,7 @@ struct Layer {
 impl Shot {
     /// How much each source whose frame a layer draws is enlarged where it is shown
     /// most, in canvas pixels per pixel of the frame's extent: what its source should
-    /// draw at to stay sharp (ADR-0071). It is measured on every pass, the program's and
+    /// draw at to stay sharp (ADR-0073). It is measured on every pass, the program's and
     /// the video mixes', from the placements the shot holds, not a gesture's live
     /// values, so a drag is measured once it commits. A source a video chain runs over
     /// counts as 1, since its filters' settings are in the frame's pixels. A source the
@@ -2935,7 +2935,7 @@ pub(crate) mod tests {
             .placed_at(FrameSize::new(16, 9).expect("invariant: non-zero"))
     }
 
-    /// A frame drawn at a density is placed at its extent, not its pixels (ADR-0071).
+    /// A frame drawn at a density is placed at its extent, not its pixels (ADR-0073).
     #[test]
     fn a_dense_frame_is_placed_at_its_extent() {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
@@ -2959,7 +2959,7 @@ pub(crate) mod tests {
     }
 
     /// A shot measures how much each frame it draws is enlarged, against the frame's
-    /// extent, the most of any of its items, and a chained source as 1 (ADR-0071).
+    /// extent, the most of any of its items, and a chained source as 1 (ADR-0073).
     #[test]
     fn a_shot_measures_how_enlarged_its_frames_are() {
         use jstream_protocol::{ItemGeometry, Size};

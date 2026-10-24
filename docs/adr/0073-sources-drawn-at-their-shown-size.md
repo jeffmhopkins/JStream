@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0071"
+id = "ADR-0073"
 title = "Sources drawn at the size they are shown"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0071: Sources drawn at the size they are shown
+# ADR-0073: Sources drawn at the size they are shown
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -74,7 +74,14 @@ the 3D placements the compositor doesn't draw yet.
 - A text item scaled up is sharp on program, in the preview and in recordings, for every
   client, with no protocol change. A text item at its own size draws exactly as before.
 - Memory grows with the square of the density: a text drawn at 4 holds 16 times the pixels.
-  `MAX_DENSITY` and the source's limits bound it.
+  `MAX_DENSITY` and the source's limits bound it. A text enlarged and then hidden keeps its
+  density, up to 64 times its pixels, until a plan shows it again: drawing it smaller on
+  hiding would only draw it large again when it is shown.
+- A source's extent must not depend on its density, or the measured scale moves with each
+  build. The `text` kind takes its bounds from its outlines at a density of 1.
+- The size a client sees for a source is its extent. When ADR-0022's `source.sizes` and
+  `source.size_changed` are built, they report the extent, not the frame's pixels, or crop
+  handles would be off by the density.
 - During a drag the text is resampled until the gesture commits, then drawn again.
 - Another kind can draw at a density by implementing `set_density`: an SVG image, or a
   browser page at a device pixel ratio. A filtered text source isn't drawn sharper; that

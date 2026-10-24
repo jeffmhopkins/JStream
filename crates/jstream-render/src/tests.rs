@@ -191,7 +191,7 @@ fn an_image_is_placed_at_its_extent() {
         return;
     };
     // 8x4 texels, each row red for its first quarter and green for the rest, standing
-    // for a 4x2 image (ADR-0071): it places as 4x2, and its crop counts in those pixels.
+    // for a 4x2 image (ADR-0073): it places as 4x2, and its crop counts in those pixels.
     let mut pixels = Vec::new();
     for _row in 0..4 {
         for x in 0..8 {

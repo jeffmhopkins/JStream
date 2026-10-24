@@ -156,7 +156,7 @@ fn golden_wrapped_centred_outlined_text_on_a_background() {
     check_golden("styled", &frame);
 }
 
-/// The styled golden's text drawn at a density between whole numbers (ADR-0071), so its
+/// The styled golden's text drawn at a density between whole numbers (ADR-0073), so its
 /// frame's corner falls between pixels.
 #[test]
 fn golden_styled_text_at_a_density() {
@@ -422,7 +422,7 @@ fn text_too_large_for_the_limits_is_an_error() {
 }
 
 /// Drawn at a density, the text keeps its layout and its own size, which the frame is
-/// placed at, and draws that many pixels each way (ADR-0071).
+/// placed at, and draws that many pixels each way (ADR-0073).
 #[test]
 fn a_density_draws_more_pixels_for_the_same_size() {
     let patch = [

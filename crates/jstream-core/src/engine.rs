@@ -2719,7 +2719,7 @@ impl State {
     /// transition running toward it (ADR-0029), whose length in milliseconds it returns;
     /// a transition that has ended is let go. The shot lists the displays and windows the
     /// program and every mix capture. A source the shot shows enlarged is drawn again at
-    /// the density that keeps it sharp, when its kind can be (ADR-0071).
+    /// the density that keeps it sharp, when its kind can be (ADR-0073).
     fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,

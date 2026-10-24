@@ -119,7 +119,7 @@ impl Image {
 
     /// Places the image as if it were `extent`, for an image drawn with more pixels than
     /// the size it stands for: a source drawn sharp for an item that shows it enlarged
-    /// (ADR-0071, docs/adr/0071-sources-drawn-at-their-shown-size.md).
+    /// (ADR-0073, docs/adr/0073-sources-drawn-at-their-shown-size.md).
     pub fn set_extent(&mut self, extent: FrameSize) {
         self.extent = (extent.width(), extent.height());
     }

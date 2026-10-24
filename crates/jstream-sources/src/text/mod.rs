@@ -171,7 +171,7 @@ struct TextSource {
     /// The font file, already checked by [`parse`].
     font: Cow<'static, [u8]>,
     frame: Arc<VideoFrame>,
-    /// How many pixels each way the frame draws per pixel of its extent (ADR-0071).
+    /// How many pixels each way the frame draws per pixel of its extent (ADR-0073).
     density: f32,
     /// The frame's size at a density of 1, which it is placed at.
     extent: FrameSize,

@@ -15,7 +15,7 @@ a single canvas.
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0071-sources-drawn-at-their-shown-size.md", "crates/jstream-platform/README.md#gpu-frames"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "crates/jstream-platform/README.md#gpu-frames"]
 -->
 
 One scene, composited on the GPU with wgpu
@@ -51,7 +51,7 @@ and calls this crate.
   `Image::set_extent` or `ResourceCache::set_extent`, for an image drawn with more
   pixels than the size it stands for, such as a text source drawn sharp for an
   enlarged item
-  ([ADR-0071](../../docs/adr/0071-sources-drawn-at-their-shown-size.md)). Crops, a
+  ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). Crops, a
   legacy scale and a fit mode's aspect ratio all count in the extent, and the texture
   is sampled across it.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
@@ -315,7 +315,7 @@ returns the retired images whose last frame has finished. A steady frame allocat
 only that callback; a frame that fails before `end_frame` leaves its retirees to the
 next frame's fence, which covers it. `frame` names the frame being built, so work that
 several draws of one frame share (a source's video chain) can run once in it.
-`set_extent` places a key's image as if it were another size (ADR-0071); a reused entry
+`set_extent` places a key's image as if it were another size (ADR-0073); a reused entry
 keeps the extent it had, so a caller that sets one sets it on every frame, and a new
 texture starts at its own size.
 `retire_filter` hands the cache a `VideoFilter` no frame runs any more: it may hold
@@ -666,7 +666,7 @@ negative scale and the geometry `from_legacy` makes of it draw the same grid.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; an image placed at an extent of half its pixels (its size and its crop
-count in the extent, ADR-0071); integer scale; 90° rotation about the top-left; opacity over an
+count in the extent, ADR-0073); integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
 staged once per submit, and not staged when the item is hidden or when a readback
