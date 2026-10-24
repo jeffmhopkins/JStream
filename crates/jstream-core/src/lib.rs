@@ -24,23 +24,28 @@ mod activity;
 mod audio;
 mod audio_sources;
 mod audit;
+mod chain;
 mod collection;
 mod drops;
 mod engine;
 mod events;
+mod filter_assets;
 mod filters;
+mod gesture;
 mod history;
 mod kinds;
 mod live;
 mod outputs;
 mod plugins;
 mod preview;
+mod privacy;
 mod runtime;
 mod session;
 mod snapshot;
 mod studio;
 #[cfg(test)]
 mod tests;
+mod transition;
 mod youtube;
 
 pub use audit::{

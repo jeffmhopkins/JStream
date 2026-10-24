@@ -102,7 +102,7 @@ impl BrowserBackend for FakeBrowser {
             spec: spec.clone(),
             css: Mutex::new(Vec::new()),
             audio: PageAudio::new(),
-            policy: RequestPolicy::for_location(&spec.location),
+            policy: RequestPolicy::for_page(spec),
             closed: AtomicBool::new(false),
         });
         state.pages.push(Arc::clone(&page));

@@ -28,11 +28,11 @@ dox = ["cef", "jstream-browser/dox"]
 
 [dependencies]
 anyhow.workspace = true
-# Crash reports redact secrets by their BLAKE3 digests, never keeping their text.
-blake3.workspace = true
 # The control token's random bytes, from the OS.
 getrandom.workspace = true
 jstream-core.workspace = true
+# Local, redacted crash reports (ADR-0067).
+jstream-crash.workspace = true
 # `Codec`, for the startup check that Media Foundation has an AAC encoder.
 jstream-media.workspace = true
 # `Backends`, and the stream key store the publish opener reads.
@@ -43,6 +43,8 @@ jstream-browser.workspace = true
 # `OutputId`, for `--output`; `OutputKind`, for the publish opener.
 jstream-protocol.workspace = true
 jstream-server.workspace = true
+# Reading the YouTube OAuth client file Google Cloud gives (`--youtube-client`).
+serde_json.workspace = true
 # The runtime the server runs on; `signal` for Ctrl-C (and SIGTERM on Unix).
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
 # The startup log line, with the log file's path.
@@ -55,11 +57,16 @@ tracing-subscriber.workspace = true
 # key store, and the Media Foundation check that runs at startup.
 [target.'cfg(windows)'.dependencies]
 jstream-platform-windows.workspace = true
+# `HttpsTransport`, the transport YouTube's calls go through (`Engine::with_youtube`), and
+# `BUILT_IN_CLIENT_ID`, to skip the transport while the built-in client is empty.
+jstream-youtube.workspace = true
 
 [dev-dependencies]
 # The tests drive the daemon through the WebSocket client, as the CLI does.
 futures-util.workspace = true
 jstream-control = { workspace = true, features = ["ws"] }
+# The YouTube setup's test: a transport that replays canned responses.
+jstream-youtube = { workspace = true, features = ["fake"] }
 # The publish opener's tests: an in-memory key store, and the fake backends.
 jstream-platform = { workspace = true, features = ["fake"] }
 # The browser wiring's test: a browser that opens pages in memory.

@@ -1,13 +1,16 @@
-//! Live sources (C1b): the engine builds a `jstream-sources` source for each source in
-//! the collection, rebuilds it when its settings change, drops it when the source is
-//! deleted, and the program mix shows its frames, advancing animations on the clock.
+//! Live sources (C1b, C3): the engine builds a `jstream-sources` source for each source
+//! in the collection, rebuilds it when its settings change, drops it when the source is
+//! deleted, and the program mix shows its frames, advancing animations on the clock, or
+//! what the pipeline captures for it.
 
 use super::{add, batch, connected, create, edits};
 use crate::Engine;
 use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
 use jstream_protocol::{AssetRoot, Batch, Edit, ItemId, Reference, Settings, SourceId, SourceKind};
+use jstream_sources::CaptureSpec;
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -160,21 +163,67 @@ fn a_text_source_is_built_and_rebuilt() {
     assert_eq!(shown(&engine, "caption"), Some([0, 0, 0xff, 0xff]));
 }
 
+/// A `display` or `window` source shows what the pipeline captures for its target:
+/// the primary display by default, the one its `target` names otherwise. Sources that
+/// capture the same thing share one capture, and a window source with no window chosen
+/// captures nothing.
 #[test]
-fn a_kind_that_is_not_built_still_shows_the_capture() {
+fn capture_sources_capture_their_targets() {
     let engine = Engine::new();
     let control = connected(&engine);
+    let target = |id: &str| settings(&[("target", json!(id))]);
     batch(
         &control,
         edits(vec![
             create("a"),
             source("screen", "display", Settings::new()),
+            source("again", "display", Settings::new()),
+            source("second", "display", target("monitor:2")),
+            source("editor", "window", target("hwnd:0x2a")),
+            source("unset", "window", Settings::new()),
+            source("cam", "webcam", Settings::new()),
+            source(
+                "card",
+                "webcam",
+                settings(&[("device", json!("fake-capture-card-0"))]),
+            ),
+            add("a", "i6", "cam"),
+            add("a", "i7", "card"),
             add("a", "i1", "screen"),
+            add("a", "i2", "again"),
+            add("a", "i3", "second"),
+            add("a", "i4", "editor"),
+            add("a", "i5", "unset"),
         ]),
     )
     .expect("created");
-    assert_eq!(shown(&engine, "screen"), None);
-    assert!(engine.render_hub().load().shot().uses_capture());
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let captures = |engine: &Engine| engine.render_hub().load().shot().captures().clone();
+    assert_eq!(
+        captures(&engine),
+        BTreeSet::from([
+            CaptureSpec::Display(None),
+            CaptureSpec::Display(Some("monitor:2".into())),
+            CaptureSpec::Window(Some("hwnd:0x2a".into())),
+            CaptureSpec::Device(None),
+            CaptureSpec::Device(Some("fake-capture-card-0".into())),
+        ])
+    );
+    assert_eq!(shown(&engine, "screen"), None, "no frame of its own");
+
+    batch(
+        &control,
+        edits(vec![Edit::SourceSetSettings {
+            source_id: SourceId::new("editor"),
+            patch: target("hwnd:0x2b"),
+        }]),
+    )
+    .expect("retargeted");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    assert!(
+        captures(&engine).contains(&CaptureSpec::Window(Some("hwnd:0x2b".into()))),
+        "a new target is a new capture"
+    );
 }
 
 /// A new, empty directory for one test.
@@ -594,5 +643,85 @@ fn a_media_file_loaded_before_the_media_backend_plays_once_it_is_injected() {
     );
     clock.advance(150);
     assert!(plays(&engine, 1), "and advances on the clock");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// A 2-point `.cube` table that inverts every colour.
+const INVERT: &str = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
+
+/// The version of the asset the first filter of `id`'s video chain reads in the
+/// published program mix, once every build and load is done.
+fn chain_asset(engine: &Engine, id: &str) -> Option<u64> {
+    assert!(engine.settle_sources(), "the assets were loaded in time");
+    let snapshot = engine.render_hub().load();
+    let chain = snapshot.shot().chain(&SourceId::new(id))?;
+    chain.filters[0]
+        .reference
+        .as_ref()
+        .map(|asset| asset.version)
+}
+
+/// V0: the sources thread loads the file a video filter reads and the plan hands it to
+/// the source's chain; a file that can't be read leaves the filter without one (it
+/// passes its input through), and pointing it at another file loads that.
+#[test]
+fn a_video_filters_asset_is_loaded_for_its_chain() {
+    let dir = temp_dir("filter-asset");
+    fs::write(dir.join("invert.cube"), INVERT).expect("the table");
+    fs::write(dir.join("again.cube"), INVERT).expect("the table");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let control = connected(&engine);
+    let lut = |path: &str| {
+        Reference::Asset {
+            root: AssetRoot::Collection,
+            path: path.into(),
+        }
+        .to_value()
+    };
+    let owner = jstream_protocol::FilterOwner::Source {
+        source_id: SourceId::new("pic"),
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("pic", "color", color("#ffffff")),
+            add("a", "i1", "pic"),
+            Edit::FilterAdd {
+                owner: owner.clone(),
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                kind: "apply_lut".into(),
+                settings: settings(&[("lut", lut("invert.cube"))]),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("created");
+    let first = chain_asset(&engine, "pic").expect("the table is loaded");
+
+    let point = |path: &str| {
+        batch(
+            &control,
+            edits(vec![Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                patch: settings(&[("lut", lut(path))]),
+            }]),
+        )
+        .expect("set");
+    };
+    point("nowhere.cube");
+    assert_eq!(
+        chain_asset(&engine, "pic"),
+        None,
+        "a missing file loads nothing"
+    );
+    point("again.cube");
+    let again = chain_asset(&engine, "pic").expect("the other table is loaded");
+    assert_ne!(again, first, "another file is another load");
     let _ = fs::remove_dir_all(dir);
 }

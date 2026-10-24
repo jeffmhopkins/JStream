@@ -571,11 +571,10 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   has one; the mixer needs the key's source processed first), running the true-peak and
   loudness meters in the mixer (for the
   master bus and subscribed buses and sources) with their meter-stream fields and
-  `audio.reset_loudness`, and monitor devices that play `bus_block`; buses, sends and
-  filters in the protocol and the graph; and render-side resampling for output devices.
-- **The rest of ADR-0027's audio half:** the master chain and `output.audio_chain` in
-  the protocol, and the engine giving an output with its own chain its own audio encode
-  from an output tap; the privacy screen's mute.
+  `audio.reset_loudness`, and monitor devices that play `bus_block`; and render-side
+  resampling for output devices.
+- **The privacy screen's mute** from ADR-0027's audio half (the master chain and output
+  taps are driven by `jstream-core`).
 - **The engine side of CLAP filters**
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the mixer's side is
   here (`insert_host_filter`), and starting and watching the host process are built

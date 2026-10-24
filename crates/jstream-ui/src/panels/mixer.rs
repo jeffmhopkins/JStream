@@ -177,7 +177,7 @@ pub async fn plan_bus_delete(
     let response = control.call(call).await.map_err(|error| describe(&error))?;
     match response.result {
         CallResult::Query {
-            result: QueryResult::DeletePlan { rev, edits },
+            result: QueryResult::DeletePlan { rev, edits, .. },
         } => Ok(Pending {
             question: format!("Delete bus “{name}”?"),
             detail: plan_summary(&edits),
@@ -199,6 +199,7 @@ pub async fn apply_plan(control: &dyn Control, plan: Pending) -> Result<(), Stri
         edits: plan.edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     }
     .expecting(plan.rev);
     control
@@ -1376,6 +1377,7 @@ mod tests {
                     result: QueryResult::DeletePlan {
                         rev,
                         edits: self.plan.clone(),
+                        hotkeys: Vec::new(),
                     },
                 };
                 Ok(response)
@@ -1474,6 +1476,7 @@ mod tests {
                     edits: control.plan.clone(),
                     expected_rev: None,
                     idempotency_key: None,
+                    ends_gesture: None,
                 }
                 .expecting(rev)
             ))

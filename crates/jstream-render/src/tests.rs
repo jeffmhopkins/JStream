@@ -18,16 +18,16 @@ use crate::{
 /// Fields drop in declaration order, so the device is destroyed while the lock is held
 /// for as long as this value is kept whole. Splitting the fields apart drops them as
 /// separate locals and can release the lock first.
-struct Opened {
-    compositor: Compositor,
+pub(crate) struct Opened {
+    pub(crate) compositor: Compositor,
     _lock: std::sync::MutexGuard<'static, ()>,
 }
 
 /// WARP (Microsoft Basic Render Driver) access-violates, `0xc0000005`, when several
 /// tests create and drop Dx12 devices at once.
-fn open() -> Option<Opened> {
+pub(crate) fn open() -> Option<Opened> {
     let _lock = gpu_lock();
-    match Compositor::open(OpenOptions::headless()) {
+    match Compositor::open(OpenOptions::hardware()) {
         Ok(compositor) => {
             let _ = writeln!(
                 std::io::stderr(),
@@ -55,7 +55,12 @@ fn gpu_lock() -> std::sync::MutexGuard<'static, ()> {
     LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn solid(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4]) -> crate::Image {
+pub(crate) fn solid(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> crate::Image {
     let pixel: Vec<u8> = std::iter::repeat_n(rgba, (width * height) as usize)
         .flatten()
         .collect();
@@ -83,7 +88,7 @@ fn draw(
         .clone()
 }
 
-fn near(snapshot: &Snapshot, x: u32, y: u32, expected: [u8; 4], tol: u8) {
+pub(crate) fn near(snapshot: &Snapshot, x: u32, y: u32, expected: [u8; 4], tol: u8) {
     let pixel = snapshot
         .pixel(x, y)
         .expect("invariant: the sample is inside the canvas");
@@ -418,6 +423,29 @@ fn a_rendered_image_is_refused_by_another_compositor() {
     ));
 }
 
+/// An opaque import reads every texel's alpha as 1, so half-transparent red over black
+/// is full red, as a capture should draw (#451), still faded by the item's opacity. A
+/// filter over it sees an opaque input too.
+#[test]
+fn an_opaque_import_ignores_the_textures_alpha() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let srgb = srgb_texture(&opened.compositor, 2, 2, [255, 0, 0, 128]);
+    let image = opened.compositor.import_opaque(srgb, None).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &items);
+    near(&snapshot, 1, 1, [255, 0, 0, 255], 2);
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 0.5)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &items);
+    let red = (linear_to_srgb(0.5) * 255.0).round() as u8;
+    near(&snapshot, 1, 1, [red, 0, 0, 255], 2);
+
+    let mut identity = crate::filter::testing::filter("color_correction", serde_json::json!({}));
+    let out = crate::filter::testing::run(&mut opened, &mut identity, &image, 0.0);
+    near(&out, 1, 1, [255, 0, 0, 255], 2);
+}
+
 /// An imported sRGB texture is straight alpha, so at a texel centre half-transparent red
 /// over black is linear red 0.5, not the full red a premultiplied read would give.
 #[test]
@@ -432,6 +460,80 @@ fn an_imported_texture_is_read_as_straight_alpha() {
     let alpha = 128.0 / 255.0;
     let red = (linear_to_srgb(alpha) * 255.0).round() as u8;
     near(&snapshot, 1, 1, [red, 0, 0, 255], 2);
+}
+
+/// A browser page's texture holds sRGB code values already multiplied by alpha. Read
+/// that way, half-transparent red over white keeps full red and lets half the white
+/// through in linear light; reading it as straight alpha would darken the red twice.
+/// The same texture is refused as a straight import, and an sRGB one as premultiplied.
+#[test]
+fn a_premultiplied_import_is_unpremultiplied_before_decoding() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    // Straight sRGB red at alpha 128, premultiplied in code values: 255 * 128 / 255.
+    let texture = unorm_texture(compositor, 2, 2, [128, 0, 0, 128]);
+    let image = compositor
+        .import_premultiplied(texture.clone(), None)
+        .expect("a Unorm texture imports premultiplied");
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(compositor, 2, 2, Color::WHITE, &items);
+    let alpha = 128.0 / 255.0;
+    let white = (linear_to_srgb(1.0 - alpha) * 255.0).round() as u8;
+    near(&snapshot, 1, 1, [255, white, white, 255], 2);
+
+    assert!(matches!(
+        compositor.import(texture, None),
+        Err(RenderError::UnsupportedFormat { .. })
+    ));
+    let srgb = srgb_texture(compositor, 2, 2, [255, 0, 0, 128]);
+    assert!(matches!(
+        compositor.import_premultiplied(srgb, None),
+        Err(RenderError::UnsupportedFormat { .. })
+    ));
+}
+
+/// A frame the cache imported one way is replaced, not reused, when the same key is
+/// imported the other way.
+#[test]
+fn the_cache_keeps_premultiplied_and_straight_imports_apart() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&'static str> = ResourceCache::new();
+    let info = VideoFrameInfo {
+        size: FrameSize::new(2, 2).unwrap(),
+        format: PixelFormat::Bgra8,
+        color: ColorInfo::default(),
+        pts: MediaTime::zero(Timebase::NANOS),
+    };
+    let page = GpuFrame::new(
+        unorm_texture(compositor, 2, 2, [0, 0, 255, 255]),
+        info,
+        Arc::new(CountSync(Arc::new(AtomicUsize::new(0)))),
+    );
+    cache.begin_frame();
+    let image = cache
+        .import_premultiplied(compositor, &"page", &page)
+        .expect("import");
+    let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(compositor, 2, 2, Color::BLACK, &items);
+    near(&snapshot, 0, 0, [0, 0, 255, 255], 1);
+    drop(cache.end_frame(compositor));
+
+    // The same key, now a straight import: a new image, and the first one retires.
+    let (straight, _) = counted_frame(compositor, 2, 2, [0, 255, 0, 255]);
+    let (pixel, early) = show_as(compositor, &mut cache, "page", &straight);
+    assert_eq!(pixel, [0, 255, 0, 255]);
+    assert_eq!((cache.live(), cache.kept_imports(&"page")), (1, 0));
+    compositor
+        .device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let late = cache.reclaim().map_or(0, |freed| freed.len());
+    assert_eq!(early + late, 1, "the premultiplied import retired");
 }
 
 #[test]
@@ -573,8 +675,57 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
     );
 }
 
+/// A readback too large for a buffer fails before any hold is staged, so the scene's
+/// frame is neither armed on a later submit nor kept by the compositor (#391).
+#[test]
+fn a_refused_readback_stages_and_keeps_no_hold() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let srgb = srgb_texture(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let count = Arc::new(AtomicUsize::new(0));
+    let sync: Arc<dyn FrameSync> = Arc::new(CountSync(Arc::clone(&count)));
+    let info = VideoFrameInfo {
+        size: FrameSize::new(2, 2).unwrap(),
+        format: PixelFormat::Rgba8,
+        color: ColorInfo::default(),
+        pts: MediaTime::zero(Timebase::NANOS),
+    };
+    let frame = GpuFrame::new(srgb, info, Arc::clone(&sync));
+    let image = opened.compositor.import_frame(&frame).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let scene = Scene {
+        canvas: FrameSize::new(4, 2).unwrap(),
+        background: Color::BLACK,
+        items: &items,
+    };
+    let holders = Arc::strong_count(&sync);
+    // Two rows padded to 256 bytes need 512; the vertex buffer fits in less.
+    opened.compositor.cap_buffer_size(511);
+    assert!(matches!(
+        opened.compositor.render(&scene, true),
+        Err(RenderError::Readback { .. })
+    ));
+    assert_eq!(count.load(Ordering::SeqCst), 0, "nothing was staged");
+    assert_eq!(
+        Arc::strong_count(&sync),
+        holders,
+        "the compositor keeps no hold after the error"
+    );
+
+    // Without readback the same scene renders, staging the hold once.
+    opened.compositor.render(&scene, false).expect("render");
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+    assert_eq!(Arc::strong_count(&sync), holders);
+}
+
 /// A straight-alpha `Rgba8UnormSrgb` texture, the kind `import` takes, filled with one colour.
-fn srgb_texture(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4]) -> wgpu::Texture {
+pub(crate) fn srgb_texture(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> wgpu::Texture {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -613,7 +764,53 @@ fn srgb_texture(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4])
     texture
 }
 
-struct CountSync(Arc<AtomicUsize>);
+/// A `Rgba8Unorm` texture of one colour, `rgba` given as code values.
+pub(crate) fn unorm_texture(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> wgpu::Texture {
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let texture = compositor
+        .device()
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-render-test-unorm"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+    let pixels: Vec<u8> = std::iter::repeat_n(rgba, (width * height) as usize)
+        .flatten()
+        .collect();
+    compositor.queue().write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        size,
+    );
+    texture
+}
+
+/// A [`FrameSync`] that counts how many times it is staged.
+pub(crate) struct CountSync(pub(crate) Arc<AtomicUsize>);
 
 impl std::fmt::Debug for CountSync {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -820,7 +1017,9 @@ fn the_cache_frees_after_the_frame_fence() {
         .expect("resize");
     assert_eq!(cache.pending(), 1);
     assert!(cache.reclaim().is_none(), "frame {frame} has not ended");
-    drop(cache.end_frame(compositor));
+    // `end_frame` polls without blocking, so a GPU that has already finished this
+    // frame's (empty) work hands the replaced texture back here: count it too (#502).
+    let first = cache.end_frame(compositor).map_or(0, |freed| freed.len());
 
     // The next frame uses only "kept": "swapped" retires after this frame's fence.
     cache.begin_frame();
@@ -833,7 +1032,7 @@ fn the_cache_frees_after_the_frame_fence() {
         .poll(wgpu::PollType::wait_indefinitely())
         .expect("poll");
     let late = cache.reclaim().map_or(0, |freed| freed.len());
-    assert_eq!(early + late, 2, "both retired textures come back");
+    assert_eq!(first + early + late, 2, "both retired textures come back");
     assert_eq!((cache.live(), cache.pending()), (1, 0));
     assert_eq!(cache.drain().len(), 1);
 }
@@ -869,13 +1068,57 @@ fn show(
     cache: &mut ResourceCache<&'static str>,
     frame: &GpuFrame,
 ) -> ([u8; 4], usize) {
+    show_as(compositor, cache, "capture", frame)
+}
+
+/// [`show`] under `key`.
+fn show_as(
+    compositor: &mut Compositor,
+    cache: &mut ResourceCache<&'static str>,
+    key: &'static str,
+    frame: &GpuFrame,
+) -> ([u8; 4], usize) {
     cache.begin_frame();
-    let image = cache.import(compositor, &"capture", frame).expect("import");
+    let image = cache.import(compositor, &key, frame).expect("import");
     let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
     let snapshot = draw(compositor, 2, 2, Color::BLACK, &items);
     let freed = cache.end_frame(compositor).map_or(0, |freed| freed.len());
     let pixel = snapshot.pixel(0, 0).expect("inside");
     ([pixel[0], pixel[1], pixel[2], pixel[3]], freed)
+}
+
+/// The cache's opaque import reads the frame's alpha as 1 and is reused frame to frame,
+/// and an import of the same texture under the same key as straight alpha replaces it.
+#[test]
+fn the_cache_imports_a_capture_as_opaque() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&'static str> = ResourceCache::new();
+    let (frame, _) = counted_frame(compositor, 2, 2, [255, 0, 0, 128]);
+    let mut pixel = |cache: &mut ResourceCache<&'static str>, opaque: bool| {
+        cache.begin_frame();
+        let image = if opaque {
+            cache.import_opaque(compositor, &"capture", &frame)
+        } else {
+            cache.import(compositor, &"capture", &frame)
+        }
+        .expect("import");
+        let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
+        let snapshot = draw(compositor, 2, 2, Color::BLACK, &items);
+        drop(cache.end_frame(compositor));
+        let pixel = snapshot.pixel(0, 0).expect("inside");
+        [pixel[0], pixel[1], pixel[2], pixel[3]]
+    };
+    assert_eq!(pixel(&mut cache, true), [255, 0, 0, 255]);
+    assert_eq!(pixel(&mut cache, true), [255, 0, 0, 255], "reused");
+    let half = (linear_to_srgb(128.0 / 255.0) * 255.0).round() as u8;
+    let straight = pixel(&mut cache, false);
+    assert!(
+        straight[0].abs_diff(half) <= 2,
+        "a straight import of the same texture: {straight:?}"
+    );
 }
 
 /// A GPU frame is sampled through the cache with no copy. Each frame stages its own
@@ -954,7 +1197,7 @@ fn the_cache_imports_gpu_frames_without_keeping_their_holds() {
 }
 
 /// An image of equal-width vertical bands, one colour each, `height` rows tall.
-fn bands(
+pub(crate) fn bands(
     compositor: &Compositor,
     band_width: u32,
     height: u32,
@@ -1142,4 +1385,250 @@ fn a_rotated_geometry_turns_about_its_centre() {
     // Vertical after the turn: (32, 16) is inside, (16, 32) is not.
     near(&snapshot, 32, 16, [255, 0, 0, 255], 1);
     near(&snapshot, 16, 32, [0, 0, 0, 255], 0);
+}
+
+/// A lost device (#349) is reported by `lost`, and drawing on it fails instead of
+/// panicking, so the caller can open a new compositor. `destroy` stands in for a driver
+/// reset: wgpu reports both through the same device-lost callback.
+#[test]
+fn a_lost_device_is_reported_and_fails_without_a_panic() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = Color::rgb(1.0, 0.0, 0.0);
+    let image = solid(&opened.compositor, 2, 2, [0, 0, 255, 255]);
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    draw(&mut opened.compositor, 4, 3, red, &items);
+    assert_eq!(opened.compositor.lost(), None);
+
+    opened.compositor.device().destroy();
+    assert_eq!(opened.compositor.lost().as_deref(), Some("destroyed"));
+    let scene = Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: red,
+        items: &items,
+    };
+    assert!(
+        opened.compositor.render(&scene, true).is_err(),
+        "a lost device draws nothing"
+    );
+    // Uploads and layers raise the invalid-resource errors a loss leaves; none panics.
+    let _ = opened.compositor.upload_rgba8(1, 1, &[0, 0, 0, 255]);
+    let _ = opened.compositor.render_image(&scene);
+}
+
+/// An uncaptured wgpu error fails the next frame instead of panicking, and a frame after
+/// it draws again: wgpu's default handler would have panicked on the thread.
+#[test]
+fn an_uncaptured_error_fails_the_next_frame() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let device = opened.compositor.device().clone();
+    let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("zero-sized"),
+            size: wgpu::Extent3d {
+                width: 0,
+                height: 0,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+    }));
+    assert!(made.is_ok(), "the error is kept, not panicked on");
+    let scene = Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: Color::BLACK,
+        items: &[],
+    };
+    let failed = opened.compositor.render(&scene, true).map(|_| ());
+    assert!(
+        matches!(failed, Err(RenderError::Uncaptured { .. })),
+        "a zero-sized texture is a validation error: {failed:?}"
+    );
+    assert_eq!(opened.compositor.lost(), None);
+    draw(&mut opened.compositor, 4, 3, Color::BLACK, &[]);
+}
+
+/// An image of four equal quadrants: `colors` is top-left, top-right, bottom-left,
+/// bottom-right.
+fn quadrants(compositor: &Compositor, side: u32, colors: [[u8; 4]; 4]) -> crate::Image {
+    let half = side / 2;
+    let pixels: Vec<u8> = (0..side)
+        .flat_map(|y| (0..side).map(move |x| (x, y)))
+        .flat_map(|(x, y)| colors[usize::from(y >= half) * 2 + usize::from(x >= half)])
+        .collect();
+    compositor
+        .upload_rgba8(side, side, &pixels)
+        .expect("invariant: the image bytes match")
+}
+
+/// [`geometry`] with `flip_h` and `flip_v` set.
+fn flipped(
+    center: [f32; 2],
+    size: [f32; 2],
+    fit_mode: jstream_protocol::FitMode,
+    rotation_deg: f32,
+    flip_h: bool,
+    flip_v: bool,
+) -> Placement {
+    let Placement::Geometry(base) = geometry(center, size, fit_mode, rotation_deg) else {
+        unreachable!("geometry is a geometry");
+    };
+    Placement::Geometry(jstream_protocol::ItemGeometry {
+        flip_h,
+        flip_v,
+        ..base
+    })
+}
+
+/// Golden test of a geometry's flips on a 64×32 canvas, sampled every 4 pixels. An 8×8
+/// image with red, green, blue and white quadrants (top-left, top-right, bottom-left,
+/// bottom-right) is stretched into 16×16 boxes:
+/// - top row, left to right: unflipped, `flip_h`, `flip_v`, both;
+/// - bottom left, at (8, 24): `flip_h` and turned 90° clockwise, so the mirror happens
+///   in the box's own frame before the turn (green|red over white|blue, turned, is
+///   white|green over blue|red);
+/// - beside it, at (24, 24): the red|green|blue|white bands filling the box and flipped,
+///   so the middle green|blue half shows mirrored as blue|green.
+#[test]
+fn golden_geometry_flips_mirror_the_content_in_the_box() {
+    use jstream_protocol::FitMode;
+
+    let Some(mut opened) = open() else {
+        return;
+    };
+    const R: [u8; 4] = [255, 0, 0, 255];
+    const G: [u8; 4] = [0, 255, 0, 255];
+    const B: [u8; 4] = [0, 0, 255, 255];
+    const W: [u8; 4] = [255, 255, 255, 255];
+    let image = quadrants(&opened.compositor, 8, [R, G, B, W]);
+    let quarters = bands(&opened.compositor, 8, 8, &[R, G, B, W]);
+    let boxed = |x: f32, flip_h: bool, flip_v: bool| {
+        item(
+            &image,
+            flipped(
+                [x, 8.0],
+                [16.0, 16.0],
+                FitMode::Stretch,
+                0.0,
+                flip_h,
+                flip_v,
+            ),
+            Crop::NONE,
+            1.0,
+        )
+    };
+    let items = [
+        boxed(8.0, false, false),
+        boxed(24.0, true, false),
+        boxed(40.0, false, true),
+        boxed(56.0, true, true),
+        item(
+            &image,
+            flipped(
+                [8.0, 24.0],
+                [16.0, 16.0],
+                FitMode::Stretch,
+                90.0,
+                true,
+                false,
+            ),
+            Crop::NONE,
+            1.0,
+        ),
+        item(
+            &quarters,
+            flipped([24.0, 24.0], [16.0, 16.0], FitMode::Fill, 0.0, true, false),
+            Crop::NONE,
+            1.0,
+        ),
+    ];
+    let snapshot = draw(&mut opened.compositor, 64, 32, Color::BLACK, &items);
+    let expected = "\
+RRGGGGRRBBWWWWBB
+RRGGGGRRBBWWWWBB
+BBWWWWBBRRGGGGRR
+BBWWWWBBRRGGGGRR
+WWGGBBGG........
+WWGGBBGG........
+BBRRBBGG........
+BBRRBBGG........
+";
+    assert_eq!(grid(&snapshot, 4), expected);
+}
+
+/// A flipped geometry draws the same pixels as the legacy negative scale it converts
+/// from ([`jstream_protocol::ItemGeometry::from_legacy`]).
+#[test]
+fn a_flipped_geometry_matches_its_legacy_negative_scale() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let image = quadrants(
+        &opened.compositor,
+        8,
+        [
+            [255, 0, 0, 255],
+            [0, 255, 0, 255],
+            [0, 0, 255, 255],
+            [255, 255, 255, 255],
+        ],
+    );
+    // Top-left at (24, 4), reflected left to right: it covers x 8..24 and y 4..28.
+    let transform = LegacyTransform {
+        position: [24.0, 4.0],
+        scale: [-2.0, 3.0],
+        rotation_deg: 0.0,
+    };
+    let legacy = jstream_protocol::ItemGeometry::from_legacy(
+        jstream_protocol::ItemTransform {
+            position: jstream_protocol::Vec2::new(24.0, 4.0).expect("finite"),
+            scale: jstream_protocol::Vec2::new(-2.0, 3.0).expect("finite"),
+            rotation_deg: jstream_protocol::Finite32::ZERO,
+        },
+        jstream_protocol::Crop::NONE,
+        8,
+        8,
+    )
+    .expect("finite")
+    .expect("drawn");
+    assert!(legacy.geometry.flip_h && !legacy.geometry.flip_v);
+    let old = draw(
+        &mut opened.compositor,
+        32,
+        32,
+        Color::BLACK,
+        &[item(&image, Placement::Legacy(transform), Crop::NONE, 1.0)],
+    );
+    let new = draw(
+        &mut opened.compositor,
+        32,
+        32,
+        Color::BLACK,
+        &[item(
+            &image,
+            Placement::Geometry(legacy.geometry),
+            Crop::NONE,
+            1.0,
+        )],
+    );
+    let expected = "\
+........
+..GGRR..
+..GGRR..
+..GGRR..
+..WWBB..
+..WWBB..
+..WWBB..
+........
+";
+    assert_eq!(grid(&old, 4), expected);
+    assert_eq!(grid(&new, 4), expected);
 }

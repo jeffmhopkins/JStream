@@ -11,7 +11,7 @@
 //! textures and a shared fence (see [`proto`]); with no live producer the stream serves a
 //! test pattern.
 //!
-//! Docs: docs/adr/0020-portable-windows-distribution.md
+//! Docs: docs/adr/0066-portable-windows-distribution-v2.md
 
 #![warn(clippy::undocumented_unsafe_blocks)]
 

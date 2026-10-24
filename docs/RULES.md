@@ -261,7 +261,7 @@ depends_on = ["docs/ARCHITECTURE.md#threading"]
 ### R-RT-001: Audio thread does not allocate, lock, block or log
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "test:jstream_plugin_host::rt::a_pass_does_not_allocate", "review"]
+enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "test:jstream_plugin_host::rt::tests::a_pass_does_not_allocate", "review"]
 applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**", "apps/jstream-plugin-host/src/rt.rs"]
 -->
 In steady state, the audio callback and mixer do not allocate, take locks, block, make
@@ -324,7 +324,7 @@ running unless the error is fatal and reported.
 <a id="dependencies"></a>
 ## Dependencies
 <!-- @section
-depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
+depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md"]
 -->
 
 <a id="R-DEP-001"></a>
@@ -346,13 +346,16 @@ status = "active"
 enforced_by = ["deny:bans", "ci:lint-deps"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
-Per [ADR-0031](adr/0031-source-types-and-decoding-scope.md). Known binding crates are banned in
+Per [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
-allowed only through that allowlist. The one media exception is the prebuilt CEF runtime, whose
-internal media stack decodes in-page audio and video only; no JStream crate calls its
-codecs ([ADR-0021](adr/0021-browser-source.md)). Pure-Rust image and font crates are not
-banned codec libraries.
+allowed only through that allowlist. The media exceptions are two. The prebuilt CEF
+runtime's internal media stack decodes in-page audio and video only; no JStream crate calls
+its codecs ([ADR-0021](adr/0021-browser-source.md)). On Linux, Cisco's prebuilt OpenH264
+binary is a software H.264 encoder that JStream downloads from Cisco on the user's request
+and loads at run time; JStream never ships or builds it, so the `openh264` crates stay
+banned ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). Pure-Rust image and
+font crates are not banned codec libraries, and neither is JStream's own AAC-LC encoder.
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions
@@ -531,8 +534,15 @@ idempotency key. Undo is per client ([ADR-0013](adr/0013-command-model.md)).
 ### R-SEC-001: Secrets stay in the OS credential store
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_core::secrets_are_redacted", "review"]
-applies_to = ["crates/**"]
+enforced_by = [
+  "test:jstream_core::secrets_are_redacted",
+  "test:jstream_server::tests::stream_keys_are_never_echoed_or_logged",
+  "test:jstream_daemon::serve::tests::a_failing_rtmp_publish_never_names_the_key",
+  "test:jstream_crash::tests::a_panic_writes_a_redacted_report",
+  "test:jstream_crash::tests::a_redacting_store_registers_what_it_stores_and_loads",
+  "review",
+]
+applies_to = ["crates/**", "apps/**"]
 -->
 Stream keys and OAuth tokens live only in the OS credential store. They never appear in
 collection files, logs, events, snapshots or MCP responses (they are redacted as `"***"`).
@@ -611,17 +621,22 @@ applies_to = [".github/workflows/**"]
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
 On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
+A skipped job reports a `skipped` check, which a required check accepts, but a skipped matrix
+job reports under its bare name (`clippy`, `test`), so the required `clippy (…)` and `test (…)`
+contexts never report on a draft head. That is what keeps auto-merge from firing on a draft
+whose checks were all skipped.
 `ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist` and `macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
 the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
-A PR into a `wave/*` branch skips only `test`, `doc`, `deny`, `wasm` and the after-review jobs;
-every other check runs. The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
+A PR into a `wave/*` branch skips only `doc`, `deny`, `wasm` and the after-review jobs;
+every other check runs, the Linux `test` included ([ADR-0070](adr/0070-wave-prs-run-linux-tests.md)).
+The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|
 | `fmt` | `cargo fmt --check` | yes | M0 |
-| `clippy` | clippy `-D warnings` on Windows and Linux; `cargo hack` feature check | yes | M0 |
+| `clippy` | clippy `-D warnings` on Windows and Linux; `cargo hack` feature check; on Linux, also `jstream-platform-macos` for `aarch64-apple-darwin` ([ADR-0063](adr/0063-macos-platform-support.md)) | yes | M0 |
 | `test` | unit, snapshot, golden (Windows WARP), scenario tests | yes | M0 |
 | `doc` | `cargo doc` with `-D warnings` | yes | M0 |
 | `deny` | `cargo deny check` | yes | M0 |
@@ -631,11 +646,12 @@ every other check runs. The wave's PR into `main` runs every check ([ADR-0055](a
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
-| `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0020](adr/0020-portable-windows-distribution.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
+| `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
-| `macos` | build and unit tests on macOS | no until M3 | M0 |
+| `macos` | clippy on `jstream-platform-macos`, then build and unit tests on macOS | yes, from M3 ([ADR-0063](adr/0063-macos-platform-support.md)) | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
+| `fuzz` | nightly scheduled run of every fuzz target for a few minutes; a crashing input opens or updates an issue for its target ([Fuzz targets › In CI](../fuzz/README.md#ci)) | n/a | now |
 
 <a id="R-GIT-004"></a>
 ### R-GIT-004: One logical change per PR

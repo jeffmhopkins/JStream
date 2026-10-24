@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -20,7 +20,7 @@ Windows camera Frame Server loads, which serves the frames the engine publishes 
 the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract. Layer 2,
 and one of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001));
 it depends only on layer-0 crates and Microsoft's `windows` bindings
-([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). On other platforms it
+([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). On other platforms it
 builds only its pixel helpers, the sample pacer and the control-block trust rule,
 which are tested everywhere.
 
@@ -49,14 +49,22 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   namespace is used only if that session is active (at the console, or an active remote
   connection) and the mapping's owner is the session's logged-on user, SYSTEM or
   Administrators (`trust`), so another user's engine, say in a session switched away
-  from, can't feed this camera. The DLL runs as LOCAL SERVICE, which can't call
-  `WTSQueryUserToken`, so it reads the owner with `GetSecurityInfo` and the session's
-  user with `WTSQuerySessionInformationW` and `LookupAccountNameW`; anything unreadable
+  from, can't feed this camera. While several sessions are active at once (Windows
+  Server, several remote sessions), only the console session's block is used; another
+  session's block is used only when it is the only active session, as when one remote
+  session has taken over a workstation (#204). A block in use is checked again every 5 s
+  (`RECHECK`) and dropped once it fails. The DLL runs as LOCAL SERVICE, which can't call
+  `WTSQueryUserToken`, so it reads the owner with `GetSecurityInfo`, the active
+  sessions with `WTSEnumerateSessionsW` and the session's user with `WTSQuerySessionInformationW` and `LookupAccountNameW`; anything unreadable
   refuses the block. `Global\` blocks are not owner-checked: only administrators and
   services can create them. The DLL then requires the contract's format
   (`format_matches`), requires the scope and session the block names to be the
   namespace it was found in, and after opening the shared objects re-checks that the
-  block is still live for the same producer.
+  block is still live for the same producer. The ring textures and the fence of a
+  session block pass the same owner rule (#356): each is opened by name as an NT handle
+  (`ID3D12Device::OpenSharedHandleByName`), its owner read with `GetSecurityInfo`, and
+  the D3D11 object opened from that handle (`OpenSharedResource1`, `OpenSharedFence`),
+  so the object checked is the object used.
 - **Panics.** Every COM method and export runs inside a panic guard that returns
   `E_UNEXPECTED` and logs ([R-UNSAFE-005](../../docs/RULES.md#R-UNSAFE-005)).
 - **Log.** Frame Server gives the DLL no `tracing` subscriber, so it writes short lines
@@ -65,9 +73,14 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   no interactive user can write), capped at 1 MiB with one older file.
 - **Registration.** `DllRegisterServer` (`regsvr32`, elevated) writes
   `HKLM\Software\Classes\CLSID\{…}` with `InprocServer32` pointing at the DLL and
-  `ThreadingModel = Both`; `DllUnregisterServer` removes it. The product registers it
-  the same way without `regsvr32`: `jstream-daemon --register-vcam`, through
-  `jstream-platform-windows` ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)).
+  `ThreadingModel = Both`; `DllUnregisterServer` removes it. That registers the DLL
+  where it is, so it is for development and the [hardware check](#hardware-check) only.
+  The product's optional step, `jstream-daemon --register-vcam` through
+  `jstream-platform-windows`, writes the same keys but points them at an
+  administrators-only copy under `%ProgramFiles%\JStream\vcam\`, never at the DLL in
+  the user-writable portable folder, and `--unregister-vcam` removes the keys and the
+  copy ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md),
+  [ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
 The DLL only opens the shared objects. The engine creates them, with the contract's DACL
 (`sddl_objects`), in `jstream-platform-windows`.

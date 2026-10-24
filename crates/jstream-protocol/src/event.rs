@@ -1,8 +1,11 @@
 //! Events: what the server pushes to every connected client after the handshake.
 
 use crate::audio::{BusMeter, SourceMeter};
+use crate::command::Edit;
 use crate::history::HistoryDirection;
-use crate::id::{ClientId, OutputId, RequestId, Rev, SceneId};
+use crate::id::{ClientId, GestureId, OutputId, RequestId, Rev, SceneId};
+use crate::live::LiveOutcome;
+use crate::transition::TransitionStarted;
 use crate::youtube::{HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,7 +15,7 @@ use serde::{Deserialize, Serialize};
 /// Serialized with an internal `type` tag holding the event name (`noun.past_tense`).
 /// Clients must ignore events they don't know: a newer server may send new ones in a
 /// minor version, and they parse as [`Event::Unknown`].
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum Event {
@@ -39,16 +42,38 @@ pub enum Event {
         /// Its new state.
         state: OutputState,
     },
-    /// The scene on program changed: after a `scene.switch`, or after a batch, undo or
-    /// redo deleted the program scene (program moves to the first remaining scene) or
-    /// created the collection's first scene (it goes on program). Studio state is runtime state
-    /// (ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits
-    /// comes first.
+    /// The scene on program or on preview changed: after a `scene.switch` or a
+    /// `studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives
+    /// way to the first remaining scene) or created the collection's first scene (it goes
+    /// on program and on preview). Studio state is runtime state (ADR-0030), so the event
+    /// carries no `rev`; a `state.changed` for the same edits comes first.
     #[serde(rename = "studio.changed")]
     StudioChanged {
         /// The scene now on program. Omitted when the collection has no scene left.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
+        /// The scene now on preview. Omitted when the collection has no scene left, and
+        /// by a server older than 0.30.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preview_scene: Option<SceneId>,
+        /// The transition a `scene.switch` started: the preset the engine chose and how
+        /// long it runs. Omitted when program did not change by a switch.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transition: Option<TransitionStarted>,
+        /// The client whose request caused it.
+        client_id: ClientId,
+        /// That client's request ID, so it can match the event to its own response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<RequestId>,
+    },
+    /// The privacy screen was turned on or off with `privacy.set` (ADR-0027 §4). It is
+    /// runtime state, so the event carries no `rev`. A client that subscribes while the
+    /// screen is on gets `privacy.changed` first, naming the client that turned it on
+    /// and no `request_id`, so no client shows it as off.
+    #[serde(rename = "privacy.changed")]
+    PrivacyChanged {
+        /// Whether the privacy screen now covers the outputs.
+        on: bool,
         /// The client whose request caused it.
         client_id: ClientId,
         /// That client's request ID, so it can match the event to its own response.
@@ -80,6 +105,35 @@ pub enum Event {
         seq: u64,
         /// Running drop totals.
         drops: DropCounts,
+    },
+    /// A gesture's live values changed (ADR-0032): the newest value of each parameter
+    /// that changed since the gesture's last `live.changed`, as setter edits. The engine
+    /// coalesces them per gesture to at most 30 a second, so a slow client gets fewer,
+    /// newer values, never a backlog; the last values before the gesture ends are always
+    /// sent. Live values are runtime state: no `rev` changes.
+    #[serde(rename = "live.changed")]
+    LiveChanged {
+        /// The gesture.
+        gesture_id: GestureId,
+        /// The client that holds it.
+        client_id: ClientId,
+        /// The parameters' new values.
+        values: Vec<Edit>,
+    },
+    /// A gesture ended, and its parameters show their collection values again. For
+    /// `committed`, the committing batch's `state.changed` comes first, and `rev` is the
+    /// revision it produced.
+    #[serde(rename = "live.ended")]
+    LiveEnded {
+        /// The gesture.
+        gesture_id: GestureId,
+        /// The client that held it.
+        client_id: ClientId,
+        /// How it ended.
+        outcome: LiveOutcome,
+        /// The committing batch's revision, for `committed` only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rev: Option<Rev>,
     },
     /// The engine's YouTube sign-in state changed: a sign-in started, finished or failed,
     /// the user signed out, or Google stopped accepting the account's token.
@@ -136,10 +190,13 @@ impl Event {
             Event::OutputStateChanged { .. } => Some("output.state_changed"),
             Event::EventsDropped { .. } => Some("events.dropped"),
             Event::StatsTick { .. } => Some("stats.tick"),
+            Event::LiveChanged { .. } => Some("live.changed"),
+            Event::LiveEnded { .. } => Some("live.ended"),
             Event::YoutubeStatusChanged { .. } => Some("youtube.status_changed"),
             Event::YoutubeHealthChanged { .. } => Some("youtube.health_changed"),
             Event::MetersTick { .. } => Some("meters.tick"),
             Event::StudioChanged { .. } => Some("studio.changed"),
+            Event::PrivacyChanged { .. } => Some("privacy.changed"),
             Event::Unknown => None,
         }
     }

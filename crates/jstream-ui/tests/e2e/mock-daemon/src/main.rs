@@ -106,12 +106,14 @@ async fn seed(engine: &MockEngine) -> Result<()> {
             edits,
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         }))
         .await?;
     control
         .call(Call::Action {
             action: Action::SceneSwitch {
                 scene_id: "main".into(),
+                preset_id: None,
             },
         })
         .await?;
