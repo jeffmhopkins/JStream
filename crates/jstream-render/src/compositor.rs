@@ -10,17 +10,20 @@ use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
-use crate::place::{self, Quad};
+use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
 
-/// Bytes from one vertex to the next: six `f32`s (position, UV, opacity, alpha mode),
-/// tightly packed. wgpu only needs the stride and attribute offsets to be multiples of 4.
-const VERTEX_STRIDE: u64 = 24;
-const VERTICES_PER_ITEM: u32 = 6;
+/// Bytes from one vertex to the next: 26 `f32`s (position, UV, opacity, alpha mode, `w`,
+/// the item's five edge lines of three each, and its UV bounds), tightly packed. wgpu
+/// only needs the stride and attribute offsets to be multiples of 4.
+const VERTEX_STRIDE: u64 = 104;
+/// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
+const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 
 struct Draw {
     index: usize,
     first_vertex: u32,
+    vertex_count: u32,
 }
 
 struct Targets {
@@ -455,7 +458,7 @@ impl Compositor {
         let filters = filter::Runtime::new(&gpu.device);
         let vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-vertices"),
-            size: VERTEX_STRIDE * u64::from(VERTICES_PER_ITEM),
+            size: VERTEX_STRIDE * u64::from(MAX_VERTICES_PER_ITEM),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -496,7 +499,7 @@ impl Compositor {
                     detail: format!("{} is not a finite value in 0..=1", item.opacity),
                 });
             }
-            let quad = place::quad(
+            let shape = place::shape(
                 item.image.width(),
                 item.image.height(),
                 item.placement,
@@ -505,16 +508,17 @@ impl Compositor {
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }
-            let Some(quad) = quad else { continue };
-            let first_vertex = u32::try_from(self.draws.len())
+            let Some(shape) = shape else { continue };
+            let too_many = || RenderError::TooManyItems {
+                count: scene.items.len(),
+            };
+            let first_vertex = u32::try_from(self.vertices.len() as u64 / VERTEX_STRIDE)
                 .ok()
-                .and_then(|n| n.checked_mul(VERTICES_PER_ITEM))
-                .ok_or(RenderError::TooManyItems {
-                    count: scene.items.len(),
-                })?;
-            push_quad(
+                .filter(|first| first.checked_add(MAX_VERTICES_PER_ITEM).is_some())
+                .ok_or_else(too_many)?;
+            let vertex_count = push_shape(
                 &mut self.vertices,
-                &quad,
+                &shape,
                 canvas_w,
                 canvas_h,
                 item.opacity,
@@ -523,6 +527,7 @@ impl Compositor {
             self.draws.push(Draw {
                 index,
                 first_vertex,
+                vertex_count,
             });
         }
         let limit = self.gpu.max_texture_dimension_2d;
@@ -582,7 +587,7 @@ impl Compositor {
         }
         let size = needed
             .next_power_of_two()
-            .max(VERTEX_STRIDE * u64::from(VERTICES_PER_ITEM));
+            .max(VERTEX_STRIDE * u64::from(MAX_VERTICES_PER_ITEM));
         if size > self.gpu.max_buffer_size {
             return Err(RenderError::TooManyItems {
                 count: self.draws.len(),
@@ -693,7 +698,7 @@ impl Compositor {
             for draw in &self.draws {
                 pass.set_bind_group(0, scene.items[draw.index].image.bind_group(), &[]);
                 pass.draw(
-                    draw.first_vertex..draw.first_vertex + VERTICES_PER_ITEM,
+                    draw.first_vertex..draw.first_vertex + draw.vertex_count,
                     0..1,
                 );
             }
@@ -751,35 +756,44 @@ impl std::fmt::Debug for Compositor {
     }
 }
 
-fn push_quad(
+/// Appends one item's triangles, a fan from its first vertex, and returns how many
+/// vertices that is.
+fn push_shape(
     buf: &mut Vec<u8>,
-    quad: &Quad,
+    shape: &Shape,
     canvas_w: f32,
     canvas_h: f32,
     opacity: f32,
     alpha: Alpha,
-) {
+) -> u32 {
     // The shader's `mode`: how it turns a filtered sample into premultiplied linear.
     let mode = match alpha {
         Alpha::Premultiplied => 0.0,
         Alpha::Straight => 1.0,
         Alpha::PremultipliedSrgb => 2.0,
     };
-    let corner = |i: usize| {
-        let [x, y] = quad.corners[i];
-        let [u, v] = quad.uvs[i];
-        (x / canvas_w * 2.0 - 1.0, 1.0 - y / canvas_h * 2.0, u, v)
-    };
-    // Two triangles: 0-1-2 and 0-2-3.
-    for index in [0, 1, 2, 0, 2, 3] {
-        let (x, y, u, v) = corner(index);
-        push_f32(buf, x);
-        push_f32(buf, y);
-        push_f32(buf, u);
-        push_f32(buf, v);
-        push_f32(buf, opacity);
-        push_f32(buf, mode);
+    let vertices = shape.vertices();
+    let mut count = 0;
+    for second in 1..vertices.len().saturating_sub(1) {
+        for vertex in [vertices[0], vertices[second], vertices[second + 1]] {
+            let [x, y] = vertex.canvas;
+            push_f32(buf, x / canvas_w * 2.0 - 1.0);
+            push_f32(buf, 1.0 - y / canvas_h * 2.0);
+            push_f32(buf, vertex.uv[0]);
+            push_f32(buf, vertex.uv[1]);
+            push_f32(buf, opacity);
+            push_f32(buf, mode);
+            push_f32(buf, vertex.w);
+            for value in shape.edges.as_flattened() {
+                push_f32(buf, *value);
+            }
+            for value in shape.uv_bounds {
+                push_f32(buf, value);
+            }
+            count += 1;
+        }
     }
+    count
 }
 
 fn push_f32(buf: &mut Vec<u8>, value: f32) {
@@ -887,6 +901,13 @@ fn composite_pipeline(
         1 => Float32x2,
         2 => Float32,
         3 => Float32,
+        4 => Float32,
+        5 => Float32x3,
+        6 => Float32x3,
+        7 => Float32x3,
+        8 => Float32x3,
+        9 => Float32x3,
+        10 => Float32x4,
     ];
     let buffers = [Some(wgpu::VertexBufferLayout {
         array_stride: VERTEX_STRIDE,
