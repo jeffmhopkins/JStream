@@ -309,8 +309,8 @@ impl ItemGeometry {
 
     /// Whether tilt, turn, depth and perspective are all at their neutral defaults.
     ///
-    /// The engine rejects a geometry for which this is false until the compositor
-    /// draws 3D. The placement functions still evaluate those fields.
+    /// Earlier minors rejected a geometry for which this is false; from protocol 0.34
+    /// [`Self::check_drawable`] decides whether an edit may store it.
     pub fn is_neutral_3d(self) -> bool {
         self.tilt_deg.get() == 0.0
             && self.turn_deg.get() == 0.0
