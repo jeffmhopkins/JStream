@@ -194,7 +194,9 @@ impl<K: Ord + Clone> ResourceCache<K> {
             return Ok(self.replace(key, image, 0));
         }
         let entry = self.live.get_mut(key).ok_or_else(|| missing("an import"))?;
+        let mut fresh = entry.used != frame_no;
         if entry.image.texture() != texture {
+            fresh = true;
             let kept = entry
                 .kept
                 .iter()
@@ -225,6 +227,10 @@ impl<K: Ord + Clone> ResourceCache<K> {
             }
         }
         entry.image.set_sync(sync);
+        if fresh {
+            // A new frame, at most once per cache frame however many mixes draw it.
+            entry.image.mark_changed();
+        }
         entry.used = frame_no;
         Ok(&entry.image)
     }
