@@ -12,26 +12,39 @@
 //! slice, preceded on IDR frames by the SPS and PPS ([`h264::sps`], [`h264::pps`]) when
 //! it takes packed headers, or by its own otherwise.
 //!
-//! Importing DMA-BUF frames (GPU encode targets) is a follow-up; a GPU frame is refused
-//! as unsupported.
+//! A session opened on the engine's GPU context (`open_on` with the context's state)
+//! takes that context's encode targets instead (`VideoSurface::Gpu`, `gpu::export`): it
+//! imports each target's DMA-BUF once as a VA surface (`vaCreateSurfaces` with a DRM
+//! PRIME descriptor), waits until render's write of the frame is done, and encodes
+//! from that surface with no copy. It holds the frame until its picture is collected,
+//! because the driver reads the surface until then, so render doesn't write that
+//! target again before. Its context has only the reconstructed surfaces as render
+//! targets; the imported inputs are passed to `vaBeginPicture` alone.
 
 use std::collections::VecDeque;
 use std::ffi::{c_int, c_uint, c_void};
 use std::mem::size_of;
+use std::os::fd::AsRawFd;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
 
-use jstream_platform::media::{Codec, MediaTime, Packet, VideoFrame};
-use jstream_platform::{CodecInfo, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface};
+use jstream_platform::media::{Codec, MediaTime, Packet, PixelFormat, VideoFrame};
+use jstream_platform::{
+    CodecInfo, FrameSync, GpuFrame, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
+};
 
 use super::display::{Display, Va};
 use super::ffi::{
     ATTRIB_NOT_SUPPORTED, CODED_BUF_STATUS_SLICE_OVERFLOW_MASK, CodedBufferSegment, ConfigAttrib,
-    FOURCC_NV12, INVALID_ID, Id, Image, ImageFormat, PACKED_HEADER_SEQUENCE, PROGRESSIVE,
-    PackedHeaderParam, RT_FORMAT_YUV420, SURFACE_RENDERING, SURFACE_SKIPPED, attrib, buffer,
-    packed,
+    DrmPrimeSurfaceDescriptor, FOURCC_NV12, INVALID_ID, Id, Image, ImageFormat, Nv12Object,
+    PACKED_HEADER_SEQUENCE, PROGRESSIVE, PackedHeaderParam, RT_FORMAT_YUV420, SURFACE_RENDERING,
+    SURFACE_SKIPPED, SurfaceAttrib, attrib, buffer, packed, surface_attrib,
 };
 use super::h264::{self, Gop, Picture, Settings};
 use super::upload::{Nv12Image, write_nv12};
 use crate::VaEncoder;
+use crate::gpu::Shared;
+use crate::gpu::export::{Nv12DmaBuf, TargetSync};
 
 /// Frames in flight: input surfaces, each with its coded buffer. When all are busy a
 /// frame is refused as busy, and the encode thread drops and counts it (R-RT-004).
@@ -43,6 +56,9 @@ const RECON: usize = 3;
 /// The most buffers one picture submits: sequence, three misc, picture, the packed
 /// header's two, slice.
 const MAX_BUFFERS: usize = 8;
+/// How long an encode waits for render's write of a GPU frame. Render submitted it
+/// before queueing the frame, so this is reached only when the GPU hangs.
+const WRITE_WAIT: Duration = Duration::from_secs(1);
 
 /// What the session owns in libva, destroyed in reverse order on drop, before the
 /// display is terminated.
@@ -50,8 +66,13 @@ struct Resources {
     display: Display,
     config: Option<Id>,
     context: Option<Id>,
-    /// The [`DEPTH`] input surfaces, then the [`RECON`] reconstructed ones.
+    /// The [`DEPTH`] input surfaces on CPU frames (none on GPU frames), then the
+    /// [`RECON`] reconstructed ones.
     surfaces: Vec<Id>,
+    /// The encode targets imported as input surfaces on GPU frames, each with its
+    /// target's hold. Weak, so the encode ring still sees a target it can reuse
+    /// (`jstream-core`'s `EncodeRing`); the weak hold also keeps its address unique.
+    imports: Vec<(Weak<dyn FrameSync>, Id)>,
     /// One coded buffer per input surface.
     coded: Vec<Id>,
     /// The staging image when the driver can't map its surfaces (`vaPutImage`).
@@ -204,6 +225,84 @@ impl Resources {
         written.and(self.va().check("vaDestroyImage", status))
     }
 
+    /// The input surface for `frame`, an encode target holding `dma_buf`: the one
+    /// imported for it before, or a new import. Imports of targets that are gone are
+    /// destroyed first.
+    fn imported(&mut self, frame: &GpuFrame, dma_buf: &Nv12DmaBuf) -> Result<Id, PlatformError> {
+        let (va, dpy) = (self.display.va.clone(), self.display.dpy);
+        self.imports.retain(|(hold, id)| {
+            let live = hold.strong_count() > 0;
+            if !live {
+                let mut id = *id;
+                // SAFETY: an imported surface whose target is gone; no picture in flight
+                // uses it, since an in-flight frame holds its target. Destroyed once.
+                // C: `VAStatus vaDestroySurfaces(VADisplay, VASurfaceID *, int)`.
+                unsafe { (va.destroy_surfaces)(dpy, &mut id, 1) };
+            }
+            live
+        });
+        let key = Arc::as_ptr(frame.sync());
+        if let Some((_, id)) = self
+            .imports
+            .iter()
+            .find(|(hold, _)| std::ptr::addr_eq(hold.as_ptr(), key))
+        {
+            return Ok(*id);
+        }
+        let id = self.import(dma_buf)?;
+        self.imports.push((Arc::downgrade(frame.sync()), id));
+        Ok(id)
+    }
+
+    /// Imports `dma_buf` as an NV12 surface.
+    fn import(&self, dma_buf: &Nv12DmaBuf) -> Result<Id, PlatformError> {
+        let size = u32::try_from(dma_buf.size).map_err(|_| PlatformError::Unsupported {
+            what: "an encode target larger than 4 GiB".into(),
+        })?;
+        let mut desc = DrmPrimeSurfaceDescriptor::nv12(Nv12Object {
+            fd: dma_buf.fd().as_raw_fd(),
+            size,
+            modifier: dma_buf.modifier,
+            width: dma_buf.width,
+            height: dma_buf.height,
+            offsets: dma_buf.offsets,
+            pitches: dma_buf.pitches,
+        });
+        let mut attribs = [
+            SurfaceAttrib::integer(
+                surface_attrib::MEMORY_TYPE,
+                surface_attrib::MEM_TYPE_DRM_PRIME_2,
+            ),
+            SurfaceAttrib::pointer(
+                surface_attrib::EXTERNAL_BUFFER_DESCRIPTOR,
+                (&raw mut desc).cast(),
+            ),
+        ];
+        let mut id = INVALID_ID;
+        // SAFETY: the display is live; `attribs` holds two attributes, the second
+        // pointing at `desc`, one descriptor for the one surface asked for, which libva
+        // reads during the call; its fd is the target's, open while the target lives,
+        // and libva doesn't close it; `id` has room for the one ID libva writes.
+        // C: `VAStatus vaCreateSurfaces(VADisplay, unsigned int format, unsigned int
+        // width, unsigned int height, VASurfaceID *surfaces, unsigned int
+        // num_surfaces, VASurfaceAttrib *attrib_list, unsigned int num_attribs)`.
+        let status = unsafe {
+            (self.va().create_surfaces)(
+                self.display.dpy,
+                RT_FORMAT_YUV420,
+                dma_buf.width,
+                dma_buf.height,
+                &mut id,
+                1,
+                attribs.as_mut_ptr().cast(),
+                attribs.len() as c_uint,
+            )
+        };
+        self.va()
+            .check("vaCreateSurfaces (DRM PRIME import)", status)?;
+        Ok(id)
+    }
+
     /// Whether the picture on `surface` is done: `vaQuerySurfaceStatus` without
     /// blocking, or `vaSyncSurface` when `wait`. `Some(false)` means it was skipped.
     fn ready(&self, surface: Id, wait: bool) -> Result<Option<bool>, PlatformError> {
@@ -297,6 +396,9 @@ impl Drop for Resources {
                 let n = c_int::try_from(self.surfaces.len()).unwrap_or(0);
                 (va.destroy_surfaces)(dpy, self.surfaces.as_mut_ptr(), n);
             }
+            for (_, id) in &mut self.imports {
+                (va.destroy_surfaces)(dpy, id, 1);
+            }
             if let Some(config) = self.config.take() {
                 (va.destroy_config)(dpy, config);
             }
@@ -305,11 +407,15 @@ impl Drop for Resources {
 }
 
 /// A frame submitted and not yet collected.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 struct InFlight {
     slot: usize,
+    /// The input surface the driver reads.
+    surface: Id,
     pts: MediaTime,
     keyframe: bool,
+    /// The encode target, held until the picture is done (GPU frames).
+    _target: Option<GpuFrame>,
 }
 
 /// One H.264 encode session on a VA-API driver.
@@ -324,7 +430,12 @@ pub(crate) struct VaapiH264Encoder {
     headers: Option<Vec<u8>>,
     /// The last picture's reconstructed surface: the next P frame's reference.
     reference: Option<(Id, Picture)>,
+    /// How many of `res.surfaces` are input surfaces: [`DEPTH`] on CPU frames, none on
+    /// GPU frames. The reconstructed ones follow.
+    inputs: usize,
     next_recon: usize,
+    /// The GPU context's state, on GPU frames.
+    gpu: Option<Arc<Shared>>,
     /// Input slots with no frame in flight.
     free: Vec<usize>,
     in_flight: VecDeque<InFlight>,
@@ -341,25 +452,38 @@ pub(crate) struct VaapiH264Encoder {
 unsafe impl Send for VaapiH264Encoder {}
 
 impl VaapiH264Encoder {
-    /// Opens a session on `encoder` (a probe result) for `config`, reported as `info`.
+    /// Opens a session on `encoder` (a probe result) for `config`, reported as `info`,
+    /// that takes CPU frames, or, with `gpu`, that context's NV12 encode targets.
     ///
     /// # Errors
     /// [`PlatformError::Unsupported`] when the configuration is outside what
-    /// [`h264::check`] accepts or the driver lacks 4:2:0 surfaces or the rate-control
-    /// mode, [`PlatformError::MissingComponent`] when libva is missing, and
-    /// [`PlatformError::Os`] when the node or the driver fails.
-    pub(crate) fn open(
+    /// [`h264::check`] accepts, a GPU session isn't configured for NV12, or the driver
+    /// lacks 4:2:0 surfaces or the rate-control mode, [`PlatformError::MissingComponent`]
+    /// when libva is missing, and [`PlatformError::Os`] when the node or the driver
+    /// fails.
+    pub(crate) fn open_on(
         encoder: &VaEncoder,
         config: &VideoEncoderConfig,
         info: CodecInfo,
+        gpu: Option<Arc<Shared>>,
     ) -> Result<Self, PlatformError> {
         let settings = h264::check(config, encoder.profile)?;
+        if gpu.is_some() && config.input_format != PixelFormat::Nv12 {
+            return Err(PlatformError::Unsupported {
+                what: format!(
+                    "{:?} GPU frames on {} (encode targets are NV12)",
+                    config.input_format, info.name
+                ),
+            });
+        }
+        let inputs = if gpu.is_some() { 0 } else { DEPTH };
         let display = Display::open(Va::load()?, &encoder.node)?;
         let mut res = Resources {
             display,
             config: None,
             context: None,
             surfaces: Vec::new(),
+            imports: Vec::new(),
             coded: Vec::new(),
             staging: None,
         };
@@ -428,8 +552,8 @@ impl VaapiH264Encoder {
 
         // Surfaces at the coded (macroblock-aligned) size; the SPS crops the excess.
         let (cw, ch) = (settings.width_mbs * 16, settings.height_mbs * 16);
-        let mut surfaces = [INVALID_ID; DEPTH + RECON];
-        // SAFETY: `surfaces` has room for the `DEPTH + RECON` IDs libva writes; no
+        let mut surfaces = vec![INVALID_ID; inputs + RECON];
+        // SAFETY: `surfaces` has room for the `inputs + RECON` IDs libva writes; no
         // surface attributes are passed.
         // C: `VAStatus vaCreateSurfaces(VADisplay, unsigned int format, unsigned int
         // width, unsigned int height, VASurfaceID *surfaces, unsigned int
@@ -441,16 +565,17 @@ impl VaapiH264Encoder {
                 cw,
                 ch,
                 surfaces.as_mut_ptr(),
-                (DEPTH + RECON) as c_uint,
+                surfaces.len() as c_uint,
                 std::ptr::null_mut(),
                 0,
             )
         };
         va.check("vaCreateSurfaces", status)?;
-        res.surfaces = surfaces.to_vec();
+        res.surfaces = surfaces.clone();
         let mut context = INVALID_ID;
-        // SAFETY: the config is live; `surfaces` holds the context's render targets,
-        // which libva reads; `context` is a valid out-pointer.
+        // SAFETY: the config is live; `surfaces` holds the context's render targets
+        // (the input and reconstructed surfaces it owns; imported inputs are named only
+        // to `vaBeginPicture`), which libva reads; `context` is a valid out-pointer.
         // C: `VAStatus vaCreateContext(VADisplay, VAConfigID, int picture_width,
         // int picture_height, int flag, VASurfaceID *render_targets,
         // int num_render_targets, VAContextID *context)`.
@@ -462,7 +587,7 @@ impl VaapiH264Encoder {
                 ch as c_int,
                 PROGRESSIVE,
                 surfaces.as_mut_ptr(),
-                (DEPTH + RECON) as c_int,
+                surfaces.len() as c_int,
                 &mut context,
             )
         };
@@ -479,7 +604,9 @@ impl VaapiH264Encoder {
             }?;
             res.coded.push(coded);
         }
-        res.staging = Self::staging(&res, cw, ch)?;
+        if gpu.is_none() {
+            res.staging = Self::staging(&res, cw, ch)?;
+        }
         Ok(Self {
             res,
             info,
@@ -488,7 +615,9 @@ impl VaapiH264Encoder {
             headers: packed.then(|| [h264::sps(&settings), h264::pps(&settings)].concat()),
             settings,
             reference: None,
+            inputs,
             next_recon: 0,
+            gpu,
             free: (0..DEPTH).rev().collect(),
             in_flight: VecDeque::with_capacity(DEPTH),
             buffers: Vec::with_capacity(MAX_BUFFERS),
@@ -526,9 +655,9 @@ impl VaapiH264Encoder {
         Ok(Some(image))
     }
 
-    /// Submits `picture` from the input surface in `slot`.
-    fn submit(&mut self, slot: usize, picture: &Picture) -> Result<(), PlatformError> {
-        let recon = self.res.surfaces[DEPTH + self.next_recon];
+    /// Submits `picture` from `input`, with `slot`'s coded buffer.
+    fn submit(&mut self, slot: usize, input: Id, picture: &Picture) -> Result<(), PlatformError> {
+        let recon = self.res.surfaces[self.inputs + self.next_recon];
         let reference = self.reference.as_ref().map(|(s, p)| (*s, p));
         let res = &self.res;
         let s = &self.settings;
@@ -560,7 +689,7 @@ impl VaapiH264Encoder {
             let (va, dpy, ctx) = (res.va(), res.display.dpy, res.context());
             // SAFETY: the context and input surface are live, and the surface is idle.
             // C: `VAStatus vaBeginPicture(VADisplay, VAContextID, VASurfaceID)`.
-            let status = unsafe { (va.begin_picture)(dpy, ctx, res.surfaces[slot]) };
+            let status = unsafe { (va.begin_picture)(dpy, ctx, input) };
             va.check("vaBeginPicture", status)?;
             // SAFETY: `buffers` holds `len` live buffer IDs, which libva reads.
             // C: `VAStatus vaRenderPicture(VADisplay, VAContextID, VABufferID *buffers,
@@ -591,11 +720,13 @@ impl VaapiH264Encoder {
     /// Collects every finished picture, in order, into `pending`; with `wait`, every
     /// picture in flight.
     fn collect(&mut self, wait: bool) -> Result<(), PlatformError> {
-        while let Some(&front) = self.in_flight.front() {
-            let Some(coded) = self.res.ready(self.res.surfaces[front.slot], wait)? else {
+        while let Some(front) = self.in_flight.front() {
+            let Some(coded) = self.res.ready(front.surface, wait)? else {
                 return Ok(());
             };
-            self.in_flight.pop_front();
+            let Some(front) = self.in_flight.pop_front() else {
+                return Ok(());
+            };
             self.free.push(front.slot);
             let data = if coded {
                 self.res.read_coded(self.res.coded[front.slot])
@@ -622,6 +753,46 @@ impl VaapiH264Encoder {
             )?);
         }
         Ok(())
+    }
+}
+
+impl VaapiH264Encoder {
+    /// The input surface for `frame`, written or imported, and the encode target to
+    /// hold while the driver reads it.
+    fn input(
+        &mut self,
+        slot: usize,
+        frame: VideoSurface,
+    ) -> Result<(Id, Option<GpuFrame>), PlatformError> {
+        match (frame, &self.gpu) {
+            (VideoSurface::Cpu(frame), None) => {
+                let surface = self.res.surfaces[slot];
+                self.res.upload(surface, &frame)?;
+                Ok((surface, None))
+            }
+            (VideoSurface::Gpu(frame), Some(shared)) => {
+                let sync = frame
+                    .sync()
+                    .platform()
+                    .and_then(|p| p.downcast_ref::<TargetSync>())
+                    .filter(|s| s.is_on(shared))
+                    .ok_or_else(|| PlatformError::Unsupported {
+                        what: "a GPU frame that is not one of this context's encode targets".into(),
+                    })?;
+                sync.wait_written(WRITE_WAIT)?;
+                let surface = self.res.imported(&frame, sync.dma_buf())?;
+                Ok((surface, Some(frame)))
+            }
+            (VideoSurface::Cpu(_), Some(_)) => Err(PlatformError::Unsupported {
+                what: "a CPU frame on a VA-API session opened for GPU frames".into(),
+            }),
+            (VideoSurface::Gpu(_), None) => Err(PlatformError::Unsupported {
+                what: "a GPU frame on a VA-API session opened for CPU frames".into(),
+            }),
+            _ => Err(PlatformError::Unsupported {
+                what: "a kind of frame the VA-API session doesn't know".into(),
+            }),
+        }
     }
 }
 
@@ -658,31 +829,24 @@ impl VideoEncoder for VaapiH264Encoder {
                 ),
             });
         }
-        let VideoSurface::Cpu(frame) = frame else {
-            return Err(PlatformError::Unsupported {
-                what: "a GPU frame on the VA-API H.264 encoder (it takes CPU frames; \
-                       DMA-BUF import is a follow-up)"
-                    .into(),
-            });
-        };
         let Some(slot) = self.free.pop() else {
             return Err(PlatformError::Busy {
                 what: "VA-API H.264 encoder",
             });
         };
-        let submitted = self
-            .res
-            .upload(self.res.surfaces[slot], &frame)
-            .and_then(|()| {
-                let picture = self.gop.next_picture();
-                self.submit(slot, &picture).map(|()| picture)
-            });
+        let submitted = self.input(slot, frame).and_then(|(surface, target)| {
+            let picture = self.gop.next_picture();
+            self.submit(slot, surface, &picture)
+                .map(|()| (surface, target, picture))
+        });
         match submitted {
-            Ok(picture) => {
+            Ok((surface, target, picture)) => {
                 self.in_flight.push_back(InFlight {
                     slot,
+                    surface,
                     pts: info.pts,
                     keyframe: picture.idr,
+                    _target: target,
                 });
                 Ok(())
             }
@@ -728,9 +892,7 @@ impl Drop for VaapiH264Encoder {
         for f in &self.in_flight {
             // SAFETY: the surface is live; blocking here is fine at teardown.
             // C: `VAStatus vaSyncSurface(VADisplay, VASurfaceID)`.
-            unsafe {
-                (self.res.va().sync_surface)(self.res.display.dpy, self.res.surfaces[f.slot])
-            };
+            unsafe { (self.res.va().sync_surface)(self.res.display.dpy, f.surface) };
         }
     }
 }
@@ -745,10 +907,11 @@ mod device_tests {
         Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrame, VideoFrameInfo,
     };
     use jstream_platform::{
-        Codecs, HardwarePreference, RateControl, VideoEncoderConfig, VideoSurface,
+        Codecs, GpuContext, GpuFrame, GpuInterop, HardwarePreference, RateControl,
+        VideoEncoderConfig, VideoSurface,
     };
 
-    use crate::VaapiCodecs;
+    use crate::{LinuxGpu, VaapiCodecs};
 
     /// Encodes 90 frames of a moving gradient from `format` frames of `size`, with a
     /// keyframe every 30 and one requested at frame 45. 1280x720 is whole macroblocks;
@@ -836,6 +999,119 @@ mod device_tests {
             PixelFormat::Nv12,
             FrameSize::new(1280, 720).expect("size"),
             RateControl::Cbr { kbps: 3000 },
+        );
+    }
+
+    /// Draws a flat NV12 picture into `target`, as render's NV12 pass does: both plane
+    /// views as render targets, the hold staged, the texture handed back in `PRESENT`.
+    fn draw(context: &GpuContext, target: &GpuFrame, luma: f64) {
+        let device = context.device();
+        let view = |aspect, format| {
+            target.texture().create_view(&wgpu::TextureViewDescriptor {
+                format: Some(format),
+                aspect,
+                ..Default::default()
+            })
+        };
+        let y = view(wgpu::TextureAspect::Plane0, wgpu::TextureFormat::R8Unorm);
+        let uv = view(wgpu::TextureAspect::Plane1, wgpu::TextureFormat::Rg8Unorm);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        for (view, value) in [(&y, (luma, 0.0)), (&uv, (0.5, 0.5))] {
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: value.0,
+                            g: value.1,
+                            b: 0.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+        }
+        encoder.transition_resources(
+            std::iter::empty(),
+            std::iter::once(wgpu::TextureTransition {
+                texture: target.texture(),
+                selector: None,
+                state: wgpu::TextureUses::PRESENT,
+            }),
+        );
+        target.stage(context.queue()).expect("stage");
+        context.queue().submit([encoder.finish()]);
+    }
+
+    /// The GPU path end to end: the context's encode targets, exported by Vulkan as
+    /// DMA-BUFs, drawn in turn and encoded by VA-API from the imported surfaces, each
+    /// reused once the encoder has let it go.
+    #[test]
+    #[ignore = "needs a GPU whose Vulkan and VA-API H.264 drivers share a render node"]
+    fn encodes_the_contexts_encode_targets() {
+        let gpu = LinuxGpu::new();
+        let context = gpu.open_device().expect("a Vulkan device");
+        let codecs = VaapiCodecs::new()
+            .on_context(&context)
+            .expect("our context")
+            .expect("VA-API H.264 on the context's render node");
+        let size = FrameSize::new(1280, 720).expect("size");
+        let mut enc = codecs
+            .video_encoder(&VideoEncoderConfig {
+                codec: Codec::H264,
+                size,
+                input_format: PixelFormat::Nv12,
+                frame_period: Timebase::new(1, 30).expect("30 fps"),
+                rate_control: RateControl::Cbr { kbps: 3000 },
+                keyframe_interval: 30,
+                hardware: HardwarePreference::Require,
+            })
+            .expect("open the VA-API H.264 encoder on GPU frames");
+        let targets: Vec<GpuFrame> = (0..6)
+            .map(|_| gpu.encode_target(&context, size).expect("an encode target"))
+            .collect();
+        let tb = Timebase::MPEG_90K;
+        let mut out = Vec::new();
+        for i in 0..60usize {
+            let mut target = None;
+            for _ in 0..1000 {
+                enc.poll(&mut out).expect("poll");
+                target = targets
+                    .iter()
+                    .cycle()
+                    .skip(i)
+                    .take(targets.len())
+                    .find(|t| std::sync::Arc::strong_count(t.sync()) == 1);
+                if target.is_some() && enc.can_accept() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            let target = target.expect("a target the encoder let go");
+            draw(&context, target, (i % 30) as f64 / 30.0);
+            let frame = target.clone().with_pts(MediaTime::new(i as i64 * 3000, tb));
+            enc.encode(VideoSurface::Gpu(frame)).expect("encode");
+        }
+        enc.finish(&mut out).expect("finish");
+        assert_eq!(out.len(), 60, "one packet per frame");
+        assert!(out[0].is_keyframe() && out[30].is_keyframe());
+        for (i, p) in out.iter().enumerate() {
+            assert_eq!(p.pts(), MediaTime::new(i as i64 * 3000, tb));
+        }
+        // Every target is free again once the encoder is finished.
+        drop(enc);
+        assert!(
+            targets
+                .iter()
+                .all(|t| std::sync::Arc::strong_count(t.sync()) == 1)
         );
     }
 

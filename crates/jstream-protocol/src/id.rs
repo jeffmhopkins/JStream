@@ -81,6 +81,11 @@ opaque_id!(
     VideoMixId
 );
 opaque_id!(
+    /// An installed WASM automation plugin (ADR-0069), chosen by the person who installs
+    /// it.
+    PluginId
+);
+opaque_id!(
     /// A folder of the scene list (ADR-0024 §3). Folders organise only.
     FolderId
 );

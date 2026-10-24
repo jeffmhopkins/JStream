@@ -1,0 +1,32 @@
+# Spike S6 (MAC1, ADR-0063 decision 8). Throwaway; not a member of the root workspace.
+[package]
+name = "s6-metal"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace, so the root workspace (crates/*, xtask) never builds or lints it.
+[workspace]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Pinned exactly, as in the workspace: wgpu-hal interop can change between releases
+# (ADR-0004). The Metal backend only.
+wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "metal", "wgsl"] }
+pollster = "=0.4.0"
+# The objc2 framework crates at the 0.3.2 line wgpu's Metal backend already uses, so the
+# raw Metal and IOSurface types are the ones wgpu-hal takes (ADR-0063 decision 12).
+# `objc2-metal` and `objc2-io-surface` wrap an IOSurface plane as a Metal texture and
+# make the shared events; Core Video makes the IOSurface-backed pixel buffers;
+# VideoToolbox and Core Media encode the result, as the engine's encoder does.
+objc2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2-metal = { version = "0.3.2", default-features = false, features = ["std", "MTLAllocation", "MTLDevice", "MTLEvent", "MTLPixelFormat", "MTLResource", "MTLTexture", "objc2-io-surface"] }
+objc2-io-surface = { version = "0.3.2", default-features = false, features = ["std", "IOSurfaceRef", "IOSurfaceTypes", "libc", "objc2-core-foundation"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFArray", "CFBase", "CFDictionary", "CFNumber", "CFString"] }
+objc2-core-video = { version = "0.3.2", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferIOSurface", "CVReturn", "objc2-io-surface"] }
+objc2-core-media = { version = "0.3.2", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "objc2-core-video"] }
+objc2-video-toolbox = { version = "0.3.2", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTErrors", "VTSession", "objc2-core-media", "objc2-core-video"] }
+libc = { version = "0.2", default-features = false }
+
+[profile.release]
+debug = "line-tables-only"

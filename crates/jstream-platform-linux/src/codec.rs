@@ -6,7 +6,9 @@
 //! Audio encode is JStream's own AAC-LC encoder (`crate::aac`, ADR-0061 and ADR-0062),
 //! unless the `aac-encoder` feature is off.
 //! [`VaapiCodecs`] lists the encoders the probe finds, picks one for a configuration
-//! and opens a VA-API H.264 session on it.
+//! and opens a VA-API H.264 session on it. On the engine's GPU context
+//! (`Codecs::on_context`) it keeps the encoders on that device's render node, whose
+//! sessions take the context's encode targets.
 
 use jstream_platform::media::Codec;
 use jstream_platform::{HardwarePreference, PlatformError, VideoEncoderConfig};
@@ -55,18 +57,31 @@ pub use backend::VaapiCodecs;
 
 #[cfg(target_os = "linux")]
 mod backend {
+    use std::os::unix::fs::MetadataExt;
+    use std::sync::Arc;
+
     use jstream_platform::media::Codec;
     use jstream_platform::{
-        AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, PlatformError,
-        VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
+        AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, GpuContext,
+        HardwarePreference, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+        VideoEncoderConfig,
     };
 
     use super::choose_encoder;
+    use crate::gpu::Shared;
+    use crate::gpu::export::device_number;
     use crate::openh264::{
         OPENH264_COMPONENT, OpenH264Store, openh264_encoder_info, wants_software,
     };
     use crate::vaapi::VaapiH264Encoder;
     use crate::{VaEncoder, probe_encoders};
+
+    /// The `(major, minor)` of the device file at `node`.
+    fn node_number(node: &str) -> Option<(u64, u64)> {
+        std::fs::metadata(node)
+            .ok()
+            .map(|m| device_number(m.rdev()))
+    }
 
     /// How an encoder is listed and reported.
     fn info(e: &VaEncoder) -> CodecInfo {
@@ -79,13 +94,16 @@ mod backend {
     }
 
     /// Codecs through VA-API (ADR-0060 §6): H.264 encode sessions on the probe's
-    /// encoders, CPU frames only for now. And the Rust AAC-LC encoder.
-    #[derive(Debug)]
+    /// encoders, on CPU frames, or on the GPU context's encode targets for the backend
+    /// [`Codecs::on_context`] returns. And the Rust AAC-LC encoder.
+    #[derive(Clone, Debug)]
     pub struct VaapiCodecs {
         /// What the probe found, or why it couldn't run (libva missing).
         encoders: Result<Vec<VaEncoder>, PlatformError>,
         /// Where Cisco's OpenH264 is kept once downloaded; `None` without a data folder.
         openh264: Option<OpenH264Store>,
+        /// On the GPU context: its state. Encoders then take its encode targets only.
+        gpu: Option<Arc<Shared>>,
     }
 
     impl VaapiCodecs {
@@ -95,6 +113,7 @@ mod backend {
             Self {
                 encoders: probe_encoders(),
                 openh264: OpenH264Store::in_data_dir(),
+                gpu: None,
             }
         }
 
@@ -156,15 +175,22 @@ mod backend {
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
             let hardware = self.encoders.as_ref().map_or(0, Vec::len);
-            if wants_software(hardware, config) {
+            if self.gpu.is_some() && config.hardware == HardwarePreference::Avoid {
+                // OpenH264 reads CPU frames; the engine opens it on the CPU backend.
+                return Err(PlatformError::Unsupported {
+                    what: "a software H.264 encoder on GPU frames".into(),
+                });
+            }
+            if self.gpu.is_none() && wants_software(hardware, config) {
                 return self.software_encoder(config, hardware);
             }
             let encoders = self.encoders.as_ref().map_err(Clone::clone)?;
             let encoder = choose_encoder(encoders, config)?;
-            Ok(Box::new(VaapiH264Encoder::open(
+            Ok(Box::new(VaapiH264Encoder::open_on(
                 encoder,
                 config,
                 info(encoder),
+                self.gpu.clone(),
             )?))
         }
 
@@ -199,6 +225,36 @@ mod backend {
                     config.codec
                 ),
             })
+        }
+
+        /// These codecs on `context`, when it can export encode targets and a VA-API
+        /// encoder runs on its device: the encoders whose render node is the context's
+        /// (VA-API and Vulkan must share the GPU for the DMA-BUF to import). `Ok(None)`
+        /// otherwise, and the engine keeps CPU frames.
+        fn on_context(
+            &self,
+            context: &GpuContext,
+        ) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
+            let shared = Shared::of(context, "VaapiCodecs::on_context")?;
+            let Some(node) = shared.export.as_ref().map(|e| e.render_node) else {
+                return Ok(None);
+            };
+            let Ok(encoders) = &self.encoders else {
+                return Ok(None);
+            };
+            let on_device: Vec<VaEncoder> = encoders
+                .iter()
+                .filter(|e| node_number(&e.node) == Some(node))
+                .cloned()
+                .collect();
+            if on_device.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some(Arc::new(Self {
+                encoders: Ok(on_device),
+                openh264: self.openh264.clone(),
+                gpu: Some(shared),
+            })))
         }
     }
 }
