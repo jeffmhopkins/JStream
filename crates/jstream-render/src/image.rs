@@ -81,7 +81,6 @@ pub struct Image {
     /// view. `None` for uploads and imports, which are never drawn into.
     target: Option<wgpu::TextureView>,
     /// How many times the texels have changed: an upload rewritten, a layer drawn into,
-    /// How many times the texels have changed: an upload rewritten, a layer drawn into,
     /// or an import given a new frame ([`Self::mark_changed`]). A mip chain is rebuilt
     /// when this moved since its last build (ADR-0050 decision 5), so once per change,
     /// however many calls draw it.
