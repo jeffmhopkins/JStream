@@ -270,9 +270,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
   or the backdrop, sends one batch putting back the settings and the switch it opened
   with, including each one it sent whose change the engine hasn't reported yet; an
-  edit that fails after the dialog has closed shows in the problem bar. Defaults resets
-  each setting but a scene input's scene. The Add filter dialog
-  offers `kind.list`'s filter kinds for the source's chains under the prototype's
+  edit that fails after the dialog, or the row edited in place, has closed shows in the
+  problem bar. Defaults resets each setting but a scene input's scene. The Add filter
+  dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's
   groups, names and hints for the kinds it knows, and sends `filter.add` with an ID from
   `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
