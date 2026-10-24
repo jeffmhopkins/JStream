@@ -140,7 +140,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   open; and the Filter settings dialog on a double-click, with the prototype's hint for
   Blur, whose switch applies at once, Cancel puts back, OK keeps and Remove deletes.
   With three kinds described (`describeKinds`): the rows' summaries and carets, a click
-  on a filter with four settings opening the dialog, the Add filter dialog offering
+  on a filter with four settings opening the dialog, Cancel pressed straight after a
+  change there still putting the filter back (the change and its restore as two
+  edits), the Add filter dialog offering
   only the video kinds under their group, its search, the picked kind's details, and
   Add as one edit, the new filter opening in place, where a changed setting is one more
   edit and updates the summary.

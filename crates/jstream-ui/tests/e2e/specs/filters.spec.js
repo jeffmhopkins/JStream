@@ -162,7 +162,7 @@ const KINDS = [
   },
 ];
 
-test('with described kinds, rows summarise, Add filter adds one that opens in place, and its settings apply', async ({ page, daemon }) => {
+test('with described kinds, rows summarise, Cancel restores an unconfirmed change, Add filter adds one that opens in place, and its settings apply', async ({ page, daemon }) => {
   await describeKinds(page, KINDS);
   await connect(page, daemon);
   await selectBackdrop(page);
@@ -175,6 +175,17 @@ test('with described kinds, rows summarise, Add filter adds one that opens in pl
   await expect(settings.getByRole('spinbutton')).toHaveCount(3);
   await page.keyboard.press('Escape');
   await expect(settings).toBeHidden();
+
+  // Cancel straight after a change, before the engine reports it back, still puts the
+  // filter back: the change and its restore both reach the engine.
+  const before = await rev(page);
+  await rows.nth(1).locator('.filter-name').click();
+  const size = settings.getByRole('spinbutton').first();
+  await size.fill('50');
+  await settings.getByRole('button', { name: 'Cancel' }).click();
+  await expect(settings).toBeHidden();
+  await expect.poll(() => rev(page)).toBe(before + 2);
+  await expect(rows.nth(1).locator('.filter-summary')).toHaveText('defaults');
 
   await panel(page).getByRole('button', { name: '+ Add filter…' }).click();
   const add = page.getByRole('dialog', { name: 'Add filter' });

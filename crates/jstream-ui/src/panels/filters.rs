@@ -1058,6 +1058,18 @@ fn Editor(
     }
 }
 
+/// The patch that puts a filter's settings back to `base`, what the dialog opened on:
+/// each value `now` changed, and each parameter in `touched`, which the dialog sent and
+/// whose edit may not have reached `now` yet. A parameter `base` lacks goes back to
+/// `null`, its default.
+pub fn restore_patch(now: &Settings, base: &Settings, touched: &HashSet<String>) -> Settings {
+    let mut patch = draft_patch(now, base);
+    for id in touched {
+        patch.insert(id.clone(), base.get(id).cloned().unwrap_or(Value::Null));
+    }
+    patch
+}
+
 /// The Filter settings dialog (spec-workspace.md 6.3), drawn while it is open.
 #[component]
 pub fn FilterSettings() -> impl IntoView {
@@ -1096,6 +1108,10 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
     };
     // What the dialog opened on: Cancel puts it back.
     let opened = StoredValue::new((filter.settings.clone(), filter.enabled));
+    // What the dialog has sent, so Cancel and Defaults cover an edit still on its way
+    // back from the engine.
+    let touched = StoredValue::new(HashSet::<String>::new());
+    let switched = StoredValue::new(false);
     let problem = RwSignal::new(None::<String>);
     let errors = RwSignal::new(HashMap::<String, String>::new());
     let kind_id = filter.kind.clone();
@@ -1151,6 +1167,7 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
     let filter_id = StoredValue::new(target.filter_id.clone());
     let owner = StoredValue::new(owner);
     let switch = move |_| {
+        switched.set_value(true);
         send(
             vec![Edit::FilterSetEnabled {
                 owner: owner.get_value(),
@@ -1162,6 +1179,7 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
     };
     let commit = move |_: SourceId, param: String, value: Value| {
         errors.update(|e| _ = e.remove(&param));
+        touched.update_value(|t| _ = t.insert(param.clone()));
         let mut patch = Settings::new();
         patch.insert(param.clone(), value);
         let edit = Edit::FilterSetSettings {
@@ -1182,7 +1200,8 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
     let cancel = move || {
         let (base, was_on) = opened.get_value();
         let mut edits = Vec::new();
-        let patch = settings.with_untracked(|now| draft_patch(now, &base));
+        let patch =
+            touched.with_value(|t| settings.with_untracked(|now| restore_patch(now, &base, t)));
         if !patch.is_empty() {
             edits.push(Edit::FilterSetSettings {
                 owner: owner.get_value(),
@@ -1190,7 +1209,7 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
                 patch,
             });
         }
-        if enabled.get_untracked() != was_on {
+        if switched.get_value() || enabled.get_untracked() != was_on {
             edits.push(Edit::FilterSetEnabled {
                 owner: owner.get_value(),
                 filter_id: filter_id.get_value(),
@@ -1212,7 +1231,8 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
         let mut patch = Settings::new();
         settings.with_untracked(|now| {
             for p in kind.params.iter().filter(|p| p.ty != ParamType::Scene) {
-                if *value_of(p, now) != p.default {
+                if *value_of(p, now) != p.default || touched.with_value(|t| t.contains(&p.id)) {
+                    touched.update_value(|t| _ = t.insert(p.id.clone()));
                     patch.insert(p.id.clone(), Value::Null);
                 }
             }
@@ -1400,8 +1420,9 @@ fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) 
             {
                 settings.insert(param, Reference::Scene { scene_id }.to_value());
             }
-            let many = descriptor
-                .with_untracked(|d| d.as_ref().is_some_and(|d| opens(d) == Opens::Dialog));
+            // Not described yet: the dialog, which loads the form itself.
+            let many =
+                descriptor.with_untracked(|d| d.as_ref().is_none_or(|d| opens(d) == Opens::Dialog));
             let edit = Edit::FilterAdd {
                 owner: FilterOwner::Source {
                     source_id: source_id.clone(),
@@ -1916,5 +1937,23 @@ mod tests {
         .map(|(_, name)| name)
         .collect();
         assert_eq!(choices, ["SHAPE"]);
+    }
+
+    #[test]
+    fn restore_covers_edits_still_in_flight() {
+        let settings = |pairs: &[(&str, Value)]| -> Settings {
+            pairs.iter().map(|(id, v)| (*id, v.clone())).collect()
+        };
+        let base = settings(&[("amount", json!(0.2)), ("scene", json!("s"))]);
+        // The store already shows `amount`; `radius` was sent and hasn't come back.
+        let now = settings(&[("amount", json!(0.5)), ("scene", json!("s"))]);
+        let touched: HashSet<String> = ["amount".into(), "radius".into()].into();
+        let patch = restore_patch(&now, &base, &touched);
+        assert_eq!(
+            patch,
+            settings(&[("amount", json!(0.2)), ("radius", Value::Null)])
+        );
+        // Nothing sent and nothing changed: nothing to put back.
+        assert!(restore_patch(&base, &base, &HashSet::new()).is_empty());
     }
 }

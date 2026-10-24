@@ -72,8 +72,8 @@ Contents ([Design](#design) explains the choices):
   `SourceProperties` and the `PropertiesDialog` context that opens it), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
-  them, with the catalogue, the row summaries and the choice of in place or dialog
-  tested natively), the number
+  them, with the catalogue, the row summaries, the choice of in place or dialog and
+  Cancel's restore patch tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (creating, editing and deleting streams, recordings and the virtual camera, their
   stream keys, start and stop, and the pipeline's health), and the calls and
@@ -269,11 +269,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and a double-click always does; each field's change is a one-parameter
   `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
   or the backdrop, sends one batch putting back the settings and the switch it opened
-  with; Defaults resets each setting but a scene input's scene. The Add filter dialog
+  with, including each one it sent whose change the engine hasn't reported yet;
+  Defaults resets each setting but a scene input's scene. The Add filter dialog
   offers `kind.list`'s filter kinds for the source's chains under the prototype's
   groups, names and hints for the kinds it knows, and sends `filter.add` with an ID from
   `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
-  than three settings. Edit filters… in the item menus selects the item and shows the
+  than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
