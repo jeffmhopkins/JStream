@@ -435,9 +435,10 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
   made again for another compositor or when the parameter block changes size. Each draw
   still makes its bind group and two views: they hold the textures it reads, and a kept
   one could outlive the cache entry that owns those textures and free them on the
-  drawing thread (R-RT-003). Besides its scratch layers and these buffers, the only thing
-  a filter keeps between frames is the video delay's ring of held frames; those are its
-  own layers (`Ctx::layer`), never scratch ones.
+  drawing thread (R-RT-003). Besides its scratch layers and these buffers, a filter keeps
+  between frames only the video delay's ring of held frames (its own layers,
+  `Ctx::layer`, never scratch ones) and the reference image an asset or scene kind is
+  given (`VideoFilter::set_reference`, see Assets and references below).
 
 **External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
 whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
