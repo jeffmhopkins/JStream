@@ -73,9 +73,10 @@ impl Size {
 ///
 /// `center`, `size` and `rotation_deg` alone define the box, so selection handles need
 /// no source size. The 3D fields default to neutral (no tilt, turn or depth, and no
-/// perspective). The formula below still evaluates a non-neutral value; drawing it is
-/// the compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]
-/// is that check. A negative `size` is rejected, not read as a flip.
+/// perspective). From protocol 0.34 the engine accepts and draws any 3D
+/// ([`Self::drawn_polygon`], ADR-0050); earlier minors rejected a non-neutral value, and
+/// [`Self::is_neutral_3d`] was that check. A negative `size` is rejected, not read as a
+/// flip.
 ///
 /// Every number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the
 /// defaults below, and omitted `perspective_px` means orthographic.

@@ -102,8 +102,7 @@ and calls this crate.
   shared functions ([Placement math](#design)). A geometry with non-neutral 3D draws
   [ADR-0050](../../docs/adr/0050-3d-transforms-rendering.md)'s drawn polygon,
   perspective-correct, with antialiased edges, and sampled from a mip chain of its
-  source with 16× anisotropic filtering. The engine still refuses non-neutral 3D before
-  it reaches here.
+  source with 16× anisotropic filtering. The engine accepts any 3D from protocol 0.34.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.

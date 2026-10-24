@@ -62,7 +62,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 1 | 5 | 0 |
 | [Scene objects panel](#objects) | 9 | 0 | 3 | 5 | 1 | 0 |
-| [Inspector](#inspector) | 10 | 0 | 0 | 6 | 4 | 0 |
+| [Inspector](#inspector) | 10 | 0 | 0 | 7 | 3 | 0 |
 | [Transform panel](#transform) | 4 | 0 | 0 | 4 | 0 | 0 |
 | [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
@@ -264,7 +264,7 @@ the source's settings move to the Properties dialog (DL-02).
 | IN-02 | Parameters | X, Y, W, H in px, and Rotation, as number fields bound to the canvas. | ⬜ | `item.set_geometry`. |
 | IN-03 | Size in % | W % and H % of the source's own size. | 🔒 | Source sizes as runtime state (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md)) aren't in the protocol. |
 | IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ⬜ | |
-| IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | 🔒 | The engine refuses non-neutral 3D until X1 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
+| IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ⬜ | `item.set_geometry` takes any 3D from protocol 0.34 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ⬜ | `item.set_crop`. |
 | IN-07 | Blending | Mode (9 modes) and Opacity %. | ⬜ | `item.set_opacity` exists. The engine accepts only the `normal` blend mode, so the mode select offers that until it accepts more. |
 | IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ⬜ | Hotkey is 🔒 with K1. |
