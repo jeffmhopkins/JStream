@@ -143,11 +143,17 @@ It has:
   its first playback stream. A stream is fixed to interleaved `f32` at the graph's rate
   in the device's layout (mono, stereo or 5.1; any other count, or a default with no
   device, as stereo; `spa/audio.rs` builds and parses the format pods), so PipeWire
-  converts and the handler never sees a format change. `process` runs on the stream's
-  own loop thread: input packets carry their device position and a media-clock time
-  from `pw_stream_get_time_n` (the capture time, before the device's delay), a
-  corrupted buffer marks a discontinuity and its frames still count in the position, an
-  empty one (nothing playing into the source) is a silent packet, and output
+  converts and the handler never sees a format change. The stream is connected with
+  `RT_PROCESS`, so `process` runs on its context's own data loop, PipeWire's real-time
+  thread (with real-time priority from `module-rt` where the system grants it), while
+  registry, metadata and the stream's state and format events stay on the loop thread.
+  `process` touches only the stream's own state, shared with the loop thread through
+  atomics (`Gate`: it calls the handler only while the stream hasn't failed, and failing
+  it waits for a running call to return), so it doesn't allocate, lock or wait: input
+  packets carry their device position and a media-clock time from
+  `pw_stream_get_time_n` (the capture time, before the device's delay), a corrupted
+  buffer marks a discontinuity and its frames still count in the position, an empty one
+  (nothing playing into the source) is a silent packet, and output
   asks the handler to fill each buffer. A named device or process whose node is
   removed is `DeviceLost`; a default follows the session manager. The callbacks catch
   panics (R-UNSAFE-005): a panicking handler is told once, with `InvalidState`, and
@@ -284,8 +290,9 @@ stopping on drop, a capture stream running again after an overrun, loopback refu
 unknown PCM and the listing) pass with or without those libraries installed and need no
 GPU, session or daemon; a missing PipeWire daemon is tried on a socket name nothing
 listens on. The registry reading and stream planning (`pipewire/graph.rs`), the audio
-format pods, and ALSA's sample conversion, channel layouts, listed names and frame times
-are platform-independent. The OpenH264 tests use a fake download and a fake encoder
+format pods, the `process` gate's hand-off between threads (`pipewire/audio.rs`), and
+ALSA's sample conversion, channel layouts, listed names and frame times are
+platform-independent. The OpenH264 tests use a fake download and a fake encoder
 behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
@@ -294,7 +301,7 @@ and run by hand: the session bus (`dbus-run-session` is enough), a portal captur
 GNOME or KDE session with PipeWire (on the CPU path, and on the GPU path with a Vulkan
 driver that imports DMA-BUFs), VA-API H.264 encodes on a GPU with an encode driver,
 from CPU frames and from the context's encode targets (which needs the Vulkan and
-VA-API drivers on one render node), `PipeWireAudio` recording, playing and looping back
-on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes are enough, no sound card),
-and a second of ALSA's default input on a sound card (`null` isn't paced, so only a real
-device shows real-time recording).
+VA-API drivers on one render node), `PipeWireAudio` recording (on the data loop),
+playing and looping back on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes
+are enough, no sound card), and a second of ALSA's default input on a sound card (`null`
+isn't paced, so only a real device shows real-time recording).
