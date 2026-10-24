@@ -8,6 +8,13 @@
 #
 # status: done (merged) | hardware (merged; a run on Windows hardware is still pending,
 #         named by `note`) | review (a PR is open) | planned
+# needs:  the steps an unfinished item still needs before it is `done`, in order, for the
+#         README's "What's left" table: build (code to write or finish through review),
+#         wave (merged into a wave that hasn't landed), hardware (a Windows run),
+#         maintainer (a decision or an action only the maintainer can take). Set it on
+#         every `planned` and `review` item (`docs progress` lists the ones without); a
+#         `hardware` item without it needs its run. Drop it when the item is `done`.
+#         ROADMAP.md#endgame has the order they land in.
 # Item IDs are the roadmap board's; PR titles name them in parentheses, e.g. "(A5)".
 
 [[milestone]]
@@ -188,6 +195,7 @@ milestone = "M1a"
 title = "Daemon goes live on Windows"
 status = "done"
 prs = [226]
+note = "the maintainer waived the Windows 11 Pro N run: there is no N-edition VM, and #333 stays open to keep the gap on record"
 
 [[item]]
 id = "A6"
@@ -202,7 +210,7 @@ milestone = "M1a"
 title = "Go-live runbook and smoke"
 status = "hardware"
 prs = [234]
-note = "smoke script run"
+note = "the go-live smoke and graceful stop (item 11 of the Windows hardware pass); its live YouTube steps are #337"
 
 [[item]]
 id = "E3a"
@@ -250,7 +258,10 @@ prs = [223]
 id = "A6b"
 milestone = "M1a"
 title = "Daemon YouTube wiring"
-status = "planned"
+status = "hardware"
+prs = [312]
+note = "#312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337"
+needs = ["maintainer", "hardware"]
 
 # M1b
 
@@ -360,6 +371,14 @@ status = "done"
 prs = [177, 225, 227]
 
 [[item]]
+id = "C4c"
+milestone = "M1b"
+title = "Webcam source (CPU path, MJPEG on Windows, paired audio)"
+status = "hardware"
+prs = [654, 658, 726]
+note = "landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam)"
+
+[[item]]
 id = "C1a"
 milestone = "M1b"
 title = "Sources crate: color, image"
@@ -386,21 +405,24 @@ milestone = "M1b"
 title = "Audio sources"
 status = "hardware"
 prs = [238]
-note = "audio hardware tests"
+note = "the WASAPI device tests on real devices (#778, item 18 of the Windows hardware pass)"
 
 [[item]]
 id = "C3"
 milestone = "M1b"
 title = "Display and window capture sources"
-status = "planned"
+status = "done"
+prs = [365]
+note = "#365 landed with wave/m1-2 (#545); its Windows run passed (#378)"
 
 [[item]]
 id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
-prs = [283, 289, 298]
-note = "#341"
+prs = [283, 289, 298, 326]
+note = "the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again"
+needs = ["build", "hardware"]
 
 [[item]]
 id = "D1"
@@ -443,6 +465,15 @@ milestone = "M1b"
 title = "Filter chains in the mixer"
 status = "done"
 prs = [231]
+
+[[item]]
+id = "V0"
+milestone = "M1b"
+title = "Video filter chain runtime"
+status = "review"
+prs = [595, 607, 626, 712, 717, 730]
+note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
+needs = ["build"]
 
 [[item]]
 id = "D5"
@@ -497,8 +528,26 @@ prs = [208]
 id = "I2"
 milestone = "M1b"
 title = "Live values"
-status = "review"
+status = "done"
 prs = [244]
+
+[[item]]
+id = "V4"
+milestone = "M1b"
+title = "Scene filter chains and item effects"
+status = "planned"
+prs = []
+note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529)"
+needs = ["build"]
+
+[[item]]
+id = "D9"
+milestone = "M1b"
+title = "Audio monitoring: a bus's monitor device and tap point"
+status = "planned"
+prs = []
+note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it"
+needs = ["build"]
 
 # M1c
 
@@ -515,7 +564,7 @@ milestone = "M1c"
 title = "vcam media source DLL"
 status = "hardware"
 prs = [174, 195, 200, 229]
-note = "pacing rerun"
+note = "the pacing rerun (#777, with item 6 of the Windows hardware pass)"
 
 [[item]]
 id = "G3a"
@@ -535,8 +584,9 @@ prs = [213, 297]
 id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
-status = "done"
-prs = [235]
+status = "hardware"
+prs = [235, 565]
+note = "Windows run (#563)"
 
 [[item]]
 id = "G3d"
@@ -544,6 +594,7 @@ milestone = "M1c"
 title = "Virtual camera in the UI and the desktop app"
 status = "done"
 prs = [316]
+note = "its Windows run passed (#390)"
 
 [[item]]
 id = "P1"
@@ -617,6 +668,24 @@ title = "Headless end-to-end test"
 status = "done"
 prs = [269]
 
+[[item]]
+id = "H8"
+milestone = "M1d"
+title = "Hardware acceleration by default, with GPU fallback and device-loss recovery"
+status = "hardware"
+prs = [437, 568, 569, 580, 604, 708]
+note = "#437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667"
+needs = ["hardware"]
+
+[[item]]
+id = "Q6"
+milestone = "M1d"
+title = "Threat-model follow-ups"
+status = "review"
+prs = [535, 540, 548, 549, 552, 555, 662, 714, 729, 573, 574, 653]
+note = "from the Q5 threat model: user-only token, devices and log files (#548) and crash reports (#662) on Windows, browser pages refused every permission and local-network requests decided by policy (#535, #549, #714, #729), the vcam's owner checks (#540), local redacted desktop crash reports (#552) and a warning on cleartext rtmp:// (#555) landed with wave/m1-3 (#754); in review: the audit log and collection file user-only (#574, for #547), the rtmp:// flag in output.status (#653, for #562) and the CLAP IPC hardening (#573, for #351); open: #344, #347, #349 (with X1) and #353; Windows runs #546 and #557"
+needs = ["build", "wave", "hardware"]
+
 # M2
 
 [[item]]
@@ -645,13 +714,13 @@ id = "U2b"
 milestone = "M2"
 title = "Device pairing"
 status = "done"
-prs = [265]
+prs = [265, 288]
 
 [[item]]
 id = "U3a"
 milestone = "M2"
 title = "Scenes, sources, properties"
-status = "review"
+status = "done"
 prs = [256]
 
 [[item]]
@@ -665,7 +734,7 @@ prs = [254]
 id = "U3c"
 milestone = "M2"
 title = "Mixer panel"
-status = "review"
+status = "done"
 prs = [308]
 
 [[item]]
@@ -673,13 +742,15 @@ id = "U4"
 milestone = "M2"
 title = "Canvas editing"
 status = "done"
-prs = [255]
+prs = [255, 302]
 
 [[item]]
 id = "U4p"
 milestone = "M2"
 title = "Live preview on canvas"
-status = "planned"
+status = "hardware"
+prs = [302]
+note = "the canvas's H.264 preview path on Windows (#380)"
 
 [[item]]
 id = "U1"
@@ -720,34 +791,47 @@ prs = [358]
 id = "T1"
 milestone = "M2"
 title = "Studio mode and transitions"
-status = "review"
+status = "hardware"
 prs = [260]
+note = "#260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029)"
 
 [[item]]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "planned"
+status = "done"
+prs = [304]
+note = "#304 landed with wave/m1-3 (#754)"
 
 [[item]]
 id = "E2"
 milestone = "M2"
 title = "Video mixes"
-status = "review"
+status = "done"
 prs = [259]
+
+[[item]]
+id = "E2b"
+milestone = "M2"
+title = "Privacy screen and encoder sharing key"
+status = "planned"
+prs = [317]
+note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build"
+needs = ["build"]
 
 [[item]]
 id = "D8"
 milestone = "M2"
 title = "Master and output audio chains"
 status = "done"
-prs = [249]
+prs = [249, 303]
 
 [[item]]
 id = "D8p"
 milestone = "M2"
 title = "Audio chain protocol fields"
-status = "planned"
+status = "done"
+prs = [303]
 
 [[item]]
 id = "C9"
@@ -755,20 +839,32 @@ milestone = "M2"
 title = "Media file source"
 status = "hardware"
 prs = [245, 322]
-note = "media file hardware tests (#382)"
+note = "the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun"
+needs = ["build", "hardware"]
 
 [[item]]
 id = "W1"
 milestone = "M2"
 title = "Audio waveform and spectrum sources"
-status = "review"
-prs = [460, 463, 466]
+status = "done"
+prs = [315, 460, 463, 466]
+
+[[item]]
+id = "B11"
+milestone = "M2"
+title = "Folders and labels"
+status = "done"
+prs = [323]
+note = "#323 landed with wave/m1-3 (#754)"
 
 [[item]]
 id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
-status = "planned"
+status = "review"
+prs = [319, 720]
+note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, #702), is in review into wave/m1-4"
+needs = ["build"]
 
 [[item]]
 id = "K2"
@@ -776,6 +872,33 @@ milestone = "M2"
 title = "Keyframe scenes: model and evaluator"
 status = "done"
 prs = [350]
+
+[[item]]
+id = "U6"
+milestone = "M2"
+title = "Desktop UI as a 1:1 match of the UI prototype"
+status = "review"
+prs = [495, 496, 615, 637, 659, 664, 766, 770]
+note = "#748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747) are in wave/m1-4; the Scenes and Scene objects panels (#770) are in review; the filters, mixer and keyboard batches are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02)"
+needs = ["build", "wave", "maintainer"]
+
+[[item]]
+id = "B12"
+milestone = "M2"
+title = "Source sizes as runtime state (source.sizes)"
+status = "planned"
+prs = []
+note = "ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
+needs = ["build"]
+
+[[item]]
+id = "C2b"
+milestone = "M2"
+title = "Crisp text at any item scale"
+status = "planned"
+prs = []
+note = "#749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR"
+needs = ["build"]
 
 # M3
 
@@ -797,15 +920,25 @@ prs = [325]
 id = "E3d"
 milestone = "M3"
 title = "Composite to NV12 on the GPU"
-status = "review"
+status = "done"
 prs = [280]
+
+[[item]]
+id = "F6"
+milestone = "M3"
+title = "HEVC and AV1 encode"
+status = "done"
+prs = [364]
+note = "#364 landed with wave/m1-2 (#545); its Windows run passed (#366); choosing HEVC or AV1 from a client is F6b"
 
 [[item]]
 id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
-status = "planned"
-prs = [359]
+status = "review"
+prs = [359, 368, 611, 622, 624, 643, 687, 629]
+note = "effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), and the mip chains built from the crop and rebuilt once per change (#687), landed in wave/m3-3; part 3, accepting 3D at protocol 0.34 (#629), also in wave/m3-3"
+needs = ["wave"]
 
 [[item]]
 id = "3D1"
@@ -819,51 +952,87 @@ id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
 status = "review"
-prs = [363, 375]
+prs = [363, 375, 594, 696]
+note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696) are in review into wave/m1-4; signed-in features need the OAuth client (ADR-0058)"
+needs = ["build", "maintainer"]
 
 [[item]]
 id = "CL1"
 milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
-prs = [272]
-note = "part 1 merged"
+prs = [272, 281, 407, 488, 573]
+note = "parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), is in review into wave/m3-4, and the IPC hardening (#573, for #351) is stacked on it; then a live-audio Windows run (new issue once CLAP filters run)"
+needs = ["build", "hardware"]
 
 [[item]]
 id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "review"
-prs = [486]
+prs = [486, 623, 642, 722, 725]
+note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722 and the 1,000-event queue #725 are in wave/m3-3; the wire half #642 (protocol 0.35) is in wave/m3-3 too; the engine side to build"
+needs = ["build", "wave"]
 
 [[item]]
 id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
 status = "review"
-prs = [511, 513, 533, 543, 554, 566, 570, 583]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583)"
+prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); in wave/m3-3: the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639)"
+needs = ["wave", "build"]
 
 [[item]]
 id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510, 603]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); V4L2 webcams (#603)"
+prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 603, 617]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); in wave/m3-3: ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); in wave/m3-4: V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); further parts are in review into wave/m3-4; the rest of the codec path to build"
+needs = ["wave", "build"]
 
 [[item]]
 id = "LNX2"
 milestone = "M3"
 title = "Linux OpenH264 download (ADR-0061)"
-status = "review"
+status = "planned"
 prs = [536]
-note = "store, check, loader and encoder (#536); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come"
+note = "store, check, loader and encoder (#536, landed with wave/m3-2, #663); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come"
+needs = ["build"]
 
 [[item]]
 id = "LNX3"
 milestone = "M3"
 title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
 status = "review"
-prs = [508, 518]
-note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
+prs = [508, 518, 723, 727]
+note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) in wave/m3-3; intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
+needs = ["wave", "build"]
+
+[[item]]
+id = "F6b"
+milestone = "M3"
+title = "Choose HEVC or AV1 from a client"
+status = "planned"
+prs = []
+note = "F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet"
+needs = ["build"]
+
+[[item]]
+id = "F7"
+milestone = "M3"
+title = "Direct NVENC and AMF encoders, if measurements justify them"
+status = "planned"
+prs = []
+note = "ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so"
+needs = ["build"]
+
+[[item]]
+id = "CL2"
+milestone = "M3"
+title = "A too_large error for oversized plugin state"
+status = "planned"
+prs = []
+note = "ROADMAP M3 and #102: a maintainer-tier ADR superseding ADR-0037's state clause adds a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection"
+needs = ["maintainer", "build"]

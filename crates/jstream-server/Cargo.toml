@@ -33,6 +33,11 @@ tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
 # A span per connection; accepted and refused upgrades are logged (R-RS-005).
 tracing.workspace = true
 
+# The device file is created with a user-only DACL, and an existing one is refused if
+# its DACL lets other users in (#344). Windows only: Unix uses the file mode.
+[target.'cfg(windows)'.dependencies]
+jstream-platform-windows.workspace = true
+
 [dev-dependencies]
 # The end-to-end tests: a `MockEngine` behind the server, the WebSocket client in front.
 jstream-control = { workspace = true, features = ["mock", "ws"] }

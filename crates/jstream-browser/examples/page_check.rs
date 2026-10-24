@@ -297,6 +297,7 @@ setInterval(() => {
             size: FrameSize::new(args.size.0, args.size.1).map_err(|e| e.to_string())?,
             fps: args.fps,
             css: DEFAULT_CSS.to_owned(),
+            local_network: false,
         };
         line(format_args!("opening {}", spec.location.to_url()));
         let started = Instant::now();

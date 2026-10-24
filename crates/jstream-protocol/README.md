@@ -33,6 +33,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
   kind, and `HistoryDirection` (`undo`, `redo`), the `cause` of a `state.changed` and
   the `direction` of a `history_empty` error.
+- **Live values** (`live.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
+  `LiveOutcome` (`committed`, `cancelled`, `expired`), `GestureInfo` (one open gesture
+  in a `live.list` result), the limits `MAX_GESTURES_PER_CLIENT` (16) and
+  `MAX_LIVE_VALUES` (256), and `is_live_adjustable`, which says which setters `live.set`
+  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`), so every
+  implementation agrees.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
@@ -40,58 +46,105 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
-  `output.set_target`, `output.set_encoder`, `output.delete`, `encoder.create`,
-  `encoder.update`, `encoder.delete`, `source.set_audio`, `bus.create`, `bus.rename`,
-  `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`), with `ItemTransform`
-  (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
+  `output.set_target`, `output.set_encoder`, `output.set_video_mix`, `output.delete`,
+  `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
+  `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
+  `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`, `hotkey.set`,
+  `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
+  `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
+  `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `label.create`,
+  `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
+  `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`, `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set`,
+  `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
-  `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`);
-  `Batch`; and the `Command`/`CommandClass`
+  `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
+  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`), with
+  `Action::named_objects` and `Action::bind_problem`,
+  which every implementation uses to check and follow a hotkey's action; `Batch`, whose
+  optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
-  `FilterInfo` and `FilterChains`, the chains `SourceInfo` reports, and
-  `MAX_CHAIN_FILTERS` (8).
+  `FilterOwner` (tagged `type`: `source`, `master` and `output`), `FilterChain`
+  (`video`, `audio`), `FilterInfo` and `FilterChains`, the chains `SourceInfo` and
+  `OutputInfo` report, and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
+  master stage as `state.get` reports it
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
-  (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+  (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo` (with the `video_mix` it shows), and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
-  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). `OutputKind::key_server` names the
+  server a stream key is bound to (scheme, host and port), which the engine and the
+  mock compare to remove a key that would otherwise follow its output elsewhere (#343).
+- **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
+  `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
+  every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
-  and `EncoderSessionInfo`, the per-output sharing `output.status` reports
+  and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+- **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
+  (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
+  base frame rate, with its range checks (`VideoMix::problem`, shared by every
+  implementation), and `VideoMixInfo`.
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   `SourceAudio` and `AudioFollow`, a source's audio settings; `BusInfo` and `SendInfo`,
   the buses and the send matrix as reads report them; the fader range and its shared
   check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
   the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
   a `meters.tick` carries.
+- **Organisation** (`organise.rs`,
+  [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): `FolderInfo`,
+  `LabelInfo`, `SceneMeta` and `SourceMeta`, and the colour and icon checks every
+  implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
-  `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus),
-  `studio.get` and `device.list`, with `QueryResult` and the `SceneSummary`,
-  `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo` shapes the reads report.
-  `state.get` carries the `Canvas`, and `ItemInfo`
-  the item's `placement` form and its `geometry`. `video.snapshot` returns the program
-  mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and `youtube.list_streams`
-  read the YouTube account.
+  `output.list`, `output.status`, `encoder.list`, `video_mix.list`, `bus.list`,
+  `video.snapshot`, `kind.list`,
+  `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
+  folder or a label),
+  `studio.get`, `privacy.get`, `device.list`, `live.list` and `capture.targets`, with `QueryResult`
+  and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo` and
+  `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and
+  `ItemInfo`
+  the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
+  overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
+  `youtube.list_streams` read the YouTube account.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer.
+- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md),
+  [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): the
+  built-in transition kinds (`cut`, `fade`, `move`) and their descriptors, `Easing` with
+  `Easing::apply`, the one easing function every implementation shares (golden-tested),
+  `ItemTransition` (an item's delay, easing, glide and appear and disappear effects) with
+  its range check, `TransitionPresetInfo` and `TransitionsInfo` as `state.get` reports
+  them, and `TransitionStarted`, what a `studio.changed` says a switch ran.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
-  `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
-  parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
+  `ParamDescriptor` and `ParamType`, the shapes that describe a source, filter or
+  transition kind's parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
   `source`, `bus` and `asset` references are tagged objects (`Reference`). The per-value checks
   (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
-  shares them. No kind is defined here.
-- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
-  `events.dropped`, `stats.tick`, `meters.tick`, `youtube.status_changed` and
-  `youtube.health_changed`.
+  shares them. No source or filter kind is defined here; the transition kinds are
+  (Transitions above).
+- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
+  (program, preview and the transition a switch started), `privacy.changed`,
+  `events.dropped`,
+  `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
+  `live.changed`, `live.ended` and `plugin.state_changed`.
+- **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
+  `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
+  one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
+  classes, adding a `hotkey.set`'s bound action and a `live.set`'s edits, or the
+  `PluginDenial` no grant overrides), `PluginGrant` (the classes, hosts and folders a
+  person grants, with `check`, which returns the `forbidden` error, and `problem`),
+  `settings_reach` and `Reach` (the hosts and files a settings map names),
+  `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), and the binary
@@ -102,7 +155,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs (`BusId::master()` is
-  the one fixed ID, `master`), `Rev`, and `PROTOCOL_VERSION`.
+  the one fixed ID, `master`; a `GestureId` is chosen by the client), `Rev`, and
+  `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
   NaN, infinity and out-of-range numbers at construction and deserialization. Computed
   results (`CanvasPoint`, `ContentRect`, `LegacyQuad`) use plain `f32`.
@@ -110,14 +164,43 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `PlacementForm` and the shared placement formula
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). `project` places the
   box, rotation about its centre, with the 3D fields in the formula and defaulting to
-  neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`.
+  neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`, and
+  `flip_h` and `flip_v` mirror it in the box. `drawn_polygon` and `unplace` are
+  ADR-0050's 3D polygon and inverse map, and `check_drawable` whether an edit may store
+  a geometry ([Item geometry](#design)).
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
-  negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.24 because of bus
+  negative scale is not refused: `from_legacy` returns the drawn outline with the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.36 because of
+  the `show_cursor` setting of the `display` and `window` kinds (whether the pointer
+  shows in the capture; on by default, which is what those kinds did before); 0.35
+  added WASM plugins ([Plugins](#design): `plugin.install`, `plugin.grant`, `plugin.enable`,
+  `plugin.state_changed`, the `forbidden` error and the `plugin` entity kind); 0.34 made
+  the engine accept non-neutral 3D (`tilt_deg`, `turn_deg`, `depth_px` and
+  `perspective_px`, which earlier minors rejected with `invalid_argument`, are stored and
+  drawn (ADR-0050) when the compositor can draw them (`check_drawable`); the wire form is
+  unchanged, so a client that sends only neutral 3D sees no difference); 0.33 added the
+  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`) and the `dedicated`
+  flag on an output's encoder session; 0.32 added the geometry flips (`ItemGeometry`'s
+  `flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
+  `scene.set_folder`, `scene.set_meta`, `source.set_meta`, `state.get`'s `folders` and
+  `labels`, `SceneInfo`'s `folder` and `meta`, `SourceInfo`'s `meta`, the `folder` and
+  `label` `delete.plan` targets, entity kinds and blockers); 0.30 added
+  transition presets and studio mode's preview (the `transition.*` edits,
+  `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
+  `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
+  `transition` entity kind and kind category); 0.29 added the master stage's and
+  outputs' filter chains (the `master` and `output` filter owners,
+  `OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes
+  (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and the mixes in
+  `state.get` and `output.list`); 0.27 added the `capture.targets` query;
+  0.26 added live values ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the
+  `live.changed` and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
+  hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
+  `hotkeys` and the batch result's `removed_hotkeys`); 0.24 added bus
   references (the `bus` parameter type and reference, which the `waveform` and
   `spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
-  `bus.delete` refused while one refers to its bus); 0.23 added YouTube
+  `bus.delete` refused while one refers to its bus), 0.23 YouTube
   ([YouTube](#design): the `youtube.*` commands and events, the `youtube`
   RTMP target, and the YouTube actions' `ActionResult`s,
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), 0.22
@@ -146,26 +229,31 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
-  encoder profiles), the exact answer to every collection read of it (`output.list`
+  canvas, legacy items, one geometry item (flipped left to right), two RTMP outputs, a virtual camera, a recording output, two
+  encoder profiles, two video mixes and two hotkeys, one of them rebound), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path and encoder profile checks, and `item.set_source` and
+  URL, recording path, encoder profile, video mix and hotkey checks, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
-  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a desktop
-  audio source with an audio chain of two gain filters, one disabled, and audio: a
-  microphone with its fader, mute and sends, two buses (one deleted again with its
-  send), a renamed and faded bus, a duplicated microphone with a send removed, and a
-  disabled nested scene. The rejected batches cover the bus limit, the master bus,
-  fader ranges, and sources with no audio or no fader of their own.
+  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a
+  desktop audio source with an audio chain of two gain filters, one disabled, a gain
+  filter each on the master stage's audio chain and on the recording output's, and
+  audio: a microphone with its fader, mute and sends, two buses (one deleted again with
+  its send), a renamed and faded bus, a duplicated microphone with a send removed, and
+  a disabled nested scene. The rejected batches also cover an audio filter on the
+  virtual camera, a reference in a master filter's settings (refused before its
+  index), the bus limit, the master bus, fader ranges, and sources with no audio (a
+  display capture, `screen`, never placed) or no fader of their own.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
-  the kinds an implementation must describe for the batch to apply (`webcam`, with
-  video and no audio, and `desktop_audio` and `mic`, with audio and no video, none with
-  parameters, so every implementation reports the same empty settings and audio
-  defaults, and the audio filter kind `gain`, whose one parameter the batch always
-  sets). It changes no
+  the kinds an implementation must describe for the batch to apply: `webcam`, with
+  video and audio (its paired input, #716), and `display`, with video and no audio,
+  each described as the engine's built-in kind is, whose one parameter (`device`,
+  `target`) the batch always sends; `desktop_audio` and `mic`, with audio and no video
+  and no parameters; and the audio filter kind `gain`, whose one parameter the batch
+  always sets. So every implementation reports the same settings and audio defaults.
+  It changes no
   message, so it never changes `PROTOCOL_VERSION`.
 
 <a id="design"></a>
@@ -192,8 +280,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":24},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":24},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":36},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":36},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -329,9 +417,9 @@ reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), 
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
-an audio routing cycle can't be expressed. Filter chains (0.22) belong only to
-sources (`FilterOwner` is `source`), so none feeds one bus from another either; a
-routing check comes with the first thing that could. `follow`'s activity gain is the engine's (D6); the
+an audio routing cycle can't be expressed. Filter chains (a source's from 0.22, the
+master stage's and outputs' from 0.29) hold no reference that could feed one bus from
+another either; a routing check comes with the first thing that could. `follow`'s activity gain is the engine's (D6); the
 protocol only stores it.
 
 Levels and loudness are runtime state: `meters.tick` carries them (see
@@ -401,12 +489,15 @@ never a type per kind.
 - **Deletes are refused while anything refers to the target**, with no cascading edit
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
-  `scene` source shows the scene; either, and `bus.delete` (0.24), is refused while a
-  setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
-  `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
-  or the source whose setting refers to it (`settings.<param>`, or
-  `filters.<filter_id>.<param>` for a filter's setting). `delete.plan` returns
-  the batch that removes them with the target (see [Queries](#design)).
+  `scene` source or a video mix shows the scene; either, and `bus.delete` (0.24), is
+  refused while a setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`),
+  the video mix (`mix.input.scene_id`) or the source whose setting refers to it
+  (`settings.<param>`, or `filters.<filter_id>.<param>` for a filter's setting).
+  `delete.plan` returns
+  the batch that removes them with the target (see [Queries](#design)). Hotkey
+  bindings are never blockers: a delete removes the bindings that name its target
+  (below).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
@@ -433,6 +524,21 @@ kind for that chain (`invalid_argument` on `edits.N.kind`), and a chain holds at
 8 filters (`edits.N.chain`). A missing filter is `not_found` with entity `filter`.
 `SourceInfo.filters { video, audio }` reports them, each omitted while empty.
 
+From 0.29 the master stage and each output own chains too
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), with the owners
+`{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
+master's audio chain runs on every bus that feeds an output, after that bus's own chain;
+an output's runs after it, for that output only, and gives the output its own audio
+encode from its next start (edits to a chain it started with apply live). Only their
+audio chains hold filters so far: a video filter is `invalid_argument` on
+`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
+carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+`output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
+`invalid_argument` on the parameter), since the delete checks follow only a source's
+references. `output.delete`'s
+inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
+`master { filters }` report them, each omitted while empty.
+
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
 would otherwise narrow an out-of-range JSON number such as `1e39` to infinity, which
@@ -452,7 +558,11 @@ application name, and is refused if it could carry a credential (`user:password@
 query or a fragment). A key pasted into the path can't be told from a nested
 application name, so it is stored as given. A `record` output (0.9) records to a file
 on the engine's machine: `path` must be absolute (`/…`, `\…`, `C:\…` or `C:/…`), have
-no `..` segment and end in a file name, and
+no `..` segment and end in a file name. As for an `absolute` asset path, it must not
+start with a second separator (a UNC share or device, `\\host\share\…`, `\\.\…`,
+`\\?\…`), nor contain `:` but the drive letter's, `?` or `*` (`\??\UNC\…`), nor
+end in a DOS device name (`NUL`, `nul.mp4`, `CON`, `COM1`, `LPT1`, …), by the same rule
+as an asset path's last component. And
 `container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
@@ -470,24 +580,155 @@ so it is set with the `output.set_key` action and removed with `output.clear_key
 from YouTube on each `output.start` ([YouTube](#design)), so it needs no
 `output.set_key`. Its ID must be ASCII letters, digits, `-` and `_`, at most 128 bytes.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
-error, query or log carries it, and `output.status` reports only `key_set`. A key
-outlives `output.delete`, so undoing the delete gives back a working output; a client
-that deletes for good also sends `output.clear_key`, which succeeds for an output no
-longer in the collection. Its errors carry fixed reasons that never quote the key.
+error, query or log carries it, and `output.status` reports only `key_set`. A key is
+bound to the server it was set for (#343): when an applied batch, undo or redo deletes
+the output, or points it at another server (`OutputKind::key_server`: scheme, host and
+port; a new path on the same server keeps the key), the engine removes the key from the
+credential store, and refuses that output's `output.start` with `action_failed` until
+the key is gone. So a retarget never sends the old key to the new server, and an output
+re-created with a deleted one's ID starts with no key. Undoing the delete or the
+retarget restores the target but not the secret: set it again with `output.set_key`.
+A start already opening when the retarget lands opens the server it checked, so while
+an output's `output.start` is opening, `output.set_key` for it fails with
+`action_failed`: a key sent for the new server waits until the start has settled.
+The two stay edits under the classification rule above: their effect on the collection
+state, and its inverse, are unchanged, and the key, which is not collection state, is
+removed by the engine guarding it, as a deleted output's runtime state is dropped.
+`output.clear_key` succeeds for an output no longer in the collection. No message
+changed, so this changes no `PROTOCOL_VERSION`. Its errors carry fixed reasons that
+never quote the key.
 
 Encoder profiles (0.13) are collection state as well
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 `encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
 `EncoderProfile`: H.264 video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
 a `vbr` peak at least the average and at most 200000), a keyframe interval of 1..=10 s
-and a hardware preference (`prefer`, `require` or `avoid`, the default), and AAC audio
+and a hardware preference (`prefer`, `require` or `avoid`, which an omitted field
+means), and AAC audio
 at 32..=320 kbit/s. Anything else, including a value a newer server sent as `unknown`,
 is refused with `invalid_argument` naming the field. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with
 no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe every
-2 s, software, AAC 160 kbit/s). Both apply from the output's next `output.start`.
+2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
+
+Hotkey bindings (0.25) are collection state too
+([ADR-0024 §5](../../docs/adr/0024-scene-structure.md),
+[ADR-0040 §3](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)):
+a `Chord` bound to an `Action`, which a client that listens for keys sends when the
+chord is pressed. The engine only stores bindings; the desktop host (OS-global
+shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon none.
+- **Chords.** Zero or more of the modifiers `Ctrl`, `Alt`, `Shift` and `Meta`, each at
+  most once and in that order, then one key, joined by `+`: `F1`, `Ctrl+Digit1`,
+  `Ctrl+Shift+KeyM`. The key is a W3C UI Events
+  [`KeyboardEvent.code`](https://www.w3.org/TR/uievents-code/) value from
+  `Chord::KEYS` (letters, digits, punctuation, function keys F1–F24, editing and
+  arrow keys, the keypad and the media keys): the physical key, whatever the layout,
+  which is what browsers and Tauri's global-shortcut API report. A chord has exactly
+  one spelling, so two bindings are on the same keys exactly when their strings are
+  equal. Anything else is `invalid_argument` on `chord`, with `Chord::problem`'s reason.
+- **`hotkey.set {chord, action}`** binds a chord; its inverse is `hotkey.clear`. It is
+  refused with `already_exists` (entity `hotkey`, the chord as `id`) for a chord that
+  is bound: rebinding is a batch of `hotkey.clear` then `hotkey.set`. `action` is an
+  action request, checked as an `action` call is, and only actions can be bound, so a
+  hotkey never adds to an undo history. `output.set_key` can't be bound (its stream key
+  would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)), nor
+  can the preview actions (they serve only the sending session), `live.set` and
+  `live.cancel` (their gesture belongs to the sending session), `pairing.start` and
+  `device.revoke` (the server answers them for the client that asks), the
+  `youtube.*` actions (YouTube is driven through the UI,
+  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
+  `plugin.*` actions (a person installs and grants plugins): each is
+  `invalid_argument` on `action.type`. A scene, output or preset the action names must
+  exist, else `not_found`.
+- **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
+  inverse is `hotkey.set` with the action.
+- **Deleting what a binding names removes the binding**, in the same edit:
+  `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
+  `transition.delete` drop every binding whose action names their target
+  (`Action::named_objects`; today scenes, outputs and the preset a `scene.switch`
+  names), and their inverses restore the
+  bindings after the target. If another client has bound one of those chords since,
+  that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
+  A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`
+  lists the ones its batch would (`hotkeys`), so a client can say "this also removes
+  the hotkey Ctrl+Digit1".
+- Reads report a binding as a `HotkeyBinding {chord, action}` whose `action` is plain
+  JSON, so a client older than an action type still reads the collection; it keeps the
+  binding and can't run it. `HotkeyBinding::action` parses it.
+
+Folders, labels and organisation metadata are collection state too
+([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4). They change no
+rendering, switching or nesting. Folders organise the scene list as a tree: an ordered
+list of `{ folder_id, name, parent? }`, where a folder's children show in folder order,
+and a scene names at most one folder (`scene.set_folder`) while keeping its place in the
+flat display order. `folder.set_parent` refuses a parent that would put the folder
+inside itself. Labels are an ordered list of `{ label_id, name, color, icon? }`, and a
+source carries a set of them, with a favourite flag (`source.set_meta`); they belong to
+the source, so every item placing it shares them, and `source.duplicate` copies them.
+A scene's `SceneMeta` (`scene.set_meta`) is its `icon`, `color`, `favourite` and
+`show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
+the whole metadata, so a field left out takes its default. Colours are sRGB `#rrggbb`;
+an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
+bytes). A folder that holds a scene or folder, and a label a source carries, can't be deleted:
+the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`), and
+`delete.plan` with a `folder` or `label` target returns the batch that moves what the
+folder holds up to its parent, or takes the label off its sources, then deletes it.
+`state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
+`state.get` and `source.list` report each scene's and source's fields, each omitted
+while it has its default, so an older client reads the collection as before.
+
+Video mixes (0.28) are collection state too: what an output's video shows.
+`video_mix.create` and `video_mix.update` take a `mix_id`, a `name` and a `VideoMix`: an
+`input` (`program`, the scene on program; `preview`, which still shows the program,
+since no mix draws studio mode's preview scene yet; or `scene` with a `scene_id`, one scene whatever is on
+program), a `resolution` whose sides are even and 16..=8192, and an `fps_divisor` of
+1..=60 (missing, it parses as 1): the mix renders on every `fps_divisor`th tick of the
+engine's base frame rate. The canvas is fitted inside the resolution, centred, with
+black bars where the aspect ratios differ, never stretched
+([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Anything else,
+including an input a newer server sent as `unknown`, is refused with `invalid_argument`
+naming the field (`edits.N.mix.resolution.width`), and a missing scene with
+`not_found`. `video_mix.delete` is refused while an output shows the mix.
+`output.set_video_mix` points an output at a mix, or with no `mix_id` back at the
+program at the engine's canvas size and base rate. A running output follows a change
+of its mix's `input` from the next frame; a new resolution, rate or mix applies from
+its next `output.start`, like an encoder profile.
+
+### Transitions and studio mode
+
+[ADR-0029](../../docs/adr/0029-transitions.md) and
+[ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
+the model (0.30). A transition preset is collection state:
+`{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
+kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
+`settings` are checked against its descriptor as a source's are (`unmatched`, the
+effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
+stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
+
+- `transition.create` adds a preset, `transition.update` changes its fields or patches
+  its settings (a new `kind` resets the settings to that kind's defaults, overlaid by
+  the patch), and `transition.delete` removes one, clearing the scene overrides and
+  removing the hotkey bindings that name it in the same edit; its inverse re-creates
+  the preset and restores them. The
+  default preset can't be deleted (`invalid_argument` on `preset_id`);
+  `transition.set_default` moves it. A new collection holds one preset, `cut`, as its
+  default.
+- `scene.set_transitions {scene_id, transition_in?, transition_out?}` sets both of a
+  scene's overrides (absent clears one), and `item.set_transition {item_id,
+  transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,
+  disappear}`, omitted from `ItemInfo` while it is the default.
+- `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
+  (`not_found` when there is no such preset), else the new scene's `transition_in`,
+  else the current scene's `transition_out`, else the default. A switch while a
+  transition runs starts the new one from what is on screen.
+- `studio.set_preview {scene_id}` puts a scene on preview, studio mode's next scene.
+  Like a switch it changes no `rev` and is never undone; a switch leaves preview where
+  it is.
+
+`Easing::apply` is the one easing function every implementation evaluates, so the UI's
+preview of a transition and the engine's render agree.
 
 ### Batches, revisions and `expected_rev`
 
@@ -507,7 +748,8 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   batch applied with a key. A retry with the same key is not applied again and gets the
   original result, even if `rev` has moved on since.
 - Results: a successful batch answers `{"kind":"batch","rev":N}`, the revision it
-  produced. Queries that read collection state report the `rev` they read.
+  produced, with `removed_hotkeys` when its deletes removed hotkey bindings (0.25;
+  omitted when there are none). Queries that read collection state report the `rev` they read.
 
 ### Queries
 
@@ -517,9 +759,16 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `state.get`: the whole collection at one revision: the `canvas` (missing from a
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
-  server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty), and the `buses` and `sends`
-  (as `bus.list`; missing from a pre-0.19 server, both parse as empty). A client reads
+  server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
+  missing from a pre-0.13 server, it parses as empty), every video mix (`video_mixes`,
+  ordered by ID; missing from a pre-0.28 server, it parses as empty), the `buses` and
+  `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
+  hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
+  parses as empty), the master stage (`master`, with its filter chains; omitted while
+  it has none, so missing, also from a pre-0.29 server, parses as empty), the
+  transition presets with the default (`transitions`; missing from a pre-0.30 server,
+  it parses as the one initial `cut`), and the `folders` and `labels` in their orders
+  (each omitted when empty, so it parses as empty from an older server). A client reads
   it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
@@ -530,42 +779,62 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
-  its `OutputKind` and `encoder_profile` (absent for the default), at a `rev`.
+  its `OutputKind`, `encoder_profile` (absent for the default), `video_mix` (absent
+  for the program) and its own `filters` (omitted while empty; 0.29), at a `rev`.
 - `encoder.list`: the encoder profiles, ordered by ID, at a `rev` (0.13).
+- `video_mix.list`: the video mixes, ordered by ID, at a `rev` (0.28).
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
   `false`). While it runs, `encoder` names its session's profile (absent for the
-  default), the other running outputs that share the session (`shared_with`, by ID)
-  and whether the session is a hardware one; `encoder_sessions` and
+  default), the other running outputs that share the session (`shared_with`, by ID),
+  whether the session is a hardware one, and whether it is `dedicated` to this output
+  because the output has its own video chain (0.33; omitted when false), so it can
+  never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
   the cap (0.13; missing, they parse as absent and 0). None of it is collection state,
   so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
-- `studio.get`: the scene on program (`program_scene`, omitted only while the collection
-  has no scene). Runtime state, not collection state
+- `studio.get`: the scene on program (`program_scene`) and on preview
+  (`preview_scene`, 0.30), each omitted only while the collection has no scene. Runtime
+  state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
+- `capture.targets`: the displays and windows the engine can capture now, displays
+  first, each with its `kind` (`display` or `window`, the source kind that captures
+  it), its `target` (the value for that source's `target` setting), a `name` to show,
+  its `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
+  for the display an empty `display` target captures. Runtime state, so no `rev`; a
+  source can still name a window closed since. `action_failed` when the engine has no
+  capture backend or the OS refuses the list. Added in 0.27.
+- `privacy.get`: whether the privacy screen is on (`on`). Runtime state, so no `rev`.
+  Added in 0.33.
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
-  `{"type":"bus","bus_id":…}`) with everything that refers to it, as `edits` and the
+  `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
+  `{"type":"label","label_id":…}`; their plans are described with folders and labels
+  above), with everything that refers to it, as `edits` and the
   `rev` it was planned at, or `not_found` for a missing target (and
   `invalid_argument` on `target.bus_id` for the master, which is never deleted). In order, the edits remove the items that place a
   deleted source, set every settings reference to a deleted object to `null` (one
   `source.set_settings` per source, which keeps the source, and one
   `filter.set_settings` per filter), delete the `scene` sources
-  that show a deleted scene, and last delete the target. Deleting a scene deletes the
+  that show a deleted scene, point every video mix that shows it at `program` (one
+  `video_mix.update`, which keeps the mix), and last delete the target. Deleting a
+  scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
   deletes no scene. A bus is held only by settings references, which the plan clears;
   its `bus.delete` takes its sends. A target nothing refers to plans just its own
-  delete. The client
+  delete. `hotkeys` lists the bindings the batch removes with what they name, ordered
+  by chord (0.25; omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
-- `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
+- `video.snapshot`: the current program mix as a PNG, never a video mix (there is no
+  per-mix snapshot yet). `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
   Source pixels are runtime state and can change without a new `rev`. The query takes
@@ -592,7 +861,7 @@ server in front answers `unsupported`. The code is a `SecretString`: it never pr
 and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
-`crop`, `visible`, `opacity` and `blend`, and a source with its name, kind, settings and
+`crop`, `visible`, `opacity`, `blend` and `transition`, and a source with its name, kind, settings and
 filters: every property an
 edit sets, so a client can compute any edit, or its inverse, from what it read
 ([Item geometry](#design) says what `transform` and `geometry` hold for each form). The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
@@ -616,10 +885,13 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `canvas.set_size` restores the canvas, and `item.set_geometry` and
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
-item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
-with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
-each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`
+and `item.set_transition` the removed item needs, and undoing `scene.delete` is
+`scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
+was last, `scene.set_transitions` if it had an override, and each item's restore,
+bottom to top. Undoing `transition.delete` is `transition.create`, then a
+`scene.set_transitions` for each override it cleared, and a `hotkey.set` for each
+binding it removed. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, then `source.set_audio` and `send.set` (or `send.remove` of the
@@ -633,7 +905,8 @@ each send the bus had; `source.set_audio`, `bus.set_fader` and `send.set` are ea
 undone by the same edit with the old values, and a new send by `send.remove`. Deleting a source that items still
 place or a setting refers to, a scene that a `scene` source shows or a setting refers
 to, or a bus a setting refers to, is rejected, so no edit removes more than the object
-it names (a bus's sends are part of it). `jstream-graph`'s property
+it names (a bus's sends are part of it), apart from the scene overrides a deleted preset
+clears and the hotkey bindings a delete removes, which its inverse restores. `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
 exactly. A new edit that can't state its inverse in edits needs new edits first.
 
@@ -677,11 +950,54 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   undoing its `output.create`, which fails with `invalid_argument` until the output
   stops.
 - `history_empty` (`direction`) means there is nothing to undo or redo.
-- Actions (outputs, stream keys), queries and history calls are never steps. The engine
+- Actions (outputs, stream keys, live values), queries and history calls are never
+  steps; a gesture's step is its committing batch. The engine
   keeps 100 steps per client by default, in memory, for the session's lifetime.
 
-Live values, which keep a drag to one batch and one undo step, are the other half of
-ADR-0032 and are not built yet.
+### Live values
+
+Live values (0.26) keep a drag, a fader move or a live dialog to one batch and one undo
+step ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). A client opens a **gesture**,
+named by a `gesture_id` it chooses, and sends its values as it goes:
+
+```json
+{"type":"request","id":"r7","call":{"kind":"action","action":{"type":"live.set","gesture_id":"drag_1","values":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":800,"y":450},"size":{"width":480,"height":270}}}]}}}
+{"type":"response","id":"r7","result":{"kind":"action"}}
+{"type":"request","id":"r9","call":{"kind":"batch","edits":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":820,"y":450},"size":{"width":480,"height":270}}}],"ends_gesture":"drag_1"}}
+```
+
+- `live.set {gesture_id, values}` opens the gesture if it is new and sets its values:
+  setter edits, the same ones a batch carries. Each overrides one parameter on output
+  from the next render tick, and replaces the gesture's earlier value for it. A live
+  value is runtime state: it never changes `rev`, is never an undo step, is never saved,
+  and `state.get` and `item.list` never show it. The live-adjustable setters are
+  `item.set_transform`, `item.set_geometry` (one parameter, the placement) and
+  `item.set_crop`; audio faders and kind parameters marked `live` follow as their
+  real-time paths exist. Values are checked as a batch's edits are, named
+  `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
+  values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
+  message is applied. The engine never refuses a `live.set` for arriving fast; a client
+  keeps one per gesture in flight and sends its newest values when the answer comes.
+- **Commit:** the client sends one ordinary batch with the final values and
+  `ends_gesture`. It is one `rev`, one undo step whose inverse restores the values from
+  before the gesture, and one audit entry. The gesture ends with it. A batch whose
+  `ends_gesture` names no gesture the client has open is `invalid_argument` (field
+  `ends_gesture`), and a batch that fails leaves the gesture open.
+- **Cancel:** `live.cancel {gesture_id}` ends the gesture without a commit; it succeeds
+  when there is nothing to cancel, so a retry is safe. A gesture also ends,
+  `expired`, when its client's session ends.
+- **Two gestures, one parameter:** a parameter is held by one gesture at a time. A
+  `live.set` naming a parameter another gesture holds takes it over (last writer
+  wins); the other keeps the rest. A gesture left holding nothing stays open, and
+  counts toward the client's 16, until the client commits it, cancels it or
+  disconnects, so its `ends_gesture` still works. A batch that changes a held parameter changes the
+  collection, but the live value still shows until the gesture ends. A batch that
+  deletes an item drops its live values.
+- `live.list` returns every open gesture, ordered by client and gesture ID, with the
+  values each holds now, for a client that connects during one. It carries no `rev`.
+
+`live.set` and `live.cancel` are actions: never undoable, never batchable, answering
+`{"kind":"action"}`.
 
 ### Events
 
@@ -694,14 +1010,32 @@ After `welcome`, the server pushes every event to every client.
   to `rev`, a gap shows that an event was missed.
 - `output.state_changed {output_id, state}` reports runtime state, which is not part of
   the collection, so it carries no `rev`.
-- `studio.changed {program_scene?, client_id, request_id?}` reports a new scene on
-  program, with the request that caused it: a `scene.switch`, or a batch, undo or redo
-  that created
-  the collection's first scene (it goes on program) or deleted the program scene
-  (program moves to the first scene left, or to none). For edits it follows their
-  `state.changed`. A switch to the scene already on program emits nothing.
-  Program is runtime state, so it carries no `rev`
-  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.16.
+- `studio.changed {program_scene?, preview_scene?, transition?, client_id, request_id?}`
+  reports a new scene on program or preview, with the request that caused it: a
+  `scene.switch`, a `studio.set_preview`, or a batch, undo or redo that created the
+  collection's first scene (it goes on program and preview) or deleted the program or
+  preview scene (it moves to the first scene left, or to none). For edits it follows
+  their `state.changed`. A switch, or setting preview, to the scene already there emits
+  nothing. After a switch, `transition` names the preset it ran and how long the
+  transition lasts in milliseconds (`duration_ms`, 0 for a cut), so a client can show
+  progress; no event marks the end. Program and preview are runtime state, so it
+  carries no `rev` ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+  Added in 0.16; `preview_scene` and `transition` in 0.30.
+- `live.changed {gesture_id, client_id, values}` carries the newest value of each
+  parameter a gesture changed since its last one. The engine coalesces it per gesture
+  to at most 30 a second, so a slow client gets fewer, newer values; the values a
+  gesture had not sent yet always go out before it ends. Until
+  [open question 7](#open-questions) every client receives it.
+- `live.ended {gesture_id, client_id, outcome, rev?}` says a gesture ended: `committed`
+  with the committing batch's `rev`, whose `state.changed` comes first, `cancelled` or
+  `expired`. A client that doesn't know these events ignores them and shows committed
+  state only.
+- `privacy.changed {on, client_id, request_id?}` reports the privacy screen going on or
+  off, with the client and request that did it. A `privacy.set` that changes nothing
+  emits nothing. A client that subscribes while the screen is on gets this event first,
+  naming the client that turned it on and with no `request_id`, so it never shows an
+  uncovered picture. Runtime state, so no `rev`
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Added in 0.33.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -741,6 +1075,8 @@ After `welcome`, the server pushes every event to every client.
   one loses nothing; nothing numbers them.
 - `youtube.status_changed {auth}` and `youtube.health_changed {output_id, broadcast_id,
   stream_id, status, health, issues}` (0.23) are described under [YouTube](#design).
+- `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
+  under [Plugins](#design).
 
 ### YouTube
 
@@ -780,6 +1116,68 @@ have an `other` value, so a value YouTube adds later still parses. Text from You
 untrusted and shown as plain text. Chat, the featured message and audience stats come
 later.
 
+### Plugins
+
+WASM automation plugins (0.35, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)) call the API through
+a scoped `Control`, which checks every call against the plugin's grant before it reaches
+the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
+
+- **Classes.** A person grants a plugin classes: `read` (the queries; always granted),
+  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey and studio
+  edits, among them a scene's folder, metadata and transitions, a source's metadata, an
+  item's transition settings, the `transition.*` presets and `studio.set_preview`,
+  `live.set` and `live.cancel`, and `undo`/`redo` on the plugin's own session), `live`
+  (`scene.switch`) and `outputs` (`output.start`, `output.stop`). Everything else is
+  never granted: creating, deleting and retargeting outputs, their encoders and stream
+  keys, video mixes, `video.snapshot` and previews (a capture's pixels could leave
+  through a granted host), `audio.reset_loudness`, folders and labels themselves
+  (`folder.*`, `label.*`), which ADR-0069 names in no class, `privacy.set` (a plugin
+  never lifts the privacy screen), `youtube.*`, pairing and devices, and `plugin.*`
+  itself.
+  `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
+  `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
+  command can't reach plugins unreviewed.
+- **Checking a call.** `plugin_classes` collects the class of every command a call
+  carries: each edit of a batch, each edit a `live.set` carries, and for `hotkey.set`
+  the class of the action it binds, since a person's key press runs it: with `edit`
+  alone a plugin can't bind `output.start`. A call needing a class outside the grant,
+  naming a never command, or an empty batch is `forbidden` (`PluginGrant::check`), with
+  the call's first command as `call`.
+- **Reach.** A class never widens network or filesystem reach (ADR-0069 S2): a
+  `browser` source's URL and a media or image source's file need the grant's `hosts` or
+  `folders` beside `edit`. `PluginGrant::check` reads the settings of `source.create`,
+  `source.set_settings`, `filter.add`, `filter.set_settings`, `transition.create` and
+  `transition.update` (in a batch or a `live.set`) with `settings_reach`, which needs no
+  kind descriptor:
+  - an asset reference under the `absolute` root must be inside a granted folder;
+  - a string that starts as `scheme://` (after trimming ASCII spaces, control
+    characters and Unicode white space from both ends, and dropping tabs and newlines,
+    which covers what both a URL parser and the engine's `str::trim` remove) must be
+    an `http`, `https`, `ws` or `wss` URL whose `scheme://host:port` (default port
+    filled in, host compared without case) is granted. Text with an address later in
+    it, such as a caption that ends with a link, is no URL and reaches nothing.
+  Anything neither rule lets through is `forbidden`: a file under the collection's or the
+  app's folder, another scheme, credentials in the URL, and a path with a `.` or `..`
+  segment. A grant's folders can't have one either. A value the engine would resolve to
+  a host without `://` (a `youtube_chat` video ID) isn't found, and the host's own
+  network and filesystem checks still apply. Both path forms pass `problem`, since the
+  client may not share the engine's OS, so an engine also refuses a folder its OS
+  doesn't read as absolute (`/data` on Windows).
+- **`plugin.install {plugin_id, path, grant}`**, **`plugin.grant {plugin_id, grant}`**
+  and **`plugin.enable {plugin_id}`** are actions for a person: no MCP tool carries
+  them, no plugin is granted them and no hotkey binds them. `PluginGrant` is
+  `{classes, hosts, folders}`, each omitted while empty: hosts as `scheme://host:port`
+  (`http`, `https`, `ws`, `wss`), folders as absolute paths on the engine's machine. A
+  grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`.
+  An unknown plugin is `not_found` with entity `plugin`; an engine that hosts no plugins
+  answers `unsupported`, as the engine and the mock do today.
+- **`plugin.state_changed {plugin_id, state, reason?, remote_name?}`** reports a plugin
+  `enabled` or `disabled`. The engine disables a plugin that runs past a limit or traps
+  (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than
+  its grant (`needs_grant`), and never re-enables one by itself. `remote_name` is the
+  name the plugin's manifest gives itself: the plugin's text, never an instruction
+  ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
+
 ### Errors
 
 `ProtocolError` is a `thiserror` enum ([R-RS-003](../../docs/RULES.md#R-RS-003)). On the
@@ -799,7 +1197,8 @@ people and agents. Clients match on `code`, never on `message`.
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
-| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.21) | `call` |
+| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35) | `call` |
+| `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -840,7 +1239,12 @@ after 1.0:
   sends, but if one's bus has since been deleted by another client, the undo fails with
   `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
   answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
-  filter edits. The encoder enums (`VideoCodec`,
+  filter edits. 0.30 adds the `EntityKind` value `transition` in the same way, but also
+  the `KindCategory` value `transition`, which `kind.list` reports for every transition
+  kind, so a client older than 0.30 can't parse `kind.list` from a 0.30 server. From
+  0.30 `KindCategory` parses an unknown value as `Unknown`, so a later category won't
+  break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
+  `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
@@ -856,8 +1260,10 @@ after 1.0:
 [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) defines an item's box as
 `ItemGeometry` ([`geometry.rs`](src/geometry.rs)): `center` and `size` in canvas pixels,
 `fit_mode` (`stretch`, `fit` or `fill`, default `fit`), clockwise `rotation_deg` about
-the centre, and 3D `tilt_deg`, `turn_deg`, `depth_px` and optional `perspective_px`.
-The 3D fields default to neutral: zeros, and perspective absent. The formula is a pure
+the centre, 3D `tilt_deg`, `turn_deg`, `depth_px` and optional `perspective_px`, and
+the flips `flip_h` and `flip_v`. The 3D fields default to neutral: zeros, and
+perspective absent. The flips default to `false` and are omitted from the wire when
+`false`, so an unflipped geometry's JSON is what it was before they existed. The formula is a pure
 function in this crate so the compositor and the UI share one implementation.
 
 - `place` and `project` map a local-frame point, and the box's four corners, through
@@ -873,13 +1279,43 @@ function in this crate so the compositor and the UI share one implementation.
   rectangle that covers the box, centred, and may extend past it; the compositor clips.
   A crop that leaves no pixels draws nothing. Crop stays [`Crop`](src/command.rs), in
   source pixels, applied before fitting.
+- `flip_h` and `flip_v` are the additive booleans ADR-0022 reserved for flips. They
+  mirror the cropped, fitted content about the box centre, in the box's local frame
+  before rotation and 3D: `content` swaps `u0` with `u1` or `v0` with `v1`. The box,
+  its projected corners and `transform_view` do not change, so selection handles and
+  0.3 clients see the same box. A negative `size` is still rejected, not read as a
+  flip. The flips travel inside `ItemGeometry`, so `item.add`, `item.set_geometry` and
+  its inverse carry them with no edit of their own. The compositor draws them, so the
+  engine accepts both.
 - `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 `ItemTransform`: crop,
   then scale, top-left at `position`, clockwise about that corner. `from_legacy`
   returns that outline as a box with `fit_mode = stretch` and neutral 3D, so a
   non-uniform scale stays exact, plus whether a negative scale flipped an axis.
-  A negative scale is not refused. Geometry has no flip field, so projecting that box
-  matches the outline and not the reflected corner order. `legacy_quad` is the
-  reflected quad.
+  A negative scale is not refused: it becomes the box's `flip_h` or `flip_v`, so the
+  box draws the same pixels. Projecting that box gives its outline, not the reflected
+  corner order, which `legacy_quad` keeps.
+- `drawn_polygon` and `unplace` (`geometry/drawn.rs`,
+  [ADR-0050](../../docs/adr/0050-3d-transforms-rendering.md) decisions 1 to 3) are what
+  a compositor draws in 3D, and its inverse. `drawn_polygon` clips `content`'s rectangle
+  to the box, then by the near plane `w ≥ NEAR_W` (1/256: nothing magnified more than 256
+  times), both in the local frame where texture coordinates are linear. It returns three
+  to five `DrawnVertex`es, each with its canvas point (`place` of its local point), local
+  point, texture coordinate and `w = (p − z) / p` (1 without perspective), so the GPU
+  can interpolate texture coordinates perspective-correctly. It returns nothing when the
+  content misses the box, the whole item is past the near plane, it is seen edge-on, or
+  it covers under 0.01 px².
+  Edge-on is decided by the plane's facing (the z of its unit normal under a millionth:
+  through the viewer with perspective, side-on without), whatever the item's size, and
+  `unplace` makes the same test, so the two agree.
+  With neutral 3D it is the 2D quad, its texture coordinates clipped to the box.
+  `unplace` maps a canvas point back to the local point it shows: a 2×2 solve, in
+  `f64`, with nothing returned edge-on or past the near plane. It doesn't check the box,
+  so a hit test compares the point with it. `drawn_vertex` gives the vertex of one
+  local point (canvas point, texture coordinate and `w`, as the polygon's own), or
+  nothing past the near plane: the compositor uses it for the corners it pushes out
+  for edge coverage. All three allocate nothing, for the render thread. They are pure
+  functions with no wire form. `jstream-render` draws from them, and from 0.34 the
+  engine accepts the 3D they can draw (`check_drawable`, Validation below).
 
 **On the wire (0.11).** ADR-0022 names these additions as 0.4, which had already
 shipped with `events.dropped`, so they ship as 0.11, an additive minor under
@@ -899,10 +1335,21 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   transform. Each one's inverse restores the previous placement in its own form.
 - **Validation.** A stored geometry has a size greater than zero
   (`edits.N.geometry.size`), a `perspective_px` greater than zero if present
-  (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). Until
-  the compositor draws 3D, a non-neutral `tilt_deg`, `turn_deg`, `depth_px` or any
-  `perspective_px` is `invalid_argument` naming that field; `is_neutral_3d` is that
-  predicate. Accepting them later is not a breaking change.
+  (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). From
+  0.34 any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is accepted and
+  drawn, provided the compositor can draw it: `ItemGeometry::check_drawable`, which the
+  engine and the mock share, also bounds a non-neutral one by `MAX_DRAWN_PX` (10^15
+  canvas pixels). Its centre's coordinates, its width and height, `|depth_px|` and
+  `perspective_px` must be at most that, and so must every vertex of the polygon its
+  whole box draws. Otherwise the edit is `invalid_argument` on `edits.N.geometry`
+  (`TooFar`, or `NotFinite` for a vertex that overflows). Bounding the inputs is what
+  keeps every content's polygon finite: in f32 the whole box's polygon doesn't bound a
+  thin source's, and a huge item on an 8192×1 source would otherwise overflow while it
+  is drawn and fail its whole frame. An item wholly behind the viewer or seen edge-on is
+  valid and draws nothing.
+  Before 0.34 a non-neutral one was `invalid_argument` naming that field, with
+  `is_neutral_3d` as the predicate. ADR-0022 said accepting them is not a breaking
+  change.
 - **Reads.** `ItemInfo.placement` is `legacy` or `geometry` (missing from a pre-0.11
   server, it parses as `legacy`). A legacy item reports its transform exactly as
   written and no `geometry`, because its box depends on the source's runtime size. A
@@ -914,9 +1361,12 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   `item.add`'s `transform` and `ItemInfo.transform`. Their doc comments, and so the
   schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
   ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
+- **Flips (0.32).** `flip_h` and `flip_v` are optional fields, an additive minor under
+  [R-API-001](../../docs/RULES.md#R-API-001): an older peer ignores them, so it shows a
+  flipped item unflipped, and one that writes the geometry back drops the flip.
 - **Not in 0.11 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
-  the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
-  which need the live-value channel. Both are later minors.
+  the engine's runtime source sizes, and live geometry values, which arrived in 0.26
+  with `live.set` ([Live values](#design)). Both are later minors.
 
 ### Binary streams
 
@@ -997,8 +1447,8 @@ described above.
    `history.undo` and `history.redo` are a fourth kind of call, `history`, which
    carries no command (it applies a batch of edits the engine already holds), so
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
-   (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are not
-   built yet.
+   (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are built
+   for item placements and crops ([Live values](#design)), not yet for audio faders.
 5. **Actions that change collection state.** Settled by
    [ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md): the program
    scene is runtime state, not collection state, so `scene.switch` is an action that
@@ -1006,13 +1456,14 @@ described above.
 6. **Idempotency.** How long the engine remembers keys (count or time), and whether a
    reused key with a different batch is an error (`idempotency_key_reused`).
 7. **Event subscriptions.** Every client gets every event in this cut, including
-   `stats.tick` (0.6). High-rate events (`stats.tick`, meters) will need opt-in
-   subscriptions. Until then every client receives a tick about once a second while
-   the pipeline runs.
+   `stats.tick` (0.6) and `live.changed`. High-rate events (`stats.tick`,
+   `live.changed`, meters) will need opt-in subscriptions. Until then every client
+   receives a tick about once a second while the pipeline runs, and up to 30
+   `live.changed` a second per gesture while someone drags.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
-   fallbacks from 0.9, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
+   fallbacks from 0.9 and `KindCategory` from 0.30, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
    outputs (see Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?

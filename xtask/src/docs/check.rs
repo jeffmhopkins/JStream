@@ -8,6 +8,7 @@ use std::path::{Component, Path, PathBuf};
 use super::hash::{self, Files};
 use super::ledger::{self, Ledger};
 use super::parse::{Diag, Doc};
+use super::test_list::{Resolved, TestList};
 
 const DOC_KEYS: &[&str] = &[
     "id",
@@ -69,9 +70,32 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
     }
 
     let known = super::backrefs::known_crates(repo.docs, repo.files.paths());
+    let tests = test_list(repo);
+    let lints = workspace_lints(repo.root);
+    let deny = deny_sections(repo.root);
+    // Crate-map crates that don't exist yet, by crate name (#739 review N2): `known`
+    // also holds every existing crate directory, whose name may differ from its package.
+    let existing: BTreeSet<&str> = super::backrefs::crates(repo.files.paths())
+        .into_iter()
+        .map(|(d, _)| d)
+        .collect();
+    let planned: BTreeSet<String> = known
+        .iter()
+        .filter(|d| !existing.contains(d.as_str()))
+        .filter_map(|d| d.rsplit('/').next().map(|n| n.replace('-', "_")))
+        .collect();
+    let refs = RuleRefs {
+        ci_checks: &ci_checks,
+        known_crates: &known,
+        planned: &planned,
+        tests: &tests,
+        lints: &lints,
+        deny_sections: &deny,
+    };
     let mut ids: BTreeMap<&str, &str> = BTreeMap::new();
     for doc in repo.docs {
         check_doc_meta(doc, &mut out);
+        check_conflict_markers(doc, &mut out);
         if let Some(id) = doc.meta_str("id")
             && let Some(other) = ids.insert(id, &doc.path)
         {
@@ -94,7 +118,7 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
         }
         for r in &doc.rules {
             if let Some(meta) = &r.meta {
-                check_rule_meta(doc, r.line, &r.id, meta, &ci_checks, &known, &mut out);
+                check_rule_meta(doc, r.line, &r.id, meta, &refs, &mut out);
             }
         }
         for link in &doc.links {
@@ -137,6 +161,39 @@ fn diag(path: &str, line: usize, msg: String) -> Diag {
         line,
         msg,
         warning: false,
+    }
+}
+
+/// Refuses git conflict markers left in a doc, as a merge whose conflicts were committed
+/// unresolved leaves them: `<<<<<<<`, `|||||||` and `>>>>>>>` at the start of a line, alone
+/// or before a space, and `=======` alone on a line inside an open `<<<<<<<` hunk. Outside
+/// one, a lone `=======` is a setext heading underline.
+fn check_conflict_markers(doc: &Doc, out: &mut Vec<Diag>) {
+    let mut open = false;
+    for (i, line) in doc.text.lines().enumerate() {
+        let line = line.trim_end_matches('\r');
+        let marker = |m: &str| {
+            line.strip_prefix(m)
+                .is_some_and(|r| r.is_empty() || r.starts_with(' '))
+        };
+        let found = if marker("<<<<<<<") {
+            open = true;
+            "<<<<<<<"
+        } else if marker(">>>>>>>") {
+            open = false;
+            ">>>>>>>"
+        } else if marker("|||||||") {
+            "|||||||"
+        } else if open && line == "=======" {
+            "======="
+        } else {
+            continue;
+        };
+        out.push(diag(
+            &doc.path,
+            i + 1,
+            format!("git conflict marker `{found}`: resolve the merge conflict before committing"),
+        ));
     }
 }
 
@@ -382,15 +439,83 @@ fn check_section_meta(
     }
 }
 
+/// What a rule's `applies_to` and `enforced_by` entries are checked against.
+struct RuleRefs<'a> {
+    ci_checks: &'a BTreeSet<String>,
+    known_crates: &'a BTreeSet<String>,
+    /// Crates on the crate map that don't exist yet, by crate name (`-` written `_`).
+    planned: &'a BTreeSet<String>,
+    tests: &'a TestList,
+    /// Lints the root `[workspace.lints]` sets above `allow`: rustc's by name, any other
+    /// tool's (`clippy`, `rustdoc`) as `<tool>::<name>`.
+    lints: &'a BTreeSet<String>,
+    /// `deny.toml`'s top-level tables.
+    deny_sections: &'a BTreeSet<String>,
+}
+
+/// The lints the root `Cargo.toml` sets above `allow` in `[workspace.lints]`, as
+/// `lint:` entries name them (docs/DOCS.md#rules).
+fn workspace_lints(root: &Path) -> BTreeSet<String> {
+    let Some(table) = read_toml(&root.join("Cargo.toml")) else {
+        return BTreeSet::new();
+    };
+    let Some(lints) = table
+        .get("workspace")
+        .and_then(|w| w.get("lints"))
+        .and_then(toml::Value::as_table)
+    else {
+        return BTreeSet::new();
+    };
+    let mut out = BTreeSet::new();
+    for (tool, set) in lints {
+        let Some(set) = set.as_table() else { continue };
+        for (name, level) in set {
+            // A level is a string, or a table with `level` (and `priority`).
+            let level = level
+                .as_str()
+                .or_else(|| level.get("level").and_then(toml::Value::as_str));
+            if level.is_some_and(|l| l != "allow") {
+                out.insert(if tool == "rust" {
+                    name.clone()
+                } else {
+                    format!("{tool}::{name}")
+                });
+            }
+        }
+    }
+    out
+}
+
+/// `deny.toml`'s top-level tables, as `deny:` entries name them (docs/DOCS.md#rules).
+fn deny_sections(root: &Path) -> BTreeSet<String> {
+    read_toml(&root.join("deny.toml")).map_or_else(BTreeSet::new, |t| {
+        t.iter()
+            .filter(|(_, v)| v.is_table())
+            .map(|(k, _)| k.clone())
+            .collect()
+    })
+}
+
+fn read_toml(path: &Path) -> Option<toml::Table> {
+    std::fs::read_to_string(path).ok()?.parse().ok()
+}
+
 fn check_rule_meta(
     doc: &Doc,
     line: usize,
     id: &str,
     meta: &toml::Table,
-    ci_checks: &BTreeSet<String>,
-    known_crates: &BTreeSet<String>,
+    refs: &RuleRefs<'_>,
     out: &mut Vec<Diag>,
 ) {
+    let RuleRefs {
+        ci_checks,
+        known_crates,
+        planned,
+        tests,
+        lints,
+        deny_sections,
+    } = refs;
     for k in meta.keys() {
         if !RULE_KEYS.contains(&k.as_str()) {
             out.push(diag(
@@ -437,7 +562,38 @@ fn check_rule_meta(
     for e in string_array(meta, "enforced_by", doc, line, out) {
         let ok = match e.split_once(':') {
             Some(("ci", name)) => ci_checks.contains(name),
-            Some(("lint" | "deny" | "test", rest)) => !rest.is_empty(),
+            Some(("lint", name)) => {
+                if !lints.contains(name) {
+                    out.push(diag(
+                        &doc.path,
+                        line,
+                        format!(
+                            "rule `{id}`: `enforced_by` entry `{e}`: `{name}` is not set above \
+                             `allow` in the root Cargo.toml's `[workspace.lints]`"
+                        ),
+                    ));
+                }
+                true
+            }
+            Some(("deny", section)) => {
+                if !deny_sections.contains(section) {
+                    out.push(diag(
+                        &doc.path,
+                        line,
+                        format!(
+                            "rule `{id}`: `enforced_by` entry `{e}`: deny.toml has no \
+                             `[{section}]` section"
+                        ),
+                    ));
+                }
+                true
+            }
+            Some(("test", path)) => {
+                if let Some(msg) = check_test_entry(path, planned, tests) {
+                    out.push(diag(&doc.path, line, format!("rule `{id}`: {msg}")));
+                }
+                true
+            }
             None => e == "review" || e == "human",
             _ => false,
         };
@@ -447,6 +603,43 @@ fn check_rule_meta(
                 line,
                 format!("rule `{id}`: invalid `enforced_by` entry `{e}`"),
             ));
+        }
+    }
+}
+
+/// The workspace's tests, read from every crate's source (docs/DOCS.md#rules).
+fn test_list(repo: &Repo<'_>) -> TestList {
+    let crates: Vec<(String, String)> = super::backrefs::crates(repo.files.paths())
+        .into_iter()
+        .map(|(dir, _)| {
+            let name = read_toml(&repo.root.join(dir).join("Cargo.toml"))
+                .and_then(|t| t.get("package")?.get("name")?.as_str().map(str::to_owned))
+                .unwrap_or_else(|| dir.rsplit('/').next().unwrap_or(dir).to_owned());
+            (dir.to_owned(), name)
+        })
+        .collect();
+    TestList::read(repo.root, &crates, repo.files.paths())
+}
+
+/// Checks a `test:<path>` entry: `<path>` must name a test, or a module holding one, in
+/// the crate or integration test target its first segment names. A crate on the crate map
+/// that doesn't exist yet makes the entry pending, which passes.
+fn check_test_entry(path: &str, planned: &BTreeSet<String>, tests: &TestList) -> Option<String> {
+    match tests.resolve(path) {
+        Resolved::Found => None,
+        Resolved::NoTest => Some(format!(
+            "`enforced_by` entry `test:{path}` names no test, or module of tests, in its \
+             crate or target"
+        )),
+        Resolved::NoTarget => {
+            let first = path.split("::").next().unwrap_or(path);
+            (!planned.contains(first)).then(|| {
+                format!(
+                    "`enforced_by` entry `test:{path}`: `{first}` is neither an existing crate \
+                     (by package name), a crate on the crate map that doesn't exist yet, nor \
+                     an integration test target"
+                )
+            })
         }
     }
 }
@@ -685,6 +878,22 @@ pub(crate) fn ci_check_names(rules_md: &str) -> BTreeSet<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conflict_markers_are_refused() {
+        let markers = |text: &str| {
+            let doc = super::super::parse::parse("T.md", text, &mut Vec::new());
+            let mut out = Vec::new();
+            check_conflict_markers(&doc, &mut out);
+            out.iter().map(|d| d.line).collect::<Vec<_>>()
+        };
+        let text = "# T\n\n<<<<<<< HEAD\nours\n||||||| base\nbase\n=======\ntheirs\n>>>>>>> origin/wave/m1-2\n";
+        assert_eq!(markers(text), vec![3, 5, 7, 9]);
+        assert_eq!(markers("<<<<<<<\n=======\n>>>>>>>\n"), vec![1, 2, 3]);
+        // A setext underline, and look-alikes that aren't markers, pass.
+        assert!(markers("Title\n=======\n\ntext\n").is_empty());
+        assert!(markers("a <<<<<<< b\n<<<<<<<< x\n>>>>>>>y\n `=======`\n").is_empty());
+    }
 
     #[test]
     fn ci_names_come_from_the_rgit003_table() {
