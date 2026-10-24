@@ -94,6 +94,8 @@ fn daemon() -> Command {
     command.env_remove("JSTREAM_TOKEN_FILE");
     command.env_remove("RUST_LOG");
     command.env_remove("XDG_DATA_HOME");
+    command.env_remove("JSTREAM_YOUTUBE_CLIENT_ID");
+    command.env_remove("JSTREAM_YOUTUBE_CLIENT_SECRET");
     command.env("HOME", &home);
     command.env("APPDATA", &home);
     command
@@ -291,7 +293,7 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     }))))
     .await
     .expect("applied");
-    assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(applied.result, CallResult::batch(Rev(1)));
     match timely(events.next()).await {
         Some(Event::StateChanged {
             rev,
@@ -340,6 +342,12 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     assert_eq!(status, 200, "{body}");
     assert!(body.contains("\"isError\":false"), "{body}");
     assert!(body.contains("main"), "{body}");
+    // Agents never get YouTube (ADR-0058): MCP lists no `youtube` tool.
+    let tools = r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#;
+    let (status, _, body) = mcp_post(&authority, token, Some(&session), tools);
+    assert_eq!(status, 200, "{body}");
+    assert!(body.contains("\"name\":\"scene\""), "{body}");
+    assert!(!body.contains("\"name\":\"youtube\""), "{body}");
     let (status, _, _) = mcp_post(&authority, WRONG_TOKEN, None, initialize);
     assert_eq!(status, 401, "the MCP endpoint needs the token too");
 
@@ -589,6 +597,16 @@ fn logs_go_to_the_data_directory_by_default() {
 fn an_unusable_token_file_exits_1() {
     let dir = scratch("unusable");
     let token_file = dir.join("token");
+    // User-only, so the daemon reaches the emptiness check: a file other users may read
+    // is refused first (on Windows the scratch folder's inherited entries may grant
+    // `BUILTIN\Users` read, as CI's runner does).
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let mut file = jstream_platform_windows::create_private_file(&token_file).expect("created");
+        file.write_all(b"\n").expect("written");
+    }
+    #[cfg(not(windows))]
     std::fs::write(&token_file, "\n").expect("written");
     #[cfg(unix)]
     {

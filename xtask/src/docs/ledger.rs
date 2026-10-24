@@ -141,6 +141,31 @@ impl Ledger {
         std::fs::write(&path, self.render()).with_context(|| format!("writing {PATH}"))
     }
 
+    /// Gives each entry whose hash equals `theirs`'s entry for the same input that entry,
+    /// `by` and `note` included; returns the sections changed, sorted. Both recorded the
+    /// same content of that input, so no section's freshness changes, but the last note on
+    /// the input becomes the one the merged side wrote for it, and the branch's ledger diff
+    /// keeps only the inputs it verified at other content (#697).
+    pub(crate) fn adopt(&mut self, theirs: &Self) -> Vec<String> {
+        let mut changed = Vec::new();
+        for (section, stamp) in &mut self.sections {
+            let Some(other) = theirs.sections.get(section) else {
+                continue;
+            };
+            let mut any = false;
+            for (input, e) in stamp.iter_mut() {
+                if let Some(t) = other.get(input).filter(|t| t.hash == e.hash && *t != e) {
+                    *e = t.clone();
+                    any = true;
+                }
+            }
+            if any {
+                changed.push(section.clone());
+            }
+        }
+        changed
+    }
+
     /// Drops every section not in `keep`; returns the dropped keys.
     pub(crate) fn prune(&mut self, keep: &dyn Fn(&str) -> bool) -> Vec<String> {
         let gone: Vec<String> = self.sections.keys().filter(|k| !keep(k)).cloned().collect();
@@ -194,6 +219,82 @@ pub(crate) fn restamp(
         .collect()
 }
 
+/// Where a note written by `docs verify --merge` turns from this branch's note to what the
+/// merge changed. A later merge's `--merge` drops everything from here on before adding its
+/// own: what an earlier merge brought in is part of the base by then, not this branch's
+/// change.
+pub(crate) const MERGE_MARK: &str = " | merge: ";
+
+/// The note `docs verify --merge` writes on an entry: the branch's `earlier` note, without
+/// any earlier merge's addendum, then `merge`, what this merge changed in the input.
+pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
+    let own = earlier
+        .map(|n| n.split_once(MERGE_MARK).map_or(n, |(own, _)| own).trim())
+        .filter(|n| !n.is_empty());
+    match own {
+        Some(own) => format!("{own}{MERGE_MARK}{merge}"),
+        None => format!("merge: {merge}"),
+    }
+}
+
+/// The stamp `docs verify --merge` writes after `docs merge-main`. `branch` is the entries
+/// this branch had written itself before the merge. Each entry that `restamp` would rewrite,
+/// and each the branch had written whose input the merge has since changed (as when a
+/// re-verify after the merge replaced the branch's note), gets [`merge_note`] of the branch's
+/// note on it. `merged` is the section's stamp on the merged side: an input whose hash equals
+/// that side's entry gets that entry as it is, since this branch changes nothing in it
+/// (#596). The rest are kept, and removed inputs dropped, as `restamp` does.
+pub(crate) fn restamp_merge(
+    old: Option<&Stamp>,
+    inputs: &BTreeMap<String, String>,
+    branch: Option<&Stamp>,
+    merged: Option<&Stamp>,
+    by: &str,
+    merge: &str,
+) -> Stamp {
+    inputs
+        .iter()
+        .map(|(k, h)| {
+            let own = branch.and_then(|b| b.get(k));
+            let theirs = merged.and_then(|m| m.get(k)).filter(|e| &e.hash == h);
+            let e = match (theirs, old.and_then(|o| o.get(k))) {
+                (Some(t), _) => t.clone(),
+                (None, Some(e)) if &e.hash == h && own.is_none_or(|o| &o.hash == h) => e.clone(),
+                _ => Entry {
+                    hash: h.clone(),
+                    by: Some(by.to_owned()),
+                    note: Some(merge_note(own.and_then(|o| o.note.as_deref()), merge)),
+                },
+            };
+            (k.clone(), e)
+        })
+        .collect()
+}
+
+/// The stamp `docs verify --renote` writes on a fresh section: the entries this branch
+/// wrote (those that differ from every one of `bases`, the section's stamps where the
+/// branch left its upstreams) get this `by` and `note`, keeping their hashes; the rest are
+/// kept as they were. `None` when the branch wrote none.
+pub(crate) fn renote(old: &Stamp, bases: &[&Stamp], by: &str, note: &str) -> Option<Stamp> {
+    let mut any = false;
+    let stamp = old
+        .iter()
+        .map(|(k, e)| {
+            if bases.iter().any(|b| b.get(k) == Some(e)) {
+                return (k.clone(), e.clone());
+            }
+            any = true;
+            let e = Entry {
+                hash: e.hash.clone(),
+                by: Some(by.to_owned()),
+                note: Some(note.to_owned()),
+            };
+            (k.clone(), e)
+        })
+        .collect();
+    any.then_some(stamp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,6 +304,65 @@ mod tests {
             .iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
             .collect()
+    }
+
+    /// #697: an entry recorded at the same hash as the merged side's takes that side's
+    /// `by` and `note`; one at another hash, and sections or inputs the other side lacks,
+    /// are kept.
+    #[test]
+    fn adopt_takes_the_other_sides_entry_at_the_same_hash() {
+        let e = |hash: &str, who: Option<&str>| Entry {
+            hash: hash.into(),
+            by: who.map(|w| format!("agent:{w}")),
+            note: who.map(|w| format!("{w}'s note")),
+        };
+        let ledger = |sections: Vec<(&str, Vec<(&str, Entry)>)>| Ledger {
+            sections: sections
+                .into_iter()
+                .map(|(s, es)| {
+                    let stamp = es.into_iter().map(|(k, v)| (k.to_owned(), v)).collect();
+                    (s.to_owned(), stamp)
+                })
+                .collect(),
+        };
+        let mut ours = ledger(vec![
+            (
+                "S#a",
+                vec![
+                    ("body", e("b3:1", Some("branch"))),
+                    ("file:a.rs", e("b3:2", Some("branch"))),
+                    ("file:b.rs", e("b3:3", Some("branch"))),
+                    ("file:new.rs", e("b3:4", Some("branch"))),
+                ],
+            ),
+            ("T#a", vec![("body", e("b3:5", Some("branch")))]),
+            ("U#a", vec![("body", e("b3:6", Some("branch")))]),
+        ]);
+        let theirs = ledger(vec![
+            (
+                "S#a",
+                vec![
+                    ("body", e("b3:1", Some("main"))),
+                    ("file:a.rs", e("b3:2", None)),
+                    ("file:b.rs", e("b3:9", Some("main"))),
+                ],
+            ),
+            ("T#a", vec![("body", e("b3:5", Some("branch")))]),
+        ]);
+        assert_eq!(ours.adopt(&theirs), vec!["S#a".to_owned()]);
+        let s = &ours.sections["S#a"];
+        assert_eq!(s["body"], e("b3:1", Some("main")));
+        // A hash-only entry on the other side is taken too: the input is the same.
+        assert_eq!(s["file:a.rs"], e("b3:2", None));
+        assert_eq!(s["file:b.rs"], e("b3:3", Some("branch")), "another hash");
+        assert_eq!(
+            s["file:new.rs"],
+            e("b3:4", Some("branch")),
+            "theirs lacks it"
+        );
+        assert_eq!(ours.sections["U#a"]["body"], e("b3:6", Some("branch")));
+        // Nothing left to take: no section is reported again.
+        assert!(ours.adopt(&theirs).is_empty());
     }
 
     #[test]
@@ -473,5 +633,48 @@ mod tests {
             }
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merge_notes_keep_the_branch_part() {
+        let m = MERGE_MARK;
+        assert_eq!(merge_note(Some("pr part"), "now"), format!("pr part{m}now"));
+        assert_eq!(
+            merge_note(Some(&format!("pr part{m}earlier")), "now"),
+            format!("pr part{m}now")
+        );
+        assert_eq!(merge_note(None, "now"), "merge: now");
+        assert_eq!(
+            merge_note(Some(&format!("{m}earlier")), "now"),
+            "merge: now"
+        );
+    }
+
+    #[test]
+    fn renote_rewrites_only_the_branch_entries() {
+        let e = |h: &str, n: &str| Entry {
+            hash: h.to_owned(),
+            by: Some("agent:x".to_owned()),
+            note: Some(n.to_owned()),
+        };
+        let base = Stamp::from([("body".to_owned(), e("b3:1", "main"))]);
+        let old = Stamp::from([
+            ("body".to_owned(), e("b3:1", "main")),
+            ("file:a".to_owned(), e("b3:2", "thin")),
+        ]);
+        let new = renote(&old, &[&base], "agent:y", "better").expect("branch entry");
+        assert_eq!(new["body"], old["body"]);
+        let a = &new["file:a"];
+        assert_eq!(
+            (a.hash.as_str(), a.by.as_deref(), a.note.as_deref()),
+            ("b3:2", Some("agent:y"), Some("better"))
+        );
+        assert!(renote(&base, &[&base], "agent:y", "better").is_none());
+        // An entry equal to any base's isn't the branch's (#719 B1).
+        let other = Stamp::from([("file:a".to_owned(), e("b3:2", "thin"))]);
+        let new = renote(&old, &[&base, &other], "agent:y", "n");
+        assert!(new.is_none(), "{new:?}");
+        // With no stamp at the base, every entry is the branch's.
+        assert_eq!(renote(&old, &[], "agent:y", "n").expect("all").len(), 2);
     }
 }

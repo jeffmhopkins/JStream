@@ -24,22 +24,29 @@ mod activity;
 mod audio;
 mod audio_sources;
 mod audit;
+mod chain;
 mod collection;
 mod drops;
 mod engine;
 mod events;
+mod filter_assets;
 mod filters;
+mod forget;
+mod gesture;
 mod history;
 mod kinds;
 mod live;
 mod outputs;
+mod plugins;
 mod preview;
+mod privacy;
 mod runtime;
 mod session;
 mod snapshot;
 mod studio;
 #[cfg(test)]
 mod tests;
+mod transition;
 mod youtube;
 
 pub use audit::{
@@ -53,6 +60,10 @@ pub use drops::{
     capture_drops, output_packet_drops, render_tick_drops, video_encode_drops,
 };
 pub use engine::Engine;
+pub use plugins::kinds::{CLAP_KIND_PREFIX, ClapKind, ClapScan};
+pub use plugins::supervisor::{
+    HostEvent, HostStatus, HostSupervisor, STOP_GRACE, SupervisorPolicy,
+};
 pub use runtime::{
     LinkState, LivePublish, OpenPublish, OutputStats, PublishError, RecordingPublish, RtmpPublish,
     connect_rtmp,

@@ -14,7 +14,29 @@ pub const CONTROL_NAME: &str = "JStream-VCam-Control";
 /// Returns `None` unless `user_sid` is a well-formed SID string, so a malformed value can't
 /// add entries to the DACL.
 pub fn sddl_objects(user_sid: &str) -> Option<String> {
-    is_sid(user_sid).then(|| format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;LS)(A;;GA;;;{user_sid})"))
+    sddl_protected(&["SY", "BA", "LS"], user_sid)
+}
+
+/// The DACL (SDDL) for a file only its user may open: full access for SYSTEM and the user
+/// whose SID string is `user_sid`, protected (`P`) so the folder's entries aren't
+/// inherited. The host creates its control-token, paired-devices and log files with it
+/// on Windows (#344), as it creates them mode `0600` on Unix.
+///
+/// Returns `None` unless `user_sid` is a well-formed SID string, as [`sddl_objects`] does.
+pub fn sddl_user_only(user_sid: &str) -> Option<String> {
+    sddl_protected(&["SY"], user_sid)
+}
+
+/// A protected DACL granting `GA` to each of the SDDL aliases `trustees`, then to
+/// `user_sid`, if that is a well-formed SID string.
+fn sddl_protected(trustees: &[&str], user_sid: &str) -> Option<String> {
+    is_sid(user_sid).then(|| {
+        let mut sddl = String::from("D:P");
+        for trustee in trustees.iter().copied().chain([user_sid]) {
+            sddl.push_str(&format!("(A;;GA;;;{trustee})"));
+        }
+        sddl
+    })
 }
 
 /// Whether `s` is a SID string: `S-1-`, an identifier authority, then one or more
@@ -188,6 +210,17 @@ mod tests {
         assert!(!sddl.contains(";IU)"));
         assert!(!sddl.contains(";WD)"));
         assert_eq!(sddl.matches("(A;").count(), 4);
+    }
+
+    #[test]
+    fn the_user_only_sddl_names_system_and_the_user() {
+        let sid = "S-1-5-21-1004336348-1177238915-682003330-1001";
+        assert_eq!(
+            sddl_user_only(sid).as_deref(),
+            Some("D:P(A;;GA;;;SY)(A;;GA;;;S-1-5-21-1004336348-1177238915-682003330-1001)")
+        );
+        assert_eq!(sddl_user_only("S-1-5-18)(A;;GA;;;WD"), None);
+        assert_eq!(sddl_user_only(""), None);
     }
 
     #[test]

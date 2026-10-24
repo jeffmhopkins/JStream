@@ -1,12 +1,13 @@
-//! The parts of Core Audio input that make no system call, so they are tested on every
-//! platform: which format a device is recorded in, how its buffers are interleaved into
-//! that format, and how its sample times become the trait's device positions.
+//! The parts of Core Audio streams that make no system call, so they are tested on every
+//! platform: which format a device is recorded or played in, how its buffers map to that
+//! format, and how its sample times become the trait's device positions.
 //!
-//! A HAL device delivers its input as an `AudioBufferList`: one buffer per stream (or per
+//! A HAL device exchanges its samples as `AudioBufferList`s: one buffer per stream (or per
 //! channel, for a non-interleaved stream), each holding interleaved `f32` frames of that
-//! buffer's channels, in the stream's virtual format. [`plan_input`] picks the format the
-//! handler gets and a [`ChannelMap`] from it to the device's channels; the IOProc then
-//! interleaves each cycle with [`ChannelMap::gather`] and positions it with
+//! buffer's channels, in the stream's virtual format. [`plan_stream`] picks the format the
+//! handler uses and a [`ChannelMap`] between it and the device's channels; each IOProc
+//! cycle then interleaves an input with [`ChannelMap::gather`], or spreads the handler's
+//! output over the device's buffers with [`ChannelMap::scatter`], and positions it with
 //! [`SamplePositions`].
 
 use jstream_platform::PlatformError;
@@ -21,6 +22,25 @@ const FLAG_IS_BIG_ENDIAN: u32 = 1 << 1;
 
 /// Hundred-nanosecond ticks per second, the crate's [`timebase`](crate::timebase).
 const HNS_PER_SEC: u128 = 10_000_000;
+
+/// The UID prefix of the private aggregate devices the backend makes to record its process
+/// taps. They are the backend's own plumbing, so it never lists them or opens them by UID.
+pub(crate) const TAP_UID_PREFIX: &str = "io.github.jeffmhopkins.jstream.tap.";
+
+/// Whether `uid` is one of the backend's own tap devices ([`TAP_UID_PREFIX`]).
+pub(crate) fn is_own_tap(uid: &str) -> bool {
+    uid.starts_with(TAP_UID_PREFIX)
+}
+
+/// The stereo pair to record from a tap's aggregate device, whose input `buffers` have
+/// these channel counts: its last two channels. The tap's stereo mixdown comes after any
+/// input channels of the aggregate's main sub-device (the output device it is clocked
+/// by), so those are left out. `None` for fewer than three channels, which
+/// [`plan_stream`] records as they are.
+pub(crate) fn tap_pair(buffers: &[u32]) -> Option<[u32; 2]> {
+    let total: u32 = buffers.iter().sum();
+    (total > 2).then(|| [total - 1, total])
+}
 
 /// Whether a stream's virtual format (`AudioStreamBasicDescription`'s format ID, flags
 /// and bits per channel) is the native-endian 32-bit float PCM the IOProc can hand on
@@ -87,6 +107,27 @@ impl ChannelMap {
             .unwrap_or(0)
     }
 
+    /// Spreads `frames` interleaved frames of the handler's from `src` over the device's
+    /// buffers, from frame `start` of each: `write(buffer, index, sample)` stores one
+    /// sample at `index` in buffer `buffer`, and must ignore an index the buffer doesn't
+    /// hold. Device channels the map doesn't use are left as they are (the caller clears
+    /// them). It doesn't allocate, so it runs on the audio thread.
+    pub(crate) fn scatter(
+        &self,
+        src: &[f32],
+        start: usize,
+        frames: usize,
+        mut write: impl FnMut(usize, usize, f32),
+    ) {
+        let n = self.sources.len();
+        for (f, frame) in src.chunks_exact(n).take(frames).enumerate() {
+            for (&v, dst) in frame.iter().zip(&self.sources) {
+                let stride = self.buffers[dst.buffer];
+                write(dst.buffer, (start + f) * stride + dst.channel, v);
+            }
+        }
+    }
+
     /// Interleaves `frames` frames, starting at frame `start` of each buffer, into `out`,
     /// which holds `frames * channels()` samples; `buffer(i)` is the device's buffer `i`.
     /// A sample a short or missing buffer doesn't hold is silence. It doesn't allocate,
@@ -112,34 +153,36 @@ impl ChannelMap {
     }
 }
 
-/// How a device is recorded: the handler's format and where its channels come from.
+/// How a device is recorded or played: the handler's format and which device channels
+/// its channels are.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct InputPlan {
+pub(crate) struct StreamPlan {
     /// Interleaved `f32` at the device's nominal rate.
     pub(crate) format: AudioFormat,
     /// From the device's buffers to the handler's channels.
     pub(crate) map: ChannelMap,
 }
 
-/// Chooses how to record a device whose input buffers have `buffers` channels each, at
-/// `rate` frames per second.
+/// Chooses how to record or play a device whose buffers in that direction have `buffers`
+/// channels each, at `rate` frames per second.
 ///
 /// One channel is mono and two are stereo, in the device's order. Any other count (a
-/// multichannel interface, a microphone array) is recorded as stereo from the device's
+/// multichannel interface, a microphone array, surround speakers) is stereo on the device's
 /// preferred stereo pair (`kAudioDevicePropertyPreferredChannelsForStereo`, 1-based
 /// channel numbers across all its buffers), or its first two channels when it names no
 /// valid pair. The other channels are not mixed in, so this is a selection, not the
 /// downmix the `jstream-platform` README proposes for other layouts, and a 5.1 input is
-/// recorded as its preferred pair too: the pair Core Audio itself records stereo on.
-/// Nothing is resampled (ADR-0014 leaves that to the engine).
+/// recorded or played as its preferred pair too: the pair Core Audio itself uses for
+/// stereo. When playing, the other channels get silence. Nothing is resampled (ADR-0014
+/// leaves that to the engine).
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] for a device without input channels.
-pub(crate) fn plan_input(
+/// [`PlatformError::Unsupported`] for a device without channels in that direction.
+pub(crate) fn plan_stream(
     rate: u32,
     buffers: &[u32],
     stereo_pair: Option<[u32; 2]>,
-) -> Result<InputPlan, PlatformError> {
+) -> Result<StreamPlan, PlatformError> {
     let buffers: Vec<usize> = buffers.iter().map(|&c| c as usize).collect();
     let total: usize = buffers.iter().sum();
     // Device channel number (0-based, across buffers) to its buffer and offset.
@@ -158,7 +201,7 @@ pub(crate) fn plan_input(
     let (layout, picked): (ChannelLayout, Vec<usize>) = match total {
         0 => {
             return Err(PlatformError::Unsupported {
-                what: "an audio device without input channels".into(),
+                what: "an audio device without channels in that direction".into(),
             });
         }
         1 => (ChannelLayout::Mono, vec![0]),
@@ -172,7 +215,7 @@ pub(crate) fn plan_input(
         }
     };
     let sources = picked.into_iter().filter_map(locate).collect();
-    Ok(InputPlan {
+    Ok(StreamPlan {
         format: AudioFormat::new(rate, layout, SampleFormat::F32Interleaved)?,
         map: ChannelMap { buffers, sources },
     })
@@ -253,6 +296,35 @@ mod tests {
     }
 
     #[test]
+    fn own_tap_devices_are_recognised() {
+        assert!(is_own_tap("io.github.jeffmhopkins.jstream.tap.0F3A"));
+        assert!(!is_own_tap("BuiltInSpeakerDevice"));
+        assert!(!is_own_tap("io.github.jeffmhopkins.jstream.daemon"));
+    }
+
+    #[test]
+    fn a_tap_records_the_last_two_channels() {
+        // A tap alone: its stereo pair as it is.
+        assert_eq!(tap_pair(&[2]), None);
+        // After a main sub-device with a mono input: the tap is channels 2 and 3.
+        assert_eq!(tap_pair(&[1, 2]), Some([2, 3]));
+        let plan = plan_stream(48_000, &[1, 2], tap_pair(&[1, 2])).expect("plan");
+        assert_eq!(
+            plan.map.sources,
+            vec![
+                Source {
+                    buffer: 1,
+                    channel: 0
+                },
+                Source {
+                    buffer: 1,
+                    channel: 1
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn only_native_f32_pcm_is_taken() {
         let native_big = cfg!(target_endian = "big");
         let endian = if native_big { FLAG_IS_BIG_ENDIAN } else { 0 };
@@ -292,11 +364,11 @@ mod tests {
 
     #[test]
     fn mono_and_stereo_keep_the_device_order() {
-        let mono = plan_input(48_000, &[1], None).expect("plannable");
+        let mono = plan_stream(48_000, &[1], None).expect("plannable");
         assert_eq!(mono.format.layout(), ChannelLayout::Mono);
         assert_eq!(mono.format.sample_rate(), 48_000);
         assert_eq!(mono.format.sample_format(), SampleFormat::F32Interleaved);
-        let stereo = plan_input(44_100, &[2], Some([2, 1])).expect("plannable");
+        let stereo = plan_stream(44_100, &[2], Some([2, 1])).expect("plannable");
         assert_eq!(stereo.format.layout(), ChannelLayout::Stereo);
         let mut out = [0.0; 4];
         stereo
@@ -307,7 +379,7 @@ mod tests {
 
     #[test]
     fn non_interleaved_stereo_is_interleaved() {
-        let p = plan_input(48_000, &[1, 1], None).expect("plannable");
+        let p = plan_stream(48_000, &[1, 1], None).expect("plannable");
         assert_eq!(p.map.channels(), 2);
         assert!(p.map.matches([1, 1].into_iter()));
         assert!(!p.map.matches([2].into_iter()));
@@ -321,7 +393,7 @@ mod tests {
     #[test]
     fn multichannel_devices_record_their_preferred_pair() {
         // An interface with an 8-channel stream and a 2-channel one, preferring 9 and 10.
-        let p = plan_input(96_000, &[8, 2], Some([9, 10])).expect("plannable");
+        let p = plan_stream(96_000, &[8, 2], Some([9, 10])).expect("plannable");
         assert_eq!(p.format.layout(), ChannelLayout::Stereo);
         let a: Vec<f32> = (0..16u8).map(f32::from).collect(); // 2 frames of 8
         let b = [100.0, 101.0, 102.0, 103.0]; // 2 frames of 2
@@ -333,7 +405,7 @@ mod tests {
         p.map.gather(at(&[&a, &b]), 1, 1, &mut one);
         assert_eq!(one, [102.0, 103.0]);
         // A pair across buffers, and swapped.
-        let across = plan_input(96_000, &[8, 2], Some([10, 3])).expect("plannable");
+        let across = plan_stream(96_000, &[8, 2], Some([10, 3])).expect("plannable");
         across.map.gather(at(&[&a, &b]), 0, 1, &mut one);
         assert_eq!(one, [101.0, 2.0]);
     }
@@ -341,7 +413,7 @@ mod tests {
     #[test]
     fn an_invalid_preferred_pair_falls_back_to_the_first_two() {
         for pair in [None, Some([0, 1]), Some([3, 3]), Some([1, 5])] {
-            let p = plan_input(48_000, &[4], pair).expect("plannable");
+            let p = plan_stream(48_000, &[4], pair).expect("plannable");
             let mut out = [0.0; 2];
             p.map.gather(at(&[&[1.0, 2.0, 3.0, 4.0]]), 0, 1, &mut out);
             assert_eq!(out, [1.0, 2.0], "{pair:?}");
@@ -351,31 +423,55 @@ mod tests {
     #[test]
     fn a_device_without_inputs_is_refused() {
         assert!(matches!(
-            plan_input(48_000, &[], None),
+            plan_stream(48_000, &[], None),
             Err(PlatformError::Unsupported { .. })
         ));
         assert!(matches!(
-            plan_input(48_000, &[0, 0], None),
+            plan_stream(48_000, &[0, 0], None),
             Err(PlatformError::Unsupported { .. })
         ));
-        assert!(plan_input(0, &[2], None).is_err(), "a zero rate");
+        assert!(plan_stream(0, &[2], None).is_err(), "a zero rate");
     }
 
     #[test]
     fn unread_buffers_do_not_limit_the_frames() {
         // An empty, zero-channel buffer in front of the stereo one.
-        let p = plan_input(48_000, &[0, 2], None).expect("plannable");
+        let p = plan_stream(48_000, &[0, 2], None).expect("plannable");
         let sizes = [0, 512];
         assert_eq!(p.map.frames(|i| sizes[i]), 512);
         // Among the buffers it reads, the shortest wins.
-        let q = plan_input(48_000, &[1, 1], None).expect("plannable");
+        let q = plan_stream(48_000, &[1, 1], None).expect("plannable");
         let sizes = [512, 256];
         assert_eq!(q.map.frames(|i| sizes[i]), 256);
     }
 
     #[test]
+    fn output_is_spread_over_the_preferred_pair() {
+        // A 4-channel output in two stereo buffers, playing stereo on channels 3 and 4.
+        let p = plan_stream(48_000, &[2, 2], Some([3, 4])).expect("plannable");
+        let mut bufs = [[0.0f32; 4], [0.0f32; 4]];
+        let src = [1.0, 2.0, 3.0, 4.0]; // 2 frames of stereo
+        p.map.scatter(&src, 0, 2, |b, i, v| {
+            if let Some(s) = bufs[b].get_mut(i) {
+                *s = v;
+            }
+        });
+        assert_eq!(bufs[0], [0.0; 4], "unused channels untouched");
+        assert_eq!(bufs[1], [1.0, 2.0, 3.0, 4.0]);
+        // From one frame in, and an index past the buffer is ignored by `write`.
+        let mut mono = [0.0f32; 2];
+        let m = plan_stream(48_000, &[1], None).expect("plannable");
+        m.map.scatter(&[5.0, 6.0], 1, 2, |_, i, v| {
+            if let Some(s) = mono.get_mut(i) {
+                *s = v;
+            }
+        });
+        assert_eq!(mono, [0.0, 5.0]);
+    }
+
+    #[test]
     fn short_buffers_read_as_silence() {
-        let p = plan_input(48_000, &[2], None).expect("plannable");
+        let p = plan_stream(48_000, &[2], None).expect("plannable");
         let mut out = [9.0; 4];
         p.map.gather(at(&[&[1.0, 2.0, 3.0]]), 0, 2, &mut out);
         assert_eq!(out, [1.0, 2.0, 3.0, 0.0]);

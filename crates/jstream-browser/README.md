@@ -25,12 +25,18 @@ the helper's build downloads and builds CEF
 
 **The seam.** `BrowserBackend` is what `jstream-sources` opens pages through, injected
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` (a
-location, a size, a frame-rate cap and the custom CSS) and returns a `BrowserPage`:
+location, a size, a frame-rate cap, the custom CSS and whether a page from the
+internet may reach the local network) and returns a `BrowserPage`:
 its latest frame as a `GpuFrame`, its audio, a way to replace its custom CSS while it
 runs, and how many of its requests were refused (`denied_requests`). `use_device` gives
-the backend a GPU device to copy the pages' paints onto. Today that is one the host
-opens on the media adapter, since the engine doesn't hand out its own device yet;
-without one a page renders and plays but delivers no frames. Dropping the
+the backend a GPU device to copy the pages' paints onto. The host gives it one it opens
+on the media adapter, for paints before any program stage; while the program stage
+runs, the engine lends it the stage's own context in its place, so the compositor
+samples the pages there, and takes it back (leaving none) when the stage stops, or
+when the stage leaves the GPU path mid-run, after which the pages deliver no frames for
+the rest of that stage
+([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). Without
+a device a page renders and plays but delivers no frames. Dropping the
 page closes it.
 
 **Built everywhere:**
@@ -55,8 +61,32 @@ page closes it.
 - `RequestPolicy` (`request.rs`): what a page may request, from its location (ADR-0021:
   no file access beyond the source's own file). Web URLs (`http`, `https`, `ws`,
   `wss`), `data:`, `blob:`, `about:blank` and `about:srcdoc` are allowed for every
-  page. `file:` URLs are allowed only for a page loaded from a local file, and only for
-  files in its folder or below. The path is compared by name first, with `..` applied,
+  page, with one exception (#347). A page from the internet may not send web URLs to
+  this computer or the local network. Local here means a loopback, private,
+  link-local, shared-space (100.64/10) or unspecified address, IPv4-mapped and
+  IPv4-compatible forms included, `localhost` and names under it, single-label names,
+  and names under `.local`, `.lan`, `.home.arpa` or `.internal`. It is decided by the
+  origin that makes each request, CEF's `request_initiator` (`check_from`, #721), not
+  by where the source started. A document whose own origin is local may. A document
+  from the source's own origin may when the source's location is itself local, or
+  when its spec sets `local_network` (`RequestPolicy::for_page`); the opt-in covers
+  that origin exactly (scheme, host and port), so a third-party frame inside the page,
+  or a page it navigates or redirects to, is refused. A local file's or a blank page's
+  documents have an opaque origin, which may only while the main frame is still on a
+  file or blank page: a main-frame navigation the policy allows tells it where the
+  frame now is (`main_frame_to`), before the new document exists, so a file or blank
+  page that navigates to the web loses the access. CEF can't tell opaque origins apart,
+  so a sandboxed or `data:` frame made by a third-party frame inside a file page counts
+  as the file page's. A request with no initiator is one the browser started (the
+  source's own load, a reload) and is judged as the source's own. The check reads the
+  host Chromium has already canonicalised, so it can't catch a public name that
+  resolves to a local address, whether fixed (`*.nip.io`) or by DNS rebinding.
+  Chromium's Local Network Access checks are meant to: they ask the page's permission
+  handler, which answers with `RequestPolicy::local_allowed_from` for the prompt's
+  requesting origin (below). That the pinned CEF enforces them in windowless pages is
+  not yet confirmed on a Windows run (#347). `file:` URLs are
+  allowed only for a page loaded from a local file, and only for files in its folder or
+  below. The path is compared by name first, with `..` applied,
   and only a path inside the folder is ever opened. So a URL naming another server (an
   SMB connection on Windows), a drive-relative path or a device (a `\\.\` path, or on
   Windows a reserved name such as `COM1` or `nul.txt`) is refused untouched. It is
@@ -113,11 +143,29 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
   every page, and the loop quits once they have closed, or after ten seconds.
 - Every page is a windowless browser with shared textures on, painting at its spec's
   frame rate with a transparent background. Command-line switches let pages play sound
-  without a click and turn off first-run and error dialogs. Pop-ups are blocked. The
+  without a click and turn off first-run and error dialogs. Pop-ups are blocked. Every
+  permission a page asks for (camera, microphone, screen capture, geolocation,
+  notifications, clipboard, MIDI and the rest) is refused by the page's permission
+  handler rather than left to CEF's default: a media request is cancelled and a
+  permission prompt answered `DENY`. The one exception is Chromium's Local Network
+  Access prompt (CEF's `LOCAL_NETWORK`, `LOOPBACK_NETWORK` and the deprecated
+  `LOCAL_NETWORK_ACCESS` bits) asked alone: it is answered `ACCEPT` when the page's
+  `RequestPolicy` lets the prompt's requesting origin (opaque when CEF names none)
+  make local requests, so a
+  source that opted in with `local_network` still reaches an app on `127.0.0.1` from
+  its own origin, and `DENY` otherwise, a third-party frame's included, so that
+  Chromium, where it enforces the checks (not yet confirmed on a Windows run), refuses
+  at the network layer what the policy can't see. The answers come from `permission.rs`
+  (`answer_prompt` and `answer_media`), whose tests pin them for every permission bit,
+  and the helper checks the three bits against CEF's when it compiles (#347). The
   custom CSS is applied when the main frame finishes loading and again on each change.
   Every request a page makes, navigations included, goes through its `RequestPolicy`
-  in `OnBeforeResourceLoad` and is cancelled when refused; the engine logs the first
-  refusal per page at `warn` and later ones at `debug`, with the count only.
+  in `OnBeforeResourceLoad`, as the origin `GetResourceRequestHandler` names for it
+  (each request gets a handler that holds it), and is cancelled when refused; an
+  allowed main-frame navigation updates where the main frame is. A redirect's target
+  goes through it too, in `OnResourceRedirect`, which can't cancel: a refused one is pointed at
+  `about:jstream-refused`, which loads nothing. The engine logs the first refusal per
+  page at `warn` and later ones at `debug`, with the count only.
 - **Frames** (`helper/d3d11.rs`): a D3D11 device on the engine's adapter. Each
   accelerated paint's texture is opened, checked to be single-mip BGRA8, and copied into
   the next of three textures the page shares with the engine through NT handles; the
@@ -132,8 +180,8 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
 **The hardware check.** `examples/page_check.rs` (features `cef` and `helper`) lays the
 helper out in the build's folder as it ships (CEF's `bootstrap.exe` copied as
 `jstream-browser-helper.exe` beside the helper's DLL), then opens the built-in test page
-(or `--url`) through the CEF backend on the engine's own device and QPC clock, as the
-daemon will once the engine hands out its device, and reports the frames and audio that
+(or `--url`) through the CEF backend on a device of the media adapter and the QPC clock,
+as the daemon's pages do before a program stage lends its own context, and reports the frames and audio that
 arrive, a custom-CSS change the page reacts to, the requests refused (the built-in page
 loads one image from outside its folder), and the shutdown time. It runs on Windows only.
 
@@ -153,11 +201,13 @@ shipping the `cef` feature.
   helper's frames take a second copy and a pipe round trip, which haven't been measured.
 - **Hosts.** The desktop app and the daemon each create a backend with their `cef`
   feature, on a device of the media adapter they open
-  ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)), not the
-  engine's own, which the engine doesn't hand out yet.
-- **Compositing.** The program mix doesn't draw a page's `GpuFrame` yet; a `browser`
-  source draws a transparent frame of its size until the render import of GPU frames
-  lands.
+  ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)); the engine
+  replaces it with the program stage's context while the stage runs on the GPU path,
+  and the host's device is not given back when the stage stops or leaves the GPU path
+  mid-run.
+- **Compositing.** The program mix draws a page's `GpuFrame`, imported premultiplied
+  on the stage's context, but only the fake backend's textures have been through it:
+  a real CEF texture on Windows hardware is #336.
 - **Settings and interaction.** "Shut down when not visible", "refresh when shown" and
   `source.interact` need the source-visibility hook and a protocol action. No page gets
   control-API access, and the per-source opt-in doesn't exist.

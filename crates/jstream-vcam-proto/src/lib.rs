@@ -22,7 +22,7 @@
 //! checks [`MAGIC`] and [`VERSION`]. Any change to the layout, the names or the meaning of
 //! a field bumps [`VERSION`].
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-vcam-proto/README.md#purpose
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-vcam-proto/README.md#purpose, docs/security/threat-model.md#vcam
 
 #![forbid(unsafe_code)]
 
@@ -35,7 +35,7 @@ pub use control::{
 };
 pub use names::{
     CONTROL_NAME, SESSION_PROBE_MAX, Scope, control_open_names, fence_base, sddl_objects,
-    texture_base,
+    sddl_user_only, texture_base,
 };
 
 /// `JSVC` in little-endian byte order, so a zeroed or foreign mapping is never mistaken for

@@ -146,7 +146,7 @@ fn undo_and_redo_move_one_step_each_way() {
 
 fn program(control: &dyn Control) -> Option<SceneId> {
     match query(control, Query::StudioGet).expect("studio.get") {
-        QueryResult::StudioGet { program_scene } => program_scene,
+        QueryResult::StudioGet { program_scene, .. } => program_scene,
         other => panic!("not a studio result: {other:?}"),
     }
 }
@@ -198,6 +198,8 @@ fn program_follows_undo_and_redo() {
             },
             Event::StudioChanged {
                 program_scene: None,
+                preview_scene: None,
+                transition: None,
                 client_id: client_id.clone(),
                 request_id: Some(undone.id),
             },
@@ -212,6 +214,8 @@ fn program_follows_undo_and_redo() {
         drain(&mut events)[1..],
         [Event::StudioChanged {
             program_scene: Some(SceneId::new("a")),
+            preview_scene: Some(SceneId::new("a")),
+            transition: None,
             client_id,
             request_id: Some(redone.id),
         }]
@@ -493,4 +497,67 @@ fn undo_and_redo_are_audited() {
             ("history.redo", 0, (3, 3), Some("history_empty"), false),
         ]
     );
+}
+
+/// Folders, labels and metadata (ADR-0024 §3 and §4) go through the engine like any
+/// edit: `state.get` reports them, and undo takes them back one step at a time.
+#[test]
+fn folders_and_labels_are_undoable_collection_state() {
+    use jstream_protocol::{FolderId, LabelId, SceneMeta};
+    let engine = Engine::new();
+    let control = connected(&engine);
+    batch(&control, one(create("main"))).expect("main");
+    batch(
+        &control,
+        edits(vec![
+            Edit::FolderCreate {
+                folder_id: FolderId::new("shows"),
+                name: "Shows".into(),
+                parent: None,
+            },
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("main"),
+                folder_id: Some(FolderId::new("shows")),
+            },
+            Edit::LabelCreate {
+                label_id: LabelId::new("sponsor"),
+                name: "Sponsor".into(),
+                color: "#ff8800".into(),
+                icon: None,
+            },
+        ]),
+    )
+    .expect("organise");
+    batch(
+        &control,
+        one(Edit::SceneSetMeta {
+            scene_id: SceneId::new("main"),
+            meta: SceneMeta {
+                favourite: true,
+                ..SceneMeta::default()
+            },
+        }),
+    )
+    .expect("favourite");
+    let read = |control: &dyn Control| match query(control, Query::StateGet).expect("state") {
+        QueryResult::StateGet {
+            scenes,
+            folders,
+            labels,
+            ..
+        } => (
+            scenes[0].folder.clone(),
+            scenes[0].meta.favourite,
+            folders.len(),
+            labels.len(),
+        ),
+        other => panic!("not a state: {other:?}"),
+    };
+    assert_eq!(read(&control), (Some(FolderId::new("shows")), true, 1, 1));
+    undo(&control).expect("undo the favourite");
+    assert_eq!(read(&control), (Some(FolderId::new("shows")), false, 1, 1));
+    undo(&control).expect("undo the folder and label");
+    assert_eq!(read(&control), (None, false, 0, 0));
+    redo(&control).expect("redo");
+    assert_eq!(read(&control), (Some(FolderId::new("shows")), false, 1, 1));
 }
