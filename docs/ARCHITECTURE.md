@@ -379,7 +379,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and the reserved
   `effects[]`, which a collection file must leave empty. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
-  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Scenes have
+  its `canvas` (protocol 0.11); any 3D geometry the compositor can draw is accepted from
+  protocol 0.34. Scenes have
   a `role` (`scene` or `group`, set by `scene.create` or `scene.set_role`), and `item.move` moves an item
   to another scene keeping its id, under the same cycle check. The placement edits take
   an optional `scene_id`, accepted only when it names the item's own scene until
@@ -438,8 +439,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), blend modes
   other than `normal`,
-  bus monitors, per-placement effects, 3D
-  geometry, variants and overrides (so no edit drops
+  bus monitors, per-placement effects, variants and overrides (so no edit drops
   any yet), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
@@ -848,7 +848,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 686 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 687 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -928,8 +928,8 @@ non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn pol
 clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
 analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
 GPU once per change to the source, so at most once per source and frame) with 16×
-anisotropic filtering. The engine still refuses non-neutral
-3D. Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34.
+Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`

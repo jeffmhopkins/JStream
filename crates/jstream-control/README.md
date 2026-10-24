@@ -124,8 +124,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - reorder and `item.move` indices out of range (`item.move` into another scene may
     name one past its top);
   - a placement edit's `scene_id` naming a scene other than the item's own;
-  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
-    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive or
+    not finite or that the compositor can't draw (`ItemGeometry::check_drawable`; any
+    other 3D is accepted, as the engine does from protocol 0.34), and a
+    canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source or a video
     mix shows, or either while a source's settings refer to it;
   - nesting cycles from `item.add`, `item.set_source` and `item.move`;

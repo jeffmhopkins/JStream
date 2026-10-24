@@ -728,6 +728,38 @@ mod tests {
         }
     }
 
+    /// Every geometry an edit may store draws (#629 rounds 1 and 2, B1 and B4): each 3D
+    /// item `check_drawable` accepts, from a sweep of every input up to past
+    /// `MAX_DRAWN_PX`, gives a shape for every source, thin ones included, and with and
+    /// without a crop, not a placement error that would fail its whole frame.
+    #[test]
+    fn every_drawable_geometry_gives_a_shape() {
+        let mut accepted = 0;
+        for geometry in crate::tests::extreme_geometries(40_000) {
+            if geometry.check_drawable().is_err() {
+                continue;
+            }
+            accepted += 1;
+            for (width, height) in crate::tests::SOURCES {
+                let crops = [
+                    Crop::NONE,
+                    Crop {
+                        left: width / 3,
+                        top: height / 3,
+                        right: width / 4,
+                        bottom: height / 4,
+                    },
+                ];
+                for crop in crops {
+                    shape(width, height, Placement::Geometry(geometry), crop).unwrap_or_else(
+                        |err| panic!("{geometry:?} on {width}x{height} {crop:?}: {err}"),
+                    );
+                }
+            }
+        }
+        assert!(accepted > 5_000, "{accepted} accepted");
+    }
+
     /// A 3D item's mip region is its crop's texels exactly, at sizes where `k / W * W`
     /// isn't `k` in `f32`: 1920 × 1080 cropped to columns 63..241 and rows 7..69 is
     /// (63, 7, 178, 62), not a texel wider on each side (#687 round 1 B1). Every whole

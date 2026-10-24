@@ -119,8 +119,8 @@ and calls this crate.
   shared functions ([Placement math](#design)). A geometry with non-neutral 3D draws
   [ADR-0050](../../docs/adr/0050-3d-transforms-rendering.md)'s drawn polygon,
   perspective-correct, with antialiased edges, and sampled from a mip chain of its
-  cropped source with 16× anisotropic filtering. The engine still refuses non-neutral 3D before
-  it reaches here.
+  cropped source with 16× anisotropic filtering. The engine accepts any 3D it can draw
+  from protocol 0.34.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
@@ -730,6 +730,14 @@ tests check:
 - that two crops of one source get a chain each;
 - that a cropped floor minified onto coarse levels shows nothing of a red border just
   past its crop (red 160 with the chain built from the whole source).
+
+Accepted means drawable (protocol 0.34's `check_drawable`): over 3D geometries from a
+fixed seed, every input spread from 0.1 to f32's limit, each one `check_drawable` accepts
+gives a `place::shape` for 64×36, 8192×1, 1×8192, 16384×1 and 1×16384 sources, with
+and without a crop (`every_drawable_geometry_gives_a_shape`), and a frame of the most
+extreme of them renders on 8192×1, 1×8192 and 64×36 sources
+(`a_frame_of_the_most_extreme_accepted_3d_items_renders`). Both fail with the input
+bound removed.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an

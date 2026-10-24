@@ -1389,6 +1389,82 @@ fn a_rotated_geometry_turns_about_its_centre() {
     near(&snapshot, 16, 32, [0, 0, 0, 255], 0);
 }
 
+/// Sources an edit may place, thin ones included (a 1-texel-wide colour source is valid),
+/// for the "accepted means drawable" tests (#629 round 2 B4).
+pub(crate) const SOURCES: [(u32, u32); 5] =
+    [(64, 36), (8192, 1), (1, 8192), (16384, 1), (1, 16384)];
+
+/// `count` non-neutral 3D geometries from a fixed seed, every input (centre, size, depth
+/// and perspective) spread over magnitudes from 0.1 to f32's limit, far past
+/// `MAX_DRAWN_PX`, at every angle, flipped or not, plus each input at exactly
+/// `MAX_DRAWN_PX`. Callers keep the ones `check_drawable` accepts.
+pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeometry> {
+    use jstream_protocol::{Finite32, FitMode, ItemGeometry, MAX_DRAWN_PX, Size, Vec2};
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let finite = |value: f32| Finite32::new(value).expect("finite");
+    let mut out = Vec::with_capacity(count + 8);
+    let bound = MAX_DRAWN_PX;
+    for (tilt, turn) in [(60.0, 0.0), (-127.0, -14.5), (13.0, -15.8), (89.0, 89.0)] {
+        for perspective in [0.28, bound] {
+            out.push(ItemGeometry {
+                center: Vec2::new(bound, -bound).expect("finite"),
+                size: Size::try_new(bound, bound).expect("positive"),
+                fit_mode: FitMode::Fit,
+                rotation_deg: finite(206.9),
+                tilt_deg: finite(tilt),
+                turn_deg: finite(turn),
+                depth_px: finite(-bound),
+                perspective_px: Some(finite(perspective)),
+                flip_h: true,
+                flip_v: false,
+            });
+        }
+    }
+    while out.len() < count {
+        // Half the geometries reach f32's limit (10^-1 to 10^38), so the bound is what
+        // refuses them; the other half stay near it (10^-1 to 10^16), so many pass.
+        let top = if next() < 0.5 { 39.0 } else { 17.0 };
+        let magnitude = |next: &mut dyn FnMut() -> f64| {
+            10f64.powf(next() * top - 1.0).min(f64::from(f32::MAX)) as f32
+        };
+        let sign = |next: &mut dyn FnMut() -> f64| if next() < 0.5 { -1.0 } else { 1.0 };
+        let cx = sign(&mut next) * magnitude(&mut next);
+        let cy = sign(&mut next) * magnitude(&mut next);
+        let w = magnitude(&mut next);
+        let h = magnitude(&mut next);
+        let depth = sign(&mut next) * magnitude(&mut next);
+        let perspective = (next() < 0.8).then(|| magnitude(&mut next));
+        let angle = |next: &mut dyn FnMut() -> f64| (next() * 360.0 - 180.0) as f32;
+        let fit_mode = [FitMode::Fit, FitMode::Fill, FitMode::Stretch][(next() * 3.0) as usize % 3];
+        let tilt = angle(&mut next);
+        let turn = angle(&mut next);
+        let rotation = angle(&mut next);
+        let (flip_h, flip_v) = (next() < 0.5, next() < 0.5);
+        let Ok(size) = Size::try_new(w, h) else {
+            continue;
+        };
+        out.push(ItemGeometry {
+            center: Vec2::new(cx, cy).expect("finite"),
+            size,
+            fit_mode,
+            rotation_deg: finite(rotation),
+            tilt_deg: finite(tilt),
+            turn_deg: finite(turn),
+            depth_px: finite(depth),
+            perspective_px: perspective.map(finite),
+            flip_h,
+            flip_v,
+        });
+    }
+    out
+}
+
 /// A lost device (#349) is reported by `lost`, and drawing on it fails instead of
 /// panicking, so the caller can open a new compositor. `destroy` stands in for a driver
 /// reset: wgpu reports both through the same device-lost callback.

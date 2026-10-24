@@ -169,9 +169,13 @@ pub enum Edit {
         transform: ItemTransform,
     },
     /// Replaces an item's placement with a box on the canvas (ADR-0022). A size that is
-    /// not greater than zero, a `perspective_px` that is not greater than zero, and any
-    /// non-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the
-    /// compositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous
+    /// not greater than zero and a `perspective_px` that is not greater than zero are
+    /// `invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is
+    /// accepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one
+    /// whose centre, size, depth or perspective is past 10^15 canvas pixels, or whose
+    /// drawn polygon would not be finite or would reach past that, is `invalid_argument`
+    /// on `geometry`. Earlier minors
+    /// rejected a non-neutral one with `invalid_argument`. Inverse: the previous
     /// placement, as `item.set_geometry` if it was a geometry and `item.set_transform`
     /// if it was legacy.
     #[serde(rename = "item.set_geometry")]

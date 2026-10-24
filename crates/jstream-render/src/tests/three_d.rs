@@ -820,3 +820,56 @@ fn each_crop_gets_its_own_chain() {
         "one chain per crop, each built once"
     );
 }
+
+/// "Accepted means drawable" through the frame path itself (#629 round 2 B4): a scene of
+/// the most extreme 3D items `check_drawable` accepts, on thin sources and an ordinary
+/// one, renders, as `jstream-core`'s render thread calls it, instead of failing the frame.
+#[test]
+fn a_frame_of_the_most_extreme_accepted_3d_items_renders() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let accepted: Vec<ItemGeometry> = crate::tests::extreme_geometries(20_000)
+        .into_iter()
+        .filter(|geometry| geometry.check_drawable().is_ok())
+        .collect();
+    assert!(accepted.len() > 1_000, "{} accepted", accepted.len());
+    // The furthest-out ones by their largest input, and the bound cases at the front.
+    let largest = |g: &ItemGeometry| {
+        [
+            g.center.x.get(),
+            g.center.y.get(),
+            g.size.width.get(),
+            g.size.height.get(),
+            g.depth_px.get(),
+        ]
+        .into_iter()
+        .map(f32::abs)
+        .fold(0.0, f32::max)
+    };
+    let mut extreme = accepted.clone();
+    extreme.sort_by(|a, b| largest(b).total_cmp(&largest(a)));
+    extreme.truncate(48);
+    extreme.extend(accepted.iter().take(8));
+    for (width, height) in [(8192, 1), (1, 8192), (64, 36)] {
+        let rgba = vec![200u8; (width * height * 4) as usize];
+        let image = compositor
+            .upload_rgba8(width, height, &rgba)
+            .expect("the source uploads");
+        for chunk in extreme.chunks(8) {
+            let items: Vec<_> = chunk
+                .iter()
+                .map(|g| item(&image, Placement::Geometry(*g), Crop::NONE, 1.0))
+                .collect();
+            let scene = Scene {
+                canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+                background: Color::rgb(0.0, 0.0, 0.0),
+                items: &items,
+            };
+            compositor
+                .render(&scene, false)
+                .unwrap_or_else(|err| panic!("{width}x{height} {chunk:?}: {err}"));
+        }
+    }
+}

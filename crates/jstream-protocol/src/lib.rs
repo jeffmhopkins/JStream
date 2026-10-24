@@ -57,8 +57,8 @@ pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_F
 pub use finite::Finite32;
 pub use geometry::{
     Canvas, CanvasPoint, ContentRect, DrawnPolygon, DrawnVertex, FitMode, GeometryError,
-    ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, NEAR_W, Placed, PlacementForm, ProjectedQuad,
-    Size, legacy_quad,
+    ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX, NEAR_W, Placed, PlacementForm,
+    ProjectedQuad, Size, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
