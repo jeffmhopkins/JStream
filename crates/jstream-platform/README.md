@@ -326,7 +326,8 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   thread's, and render is not the only thread that submits on a context's queue: the
   browser source copies its pages' paints on it. So render holds the lock from its
   first `stage` through its submit, and every other thread holds it around its own
-  submits on that queue. Holders keep it only while recording and submitting, never
+  submits on that queue (the Linux backend's capture copies and NV12 submits don't
+  take it yet, #694). Holders keep it only while recording and submitting, never
   across a wait for the GPU. A device render opens for itself has a lock of its own.
 - **Encoders and the virtual camera** accept `VideoSurface::Gpu` from the same platform.
   The encoders reach the context through `Codecs::on_context`, a default method like

@@ -62,7 +62,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Dialogs and windows](#dialogs) | 8 | 4 | 1 | 0 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 4 | 3 | 1 | 2 | 0 |
 | [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
-| [Inspector](#inspector) | 10 | 5 | 2 | 0 | 3 | 0 |
+| [Inspector](#inspector) | 10 | 5 | 2 | 1 | 2 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **58** | **31** | **8** | **32** | **1** |
+| **Total** | **130** | **58** | **31** | **9** | **31** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
