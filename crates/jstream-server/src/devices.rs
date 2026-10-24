@@ -16,8 +16,9 @@
 //!   in memory only; a device read from the file is taken to have had it set at its last
 //!   use.
 //! - **The device file.** With `ServerConfig::device_file` the devices are kept in that
-//!   file, user-only on Unix (mode 0600; on Windows it gets its directory's ACL, like the
-//!   token file), rewritten whole through a temporary file on every change. It holds
+//!   file, user-only like the token file (mode 0600 on Unix; on Windows a protected DACL
+//!   for SYSTEM and the user, #344), rewritten whole through a temporary file on every
+//!   change. It holds
 //!   digests, never tokens. Without it they live in memory and are gone when the server
 //!   stops.
 //! - **Revocation.** Each open connection a device token admitted watches its device;
@@ -30,7 +31,9 @@ use crate::error::ServerError;
 use jstream_protocol::{DeviceId, DeviceInfo};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
-use std::fs::{self, OpenOptions};
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -420,8 +423,9 @@ pub(crate) fn check_name(name: &str) -> Result<&str, &'static str> {
     Ok(name)
 }
 
-/// Reads the device file: a missing one holds no devices. On Unix a file group or others
-/// can access is refused, as the token file is.
+/// Reads the device file: a missing one holds no devices. A file other users may access
+/// is refused, as the token file is: on Unix one group or others have any permission on,
+/// on Windows one `jstream_platform_windows::check_private_file` refuses.
 fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -442,7 +446,12 @@ fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
             ));
         }
     }
-    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let mut file = fs::File::open(path).map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    jstream_platform_windows::check_private_file(&file)
+        .map_err(|why| format!("it may be accessible to other users: {why}; make it user-only"))?;
+    let mut text = String::new();
+    io::Read::read_to_string(&mut file, &mut text).map_err(|error| error.to_string())?;
     parse_file(&text)
 }
 
@@ -495,7 +504,7 @@ fn render_file(devices: &BTreeMap<DeviceId, Device>) -> String {
     text
 }
 
-/// Writes the device file whole: to `<path>.tmp`, created user-only on Unix, synced, then
+/// Writes the device file whole: to `<path>.tmp`, created user-only, synced, then
 /// renamed over `path`, so a crash leaves the old file or the new one.
 fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
@@ -506,11 +515,7 @@ fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<(
         Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
         _ => {}
     }
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let written = options.open(&tmp).and_then(|mut file| {
+    let written = create_private(&tmp).and_then(|mut file| {
         file.write_all(render_file(devices).as_bytes())?;
         file.sync_all()
     });
@@ -519,6 +524,21 @@ fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<(
         let _ = fs::remove_file(&tmp);
     }
     renamed
+}
+
+/// Opens a new user-only file at `path`, failing if anything is there: mode 0600 on
+/// Unix, a protected DACL for SYSTEM and the user on Windows.
+fn create_private(path: &Path) -> io::Result<fs::File> {
+    #[cfg(windows)]
+    return jstream_platform_windows::create_private_file(path);
+    #[cfg(not(windows))]
+    {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        options.open(path)
+    }
 }
 
 #[cfg(test)]
@@ -750,6 +770,39 @@ mod tests {
 
         fs::write(&path, "not json").expect("written");
         assert!(Devices::load(Some(path.clone())).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// #344: a device file whose DACL lets everyone read it is refused.
+    #[cfg(windows)]
+    #[test]
+    fn a_device_file_other_users_can_read_is_refused_on_windows() {
+        let dir = scratch("dacl");
+        let path = dir.join("token.devices");
+        let devices = Devices::load(Some(path.clone())).expect("no file yet");
+        let code = devices.start_pairing(now()).expect("OS randomness");
+        devices.pair(&code, "Tablet", now()).expect("paired");
+        assert!(
+            Devices::load(Some(path.clone())).is_ok(),
+            "its own DACL passes"
+        );
+
+        // Everyone (S-1-1-0) may read it now.
+        let granted = std::process::Command::new("icacls")
+            .arg(&path)
+            .args(["/grant", "*S-1-1-0:R"])
+            .output()
+            .expect("icacls runs");
+        assert!(granted.status.success(), "{granted:?}");
+        let error = Devices::load(Some(path.clone()))
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            error
+                .as_deref()
+                .is_some_and(|e| e.contains("accessible to other users")),
+            "{error:?}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

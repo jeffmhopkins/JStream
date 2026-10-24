@@ -28,11 +28,11 @@ dox = ["cef", "jstream-browser/dox"]
 
 [dependencies]
 anyhow.workspace = true
-# Crash reports redact secrets by their BLAKE3 digests, never keeping their text.
-blake3.workspace = true
 # The control token's random bytes, from the OS.
 getrandom.workspace = true
 jstream-core.workspace = true
+# Local, redacted crash reports (ADR-0067).
+jstream-crash.workspace = true
 # `Codec`, for the startup check that Media Foundation has an AAC encoder.
 jstream-media.workspace = true
 # `Backends`, and the stream key store the publish opener reads.

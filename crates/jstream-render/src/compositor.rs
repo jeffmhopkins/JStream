@@ -133,7 +133,23 @@ impl Compositor {
         self.import_as(texture, sync, Alpha::PremultipliedSrgb)
     }
 
-    /// [`Self::import`] or [`Self::import_premultiplied`], by `alpha`.
+    /// Samples `texture`, as [`Self::import`] does, reading every texel's alpha as 1:
+    /// for a captured frame, whose alpha means nothing (a display or window capture can
+    /// deliver alpha below 1 under some drivers or HDR modes), so it draws as the CPU
+    /// capture path does, which ignores alpha (#451).
+    ///
+    /// # Errors
+    /// As for [`Self::import`].
+    pub fn import_opaque(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+    ) -> Result<Image, RenderError> {
+        self.import_as(texture, sync, Alpha::Opaque)
+    }
+
+    /// [`Self::import`], [`Self::import_premultiplied`] or [`Self::import_opaque`], by
+    /// `alpha`.
     pub(crate) fn import_as(
         &self,
         texture: wgpu::Texture,
@@ -218,6 +234,11 @@ impl Compositor {
         self.gpu.queue.submit([encoder.finish()]);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
+        // wgpu validates the commands as they are recorded and submitted, so an error in
+        // this frame has been raised by now; one from an earlier call fails this frame.
+        if let Some(detail) = self.take_error() {
+            return Err(RenderError::Uncaptured { detail });
+        }
 
         let output = targets.output.clone();
         let pixels = match readback_buffer {
@@ -342,14 +363,52 @@ impl Compositor {
         input: &Image,
         clock: FilterClock,
     ) -> Result<Image, RenderError> {
-        if !input.owner().is(&self.owner) {
-            return Err(RenderError::Invalid {
-                what: "image",
-                detail: "the filter input was made by another compositor".into(),
-            });
-        }
+        self.check_filter_input(input)?;
         let (width, height) = filter.output_size(input.width(), input.height());
         let output = self.layer(width, height)?;
+        self.apply_filter_into(filter, input, &output, clock)?;
+        Ok(output)
+    }
+
+    /// [`Self::apply_filter`] into `output`, a [`Self::layer`] of the filter's
+    /// [`VideoFilter::output_size`] for `input`, replacing what it held. The layer is
+    /// reused, so a chain that runs every frame allocates no output texture (a
+    /// multi-pass kind's scratch layers are still its own). Earlier submits that read
+    /// `output` are ordered before this one, so they keep its old contents.
+    ///
+    /// # Errors
+    /// As for [`Self::apply_filter`]; also [`RenderError::Invalid`] when `output` is not
+    /// a layer this compositor made, is not the filter's output size, or is `input`.
+    pub fn apply_filter_into(
+        &mut self,
+        filter: &mut VideoFilter,
+        input: &Image,
+        output: &Image,
+        clock: FilterClock,
+    ) -> Result<(), RenderError> {
+        self.check_filter_input(input)?;
+        let invalid = |detail: String| RenderError::Invalid {
+            what: "filter output",
+            detail,
+        };
+        if !output.owner().is(&self.owner) || output.target().is_none() {
+            return Err(invalid(
+                "the output is not a layer this compositor made".into(),
+            ));
+        }
+        if output.texture() == input.texture() {
+            return Err(invalid("a filter cannot draw into its own input".into()));
+        }
+        let size = filter.output_size(input.width(), input.height());
+        if (output.width(), output.height()) != size {
+            return Err(invalid(format!(
+                "the output is {}x{}, but the filter draws {}x{}",
+                output.width(),
+                output.height(),
+                size.0,
+                size.1
+            )));
+        }
         let mut encoder = self
             .gpu
             .device
@@ -370,7 +429,7 @@ impl Compositor {
             holds: &mut self.staged,
         };
         ctx.holds.clear();
-        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, &output) {
+        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, output) {
             self.staged.clear();
             return Err(err);
         }
@@ -379,13 +438,27 @@ impl Compositor {
         // handed back to the platform at the end of that submit, as `render` does: the
         // input's hold and those of the images the filter reads besides it, each once.
         for (sync, _) in &self.staged {
-            sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
+            if let Err(err) = sync.stage(&self.gpu.queue) {
+                self.staged.clear();
+                return Err(RenderError::Sync(err));
+            }
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
-        Ok(output)
+        Ok(())
+    }
+
+    fn check_filter_input(&self, input: &Image) -> Result<(), RenderError> {
+        if input.owner().is(&self.owner) {
+            Ok(())
+        } else {
+            Err(RenderError::Invalid {
+                what: "image",
+                detail: "the filter input was made by another compositor".into(),
+            })
+        }
     }
 
     /// The device images and targets are created on.
@@ -410,6 +483,35 @@ impl Compositor {
         self.gpu.context.as_ref()
     }
 
+    /// Why the device was lost, from wgpu's device-lost callback: `destroyed`, or `lost by
+    /// the driver` (a reset after a hang, Windows' TDR, a removed GPU) with the driver's
+    /// message. `None` while the device is usable. wgpu reports a loss when the device
+    /// is polled, so this polls it once, without waiting.
+    ///
+    /// Once it is lost, calls on this compositor fail or draw nothing. Nothing comes
+    /// back: open a new compositor ([`Self::open`]) and upload the images again.
+    pub fn lost(&self) -> Option<String> {
+        if self.gpu.faults.lost.get().is_none() {
+            let _ = self.gpu.device.poll(wgpu::PollType::Poll);
+        }
+        self.gpu.faults.lost.get().cloned()
+    }
+
+    /// The first uncaptured wgpu error on this compositor's device since the last call:
+    /// one no call returned, such as a validation error in a submitted command. wgpu's
+    /// default would panic on it. The compositor installs its own handler instead, so a
+    /// lost device's invalid resources fail the frame rather than the thread; an error
+    /// before a loss is also logged, as `uncaptured wgpu error`, once until it is taken:
+    /// `render` takes it each frame, so one that recurs is logged once per frame.
+    pub fn take_error(&self) -> Option<String> {
+        self.gpu
+            .faults
+            .error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+    }
+
     /// A one-line description of the adapter, for logs and test output.
     pub fn adapter_description(&self) -> String {
         self.gpu.description()
@@ -426,10 +528,11 @@ impl Compositor {
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
             context: self.gpu.context.clone(),
+            faults: Arc::clone(&self.gpu.faults),
         })
     }
 
-    fn maker(&self) -> Maker<'_> {
+    pub(crate) fn maker(&self) -> Maker<'_> {
         Maker {
             gpu: &self.gpu,
             layout: &self.image_layout,
@@ -835,11 +938,7 @@ fn push_shape(
     alpha: Alpha,
 ) -> u32 {
     // The shader's `mode`: how it turns a filtered sample into premultiplied linear.
-    let mode = match alpha {
-        Alpha::Premultiplied => 0.0,
-        Alpha::Straight => 1.0,
-        Alpha::PremultipliedSrgb => 2.0,
-    };
+    let mode = alpha.shader_mode();
     let vertices = shape.vertices();
     let mut count = 0;
     for second in 1..vertices.len().saturating_sub(1) {

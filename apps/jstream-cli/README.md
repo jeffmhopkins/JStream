@@ -82,9 +82,12 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `hello` | the `hello`/`welcome` handshake |
 | `state get` | query `state.get` |
 | `scene list` | query `scene.list` |
-| `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
-| `studio get` | query `studio.get` (the scene on program) |
+| `scene switch <scene-id> [--preset <preset-id>]` | action `scene.switch` (to that scene, with the preset's transition, else the one the engine resolves) |
+| `studio get` | query `studio.get` (the scenes on program and preview) |
+| `studio set-preview <scene-id>` | action `studio.set_preview` |
 | `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
+| `privacy on`, `privacy off` | action `privacy.set` (covers every output, or uncovers them) |
+| `privacy get` | query `privacy.get` |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -122,7 +125,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
   are always sent neutral: the command sets the 2D box only, though the engine accepts
-  any 3D it can draw from protocol 0.34.
+  any 3D it can draw from protocol 0.34. It sends no flip (`flip_h` and `flip_v` false):
+  the command has no flip argument yet.
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
@@ -132,7 +136,10 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
   the item's own scene, which omitting it already means. Protocol 0.19's audio edits
   (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
-  in the CLI either.
+  in the CLI either, and neither are the transition edits (`transition.*`,
+  `scene.set_transitions`, `item.set_transition`) or the folder, label and metadata
+  edits (`folder.*`, `label.*`, `scene.set_folder`, `scene.set_meta`,
+  `source.set_meta`).
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine accepts only `normal` until it draws the
@@ -140,6 +147,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
+  A `scene.switch` bound here names no transition preset (MCP and the WebSocket API
+  can bind one), and the `hotkeys:` table lists a bound preset after the scene.
   Applying a batch prints `removed hotkey <chord>` for each binding its deletes
   removed. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
@@ -177,7 +186,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` (or `studio.changed`) event it causes; an event an undo or redo caused ends with
+  the `state.changed` (or `studio.changed`, or `privacy.changed`) event it causes; an event an undo or redo caused ends with
   `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
@@ -194,8 +203,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
   (<name>):` by its role, then the outputs, then a `hotkeys:` table (`CHORD`,
-  `ACTION`) when any are bound; only `--json` shows the sources' audio, the buses and
-  the sends. `output status` prints
+  `ACTION`) when any are bound; only `--json` shows the sources' audio, the buses, the
+  sends, the transition presets, the folders and labels, and each scene's and source's
+  organisation metadata. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.

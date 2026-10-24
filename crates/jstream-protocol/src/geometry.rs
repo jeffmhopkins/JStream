@@ -74,12 +74,14 @@ impl Size {
 /// `center`, `size` and `rotation_deg` alone define the box, so selection handles need
 /// no source size. The 3D fields default to neutral (no tilt, turn or depth, and no
 /// perspective). From protocol 0.34 the engine accepts and draws any 3D it can draw
-/// ([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors rejected a non-neutral value, and
-/// [`Self::is_neutral_3d`] was that check. A negative `size` is rejected, not read as a
-/// flip.
+/// ([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors
+/// rejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative
+/// `size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror
+/// the content instead, the additive booleans ADR-0022 reserved.
 ///
 /// Every number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the
-/// defaults below, and omitted `perspective_px` means orthographic.
+/// defaults below, omitted `perspective_px` means orthographic, and omitted flips mean
+/// `false`. A flip that is `false` is not written.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ItemGeometry {
     /// Centre of the box, in canvas pixels.
@@ -109,6 +111,15 @@ pub struct ItemGeometry {
     /// orthographic. When present it must be greater than zero.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub perspective_px: Option<Finite32>,
+    /// Mirror the content left to right, about the box's vertical centre line in its
+    /// local frame, after crop and fit and before rotation. The box itself does not
+    /// change. Default `false`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub flip_h: bool,
+    /// Mirror the content top to bottom, about the box's horizontal centre line in its
+    /// local frame, after crop and fit and before rotation. Default `false`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub flip_v: bool,
 }
 
 /// The collection's canvas: every scene's coordinate space, in whole pixels.
@@ -206,7 +217,9 @@ pub struct ProjectedQuad {
 /// The origin is the box centre, x right, y down. `left` and `top` are the edges of
 /// the content rectangle. For [`FitMode::Fill`] the rectangle may extend past the box;
 /// the compositor clips it. `u0, v0` and `u1, v1` are the cropped source's texture
-/// coordinates, y down.
+/// coordinates, y down, at the rectangle's left, top, right and bottom edges. A flip
+/// swaps them: with [`ItemGeometry::flip_h`] `u0` is the crop's right edge and `u1` its
+/// left, and [`ItemGeometry::flip_v`] does the same for `v0` and `v1`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ContentRect {
     /// Left edge, local x.
@@ -217,28 +230,30 @@ pub struct ContentRect {
     pub width: f32,
     /// Height of the content rectangle.
     pub height: f32,
-    /// Left texture coordinate of the crop, in `0..=1` of the source.
+    /// Texture coordinate at the left edge, in `0..=1` of the source.
     pub u0: f32,
-    /// Top texture coordinate of the crop.
+    /// Texture coordinate at the top edge.
     pub v0: f32,
-    /// Right texture coordinate of the crop.
+    /// Texture coordinate at the right edge.
     pub u1: f32,
-    /// Bottom texture coordinate of the crop.
+    /// Texture coordinate at the bottom edge.
     pub v1: f32,
 }
 
 /// The box a legacy 0.3 transform draws, plus whether a negative scale flipped an axis.
 ///
-/// [`ItemGeometry`] has no flip field. Projecting `geometry` matches the drawn outline
-/// and, when either flag is set, not the reflected corner order.
+/// A negative scale is stored as the geometry's flip ([`ItemGeometry::flip_h`],
+/// [`ItemGeometry::flip_v`]), so `geometry` draws what [`legacy_quad`] draws. Its
+/// projected corners are the box's own, so they match the drawn outline and, when a
+/// flag is set, not the reflected corner order.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LegacyBox {
     /// `fit_mode` is [`FitMode::Stretch`] and the 3D fields are neutral. Size components
-    /// are the absolute scaled crop.
+    /// are the absolute scaled crop, and a negative scale is the matching flip.
     pub geometry: ItemGeometry,
-    /// `scale.x` was negative.
+    /// `scale.x` was negative; equal to `geometry.flip_h`.
     pub flip_x: bool,
-    /// `scale.y` was negative.
+    /// `scale.y` was negative; equal to `geometry.flip_v`.
     pub flip_y: bool,
 }
 
@@ -257,7 +272,7 @@ pub struct LegacyQuad {
 }
 
 impl ItemGeometry {
-    /// A box at `center` with `size`, fit mode [`FitMode::Fit`], and neutral 3D.
+    /// A box at `center` with `size`, fit mode [`FitMode::Fit`], neutral 3D and no flip.
     ///
     /// # Errors
     /// [`GeometryError::NonPositiveSize`] when `size` is not positive.
@@ -271,13 +286,15 @@ impl ItemGeometry {
             turn_deg: Finite32::ZERO,
             depth_px: Finite32::ZERO,
             perspective_px: None,
+            flip_h: false,
+            flip_v: false,
         };
         geometry.validate()?;
         Ok(geometry)
     }
 
     /// The default placement from protocol 1.0: the box is the whole canvas, centred,
-    /// with [`FitMode::Fit`] and neutral 3D.
+    /// with [`FitMode::Fit`], neutral 3D and no flip.
     ///
     /// `width` and `height` are the canvas in whole pixels.
     ///
@@ -378,7 +395,9 @@ impl ItemGeometry {
     ///
     /// Crop is in whole source pixels and is applied before fitting. The rectangle is
     /// centred in the box for every fit mode. It does not depend on rotation or the 3D
-    /// fields: those are applied by [`Self::place`] to the rectangle's corners.
+    /// fields: those are applied by [`Self::place`] to the rectangle's corners. A flip
+    /// swaps the texture coordinates of that axis, which mirrors the cropped, fitted
+    /// content about the box centre; the rectangle itself is unchanged.
     ///
     /// # Errors
     /// The same as [`Self::validate`], or [`GeometryError::NotFinite`] if the fitted
@@ -405,23 +424,37 @@ impl ItemGeometry {
         }
         let source_w = source_width as f32;
         let source_h = source_height as f32;
+        let (mut u0, mut u1) = (
+            crop.left as f32 / source_w,
+            (crop.left + cropped_w) as f32 / source_w,
+        );
+        let (mut v0, mut v1) = (
+            crop.top as f32 / source_h,
+            (crop.top + cropped_h) as f32 / source_h,
+        );
+        if self.flip_h {
+            std::mem::swap(&mut u0, &mut u1);
+        }
+        if self.flip_v {
+            std::mem::swap(&mut v0, &mut v1);
+        }
         Ok(Some(ContentRect {
             left: -width * 0.5,
             top: -height * 0.5,
             width,
             height,
-            u0: crop.left as f32 / source_w,
-            v0: crop.top as f32 / source_h,
-            u1: (crop.left + cropped_w) as f32 / source_w,
-            v1: (crop.top + cropped_h) as f32 / source_h,
+            u0,
+            v0,
+            u1,
+            v1,
         }))
     }
 
     /// The deprecated 0.3 view of this geometry, which `ItemInfo.transform` reports for
     /// a geometry item: `position` is the box's top-left corner after rotation about
     /// `center`, `rotation_deg` is the box's rotation, and `scale` is (1, 1), as if the
-    /// source were exactly the box's size. It depends on no source size. The 3D fields
-    /// and the fit mode are not in it.
+    /// source were exactly the box's size. It depends on no source size. The 3D fields,
+    /// the fit mode and the flips are not in it.
     ///
     /// # Errors
     /// [`GeometryError::NotFinite`] when the corner is not finite.
@@ -444,9 +477,9 @@ impl ItemGeometry {
     /// The cropped source is scaled, its top-left is `position`, and it rotates
     /// clockwise about that corner. The returned geometry has [`FitMode::Stretch`] and
     /// neutral 3D, so a non-uniform scale stays exact. A negative scale is not refused:
-    /// there is no flip field yet, so the size is the absolute value and the matching
-    /// flag records that the reflection is not stored. Projecting the box matches the
-    /// outline, not the reflected corner order. [`legacy_quad`] keeps that reflection.
+    /// the size is the absolute value and the reflection is the matching flip, so the
+    /// box draws the same pixels as [`legacy_quad`]. Projecting the box gives its
+    /// outline, not the reflected corner order that [`legacy_quad`] returns.
     ///
     /// # Errors
     /// [`GeometryError::NotFinite`] when the scaled size or the centre is not finite.
@@ -476,6 +509,8 @@ impl ItemGeometry {
             turn_deg: Finite32::ZERO,
             depth_px: Finite32::ZERO,
             perspective_px: None,
+            flip_h: dest_w < 0.0,
+            flip_v: dest_h < 0.0,
         };
         Ok(Some(LegacyBox {
             geometry,
@@ -980,9 +1015,11 @@ mod tests {
             .expect("finite")
             .expect("drawn");
         assert!(legacy.flip_x && !legacy.flip_y);
+        assert!(legacy.geometry.flip_h && !legacy.geometry.flip_v);
         assert_eq!(legacy.geometry.size, size(4.0, 2.0));
         let projected = legacy.geometry.project().expect("projects");
-        // The outline matches; the corner order does not, because geometry cannot flip.
+        // The outline matches; the corner order does not, because the box keeps its own
+        // corners and the flip mirrors only the content (see the next test).
         let mut from_quad: Vec<(i32, i32)> = quad
             .corners
             .iter()
@@ -1003,6 +1040,110 @@ mod tests {
             xy(projected.corners[0]),
             (quad.corners[0].x, quad.corners[0].y)
         );
+    }
+
+    /// The texture coordinate a stretched box samples at each projected corner.
+    fn corner_uvs(geometry: ItemGeometry, width: u32, height: u32) -> Vec<((i32, i32), [f32; 2])> {
+        let rect = geometry
+            .content(width, height, Crop::NONE)
+            .expect("content")
+            .expect("drawn");
+        let uvs = [
+            [rect.u0, rect.v0],
+            [rect.u1, rect.v0],
+            [rect.u1, rect.v1],
+            [rect.u0, rect.v1],
+        ];
+        let quad = geometry.project().expect("projects");
+        let mut pairs: Vec<((i32, i32), [f32; 2])> = quad
+            .corners
+            .iter()
+            .zip(uvs)
+            .map(|(corner, uv)| {
+                let (x, y) = xy(*corner);
+                ((x.round() as i32, y.round() as i32), uv)
+            })
+            .collect();
+        pairs.sort_by_key(|(at, _)| *at);
+        pairs
+    }
+
+    #[test]
+    fn a_legacy_box_with_a_negative_scale_samples_what_the_legacy_quad_samples() {
+        for (scale, rotation) in [
+            ((-1.0, 1.0), 0.0),
+            ((1.0, -2.0), 0.0),
+            ((-2.0, -1.0), 0.0),
+            ((-1.0, 1.0), 90.0),
+        ] {
+            let transform = ItemTransform {
+                position: vec2(10.0, 20.0),
+                scale: vec2(scale.0, scale.1),
+                rotation_deg: finite(rotation),
+            };
+            let quad = legacy_quad(transform, Crop::NONE, 4, 2)
+                .expect("finite")
+                .expect("drawn");
+            let mut expected: Vec<((i32, i32), [f32; 2])> = quad
+                .corners
+                .iter()
+                .zip(quad.uvs)
+                .map(|(corner, uv)| ((corner.x.round() as i32, corner.y.round() as i32), uv))
+                .collect();
+            expected.sort_by_key(|(at, _)| *at);
+            let legacy = ItemGeometry::from_legacy(transform, Crop::NONE, 4, 2)
+                .expect("finite")
+                .expect("drawn");
+            assert_eq!(
+                corner_uvs(legacy.geometry, 4, 2),
+                expected,
+                "scale {scale:?}, rotation {rotation}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_flip_swaps_the_content_uvs_and_leaves_the_box() {
+        let plain = box_at(50.0, 40.0, 20.0, 20.0);
+        let crop = Crop {
+            left: 1,
+            top: 0,
+            right: 0,
+            bottom: 1,
+        };
+        let unflipped = plain.content(4, 4, crop).expect("content").expect("drawn");
+        assert_eq!(
+            (unflipped.u0, unflipped.v0, unflipped.u1, unflipped.v1),
+            (0.25, 0.0, 1.0, 0.75)
+        );
+        for (flip_h, flip_v, uvs) in [
+            (true, false, (1.0, 0.0, 0.25, 0.75)),
+            (false, true, (0.25, 0.75, 1.0, 0.0)),
+            (true, true, (1.0, 0.75, 0.25, 0.0)),
+        ] {
+            let flipped = ItemGeometry {
+                flip_h,
+                flip_v,
+                ..plain
+            };
+            let rect = flipped
+                .content(4, 4, crop)
+                .expect("content")
+                .expect("drawn");
+            assert_eq!((rect.u0, rect.v0, rect.u1, rect.v1), uvs);
+            assert_eq!(
+                (rect.left, rect.top, rect.width, rect.height),
+                (
+                    unflipped.left,
+                    unflipped.top,
+                    unflipped.width,
+                    unflipped.height
+                )
+            );
+            assert_eq!(flipped.project(), plain.project());
+            assert_eq!(flipped.transform_view(), plain.transform_view());
+            assert!(flipped.is_neutral_3d());
+        }
     }
 
     #[test]
@@ -1054,8 +1195,10 @@ mod tests {
         assert_eq!(parsed.depth_px, Finite32::ZERO);
         assert_eq!(parsed.perspective_px, None);
         assert!(parsed.is_neutral_3d());
+        assert!(!parsed.flip_h && !parsed.flip_v);
         let json = serde_json::to_value(parsed).expect("serializes");
         assert!(json.get("perspective_px").is_none());
+        assert!(json.get("flip_h").is_none() && json.get("flip_v").is_none());
         assert_eq!(json["fit_mode"], "fit");
 
         let mut full = parsed;
@@ -1065,7 +1208,10 @@ mod tests {
         full.turn_deg = finite(-2.0);
         full.depth_px = finite(3.0);
         full.perspective_px = Some(finite(800.0));
+        full.flip_h = true;
+        full.flip_v = true;
         let text = serde_json::to_string(&full).expect("serializes");
+        assert!(text.contains(r#""flip_h":true,"flip_v":true"#), "{text}");
         let back: ItemGeometry = serde_json::from_str(&text).expect("parses");
         assert_eq!(back, full);
         assert!(serde_json::from_str::<FitMode>("\"cover\"").is_err());

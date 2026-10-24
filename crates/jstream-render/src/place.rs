@@ -156,7 +156,9 @@ fn legacy(
 ///
 /// Clipping happens in the box's local frame, before rotation, so it is exact for any
 /// in-plane rotation. With 3D neutral every corner is in front of the viewer and the
-/// placement is affine, so linear UVs are correct. Any other 3D is [`drawn`].
+/// placement is affine, so linear UVs are correct. A flip arrives as the content's
+/// swapped UV pair, so the same interpolation mirrors the clipped part. Any other 3D is
+/// [`drawn`].
 fn boxed(
     source_width: u32,
     source_height: u32,
@@ -552,6 +554,31 @@ mod tests {
         assert_eq!(
             q.uvs(),
             [[0.25, 0.0], [0.75, 0.0], [0.75, 1.0], [0.25, 1.0]]
+        );
+    }
+
+    #[test]
+    fn a_flip_mirrors_the_clipped_uvs_and_keeps_the_corners() {
+        let Placement::Geometry(geometry) = boxed(20.0, 20.0, FitMode::Fill, 0.0) else {
+            unreachable!("boxed is a geometry");
+        };
+        let mirrored = Placement::Geometry(ItemGeometry {
+            flip_h: true,
+            flip_v: true,
+            ..geometry
+        });
+        // The same middle half as the unflipped fill, sampled right to left and bottom
+        // to top.
+        let q = shape(4, 2, mirrored, Crop::NONE)
+            .expect("finite")
+            .expect("draws");
+        assert_eq!(
+            q.corners(),
+            [[40.0, 30.0], [60.0, 30.0], [60.0, 50.0], [40.0, 50.0]]
+        );
+        assert_eq!(
+            q.uvs(),
+            [[0.75, 1.0], [0.25, 1.0], [0.25, 0.0], [0.75, 0.0]]
         );
     }
 

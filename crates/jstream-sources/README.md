@@ -90,6 +90,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   full-resolution YCbCr) while it decodes, bounded only by the side
   limit. `Context` also carries the `AudioScopes` the `waveform` and `spectrum`
   sources find their audio in; with none they draw silence.
+- `decode_still(bytes, path, limits)`: an image file's first frame as a `StillImage`
+  (straight sRGB RGBA8), decoded as the `image` kind decodes, within the same `Limits`,
+  with the same errors. `jstream-core` reads the images video filters use with it (an
+  `image_mask`'s mask, an `apply_lut` table stored as tiles), which never animate.
 - `AudioScope`: the latest audio of one mix, as mono (the mean of left and right), in
   a lock-free ring of 16384 samples (341 ms at 48 kHz) stored as atomics. One thread
   pushes interleaved stereo blocks; any number read the latest window of up to 2048
@@ -267,7 +271,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
   background transparent) is the one live setting: `update` replaces the page's custom
   CSS without reloading it. Through the engine a `css` edit still reloads the page, until
-  the engine updates live settings in place (core's README › Open items). The page's picture is only on the GPU (`gpu_frame`), so
+  the engine updates live settings in place (core's README › Open items).
+  `local_network` (advanced, default off) lets a page from the internet make requests
+  to this computer and the local network, for widgets that talk to an app running here;
+  off, `jstream-browser`'s request policy refuses them (#347). `youtube_chat` never sets
+  it. The page's picture is only on the GPU (`gpu_frame`), so
   `frame` is a transparent frame of the page's size, and the page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
   backend's failure is `SourceError::Browser`. Dropping the source closes the page.
@@ -309,9 +317,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source's `Painter` takes the slot's lock and redraws (and so allocates) only when
   another message was featured since, and `frame` hands out the frame drawn last
   without drawing. Every setting but `font` is live.
-- `webcam` is described only, with the settings B4 gave it: its sources can be
-  created and configured, and `create` fails with
-  `SourceError::NotBuilt`.
+- `webcam`: a webcam or capture card, by the `device` setting, the ID the
+  platform's video-device backend lists it by (`VideoDevices::devices`). An empty
+  `device` captures the first device listed. Like `display` and `window`, it only says
+  what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
+  device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
+  before it had a setting, its sources couldn't start. It has audio too (#716): the
+  input the platform pairs with the device, a webcam's microphone or a capture card's
+  HDMI audio, which the engine records as an audio input's
+  (`webcam_device(kind, settings)` says whose pair: `Some(Some(id))` for the `device`
+  named, `Some(None)` for the first device listed, and `None` for any other kind). So a new webcam gets audio settings that follow `when_shown` and a
+  master send, as ADR-0028 gives a source with video and audio.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
@@ -378,7 +394,10 @@ asset checks refuse a file swapped in from outside the root (Unix) and a junctio
 symbolic link inside the root that leads outside it (Windows, both when the path is
 resolved and in the walk on its own, as a link swapped in after resolving would meet
 it; a symbolic link is skipped, with a note, where the test may not create one).
-`tests/sources.rs` checks
+`tests/kinds.rs` snapshots every built-in kind's descriptor (`schema/kinds.snap`, an
+`insta` snapshot): adding or changing a kind changes no protocol schema, so this diff is
+where a kind's settings are reviewed like an API diff (ADR-0025). `INSTA_UPDATE=always
+cargo test -p jstream-sources --test kinds` rewrites it. `tests/sources.rs` checks
 the registry and runs the colour and image kinds through the public API on files in a
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
@@ -421,7 +440,8 @@ continuous across the block seam. `player.rs`'s own tests loop a stream that sta
 in the file one frame period apart, and cut a block at a rate where 10 ms isn't a whole
 number of frames, keeping every frame and the pieces contiguous. `tests/browser.rs` runs
 the `browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
-over URL, setting and backend errors, live CSS, closing on drop and the audio hand-off.
+over URL, setting and backend errors, live CSS, the `local_network` opt-in, closing on
+drop and the audio hand-off.
 `tests/youtube_chat.rs` runs the `youtube_chat` preset the same way: the popout chat
 page a video or link opens, a blank page for an empty setting, refused links, the
 default CSS and live CSS.
