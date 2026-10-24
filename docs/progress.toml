@@ -374,9 +374,9 @@ prs = [177, 225, 227]
 id = "C4c"
 milestone = "M1b"
 title = "Webcam source (CPU path, MJPEG on Windows, paired audio)"
-status = "review"
+status = "hardware"
 prs = [654, 658, 726]
-needs = ["build", "wave", "hardware"]
+note = "landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam)"
 
 [[item]]
 id = "C1a"
@@ -470,7 +470,7 @@ id = "V0"
 milestone = "M1b"
 title = "Video filter chain runtime"
 status = "review"
-prs = [595, 607, 626, 717, 730]
+prs = [595, 607, 626, 712, 717, 730]
 note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
 needs = ["build"]
 
@@ -705,7 +705,7 @@ id = "U4"
 milestone = "M2"
 title = "Canvas editing"
 status = "done"
-prs = [255]
+prs = [255, 302]
 
 [[item]]
 id = "U4p"
@@ -753,17 +753,17 @@ prs = [358]
 id = "T1"
 milestone = "M2"
 title = "Studio mode and transitions"
-status = "review"
+status = "done"
 prs = [260]
-needs = ["build"]
+note = "#260 landed with wave/m1-3 (#754)"
 
 [[item]]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "review"
+status = "done"
 prs = [304]
-needs = ["build"]
+note = "#304 landed with wave/m1-3 (#754)"
 
 [[item]]
 id = "E2"
@@ -776,15 +776,17 @@ prs = [259]
 id = "E2b"
 milestone = "M2"
 title = "Privacy screen and encoder sharing key"
-status = "review"
+status = "planned"
 prs = [317]
+note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build"
+needs = ["build"]
 
 [[item]]
 id = "D8"
 milestone = "M2"
 title = "Master and output audio chains"
 status = "done"
-prs = [249]
+prs = [249, 303]
 
 [[item]]
 id = "D8p"
@@ -812,8 +814,9 @@ prs = [315, 460, 463, 466]
 id = "B11"
 milestone = "M2"
 title = "Folders and labels"
-status = "review"
+status = "done"
 prs = [323]
+note = "#323 landed with wave/m1-3 (#754)"
 
 [[item]]
 id = "K1"
@@ -821,7 +824,7 @@ milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "planned"
 prs = [319]
-note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 in review into wave/m1-3"
+note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754)"
 needs = ["build"]
 
 [[item]]
