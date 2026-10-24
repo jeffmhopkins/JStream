@@ -45,6 +45,8 @@
       }
       if (src[lt + 1] === '/') {
         const end = src.indexOf('>', lt);
+        // An unclosed tag at the end of a block (a typo in an edited copy) ends the parse.
+        if (end < 0) { i = src.length; break; }
         const name = src.slice(lt + 2, end).trim().toLowerCase();
         for (let k = stack.length - 1; k > 0; k--) {
           if (stack[k].tag.toLowerCase() === name) { stack.length = k; break; }
@@ -60,7 +62,7 @@
       for (;;) {
         attrRe.lastIndex = i;
         const a = attrRe.exec(src);
-        if (!a) { i = src.indexOf('>', i) + 1; break; }
+        if (!a) { i = src.indexOf('>', i) + 1 || src.length; break; }
         i = attrRe.lastIndex;
         if (a[5]) { node.selfClose = a[5] === '/>'; break; }
         const v = a[2] ?? a[3] ?? a[4];
