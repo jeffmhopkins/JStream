@@ -8,8 +8,9 @@
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
-//! Media Foundation is installed, and `--register-vcam` registers the virtual camera's
-//! media source (`register`). With `--collection` it loads the collection from a file
+//! Media Foundation is installed. The optional `--register-vcam` registers an
+//! administrators-only copy of the virtual camera's media source, and `--unregister-vcam`
+//! removes it (`register`). With `--collection` it loads the collection from a file
 //! and saves every change there, and it records every batch, undo, redo and action in an
 //! audit log next to its log files. Not yet: the web UI.
 //!
@@ -21,7 +22,6 @@ mod args;
 // Windows runs it at startup; its decision is tested everywhere.
 #[cfg(any(windows, test))]
 mod components;
-mod crash;
 mod logs;
 mod register;
 mod serve;
@@ -31,6 +31,7 @@ mod youtube;
 use anyhow::Context;
 use args::{Invocation, Options};
 use jstream_core::AuditFile;
+use jstream_crash::{Program, Secrets};
 use jstream_protocol::PROTOCOL_VERSION;
 use std::io::{Write, stderr, stdout};
 use std::path::{Path, PathBuf};
@@ -98,6 +99,9 @@ fn main() -> ExitCode {
         Ok(Invocation::RegisterVcam) => register::register()
             .map_err(Failure::Failed)
             .and_then(|message| print(&message)),
+        Ok(Invocation::UnregisterVcam) => register::unregister()
+            .map_err(Failure::Failed)
+            .and_then(|message| print(&message)),
         Ok(Invocation::Serve(options)) => run(options),
         Err(message) => Err(Failure::Usage(format!(
             "{message}\n(run `jstream-daemon --help` for usage)"
@@ -161,14 +165,30 @@ fn log_dir(options: &Options) -> Result<PathBuf, Failure> {
     }
 }
 
+/// Prints the crash hook's redacted line naming the report. Best effort: the report is
+/// what matters.
+fn crash_line(line: &str) {
+    let _ = writeln!(stderr().lock(), "{line}");
+}
+
 /// Creates the log directory, installs the crash-report hook there, and installs the
 /// process's log subscriber: the libraries' `tracing` spans and events, filtered by
 /// `filter`, as text lines on stderr (stdout carries only the banner lines) and in the
 /// rotating log files in `dir`.
-fn init_logging(dir: &Path, filter: Targets) -> Result<(), Failure> {
+fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Failure> {
     logs::create_dir(dir)
         .with_context(|| format!("could not create the log directory `{}`", dir.display()))?;
-    crash::install(dir.to_owned());
+    // Reports are made like the log files: user-only on Unix and on Windows (#656).
+    jstream_crash::install_creating(
+        dir.to_owned(),
+        Program {
+            name: env!("CARGO_PKG_NAME"),
+            version: env!("CARGO_PKG_VERSION"),
+        },
+        secrets.clone(),
+        crash_line,
+        logs::create_new,
+    );
     let files = logs::LogFiles::open(dir)
         .with_context(|| format!("could not create a log file in `{}`", dir.display()))?;
     let file_path = files.current_path();
@@ -219,7 +239,10 @@ fn run(options: Options) -> Result<(), Failure> {
     };
     let filter = log_filter(&options)?;
     let logs = log_dir(&options)?;
-    init_logging(&logs, filter)?;
+    // The crash reports' redaction: the hook, the token and the credential stores
+    // share it.
+    let secrets = Secrets::new();
+    init_logging(&logs, filter, &secrets)?;
     #[cfg(windows)]
     check_media_foundation()?;
     #[cfg(windows)]
@@ -240,14 +263,14 @@ fn run(options: Options) -> Result<(), Failure> {
     {
         return Err(anyhow::anyhow!("unusable UI directory `{dir}`: not a directory").into());
     }
-    let (token, provenance) = token::load_or_create(&path)?;
+    let (token, provenance) = token::load_or_create(&path, &secrets)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .context("could not start the async runtime")?;
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
-        let engine = serve::engine(&options, Arc::new(audit), youtube)?;
+        let engine = serve::engine(&options, Arc::new(audit), youtube, &secrets)?;
         let ui_dir = options.ui_dir.as_deref().map(Path::new);
         let device_file = token::device_file(&path);
         let server = serve::bind(engine, options.port, token, Some(device_file), ui_dir)

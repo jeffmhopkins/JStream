@@ -61,7 +61,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
-  that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
+  that are only between stamps or only inside `@generated` blocks, takes main's `by` and note
+  for each ledger entry both sides recorded at the same content, moves inline stamps a branch from before ADR-0053 still
   has, and lists the sections left stale: each stale input with the note the branch had
   written on it and the merged commits that changed it, then the PRs those commits came
   from. `docs verify --merge` then keeps those notes and adds what the merge changed
@@ -326,7 +327,15 @@ cargo xtask docs migrate                       # move inline stamps to the ledge
 wave's ([runbook](runbooks/waves.md#current)). Every
 conflict in the ledger takes main's side: a merge never leaves a section falsely fresh,
 and a conflict usually leaves it stale, for a re-read. The result must parse, and is
-rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
+rewritten in canonical form. Once the ledger has no conflict left, each entry whose hash
+equals main's entry for the same input takes main's entry, `by` and note included,
+whether it conflicted or not. Both sides verified the same content of that input, so no
+section's freshness changes; but the last note on it becomes the one main wrote for it,
+and the branch's ledger diff keeps only the inputs it verified at other content. This goes
+into the merge commit itself, and `merge-main` names each section it changed. A
+fast-forward, or a merge with nothing to bring in, makes no merge commit and takes
+nothing; neither does a merge whose ledger doesn't parse, which the steps after the commit
+report. In a doc, a conflict whose two sides are only inline `verified` lines
 inside `@section` blocks (either side may have none, as when `main` moved them to the
 ledger) takes main's side too. A conflict whose two sides lie wholly inside `@generated`
 blocks that `docs generate` writes, such as two PRs each regenerating the README's progress
@@ -366,9 +375,15 @@ lists the branch's notes, after it has committed the merge.
 section that is already fresh, as when a reviewer asks for a better note, without touching
 any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
 at the merge base of `HEAD` and `origin/main`, or of the wave named with
-`--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
-`--merge`, and a section this branch never stamped. It fails when the ledger at that merge
-base doesn't parse, rather than taking every entry for this branch's own.
+`--from wave/<name>`. A PR stacked on another PR's branch names that branch instead,
+`--from <base branch>`, which must be an ancestor of `HEAD` (merge it first), so the base
+PR's entries keep their notes. An entry equal to the one where `HEAD` left `origin/main`
+or any `origin/wave/*` is kept too, so main's or a wave's notes survive when the stacked PR
+has merged them ahead of its base. A bare `--renote` on a stacked PR compares against
+`origin/main` and so rewrites the base PR's entries as well: name the base. It refuses a
+stale section, which needs a re-read and `--note` or `--merge`, and a section this branch
+never stamped. It fails when the ledger at that merge base doesn't parse, rather than
+taking every entry for this branch's own.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -468,7 +483,8 @@ holds**. The note says what was checked and why it still holds, e.g.:
   said about this PR's change, plus what the merge changed in that section's inputs.
   `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
   this PR changes and adds the text. On an input whose hash equals the merged side's
-  entry, it keeps that entry as it is. `merge-main` prints the merged commits behind each
+  entry, it keeps that entry as it is, which `merge-main` has already given main's note.
+  `merge-main` prints the merged commits behind each
   stale input to write it from ([Hash-bound verification](#verification)), and under each
   stale section the PRs (`(#N)` in their subjects) those commits came from. `--merge` and
   `--renote` print the PRs behind the entries they rewrite (an entry kept as the merged

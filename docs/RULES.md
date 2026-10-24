@@ -534,8 +534,15 @@ idempotency key. Undo is per client ([ADR-0013](adr/0013-command-model.md)).
 ### R-SEC-001: Secrets stay in the OS credential store
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_core::secrets_are_redacted", "review"]
-applies_to = ["crates/**"]
+enforced_by = [
+  "test:jstream_core::secrets_are_redacted",
+  "test:jstream_server::tests::stream_keys_are_never_echoed_or_logged",
+  "test:jstream_daemon::serve::tests::a_failing_rtmp_publish_never_names_the_key",
+  "test:jstream_crash::tests::a_panic_writes_a_redacted_report",
+  "test:jstream_crash::tests::a_redacting_store_registers_what_it_stores_and_loads",
+  "review",
+]
+applies_to = ["crates/**", "apps/**"]
 -->
 Stream keys and OAuth tokens live only in the OS credential store. They never appear in
 collection files, logs, events, snapshots or MCP responses (they are redacted as `"***"`).
@@ -639,7 +646,7 @@ The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
-| `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0020](adr/0020-portable-windows-distribution.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
+| `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | clippy on `jstream-platform-macos`, then build and unit tests on macOS | yes, from M3 ([ADR-0063](adr/0063-macos-platform-support.md)) | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |

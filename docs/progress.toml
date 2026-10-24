@@ -371,6 +371,14 @@ status = "done"
 prs = [177, 225, 227]
 
 [[item]]
+id = "C4c"
+milestone = "M1b"
+title = "Webcam source (CPU path, MJPEG on Windows, paired audio)"
+status = "review"
+prs = [654, 658, 726]
+needs = ["build", "wave", "hardware"]
+
+[[item]]
 id = "C1a"
 milestone = "M1b"
 title = "Sources crate: color, image"
@@ -456,6 +464,15 @@ milestone = "M1b"
 title = "Filter chains in the mixer"
 status = "done"
 prs = [231]
+
+[[item]]
+id = "V0"
+milestone = "M1b"
+title = "Video filter chain runtime"
+status = "review"
+prs = [595, 607, 626, 717, 730]
+note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
+needs = ["build"]
 
 [[item]]
 id = "D5"
@@ -548,8 +565,9 @@ prs = [213, 297]
 id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
-status = "done"
-prs = [235]
+status = "hardware"
+prs = [235, 565]
+note = "Windows run (#563)"
 
 [[item]]
 id = "G3d"
@@ -743,8 +761,8 @@ needs = ["build"]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "planned"
-note = "draft #304, on T1"
+status = "review"
+prs = [304]
 needs = ["build"]
 
 [[item]]
@@ -753,6 +771,13 @@ milestone = "M2"
 title = "Video mixes"
 status = "done"
 prs = [259]
+
+[[item]]
+id = "E2b"
+milestone = "M2"
+title = "Privacy screen and encoder sharing key"
+status = "review"
+prs = [317]
 
 [[item]]
 id = "D8"
@@ -782,6 +807,13 @@ milestone = "M2"
 title = "Audio waveform and spectrum sources"
 status = "done"
 prs = [315, 460, 463, 466]
+
+[[item]]
+id = "B11"
+milestone = "M2"
+title = "Folders and labels"
+status = "review"
+prs = [323]
 
 [[item]]
 id = "K1"

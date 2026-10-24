@@ -31,6 +31,9 @@ pub(crate) const BRANCH: &str = "main";
 pub(crate) struct Merge {
     /// Sections whose conflicting stamp was resolved to main's, as `DOC#anchor`.
     pub(crate) stamps: Vec<String>,
+    /// Sections where an entry whose hash equals main's took main's `by` and `note` (#697),
+    /// as `DOC#anchor`.
+    pub(crate) adopted: Vec<String>,
     /// What `docs migrate` did after the merge, when the branch still had inline stamps.
     pub(crate) migrated: Option<super::Migrate>,
     /// Files whose conflict was only inside `@generated` blocks, rewritten from the merged
@@ -116,30 +119,40 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     }
     git_ok(root, &["fetch", "-q", REMOTE, branch])?;
     let upstream = format!("{REMOTE}/{branch}");
-    // A fixed conflict style, whatever the user's config, so the markers parse.
+    // A fixed conflict style, whatever the user's config, so the markers parse. The merge
+    // isn't committed yet: main's stamps on inputs it verified at the same content are
+    // taken into the merge commit itself, so it stays what `merge-main` left (#697).
     let out = git(
         root,
         &[
             "-c",
             "merge.conflictStyle=merge",
             "merge",
+            "--no-commit",
             "--no-edit",
             "-q",
             &upstream,
         ],
     )?;
     let mut report = Merge::default();
+    let merging = || -> Result<bool> {
+        Ok(git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
+            .status
+            .success())
+    };
     if out.status.success() {
+        // A fast-forward, or nothing to merge, leaves no merge to commit.
+        if merging()? {
+            report.adopted = adopt_matching(root, &upstream).context(MERGE_OPEN)?;
+            git_ok(root, &["commit", "-q", "--no-edit"]).context(MERGE_OPEN)?;
+        }
         report.committed = true;
         report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
         report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
         return Ok(report);
     }
-    if !git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
-        .status
-        .success()
-    {
+    if !merging()? {
         bail!(
             "`git merge {upstream}` failed: {}",
             String::from_utf8_lossy(&out.stderr).trim()
@@ -197,14 +210,40 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
             git_ok(root, &["add", "--", path])?;
         }
     }
+    // Once the ledger has no conflict left, whether or not another file keeps the merge
+    // open, it takes main's stamps on inputs main verified at the same content.
+    if !report.refused.iter().any(|(p, _)| p == ledger::PATH) {
+        report.adopted = adopt_matching(root, &upstream).context(MERGE_OPEN)?;
+    }
     if report.refused.is_empty() {
-        git_ok(root, &["commit", "-q", "--no-edit"])?;
+        git_ok(root, &["commit", "-q", "--no-edit"]).context(MERGE_OPEN)?;
         report.committed = true;
         report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
         report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
     }
     Ok(report)
+}
+
+/// During the merge, before it is committed: gives each ledger entry whose hash equals
+/// `upstream`'s entry for that input `upstream`'s entry, and stages the ledger; returns the
+/// sections changed (#697). Nothing changes when either side has no ledger.
+fn adopt_matching(root: &Path, upstream: &str) -> Result<Vec<String>> {
+    if !root.join(ledger::PATH).exists() {
+        return Ok(Vec::new());
+    }
+    // A merged ledger that doesn't parse is left for the steps after the commit, which
+    // report it as such (#551 N1).
+    let Ok(mut ours) = ledger::Ledger::read(root) else {
+        return Ok(Vec::new());
+    };
+    let theirs = ledger_at(root, upstream, &format!("on `{upstream}`"))?;
+    let adopted = ours.adopt(&theirs);
+    if !adopted.is_empty() {
+        ours.write(root)?;
+        git_ok(root, &["add", "--", ledger::PATH])?;
+    }
+    Ok(adopted)
 }
 
 /// The ledger as it was at `rev`; empty when the file is missing there, and an error naming
@@ -313,17 +352,83 @@ pub(crate) fn changed_after(
     Ok(out)
 }
 
-/// The ledger at the merge base of `HEAD` and `origin/<branch>` (`main`, or the `wave/*`
-/// branch a PR targets): the entries this branch didn't write are the ones equal to it.
-/// Empty when the ledger doesn't exist there; an error when it doesn't parse, since an
-/// empty base would make every entry look like this branch's own.
-pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
-    check_branch(branch, "can only compare against")?;
-    let upstream = format!("{REMOTE}/{branch}");
-    let base = git_ok(root, &["merge-base", "HEAD", &upstream])
-        .with_context(|| format!("finding where this branch left `{upstream}`"))?;
-    let base = String::from_utf8_lossy(&base).trim().to_owned();
-    ledger_at(root, &base, &format!("where this branch left `{upstream}`"))
+/// The ledgers where this branch left its upstreams: the entries this branch didn't write
+/// are the ones equal to an entry of any of them. For `main` or a `wave/*` branch that is
+/// the one ledger at their merge base with `HEAD`. Any other branch is a stacked PR's base
+/// (#715), which must be an ancestor of `HEAD`: its ledger is the one at `origin/<branch>`
+/// itself, so the base PR's entries are excluded. A stacked PR may also have merged `main`
+/// or a wave ahead of its base, so the ledgers where `HEAD` left `origin/main` and each
+/// `origin/wave/*` are excluded too (#719 B1). A ledger is empty where the file doesn't
+/// exist; one that doesn't parse is an error, since an empty base would make every entry
+/// look like this branch's own.
+pub(crate) fn base_ledgers(root: &Path, branch: &str) -> Result<Vec<ledger::Ledger>> {
+    let mut upstreams = vec![format!("{REMOTE}/{branch}")];
+    if check_branch(branch, "").is_err() {
+        check_stacked_base(root, branch, &upstreams[0])?;
+        let waves = git_ok(
+            root,
+            &[
+                "for-each-ref",
+                "--format=%(refname:strip=2)",
+                &format!("refs/remotes/{REMOTE}/wave/"),
+            ],
+        )?;
+        upstreams.push(format!("{REMOTE}/{BRANCH}"));
+        upstreams.extend(String::from_utf8_lossy(&waves).lines().map(str::to_owned));
+    }
+    let mut ledgers = Vec::new();
+    for (i, upstream) in upstreams.iter().enumerate() {
+        let base = git(root, &["merge-base", "HEAD", upstream])?;
+        if !base.status.success() {
+            // The branch named must share history with HEAD; a trunk that isn't fetched
+            // or shares none has nothing to exclude.
+            if i == 0 {
+                bail!(
+                    "finding where this branch left `{upstream}`: {}",
+                    String::from_utf8_lossy(&base.stderr).trim()
+                );
+            }
+            continue;
+        }
+        let base = String::from_utf8_lossy(&base.stdout).trim().to_owned();
+        ledgers.push(ledger_at(
+            root,
+            &base,
+            &format!("where this branch left `{upstream}`"),
+        )?);
+    }
+    Ok(ledgers)
+}
+
+/// Refuses a stacked base `branch` that isn't a valid branch name, isn't on the remote, or
+/// isn't an ancestor of `HEAD` (merge its newer commits first).
+fn check_stacked_base(root: &Path, branch: &str, upstream: &str) -> Result<()> {
+    let named = git(root, &["check-ref-format", "--branch", branch])?;
+    if branch.starts_with('-') || !named.status.success() {
+        bail!(
+            "can only compare against `{BRANCH}`, a `wave/<name>` branch or a stacked PR's \
+             base branch, not `{branch}`"
+        );
+    }
+    let commit = format!("refs/remotes/{upstream}^{{commit}}");
+    if !git(root, &["rev-parse", "--verify", "--quiet", &commit])?
+        .status
+        .success()
+    {
+        bail!("`{upstream}` doesn't exist: fetch it, or name the branch this PR is stacked on");
+    }
+    let ancestor = git(root, &["merge-base", "--is-ancestor", upstream, "HEAD"])?;
+    match ancestor.status.code() {
+        Some(0) => Ok(()),
+        Some(1) => bail!(
+            "`{upstream}` isn't an ancestor of this branch: merge it first, so that every \
+             entry differing from its ledger is this branch's own"
+        ),
+        _ => bail!(
+            "`git merge-base --is-ancestor {upstream} HEAD` failed: {}",
+            String::from_utf8_lossy(&ancestor.stderr).trim()
+        ),
+    }
 }
 
 /// Refuses any branch but `main` and `wave/<name>`; `refusal` says what the caller does
@@ -372,6 +477,12 @@ pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::L
 const AFTER_COMMIT: &str = "the merge is committed, but the steps after it failed; fix what \
      the error names, then run `cargo xtask docs check` and verify each stale section with \
      `--note`";
+
+/// The context of an error before the merge is committed, with `MERGE_HEAD` still set
+/// (#704 N1).
+const MERGE_OPEN: &str = "the merge is still in progress and not committed: fix what the \
+     error names and run `git commit --no-edit`, or `git merge --abort` and run `docs \
+     merge-main` again";
 
 /// Each stale section after a merge commit with its stale inputs, each with this branch's
 /// earlier note and the merged commits that changed it (none listed when the branch has no

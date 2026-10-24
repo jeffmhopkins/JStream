@@ -53,7 +53,8 @@ block conflicts the same way and lists the sections to re-read and verify. Merge
 Verify each one with `docs verify --merge`, which keeps the note this PR already wrote on
 an entry and adds what the merge changed. A plain `--note` replaces that note, so the
 ledger no longer covers the PR's own change ([DOCS › notes](../DOCS.md#notes)). To correct
-a note on a section that is already fresh, use `--renote` with `--from wave/<name>`.
+a note on a section that is already fresh, use `--renote` with `--from wave/<name>`; a
+stacked PR names the branch it is stacked on, `--from <base branch>`.
 
 Everything else in [CLAUDE.md](../../CLAUDE.md#pr-loop) holds: auto-merge (squash) on once the
 PR leaves draft, every blocking finding answered, and `docs/progress.toml` updated with the
