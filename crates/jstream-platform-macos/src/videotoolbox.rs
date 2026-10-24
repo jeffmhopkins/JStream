@@ -18,11 +18,15 @@
 //! (the default is no limit) would wait for input that `can_accept` never lets in. The
 //! cost is that `encode` may wait, while three frames are held, for the oldest to be
 //! emitted: at most about one frame's encode time, which a real-time hardware encoder
-//! rarely needs.
+//! rarely needs. An encoder without the property (Apple's software H.264 encoder answers
+//! `kVTPropertyNotSupportedErr`) may hold all four; there `encode`, once the queue is full,
+//! completes frames up to the oldest queued one's `pts` (`VTCompressionSessionCompleteFrames`),
+//! so the oldest is emitted before it returns, at the same cost (#627).
 //!
 //! GPU frames (IOSurface encode targets) follow once the Metal interop spike lands
 //! (ADR-0063 §8).
 
+use std::collections::VecDeque;
 use std::ffi::{c_int, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr::{self, NonNull};
@@ -521,12 +525,12 @@ fn data_rate_limit(bps: u64) -> CFRetained<CFArray<CFNumber>> {
 }
 
 /// Sets the session's rate control, real time, reordering, frame delay, profile and
-/// keyframe interval.
+/// keyframe interval. Returns whether the encoder took the maximum frame delay.
 fn configure(
     session: &VTCompressionSession,
     config: &VideoEncoderConfig,
     settings: &VtEncoderSettings,
-) -> Result<(), PlatformError> {
+) -> Result<bool, PlatformError> {
     // SAFETY: VideoToolbox constants, set before any code runs and never written.
     let (real_time, reordering, delay, profile_key, interval, rate, cbr, average, limits) = unsafe {
         (
@@ -565,8 +569,10 @@ fn configure(
     let value: &CFType = &max_delay;
     // SAFETY: as in `set_property`: a CFNumber of frames.
     let status = unsafe { VTSessionSetProperty(session, delay, Some(value)) };
-    // An encoder without the property keeps its own delay; #627 tracks checking that.
-    if status != VT_PROPERTY_NOT_SUPPORTED {
+    // An encoder without the property keeps its own delay: `VtEncoder::encode` then
+    // completes the oldest frame by hand once the queue is full (#627).
+    let delay_limited = status != VT_PROPERTY_NOT_SUPPORTED;
+    if delay_limited {
         check(status, "VTSessionSetProperty", "the maximum frame delay")?;
     }
     set_property(session, profile_key, profile, "the profile")?;
@@ -608,7 +614,8 @@ fn configure(
         status,
         "VTCompressionSessionPrepareToEncodeFrames",
         "preparing the encoder",
-    )
+    )?;
+    Ok(delay_limited)
 }
 
 /// One VideoToolbox H.264 or HEVC compression session, fed CPU frames.
@@ -626,6 +633,13 @@ pub(crate) struct VtEncoder {
     timebase: Option<Timebase>,
     force_keyframe: bool,
     finished: bool,
+    /// Whether the session took `MaxFrameDelayCount`. Without it, a full queue is drained
+    /// by completing the oldest frame (#627).
+    delay_limited: bool,
+    /// The `pts` of the last [`MAX_IN_FLIGHT`] frames submitted, oldest first. Frames come
+    /// back in submission order (no reordering), so the oldest in flight is the
+    /// `in_flight`-th from the back.
+    queued: VecDeque<CMTime>,
 }
 
 impl VtEncoder {
@@ -700,9 +714,15 @@ impl VtEncoder {
         })?;
         // SAFETY: a Create function returned it, so this takes over its +1 reference.
         let session = Session(unsafe { CFRetained::from_raw(raw) });
-        configure(&session.0, config, &settings)?;
+        let delay_limited = configure(&session.0, config, &settings)?;
         let hardware = uses_hardware(&session.0);
         let kind = if hardware { "hardware" } else { "software" };
+        // The name reports the fallback, so it shows wherever the encoder is listed.
+        let kind = if delay_limited {
+            kind.to_owned()
+        } else {
+            format!("{kind}, oldest frame completed when full")
+        };
         Ok(Self {
             session,
             context,
@@ -718,7 +738,38 @@ impl VtEncoder {
             timebase: None,
             force_keyframe: false,
             finished: false,
+            delay_limited,
+            queued: VecDeque::with_capacity(MAX_IN_FLIGHT),
         })
+    }
+
+    /// Without a maximum frame delay the encoder may hold every queued frame and wait for
+    /// more: once the queue is full, completes frames up to the oldest one's `pts`, so it
+    /// is emitted (and its slot freed) before this returns.
+    fn drain_full_queue(&self) -> Result<(), PlatformError> {
+        if self.delay_limited {
+            return Ok(());
+        }
+        let in_flight = self.context.in_flight.load(Ordering::Acquire);
+        if in_flight < MAX_IN_FLIGHT {
+            return Ok(());
+        }
+        let Some(&oldest) = self
+            .queued
+            .len()
+            .checked_sub(in_flight)
+            .and_then(|i| self.queued.get(i))
+        else {
+            return Ok(());
+        };
+        // SAFETY: the session is live; completing up to a valid time emits every pending
+        // frame at or before it, whose callbacks have all run when this returns.
+        let status = unsafe { self.session.0.complete_frames(oldest) };
+        check(
+            status,
+            "VTCompressionSessionCompleteFrames",
+            "emitting the oldest queued frame",
+        )
     }
 
     fn refuse_after_finish(&self, what: &'static str) -> Result<(), PlatformError> {
@@ -877,7 +928,11 @@ impl VideoEncoder for VtEncoder {
             ));
         }
         self.force_keyframe = false;
-        Ok(())
+        if self.queued.len() == MAX_IN_FLIGHT {
+            self.queued.pop_front();
+        }
+        self.queued.push_back(pts);
+        self.drain_full_queue()
     }
 
     fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
