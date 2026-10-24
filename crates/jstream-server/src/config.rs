@@ -1,7 +1,8 @@
 //! The server's configuration: where it listens, the control token, which `Host` and
 //! `Origin` values it accepts beyond its own, the connection limits, the MCP transport,
-//! the web UI's directory, the file that keeps the paired devices, and whether the
-//! listener is reached over TLS.
+//! how often a WebSocket client is pinged and how long it may stay silent, the web UI's
+//! directory, the file that keeps the paired devices, and whether the listener is
+//! reached over TLS.
 
 use crate::error::ServerError;
 use std::fmt;
@@ -20,6 +21,12 @@ const MAX_TCP_CONNECTIONS: usize = 128;
 
 /// The default [`ServerConfig::handshake_timeout`].
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The default [`ServerConfig::ping_interval`].
+const PING_INTERVAL: Duration = Duration::from_secs(15);
+
+/// The default [`ServerConfig::liveness_timeout`]: three pings unanswered.
+const LIVENESS_TIMEOUT: Duration = Duration::from_secs(45);
 
 /// The default [`ServerConfig::header_read_timeout`].
 const HEADER_READ_TIMEOUT: Duration = Duration::from_secs(10);
@@ -77,7 +84,9 @@ impl fmt::Debug for Token {
 ///
 /// Every connection limit and timeout must be greater than zero:
 /// [`Server::bind`](crate::Server::bind) refuses a zero one
-/// ([`ServerError::InvalidLimit`]).
+/// ([`ServerError::InvalidLimit`]), and a
+/// [`liveness_timeout`](Self::liveness_timeout) no longer than the
+/// [`ping_interval`](Self::ping_interval) ([`ServerError::LivenessTimeout`]).
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     /// The address to listen on. [`ServerConfig::new`] uses `127.0.0.1` and an ephemeral
@@ -111,6 +120,19 @@ pub struct ServerConfig {
     /// handshake (`hello` answered by `welcome`). One that hasn't is closed (close code
     /// 1008). [`ServerConfig::new`] sets 10 s.
     pub handshake_timeout: Duration,
+    /// How often the server pings each WebSocket connection. A live client's WebSocket
+    /// layer answers with a pong, which counts as hearing from it.
+    /// [`ServerConfig::new`] sets 15 s.
+    pub ping_interval: Duration,
+    /// How long a WebSocket connection may go without the server hearing anything from
+    /// it (a message, a pong) before it is closed (close code 1008) and its session
+    /// dropped, which expires its open live-value gestures (ADR-0032). So a connection
+    /// that died without a close frame doesn't hold its session for good. While the
+    /// server itself has stopped reading the connection (its replies are backed up, or
+    /// too many of its calls are in flight), the silence doesn't count. It must be longer
+    /// than [`ping_interval`](Self::ping_interval), or an idle client that answers every
+    /// ping would be closed. [`ServerConfig::new`] sets 45 s.
+    pub liveness_timeout: Duration,
     /// How long a connection has, from being accepted, to send a complete upgrade
     /// request that is accepted. One that hasn't (it sent its headers too slowly, sent
     /// none, or was refused and kept the connection open) is dropped.
@@ -168,6 +190,8 @@ impl ServerConfig {
             max_connections: MAX_CONNECTIONS,
             max_tcp_connections: MAX_TCP_CONNECTIONS,
             handshake_timeout: HANDSHAKE_TIMEOUT,
+            ping_interval: PING_INTERVAL,
+            liveness_timeout: LIVENESS_TIMEOUT,
             header_read_timeout: HEADER_READ_TIMEOUT,
             mcp: false,
             max_mcp_sessions: MAX_MCP_SESSIONS,
@@ -180,21 +204,28 @@ impl ServerConfig {
     }
 
     /// Refuses a zero connection limit or timeout ([`ServerError::InvalidLimit`]): the
-    /// server would refuse or drop every connection or MCP session. Checked by
+    /// server would refuse or drop every connection or MCP session. Refuses a liveness
+    /// timeout no longer than the ping interval ([`ServerError::LivenessTimeout`]): an
+    /// idle client could never answer in time. Checked by
     /// [`Server::bind`](crate::Server::bind) before anything is opened.
     pub(crate) fn check_limits(&self) -> Result<(), ServerError> {
         let zero = [
             ("max_connections", self.max_connections == 0),
             ("max_tcp_connections", self.max_tcp_connections == 0),
             ("handshake_timeout", self.handshake_timeout.is_zero()),
+            ("ping_interval", self.ping_interval.is_zero()),
+            ("liveness_timeout", self.liveness_timeout.is_zero()),
             ("header_read_timeout", self.header_read_timeout.is_zero()),
             ("max_mcp_sessions", self.max_mcp_sessions == 0),
             ("mcp_idle_timeout", self.mcp_idle_timeout.is_zero()),
         ];
-        match zero.into_iter().find(|&(_, is_zero)| is_zero) {
-            Some((field, _)) => Err(ServerError::InvalidLimit { field }),
-            None => Ok(()),
+        if let Some((field, _)) = zero.into_iter().find(|&(_, is_zero)| is_zero) {
+            return Err(ServerError::InvalidLimit { field });
         }
+        if self.liveness_timeout <= self.ping_interval {
+            return Err(ServerError::LivenessTimeout);
+        }
+        Ok(())
     }
 }
 
@@ -215,12 +246,14 @@ mod tests {
         };
         let config = ServerConfig::new(token);
         assert!(config.check_limits().is_ok(), "the defaults");
-        let cases: [(&str, Zero); 6] = [
+        let cases: [(&str, Zero); 8] = [
             ("max_connections", |c| c.max_connections = 0),
             ("max_tcp_connections", |c| c.max_tcp_connections = 0),
             ("handshake_timeout", |c| {
                 c.handshake_timeout = Duration::ZERO
             }),
+            ("ping_interval", |c| c.ping_interval = Duration::ZERO),
+            ("liveness_timeout", |c| c.liveness_timeout = Duration::ZERO),
             ("header_read_timeout", |c| {
                 c.header_read_timeout = Duration::ZERO
             }),
@@ -238,7 +271,26 @@ mod tests {
         let mut small = config;
         small.max_connections = 1;
         small.handshake_timeout = Duration::from_millis(1);
+        small.ping_interval = Duration::from_millis(1);
+        small.liveness_timeout = Duration::from_millis(2);
         assert!(small.check_limits().is_ok(), "small but nonzero");
+    }
+
+    /// A liveness timeout no longer than the ping interval is refused: an idle client
+    /// that answers every ping would still be closed.
+    #[test]
+    fn the_liveness_timeout_must_outlast_the_ping_interval() {
+        let Ok(token) = Token::new("abc") else {
+            panic!("a valid token");
+        };
+        let mut config = ServerConfig::new(token);
+        for timeout in [config.ping_interval, config.ping_interval / 2] {
+            config.liveness_timeout = timeout;
+            assert!(
+                matches!(config.check_limits(), Err(ServerError::LivenessTimeout)),
+                "{timeout:?}"
+            );
+        }
     }
 
     #[test]

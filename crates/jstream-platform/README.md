@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -22,10 +22,11 @@ This crate is the **single owner** of the encoder and decoder traits
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). It depends only on
 [`jstream-media`](../jstream-media/README.md#purpose),
 [`jstream-plugin-proto`](../jstream-plugin-proto/README.md#purpose) (the plugin-host
-contract, itself dependency-free), `thiserror` and `wgpu` (for the
+contract, itself dependency-free), `thiserror`, `wgpu` (for the
 GPU-frame types, pinned exactly per
 [ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md) and re-exported as
-`jstream_platform::wgpu`), and has no `unsafe`.
+`jstream_platform::wgpu`) and `crossbeam-utils` (the mailbox's atomic cell), and has no
+`unsafe`.
 
 The shapes follow what spikes S1 (GPU and encode), S2 (virtual camera) and S3 (clock)
 do on Windows. This is a first cut: the traits will change once `jstream-platform-windows`
@@ -48,7 +49,8 @@ Contents:
   `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
   stages its fence wait and signal around the engine's next submit, and
   `FrameSync::platform` lets the platform that made a hold recognise it (`None` by
-  default). Frames compare by texture, hold and info.
+  default). `GpuContext::submit_lock` is the context's `SubmitLock`, which orders the
+  submits on its queue around that staging. Frames compare by texture, hold and info.
 - **Capture:** `Capture` (`Send + Sync`) lists displays and windows and starts a
   `CaptureStream` (`Send`). The backend's capture thread fills a single-slot
   "latest frame" mailbox, as in
@@ -61,7 +63,7 @@ Contents:
   deliver `Gpu` frames, or `None` (the default) when it has no GPU path; the engine
   then keeps CPU frames.
 - **Video capture devices** (webcams and capture cards,
-  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
   endpoint when the backend can pair one), each device's `VideoDeviceFormat`s (size, frame
   period, `CaptureEncoding`), and opens a device in one format as a `CaptureStream`, the
@@ -93,7 +95,7 @@ Contents:
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). Packets keep their frame's `pts` on the
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
-  as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) says.
+  as [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md) says.
   `VideoEncoder::info` names the implementation encoding: it changes only when an
   encoder falls back before its first packet (a hardware one refusing its first frame,
   #443).
@@ -104,7 +106,7 @@ Contents:
   not the device backend; its default is `Unsupported`, and the engine then opens the
   device in an uncompressed format.
 - **Media files** (`media_file.rs`,
-  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `MediaDecoders`
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `MediaDecoders`
   (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
   video pixel format, a `HardwarePreference`, and whether to decode audio too) as a
   `MediaDecoder` (`Send`), which owns the whole file: the platform demuxes and decodes
@@ -164,6 +166,16 @@ Contents:
   variables count, so nothing is written beside the exe without the marker. It reads the
   environment itself: three cases don't pay for `dirs`. A plain function, not a trait:
   no host needs to swap it.
+- **Shared backend helpers** (`mailbox.rs`, `nv12.rs`): safe, platform-independent code
+  the platform crates share, so it is written and tested once. `mailbox::Mailbox` is the
+  capture callbacks' single-slot latest-frame mailbox: `put` swaps a boxed frame in and
+  returns the one it replaced (a skipped frame), `take` swaps it out, and neither waits
+  ([R-RT-002](../../docs/RULES.md#R-RT-002)); it is `crossbeam-utils`' `AtomicCell`
+  around an optional box, one atomic swap. `nv12` converts packed 8-bit BGRA or RGBA to
+  NV12 in BT.709 limited range with left-sited chroma (`rgb_to_nv12` into a
+  `VideoFrame`, `rgb_to_nv12_image` into an `Nv12Image`, NV12 laid out in one mapped
+  buffer), and `even_size` crops an odd source. Windows' capture and H.264 CPU path and
+  Linux's PipeWire capture and VA-API upload use them.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
@@ -218,12 +230,13 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene, or a
-transition between two, on that device when the engine has one, sampling capture
-frames there, and the frames a browser source's page paints on it, and opens its own
-(hardware adapter first, the software one as the fallback) when it does not; it does
-not write the NV12 encode target. Windows' H.264 encoder takes encode targets on the
-context it reached through `Codecs::on_context`; the engine does not write or push
-them yet.
+transition between two, on that device when the engine has one, sampling capture frames there, and the frames a
+browser source's page paints on it, and opens its own (hardware adapter first, the
+software one as the fallback) when it does not. It has the NV12 pass that can render
+into an encode target's plane views (`Nv12Converter`). Windows' video encoders take
+encode targets on the context they reached through `Codecs::on_context`, and the
+engine's render thread converts each video mix's composite into the next of that mix's
+ring of them and pushes it to the mix's sessions on that path.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -275,6 +288,13 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   queue's next submit, whichever it is. That submit ends by transitioning the texture to
   `wgpu::TextureUses::PRESENT`, the D3D12 `COMMON` state the platform's other APIs
   expect, as S1 did.
+- **`SubmitLock`** (`GpuContext::submit_lock`, shared by clones) keeps another thread's
+  submit from taking what render staged. "The next submit" is the queue's, not the
+  thread's, and render is not the only thread that submits on a context's queue: the
+  browser source copies its pages' paints on it. So render holds the lock from its
+  first `stage` through its submit, and every other thread holds it around its own
+  submits on that queue. Holders keep it only while recording and submitting, never
+  across a wait for the GPU. A device render opens for itself has a lock of its own.
 - **Encoders and the virtual camera** accept `VideoSurface::Gpu` from the same platform.
   The encoders reach the context through `Codecs::on_context`, a default method like
   `Capture::on_context`. They wait on the D3D11 side for the value the last write
@@ -336,7 +356,8 @@ the same reason.
   delivers them, the engine composites them, and Windows' H.264 encoder takes encode
   targets. Capture and the encoders reach the context through default methods,
   `Capture::on_context` and `Codecs::on_context`, so other backends are unchanged. The
-  engine does not yet write encode targets or push them to an encoder.
+  engine's render thread writes encode targets and pushes them to the encoders that
+  take them. Open: the virtual camera taking them.
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
   **Proposed default:** backends downmix any other layout to stereo, and new layouts
   (e.g. 7.1) are added only when a real device needs them. The Windows backend already

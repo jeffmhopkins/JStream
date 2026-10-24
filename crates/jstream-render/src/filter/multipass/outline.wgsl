@@ -6,8 +6,6 @@
 struct Params {
     // Premultiplied linear.
     color: vec4<f32>,
-    inset_x: i32,
-    inset_y: i32,
     width: f32,
     inside: u32,
 }
@@ -17,7 +15,7 @@ struct Params {
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let px = out_px(in.pos);
-    let top = placed(px, vec2<i32>(p.inset_x, p.inset_y));
+    let top = load_edge(px, 1u);
     let v = textureLoad(aux_tex, px, 0);
     var d = 3.4e38;
     if (v.a > 0.5) {

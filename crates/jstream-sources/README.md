@@ -12,11 +12,11 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
-kind lives here ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): its
+kind lives here ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): its
 descriptor, which the engine reports through `kind.list` and `kind.describe` and
 validates settings against
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)), and the code that
@@ -49,6 +49,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `capture()` is `Some` for a `display` or `window` source: what the platform captures
   for it (a `CaptureSpec`). Its frames come from the platform's capture backend on the
   engine's render thread, so its `frame` is `SourceError::Captured`.
+  `set_density(d)` asks a source to draw its frames `d` times as many pixels each way
+  as its own size, so an item that shows it enlarged stays sharp, and returns that own
+  size, which its frames are placed at; the default is `None`, a kind whose frames are
+  their own size whatever is asked. Only `text` draws at a density (see *Kinds*).
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
@@ -103,7 +107,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   a read retries when a claim reached a slot it copied, so it never returns a window
   mixed from two passes of the ring. The analysis (the FFT included) runs in the
   source's `Painter`, on the thread that paints, never on the mixer thread
-  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)'s audio → render
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)'s audio → render
   path).
 - `AudioScopes`: where those sources find their scope, by their `audio_source` and
   `audio` settings: the program mix's (`program()`, which always exists), a bus's
@@ -163,7 +167,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   and background are blended on sRGB values, not in linear light. The frame must fit
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
-  naming `text`.
+  naming `text`. It is the one kind that draws at a density
+  ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)):
+  `set_density(d)` draws the same layout with every length (the em size, the glyphs'
+  positions, the outline, the padding) multiplied by `d`, so the frame has `d` times the
+  pixels each way and stands for the same size, which `set_density` returns and the
+  engine places it at. Densities run from 1 to `MAX_DENSITY` (8); one whose frame would
+  be over the limits is halved until it fits, down to 1. An update draws at the density
+  set last.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
   `hwnd:0x` and the window handle). An empty `display` target is the primary display,
@@ -173,7 +184,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `capture.targets` query lists the IDs a `target` can take.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
-  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), so it plays the
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), so it plays the
   containers and codecs the OS does. `create` opens the file through
   `AssetRoots::open` and decodes its first frame, so a file the platform can't play,
   one with neither video nor audio, or one without a media backend
@@ -322,7 +333,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `device` captures the first device listed. Like `display` and `window`, it only says
   what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
   device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
-  before it had a setting, its sources couldn't start.
+  before it had a setting, its sources couldn't start. It has audio too (#716): the
+  input the platform pairs with the device, a webcam's microphone or a capture card's
+  HDMI audio, which the engine records as an audio input's
+  (`webcam_device(kind, settings)` says whose pair: `Some(Some(id))` for the `device`
+  named, `Some(None)` for the first device listed, and `None` for any other kind). So a new webcam gets audio settings that follow `when_shown` and a
+  master send, as ADR-0028 gives a source with video and audio.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
@@ -380,7 +396,7 @@ spectrum's FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemu
 `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default features off.
 `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
-([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
+([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
 distance transform, reading an audio target from settings and taking a YouTube video
@@ -397,8 +413,10 @@ the registry and runs the colour and image kinds through the public API on files
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
 the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
-alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
-`tests/data/text` (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
+alignment, padding, outline, live updates, font assets and limits, drawing at a
+density (twice the pixels for the same extent, kept across an update, clamped to
+`MAX_DENSITY`, halved to fit the limits), plus golden PNGs in `tests/data/text`, one of
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
 waveform column's range, the dB scale, a tone lighting its own spectrum bar, every

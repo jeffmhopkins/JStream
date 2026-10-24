@@ -1,19 +1,27 @@
-//! The sources list: the selected scene's items, top of the stack first, each named by
-//! the source it places. An item is selected for the properties form, shown or hidden,
-//! moved up or down the stack, or removed from the scene; its source is renamed, or
-//! deleted everywhere through `delete.plan`. New items place a new source of a kind
-//! `kind.list` reports, an existing source, or another scene.
+//! The Scene objects panel (spec-panels.md 2): the selected scene's items, top of the
+//! stack first, under the "In “<scene>”, top to bottom" caption and the search box and
+//! favourites filter. Each row shows its source's type icon and name (in italics when
+//! the source is placed in other scenes too), a visibility eye and a favourite star.
+//! A click selects an item (Shift adds or takes it out), a double click opens its
+//! Properties dialog, F2 renames its source in place and Del removes it from the scene;
+//! rows are reordered by dragging them (`item.reorder`). A right-click on a row opens the
+//! selected items' menu (`item_menu.rs`), plus deleting the source everywhere through
+//! `delete.plan`, and one on the panel's empty space opens the panel's menu, whose Add
+//! source opens the Add source dialog (`add_source.rs`).
 //!
-//! Docs: crates/jstream-ui/README.md#design
+//! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#objects
 
 use crate::app::SessionContext;
+use crate::icons::Icon;
+use crate::item_menu;
+use crate::menu::{Entry, Menus};
+use crate::panels::add_source::{AddSourceDialog, type_label};
 use crate::panels::confirm::{Confirm, Pending};
+use crate::panels::inspector::is_shared;
 use crate::panels::scenes::RenameField;
+use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
-use jstream_control::protocol::{
-    DeleteTarget, Edit, ItemGeometry, ItemId, KindCategory, KindSummary, SceneId, Settings,
-    SourceId, SourceKind,
-};
+use jstream_control::protocol::{DeleteTarget, Edit, ItemId, SceneId, SourceId, SourceKind};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -23,11 +31,21 @@ struct Row {
     item_id: ItemId,
     source_id: SourceId,
     name: String,
-    kind: String,
+    /// The source's type icon.
+    icon: &'static str,
     visible: bool,
-    /// Its stacking index (0 is the bottom), and the scene's item count.
-    index: u32,
-    count: u32,
+    /// Whether the source is placed in other scenes too.
+    shared: bool,
+    favourite: bool,
+}
+
+/// The icon of a source of this kind: its type's, the scene icon for a nested scene.
+fn icon_of(kind: Option<&SourceKind>) -> &'static str {
+    match kind {
+        Some(SourceKind::Builtin { kind }) => type_label(kind).map_or("image", |(_, icon)| icon),
+        Some(SourceKind::Scene { .. }) => "layers",
+        _ => "image",
+    }
 }
 
 /// The selected scene's items, top of the stack first.
@@ -35,126 +53,23 @@ fn rows(collection: &Collection, scene_id: &SceneId) -> Vec<Row> {
     let Some(scene) = collection.scene(scene_id) else {
         return Vec::new();
     };
-    let count = u32::try_from(scene.items.len()).unwrap_or(u32::MAX);
     scene
         .items
         .iter()
-        .enumerate()
         .rev()
-        .map(|(index, item)| Row {
-            item_id: item.item_id.clone(),
-            source_id: item.source_id.clone(),
-            name: collection.source_name(&item.source_id),
-            kind: collection
-                .source(&item.source_id)
-                .map_or_else(String::new, |s| collection.kind_label(&s.kind)),
-            visible: item.visible,
-            index: u32::try_from(index).unwrap_or(u32::MAX),
-            count,
+        .map(|item| {
+            let source = collection.source(&item.source_id);
+            Row {
+                item_id: item.item_id.clone(),
+                source_id: item.source_id.clone(),
+                name: collection.source_name(&item.source_id),
+                icon: icon_of(source.map(|s| &s.kind)),
+                visible: item.visible,
+                shared: is_shared(collection, item),
+                favourite: source.is_some_and(|s| s.meta.favourite),
+            }
         })
         .collect()
-}
-
-/// What "Add" places, as the add form's select encodes it in its value.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Choice {
-    /// A new source of this built-in kind.
-    New(String),
-    /// An existing source.
-    Existing(SourceId),
-    /// A new `scene` source showing this scene.
-    Scene(SceneId),
-}
-
-impl Choice {
-    fn encode(&self) -> String {
-        match self {
-            Choice::New(kind) => format!("new:{kind}"),
-            Choice::Existing(id) => format!("source:{id}"),
-            Choice::Scene(id) => format!("scene:{id}"),
-        }
-    }
-
-    fn decode(value: &str) -> Option<Choice> {
-        let (tag, rest) = value.split_once(':')?;
-        match tag {
-            "new" => Some(Choice::New(rest.into())),
-            "source" => Some(Choice::Existing(rest.into())),
-            "scene" => Some(Choice::Scene(rest.into())),
-            _ => None,
-        }
-    }
-}
-
-/// The edits that place `choice` in `scene_id` as item `item_id`, covering the canvas:
-/// a `source.create` first unless it places an existing source, then `item.add`.
-fn place_edits(
-    choice: Choice,
-    scene_id: SceneId,
-    item_id: ItemId,
-    new_source_id: SourceId,
-    name: String,
-    collection: &Collection,
-) -> Vec<Edit> {
-    let mut edits = Vec::new();
-    let source_id = match choice {
-        Choice::Existing(id) => id,
-        Choice::New(kind) => {
-            edits.push(source_create(
-                new_source_id.clone(),
-                name,
-                SourceKind::Builtin { kind },
-            ));
-            new_source_id
-        }
-        Choice::Scene(shown) => {
-            let name = if name.is_empty() {
-                collection
-                    .scene(&shown)
-                    .map_or_else(|| shown.to_string(), |s| s.name.clone())
-            } else {
-                name
-            };
-            edits.push(source_create(
-                new_source_id.clone(),
-                name,
-                SourceKind::Scene { scene_id: shown },
-            ));
-            new_source_id
-        }
-    };
-    let canvas = collection.canvas;
-    edits.push(Edit::ItemAdd {
-        scene_id,
-        item_id,
-        source_id,
-        transform: None,
-        geometry: ItemGeometry::covering_canvas(canvas.width, canvas.height).ok(),
-        opacity: None,
-        blend: None,
-    });
-    edits
-}
-
-fn source_create(source_id: SourceId, name: String, kind: SourceKind) -> Edit {
-    Edit::SourceCreate {
-        source_id,
-        name,
-        kind,
-        settings: Settings::new(),
-        duplicated_from: None,
-    }
-}
-
-/// The name a new source gets when the user gives none: the kind's display name.
-fn default_name(choice: &Choice, kinds: &[KindSummary]) -> String {
-    match choice {
-        Choice::New(kind) => kinds
-            .iter()
-            .find(|k| &k.kind_id == kind)
-            .map_or_else(|| kind.clone(), |k| k.name.clone()),
-        _ => String::new(),
-    }
 }
 
 /// The sources list.
@@ -162,12 +77,22 @@ fn default_name(choice: &Choice, kinds: &[KindSummary]) -> String {
 pub fn Sources() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
-    let renaming = RwSignal::new(None::<SourceId>);
+    // The row being renamed, by item: a source placed twice is renamed in one row.
+    let renaming = RwSignal::new(None::<ItemId>);
     let pending = RwSignal::new(None::<Pending>);
-    let choice = RwSignal::new(String::new());
-    let new_name = RwSignal::new(String::new());
+    let menus = use_context::<Menus>();
+    let adder = use_context::<AddSourceDialog>();
+    let item_cx = item_menu::Context::from_page();
+    let filter = Filter::new();
+    let reorder = Reorder::new();
 
     let scene = move || studio.selection.with(|s| s.scene.clone());
+    let scene_name = move || {
+        let scene_id = scene()?;
+        studio
+            .collection
+            .with(|c| c.as_ref()?.scene(&scene_id).map(|s| s.name.clone()))
+    };
     let all_rows = move || {
         let Some(scene_id) = scene() else {
             return Vec::new();
@@ -176,31 +101,11 @@ pub fn Sources() -> impl IntoView {
             .collection
             .with(|c| c.as_ref().map(|c| rows(c, &scene_id)).unwrap_or_default())
     };
-
-    let add = move || {
-        let (Some(s), Some(scene_id)) = (session.get(), scene()) else {
-            return;
-        };
-        let Some(picked) = Choice::decode(&choice.get_untracked()) else {
-            return;
-        };
-        let mut name = new_name.get_untracked().trim().to_owned();
-        if name.is_empty() {
-            name = studio
-                .kinds
-                .with_untracked(|k| default_name(&picked, k.as_deref().unwrap_or_default()));
-        }
-        let item_id = ItemId::new(studio.fresh_id(&s, "item"));
-        let source_id = SourceId::new(studio.fresh_id(&s, "source"));
-        let edits = studio.collection.with_untracked(|c| {
-            c.as_ref()
-                .map(|c| place_edits(picked, scene_id, item_id.clone(), source_id, name, c))
-        });
-        if let Some(edits) = edits {
-            studio.apply(&s, edits);
-            studio.select_item(Some(item_id));
-            new_name.set(String::new());
-        }
+    let shown_rows = move || {
+        all_rows()
+            .into_iter()
+            .filter(|row| filter.shows(&row.name, row.favourite))
+            .collect::<Vec<_>>()
     };
 
     let ask_delete = move |source_id: SourceId, name: String| {
@@ -230,23 +135,49 @@ pub fn Sources() -> impl IntoView {
             studio.apply(&s, vec![edit]);
         }
     };
+    // The list is top first and `item.reorder` counts from the bottom, so a drop above a
+    // row goes after it in the scene's order.
+    let drop = move |moved: String, target: String, side: Side| {
+        let Some(scene_id) = scene() else { return };
+        let index = studio.collection.with_untracked(|c| {
+            let order: Vec<&str> = c
+                .as_ref()?
+                .scene(&scene_id)?
+                .items
+                .iter()
+                .map(|i| i.item_id.as_str())
+                .collect();
+            let side = match side {
+                Side::Before => Side::After,
+                Side::After => Side::Before,
+            };
+            dropped_at(&order, &moved.as_str(), &target.as_str(), side)
+        });
+        if let Some(index) = index {
+            send(Edit::ItemReorder {
+                item_id: ItemId::new(moved),
+                index,
+            });
+        }
+    };
 
     let row = move |row: Row| {
         let Row {
             item_id,
             source_id,
             name,
-            kind,
+            icon,
             visible,
-            index,
-            count,
+            shared,
+            favourite,
         } = row;
+        let key = item_id.to_string();
         let selected = {
             let id = item_id.clone();
             move || studio.selection.with(|s| s.contains(&id))
         };
         let is_renaming = {
-            let id = source_id.clone();
+            let id = item_id.clone();
             move || renaming.with(|r| r.as_ref() == Some(&id))
         };
         // A click selects the item alone; Shift-click adds it to the selection or takes
@@ -261,9 +192,14 @@ pub fn Sources() -> impl IntoView {
                 }
             }
         };
-        let start_rename = {
-            let id = source_id.clone();
-            move |_| renaming.set(Some(id.clone()))
+        let open_properties = {
+            let id = item_id.clone();
+            move |_| {
+                if let Some(cx) = item_cx {
+                    studio.select_item(Some(id.clone()));
+                    cx.properties(id.clone());
+                }
+            }
         };
         let rename = {
             let id = source_id.clone();
@@ -279,150 +215,215 @@ pub fn Sources() -> impl IntoView {
                 }
             }
         };
-        let item = item_id.clone();
-        let toggle = move |_: leptos::ev::MouseEvent| {
-            send(Edit::ItemSetVisible {
-                item_id: item.clone(),
-                scene_id: None,
-                visible: !visible,
-            });
+        // F2 renames the source, Del removes the item from the scene, as the menu's
+        // hints say.
+        let on_key = {
+            let item = item_id.clone();
+            move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+                "F2" => {
+                    event.prevent_default();
+                    renaming.set(Some(item.clone()));
+                }
+                "Delete" => {
+                    event.prevent_default();
+                    send(Edit::ItemRemove {
+                        item_id: item.clone(),
+                    });
+                }
+                _ => {}
+            }
         };
-        let item = item_id.clone();
-        let raise = move |_: leptos::ev::MouseEvent| {
-            send(Edit::ItemReorder {
-                item_id: item.clone(),
-                index: index + 1,
-            });
+        let toggle = {
+            let item = item_id.clone();
+            move |_: leptos::ev::MouseEvent| {
+                send(Edit::ItemSetVisible {
+                    item_id: item.clone(),
+                    scene_id: None,
+                    visible: !visible,
+                });
+            }
         };
-        let item = item_id.clone();
-        let lower = move |_: leptos::ev::MouseEvent| {
-            send(Edit::ItemReorder {
-                item_id: item.clone(),
-                index: index.saturating_sub(1),
-            });
-        };
-        let item = item_id.clone();
-        let remove = move |_: leptos::ev::MouseEvent| {
-            send(Edit::ItemRemove {
-                item_id: item.clone(),
-            })
-        };
-        let delete = {
+        let toggle_favourite = {
             let id = source_id.clone();
-            let name = name.clone();
-            move |_| ask_delete(id.clone(), name.clone())
+            move || {
+                let edit = studio.collection.with_untracked(|c| {
+                    let source = c.as_ref()?.source(&id)?;
+                    let mut meta = source.meta.clone();
+                    meta.favourite = !meta.favourite;
+                    Some(Edit::SourceSetMeta {
+                        source_id: id.clone(),
+                        meta,
+                    })
+                });
+                if let Some(edit) = edit {
+                    send(edit);
+                }
+            }
+        };
+        // A right-click on the row opens the selected items' menu, after selecting the
+        // item alone unless it is already selected. With one item, deleting its source
+        // everywhere follows.
+        let on_row_context = {
+            let id = item_id.clone();
+            let (source, name) = (source_id.clone(), name.clone());
+            move |event: leptos::ev::MouseEvent| {
+                let (Some(menus), Some(cx), Some(scene_id)) = (menus, item_cx, scene()) else {
+                    return;
+                };
+                if !studio.selection.with_untracked(|s| s.contains(&id)) {
+                    studio.select_item(Some(id.clone()));
+                }
+                let items: Vec<ItemId> = studio
+                    .selection
+                    .with_untracked(|s| s.items().cloned().collect());
+                let mut entries =
+                    item_menu::entries(cx, &scene_id, &items, item_menu::Scope::Objects);
+                if entries.is_empty() {
+                    return;
+                }
+                if items.len() == 1 {
+                    let (source, name) = (source.clone(), name.clone());
+                    entries.extend([
+                        Entry::Sep,
+                        Entry::item("Delete source everywhere…", move || {
+                            ask_delete(source.clone(), name.clone());
+                        }),
+                    ]);
+                }
+                menus.open(&event, entries);
+            }
+        };
+        let drop_side = {
+            let key = key.clone();
+            move |side: Side| {
+                let key = key.clone();
+                move || {
+                    reorder
+                        .target
+                        .with(|t| t.as_ref().is_some_and(|(id, s)| *id == key && *s == side))
+                }
+            }
+        };
+        let dragging = {
+            let key = key.clone();
+            move || reorder.dragged.with(|d| d.as_deref() == Some(key.as_str()))
+        };
+        let press = {
+            let key = key.clone();
+            move |event: leptos::ev::PointerEvent| {
+                if !filter.active() && renaming.with_untracked(Option::is_none) {
+                    reorder.down(&key, &event);
+                }
+            }
         };
         let shown = name.clone();
+        let eye_label = format!("Show or hide {name}");
+        let star_name = name.clone();
         view! {
-            <li class="row" class:selected=selected class:hidden=!visible>
-                <button
-                    class="eye"
-                    title=if visible { "Hide" } else { "Show" }
-                    aria-pressed=if visible { "true" } else { "false" }
-                    on:click=toggle
-                >{if visible { "●" } else { "○" }}</button>
+            <li
+                class="row tree-row"
+                class:selected=selected
+                class:hidden=!visible
+                class:drop-before=drop_side(Side::Before)
+                class:drop-after=drop_side(Side::After)
+                class:dragging=dragging
+                data-tree-id=key
+                on:contextmenu=on_row_context
+                on:keydown=on_key
+                on:pointerdown=press
+            >
+                <span class="tree-caret"></span>
                 <Show
                     when=is_renaming
                     fallback=move || {
+                        let name = shown.clone();
                         view! {
-                            <button class="row-main" on:click=select.clone() on:dblclick=start_rename.clone()>
-                                {shown.clone()}
-                                <span class="muted">{kind.clone()}</span>
+                            <button class="row-main" on:click=select.clone() on:dblclick=open_properties.clone()>
+                                <Icon name=icon size=15 />
+                                <span class="tree-label" class:reference=shared>{name}</span>
                             </button>
                         }
                     }
                 >
                     <RenameField value=name.clone() done=rename.clone() />
                 </Show>
-                <span class="row-tools">
-                    <button title="Move up" disabled={index + 1 >= count} on:click=raise>"▲"</button>
-                    <button title="Move down" disabled={index == 0} on:click=lower>"▼"</button>
-                    <button title="Remove from this scene" on:click=remove>"−"</button>
-                    <button title="Delete the source everywhere" on:click=delete>"✕"</button>
-                </span>
+                <button
+                    type="button"
+                    class="hov tree-tool eye"
+                    class:on=!visible
+                    title="Visible in this scene"
+                    aria-label=eye_label
+                    aria-pressed=(!visible).to_string()
+                    on:click=toggle
+                >
+                    <Icon name=if visible { "eye" } else { "eye-off" } size=14 />
+                </button>
+                <Star name=star_name on=Signal::stored(favourite) toggle=toggle_favourite />
             </li>
         }
     };
 
-    let options = move || {
-        let current = scene();
-        let (sources, scenes) = studio.collection.with(|c| {
-            let Some(c) = c else {
-                return (Vec::new(), Vec::new());
-            };
-            let sources: Vec<(String, String)> = c
-                .sources
-                .iter()
-                .map(|s| {
-                    (
-                        Choice::Existing(s.source_id.clone()).encode(),
-                        s.name.clone(),
-                    )
-                })
-                .collect();
-            let scenes: Vec<(String, String)> = c
-                .scenes
-                .iter()
-                .filter(|s| Some(&s.scene_id) != current.as_ref())
-                .map(|s| (Choice::Scene(s.scene_id.clone()).encode(), s.name.clone()))
-                .collect();
-            (sources, scenes)
-        });
-        let kinds: Vec<(String, String)> = studio.kinds.with(|k| {
-            k.iter()
-                .flatten()
-                .filter(|k| k.category == KindCategory::Source)
-                .map(|k| (Choice::New(k.kind_id.clone()).encode(), k.name.clone()))
-                .collect()
-        });
-        let group = |label: &'static str, entries: Vec<(String, String)>| {
-            (!entries.is_empty()).then(|| {
-                view! {
-                    <optgroup label=label>
-                        {entries
-                            .into_iter()
-                            .map(|(value, text)| view! { <option value=value>{text}</option> })
-                            .collect_view()}
-                    </optgroup>
-                }
-            })
+    // A right-click in the panel opens its menu (spec-workspace.md 5.2.4).
+    let on_context = move |event: leptos::ev::MouseEvent| {
+        let (Some(menus), Some(scene_id)) = (menus, scene()) else {
+            return;
         };
-        view! {
-            <option value="">"Add…"</option>
-            {group("New source", kinds)}
-            {group("Existing source", sources)}
-            {group("Scene", scenes)}
-        }
+        let open = move |scene_type: bool| {
+            let scene_id = scene_id.clone();
+            move || {
+                if let Some(adder) = adder {
+                    adder.open(scene_id.clone(), scene_type);
+                }
+            }
+        };
+        let select_all = move || {
+            let items: Vec<ItemId> = all_rows().into_iter().rev().map(|r| r.item_id).collect();
+            studio.select_items(items);
+        };
+        menus.open(
+            &event,
+            vec![
+                Entry::item("Add source…", open(false)).disabled_if(adder.is_none()),
+                Entry::item("Add scene as source…", open(true)).disabled_if(adder.is_none()),
+                Entry::unavailable("New group"),
+                Entry::Sep,
+                Entry::item("Select all", select_all).hint("Ctrl+A"),
+                Entry::unavailable("Paste").hint("Ctrl+V"),
+            ],
+        );
     };
 
     view! {
-        <section class="panel sources-panel">
+        <section class="panel sources-panel tree-panel" on:contextmenu=on_context>
             <h2>"Sources"</h2>
+            <SearchBar what="objects" filter=filter />
             <Confirm pending=pending confirm=confirm_delete />
             <Show
                 when=move || scene().is_some()
                 fallback=|| view! { <p class="placeholder">"Select a scene."</p> }
             >
-                <ul class="rows">
-                    <For each=all_rows key=|row| row.clone() children=row />
+                <p class="tree-caption">
+                    "In “" {scene_name} "”, top to bottom"
+                </p>
+                <ul
+                    class="rows tree-rows"
+                    class:reordering=move || reorder.dragged.with(Option::is_some)
+                    on:pointermove=move |event| reorder.moved(&event)
+                    on:pointerup=move |_| reorder.up(drop)
+                    on:pointercancel=move |_| reorder.cancel()
+                >
+                    <For each=shown_rows key=|row| row.clone() children=row />
                 </ul>
-                <Show when=move || all_rows().is_empty()>
-                    <p class="placeholder">"This scene is empty."</p>
-                </Show>
-                <form class="add" on:submit=move |event| {
-                    event.prevent_default();
-                    add();
-                }>
-                    <select
-                        aria-label="What to add"
-                        prop:value=move || choice.get()
-                        on:change=move |event| choice.set(event_target_value(&event))
-                    >
-                        {options}
-                    </select>
-                    <input type="text" placeholder="Name (optional)" bind:value=new_name />
-                    <button type="submit" disabled=move || choice.with(String::is_empty)>"Add"</button>
-                </form>
+                {move || {
+                    let none = all_rows().is_empty();
+                    if none {
+                        Some(view! { <p class="placeholder">"This scene is empty."</p> }.into_any())
+                    } else if shown_rows().is_empty() {
+                        Some(view! { <p class="placeholder">"Nothing matches these filters."</p> }.into_any())
+                    } else {
+                        None
+                    }
+                }}
             </Show>
         </section>
     }
@@ -430,11 +431,11 @@ pub fn Sources() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::{Choice, default_name, place_edits, rows};
+    use super::rows;
     use crate::store::Collection;
     use jstream_control::protocol::{
-        Canvas, Crop, Edit, Finite32, ItemInfo, ItemTransform, KindCategory, KindSummary,
-        PlacementForm, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
+        Canvas, Crop, Finite32, ItemInfo, ItemTransform, PlacementForm, SceneId, SceneInfo,
+        SceneRole, SourceInfo, SourceKind,
     };
 
     fn collection() -> Collection {
@@ -486,100 +487,12 @@ mod tests {
         let rows = rows(&collection(), &SceneId::new("main"));
         let ids: Vec<&str> = rows.iter().map(|r| r.item_id.as_str()).collect();
         assert_eq!(ids, ["top", "bottom"]);
+        assert!(!rows[0].visible && rows[1].visible);
         assert_eq!(
-            (rows[0].index, rows[0].count, rows[0].visible),
-            (1, 2, false)
-        );
-        assert_eq!(
-            (rows[1].name.as_str(), rows[1].kind.as_str()),
-            ("Camera", "webcam")
+            (rows[1].name.as_str(), rows[1].icon, rows[1].shared),
+            ("Camera", "webcam", false)
         );
         assert_eq!(rows[0].name, "gone", "a missing source shows its ID");
         assert!(super::rows(&collection(), &SceneId::new("other")).is_empty());
-    }
-
-    #[test]
-    fn choices_round_trip_through_the_select() {
-        for choice in [
-            Choice::New("color".into()),
-            Choice::Existing("a:b".into()),
-            Choice::Scene("s".into()),
-        ] {
-            assert_eq!(Choice::decode(&choice.encode()), Some(choice));
-        }
-        assert_eq!(Choice::decode(""), None);
-        assert_eq!(Choice::decode("bogus:x"), None);
-    }
-
-    #[test]
-    fn placing_creates_the_source_and_covers_the_canvas() {
-        let c = collection();
-        let edits = place_edits(
-            Choice::New("color".into()),
-            "main".into(),
-            "i".into(),
-            "s".into(),
-            "Backdrop".into(),
-            &c,
-        );
-        let [
-            Edit::SourceCreate {
-                source_id, kind, ..
-            },
-            Edit::ItemAdd { geometry, .. },
-        ] = edits.as_slice()
-        else {
-            panic!("expected source.create then item.add: {edits:?}");
-        };
-        assert_eq!(source_id, &SourceId::new("s"));
-        assert_eq!(
-            kind,
-            &SourceKind::Builtin {
-                kind: "color".into()
-            }
-        );
-        let geometry = geometry.unwrap_or_else(|| panic!("no geometry"));
-        assert_eq!(
-            (geometry.size.width.get(), geometry.size.height.get()),
-            (1280.0, 720.0)
-        );
-
-        let existing = place_edits(
-            Choice::Existing("cam".into()),
-            "main".into(),
-            "i".into(),
-            "unused".into(),
-            String::new(),
-            &c,
-        );
-        assert!(
-            matches!(existing.as_slice(), [Edit::ItemAdd { source_id, .. }] if source_id.as_str() == "cam")
-        );
-
-        let nested = place_edits(
-            Choice::Scene("main".into()),
-            "other".into(),
-            "i".into(),
-            "s".into(),
-            String::new(),
-            &c,
-        );
-        assert!(
-            matches!(&nested[0], Edit::SourceCreate { name, kind: SourceKind::Scene { .. }, .. } if name == "Main"),
-            "a nested scene is named after its scene"
-        );
-    }
-
-    #[test]
-    fn a_new_source_is_named_after_its_kind() {
-        let kinds = [KindSummary {
-            kind_id: "color".into(),
-            category: KindCategory::Source,
-            name: "Colour".into(),
-            version: 1,
-        }];
-        assert_eq!(default_name(&Choice::New("color".into()), &kinds), "Colour");
-        assert_eq!(default_name(&Choice::New("text".into()), &kinds), "text");
-        assert_eq!(default_name(&Choice::Existing("x".into()), &kinds), "");
     }
 }

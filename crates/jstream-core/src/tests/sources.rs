@@ -163,6 +163,79 @@ fn a_text_source_is_built_and_rebuilt() {
     assert_eq!(shown(&engine, "caption"), Some([0, 0, 0xff, 0xff]));
 }
 
+/// A text item shown enlarged has its source drawn again with more pixels for the same
+/// size, so it stays sharp, and drawn at its own size again when it is not enlarged
+/// (ADR-0073). The density goes up in quarter steps of a doubling.
+#[test]
+fn an_enlarged_text_item_draws_its_source_at_a_density() {
+    use jstream_protocol::{Finite32, ItemGeometry, ItemTransform, Size, Vec2};
+    let engine = Engine::new();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("caption", "text", settings(&[("text", json!("Hi"))])),
+            add("a", "i1", "caption"),
+        ]),
+    )
+    .expect("created");
+    let sizes = || {
+        assert!(engine.settle_sources(), "the sources were built in time");
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .frame(&SourceId::new("caption"))
+            .map(|frame| frame.sizes())
+            .expect("the caption is shown")
+    };
+    let (pixels, extent) = sizes();
+    assert_eq!(pixels, extent, "at its own size");
+    let scaled = |scale: f32| Edit::ItemSetTransform {
+        item_id: ItemId::new("i1"),
+        scene_id: None,
+        transform: ItemTransform {
+            position: Vec2::new(0.0, 0.0).expect("finite"),
+            scale: Vec2::new(scale, scale).expect("finite"),
+            rotation_deg: Finite32::new(0.0).expect("finite"),
+        },
+    };
+
+    batch(&control, Batch::single(scaled(2.0))).expect("scaled");
+    assert_eq!(
+        sizes(),
+        ([extent[0] * 2, extent[1] * 2], extent),
+        "twice as many pixels each way, placed at the same size"
+    );
+
+    // A box three times its size: the next quarter step up is 2^(7/4).
+    let [w, h] = extent.map(|side| side as f32 * 3.0);
+    batch(
+        &control,
+        Batch::single(Edit::ItemSetGeometry {
+            item_id: ItemId::new("i1"),
+            scene_id: None,
+            geometry: ItemGeometry {
+                size: Size::try_new(w, h).expect("positive"),
+                ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+            },
+        }),
+    )
+    .expect("boxed");
+    let step = 2f32.powf(7.0 / 4.0);
+    assert_eq!(
+        sizes(),
+        (
+            extent.map(|side| (side as f32 * step).ceil() as u32),
+            extent
+        )
+    );
+
+    batch(&control, Batch::single(scaled(1.0))).expect("back to its size");
+    assert_eq!(sizes(), (extent, extent), "at its own size again");
+}
+
 /// A `display` or `window` source shows what the pipeline captures for its target:
 /// the primary display by default, the one its `target` names otherwise. Sources that
 /// capture the same thing share one capture, and a window source with no window chosen

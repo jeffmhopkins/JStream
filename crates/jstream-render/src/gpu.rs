@@ -5,7 +5,7 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::task::{Context, Poll, Waker};
 
-use jstream_platform::{ContextKey, GpuContext};
+use jstream_platform::{ContextKey, GpuContext, SubmitLock};
 
 use crate::error::RenderError;
 
@@ -52,6 +52,9 @@ pub(crate) struct Gpu {
     pub context: Option<ContextKey>,
     /// How the device has failed ([`watch`]).
     pub faults: Arc<Faults>,
+    /// Held from staging a frame through the submit it arms: the context's, which
+    /// platform threads that submit on the same queue take too, or one of its own.
+    pub submit: SubmitLock,
 }
 
 /// What wgpu reported about a device outside any call's result.
@@ -157,6 +160,7 @@ impl Gpu {
         let adapter = ctx.adapter().clone();
         let mut gpu = Self::bundle(adapter, ctx.device().clone(), ctx.queue().clone());
         gpu.context = Some(ctx.key());
+        gpu.submit = ctx.submit_lock().clone();
         gpu.log_open("platform context");
         gpu
     }
@@ -188,6 +192,7 @@ impl Gpu {
             max_buffer_size: limits.max_buffer_size,
             context: None,
             faults,
+            submit: SubmitLock::new(),
         }
     }
 

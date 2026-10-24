@@ -53,7 +53,7 @@ fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
 
 /// One built-in video filter with its settings read, ready to draw. It keeps whatever
 /// state its kind needs between frames (a video delay's ring of frames), and a
-/// multi-pass kind's intermediate layers ([`Scratch`]).
+/// multi-pass kind's intermediate layers (`Scratch`).
 pub struct VideoFilter {
     kind: String,
     pass: Box<dyn Pass>,

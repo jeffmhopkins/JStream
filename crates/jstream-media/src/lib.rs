@@ -3,7 +3,7 @@
 //! Layer 0: plain data and invariants only, with no I/O, GPU or platform code, and no
 //! dependencies on other JStream crates.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-media/README.md#purpose, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0014-media-clock.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-media/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md
 
 #![forbid(unsafe_code)]
 
