@@ -70,7 +70,12 @@ state machine. Contents:
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
-  the source kinds of `jstream-sources`' built-in registry and the audio filter kinds.
+  the source kinds of `jstream-sources`' built-in registry, the audio filter kinds and
+  `jstream-render`'s video filter kinds. Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
+  `jstream-sources` and `jstream-render` do for theirs), so a change to an audio
+  filter's settings is reviewed like an API diff (ADR-0025, #635). The CLAP kinds a scan
+  adds aren't in it. `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
+  rewrites it.
 - **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
@@ -449,8 +454,9 @@ feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
-`src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests) and
-`jstream-mcp` (`tests/mcp.rs`); the tests also use `serde_json`
+`src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
+`insta` (the built-in kinds' snapshot, `schema/kinds.snap`) and `jstream-mcp`
+(`tests/mcp.rs`); the tests also use `serde_json`
 for settings values and saved collection files. All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
