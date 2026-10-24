@@ -28,7 +28,10 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r29","call":{"kind":"action","action":{"type":"studio.set_preview","scene_id":"scn_1"}}}
 {"type":"request","id":"r30","call":{"kind":"action","action":{"type":"pairing.start"}}}
 {"type":"request","id":"r31","call":{"kind":"action","action":{"type":"device.revoke","device_id":"dev_1"}}}
-{"type":"request","id":"r32","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
+{"type":"request","id":"r32","call":{"kind":"action","action":{"type":"plugin.install","plugin_id":"plg_1","path":"/home/me/plugins/chat-scenes","grant":{"classes":["read","edit","live"],"hosts":["https://api.example.com:443"],"folders":["/home/me/clips"]}}}}
+{"type":"request","id":"r33","call":{"kind":"action","action":{"type":"plugin.grant","plugin_id":"plg_1","grant":{"classes":["outputs"]}}}}
+{"type":"request","id":"r34","call":{"kind":"action","action":{"type":"plugin.enable","plugin_id":"plg_1"}}}
+{"type":"request","id":"r35","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}
@@ -106,6 +109,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"error","id":"r1","error":{"code":"history_empty","direction":"redo","message":"nothing to redo"}}
 {"type":"error","id":"r1","error":{"code":"action_failed","reason":"connection refused","message":"action failed: connection refused"}}
 {"type":"error","id":"r1","error":{"code":"unsupported","call":"pairing.start","message":"`pairing.start` is not served here"}}
+{"type":"error","id":"r1","error":{"code":"forbidden","call":"output.start","reason":"the plugin is not granted `outputs`","message":"`output.start` is forbidden: the plugin is not granted `outputs`"}}
 {"type":"error","id":"r1","error":{"code":"internal","reason":"render thread stopped","message":"internal error: render thread stopped"}}
 {"type":"error","id":"r1","error":{"code":"not_found","entity":"scene","id":"x","message":"scene `x` does not exist"}}
 {"type":"error","id":"r1","error":{"code":"already_exists","entity":"scene","id":"x","message":"scene `x` already exists"}}
@@ -127,6 +131,8 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"error","id":"r1","error":{"code":"already_exists","entity":"device","id":"x","message":"device `x` already exists"}}
 {"type":"error","id":"r1","error":{"code":"not_found","entity":"hotkey","id":"x","message":"hotkey `x` does not exist"}}
 {"type":"error","id":"r1","error":{"code":"already_exists","entity":"hotkey","id":"x","message":"hotkey `x` already exists"}}
+{"type":"error","id":"r1","error":{"code":"not_found","entity":"plugin","id":"x","message":"plugin `x` does not exist"}}
+{"type":"error","id":"r1","error":{"code":"already_exists","entity":"plugin","id":"x","message":"plugin `x` already exists"}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
 {"type":"event","event":{"type":"state.changed","rev":14,"client_id":"cli_8"}}
 {"type":"event","event":{"type":"state.changed","rev":15,"client_id":"cli_7","request_id":"r30","cause":"undo"}}
@@ -141,6 +147,11 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"event","event":{"type":"studio.changed","client_id":"cli_8"}}
 {"type":"event","event":{"type":"privacy.changed","on":true,"client_id":"cli_7","request_id":"r3"}}
 {"type":"event","event":{"type":"events.dropped","count":1500}}
+{"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"enabled","remote_name":"Chat scenes"}}
+{"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"cpu_limit"}}
+{"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"memory_limit"}}
+{"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"trap"}}
+{"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"needs_grant"}}
 {"type":"event","event":{"type":"stats.tick","seq":4,"drops":{"capture_frames":2,"audio_frames":5,"render_ticks":1,"encode_frames":4,"encode_blocks":6,"output_packets":7}}}
 {"type":"event","event":{"type":"live.changed","gesture_id":"drag_1","client_id":"cli_7","values":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":1600.0,"y":900.0},"size":{"width":480.0,"height":270.0},"fit_mode":"fit","rotation_deg":0.0,"tilt_deg":0.0,"turn_deg":0.0,"depth_px":0.0}},{"type":"item.set_crop","item_id":"itm_2","crop":{"left":4,"top":0,"right":4,"bottom":0}}]}}
 {"type":"event","event":{"type":"live.ended","gesture_id":"drag_1","client_id":"cli_7","outcome":"committed","rev":17}}

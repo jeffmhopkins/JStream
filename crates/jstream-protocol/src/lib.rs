@@ -26,6 +26,7 @@ mod organise;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
+mod plugin;
 mod preview;
 mod query;
 mod schema;
@@ -55,14 +56,16 @@ pub use event::{DropCounts, Event, OutputState};
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
 pub use geometry::{
-    Canvas, CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad,
-    Placed, PlacementForm, ProjectedQuad, Size, legacy_quad,
+    Canvas, CanvasPoint, ContentRect, DrawnPolygon, DrawnVertex, FitMode, GeometryError,
+    ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX, NEAR_W, Placed, PlacementForm,
+    ProjectedQuad, Size, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey,
-    ItemId, LabelId, OutputId, RequestId, Rev, SceneId, SourceId, TransitionPresetId, VideoMixId,
+    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TransitionPresetId,
+    VideoMixId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -78,6 +81,10 @@ pub use organise::{
 pub use output::{
     OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
     rtmp_url_sends_key_in_cleartext,
+};
+pub use plugin::{
+    PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginScope,
+    PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope, settings_reach,
 };
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
@@ -114,6 +121,14 @@ mod fixtures;
 #[test]
 fn names_are_valid() {
     fixtures::check_names_are_valid();
+}
+
+/// ADR-0069: every command has a place in the plugin capability table, in a class or
+/// under "never", so no new command is granted to plugins without a PR deciding it.
+#[cfg(test)]
+#[test]
+fn every_command_has_a_plugin_scope() {
+    fixtures::check_every_command_has_a_plugin_scope();
 }
 
 /// R-ARCH-006: every command in the schema is classified as exactly one of edit or

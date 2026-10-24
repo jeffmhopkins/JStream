@@ -1539,6 +1539,19 @@ fn the_engine_answers_like_the_mock() {
                 gesture_id: GestureId::new("g9"),
             },
         },
+        // Neither hosts plugins yet (ADR-0069): both answer `unsupported`.
+        Call::Action {
+            action: Action::PluginEnable {
+                plugin_id: jstream_protocol::PluginId::new("plg_1"),
+            },
+        },
+        Call::Action {
+            action: Action::PluginInstall {
+                plugin_id: jstream_protocol::PluginId::new("plg_1"),
+                path: "/plugins/one".into(),
+                grant: jstream_protocol::PluginGrant::default(),
+            },
+        },
     ];
     let script: Vec<Call> = script.into_iter().chain(organise_script()).collect();
 
@@ -2262,7 +2275,10 @@ fn the_render_snapshot_follows_the_program_mix() {
     assert!(engine.settle_sources(), "the display source was built");
     // The scene, then the display source's build.
     assert_eq!(generation(), 3);
-    let primary = std::collections::BTreeSet::from([jstream_sources::CaptureSpec::Display(None)]);
+    let primary = std::collections::BTreeSet::from([crate::snapshot::CaptureKey::for_source(
+        jstream_sources::CaptureSpec::Display(None),
+        SourceId::new("screen"),
+    )]);
     assert_eq!(
         hub.load().shot().captures(),
         &primary,
@@ -5365,11 +5381,10 @@ mod cpu_pipeline {
     fn a_virtual_camera_is_covered_by_the_privacy_screen() {
         use crate::snapshot::{CaptureFrame, CaptureImage, Captures};
         use jstream_protocol::{Action, Call};
-        use jstream_sources::CaptureSpec;
 
         struct Grey;
         impl Captures for Grey {
-            fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+            fn frame(&self, _: &crate::snapshot::CaptureKey) -> Option<CaptureFrame<'_>> {
                 Some(CaptureFrame {
                     version: 1,
                     image: CaptureImage::Rgba {

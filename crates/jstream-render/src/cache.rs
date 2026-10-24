@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use jstream_media::FrameSize;
 use jstream_platform::GpuFrame;
 
 use crate::compositor::Compositor;
@@ -213,13 +214,13 @@ impl<K: Ord + Clone> ResourceCache<K> {
     ) -> Result<&Image, RenderError> {
         let frame_no = self.frame;
         let texture = frame.texture();
-        let sync = Some(Arc::clone(frame.sync()));
         let reuse = self
             .live
             .get(key)
             .is_some_and(|entry| entry.image.is_import_as(alpha));
         if !reuse {
-            let image = compositor.import_as(texture.clone(), sync, alpha)?;
+            let mut image = compositor.import_as(texture.clone(), None, alpha)?;
+            image.set_frame(frame);
             return Ok(self.replace(key, image, 0));
         }
         let entry = self.live.get_mut(key).ok_or_else(|| missing("an import"))?;
@@ -233,7 +234,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
                 None => compositor.import_as(texture.clone(), None, alpha)?,
             };
             let mut old = std::mem::replace(&mut entry.image, image);
-            old.set_sync(None);
+            old.clear_sync();
             entry.kept.push((old, entry.used));
             let size = (texture.width(), texture.height());
             let mut index = 0;
@@ -253,7 +254,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
                 self.retired.push(Retired { image, after });
             }
         }
-        entry.image.set_sync(sync);
+        entry.image.set_frame(frame);
         entry.used = frame_no;
         Ok(&entry.image)
     }
@@ -297,6 +298,15 @@ impl<K: Ord + Clone> ResourceCache<K> {
         self.live.get(key).map(|entry| &entry.image)
     }
 
+    /// Places `key`'s image as if it were `extent` ([`Image::set_extent`]), if there is
+    /// one. An upload or a layer made again, at a new size, is placed at its own size
+    /// until this is called again.
+    pub fn set_extent(&mut self, key: &K, extent: FrameSize) {
+        if let Some(entry) = self.live.get_mut(key) {
+            entry.image.set_extent(extent);
+        }
+    }
+
     /// How many images are live (referenced by a recent frame).
     pub fn live(&self) -> usize {
         self.live.len()
@@ -326,7 +336,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
     pub fn end_frame(&mut self, compositor: &Compositor) -> Option<Reclaimed> {
         let frame = self.frame;
         for entry in self.live.values_mut() {
-            entry.image.set_sync(None);
+            entry.image.clear_sync();
         }
         let stale = self.live.iter().any(|(_, entry)| entry.used < frame);
         if stale {
@@ -430,7 +440,7 @@ fn retire(retired: &mut Vec<Retired>, entry: Entry) {
         kept,
         ..
     } = entry;
-    image.set_sync(None);
+    image.clear_sync();
     retired.push(Retired { image, after: used });
     retired.extend(
         kept.into_iter()

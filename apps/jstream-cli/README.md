@@ -124,9 +124,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   item is a legacy one at 1:1. Place either with `item.set_geometry <item-id>
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
-  are always sent neutral, since the engine refuses anything else until it draws 3D,
-  and it sends no flip (`flip_h` and `flip_v` false): the command has no flip argument
-  yet.
+  are always sent neutral: the command sets the 2D box only, though the engine accepts
+  any 3D it can draw from protocol 0.34. It sends no flip (`flip_h` and `flip_v` false):
+  the command has no flip argument yet.
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
@@ -284,7 +284,7 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine); `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send; and `unsupported`, which `pair` and `device` get from an engine with no server in front (`--mock`) |
+| 20 | an error code this CLI doesn't know (from a newer engine); `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send; `unsupported`, which `pair` and `device` get from an engine with no server in front (`--mock`); and `forbidden`, which only a plugin's call gets |
 
 <a id="design"></a>
 ## Design

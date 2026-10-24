@@ -1260,7 +1260,8 @@ mod property {
             _ => Some(SceneId::new(scene(rng))),
         };
         let f = |rng: &mut Rng| f32::from(u16::try_from(rng.below(2000)).expect("fits")) - 1000.0;
-        // Mostly valid geometries; one in six has a zero width or a tilt.
+        // Mostly flat geometries; one in six has a zero width (invalid) and one a tilt
+        // (valid from protocol 0.34).
         let geometry = |rng: &mut Rng| {
             let (width, tilt) = match rng.below(6) {
                 0 => (0.0, 0.0),
@@ -3247,6 +3248,37 @@ fn a_geometry_item_reads_its_geometry_and_a_transform_view() {
     assert_eq!(view.rotation_deg, boxed().rotation_deg);
 }
 
+/// From protocol 0.34 any drawable 3D is accepted (ADR-0050 decision 8), read back as stored, and
+/// undone to the placement before it. Before, each field was `invalid_argument`.
+#[test]
+fn a_3d_geometry_is_accepted_and_read_back() {
+    let mut graph = fixture();
+    apply_ok(&mut graph, vec![add("a", "i1", "cam")]);
+    let finite = |v: f32| Finite32::new(v).expect("finite");
+    let tilted = ItemGeometry {
+        tilt_deg: finite(20.0),
+        turn_deg: finite(-35.0),
+        depth_px: finite(40.0),
+        perspective_px: Some(finite(800.0)),
+        ..boxed()
+    };
+    apply_ok(&mut graph, vec![set_geometry("i1", tilted)]);
+    let Some(Ok(QueryResult::ItemList { items, .. })) = graph.query(&Query::ItemList {
+        scene_id: SceneId::new("a"),
+    }) else {
+        panic!("item.list");
+    };
+    assert_eq!(items[0].placement, PlacementForm::Geometry);
+    assert_eq!(items[0].geometry, Some(tilted));
+    // Wholly behind the viewer is still a valid placement: it draws nothing.
+    let behind = ItemGeometry {
+        depth_px: finite(5000.0),
+        perspective_px: Some(finite(800.0)),
+        ..boxed()
+    };
+    apply_ok(&mut graph, vec![set_geometry("i1", behind)]);
+}
+
 #[test]
 fn invalid_geometries_name_the_field() {
     let mut graph = fixture();
@@ -3272,40 +3304,41 @@ fn invalid_geometries_name_the_field() {
         ),
         (
             ItemGeometry {
-                tilt_deg: finite(1.0),
-                ..boxed()
-            },
-            "edits.0.geometry.tilt_deg",
-        ),
-        (
-            ItemGeometry {
-                turn_deg: finite(1.0),
-                ..boxed()
-            },
-            "edits.0.geometry.turn_deg",
-        ),
-        (
-            ItemGeometry {
-                depth_px: finite(1.0),
-                ..boxed()
-            },
-            "edits.0.geometry.depth_px",
-        ),
-        (
-            ItemGeometry {
-                perspective_px: Some(finite(800.0)),
-                ..boxed()
-            },
-            "edits.0.geometry.perspective_px",
-        ),
-        (
-            ItemGeometry {
                 center: Vec2::new(f32::MAX, 0.0).expect("finite"),
                 size: Size {
                     width: finite(f32::MAX),
                     height: finite(10.0),
                 },
                 rotation_deg: finite(180.0),
+                ..boxed()
+            },
+            "edits.0.geometry",
+        ),
+        // 3D whose four corners project but which the compositor can't draw (#629 B1):
+        // a huge tilted item clipped at the near plane, and one centred near f32::MAX.
+        (
+            ItemGeometry {
+                size: Size {
+                    width: finite(1e37),
+                    height: finite(2000.0),
+                },
+                rotation_deg: finite(0.0),
+                tilt_deg: finite(60.0),
+                perspective_px: Some(finite(800.0)),
+                ..boxed()
+            },
+            "edits.0.geometry",
+        ),
+        (
+            ItemGeometry {
+                center: Vec2::new(3e38, 540.0).expect("finite"),
+                size: Size {
+                    width: finite(1e36),
+                    height: finite(2000.0),
+                },
+                rotation_deg: finite(0.0),
+                tilt_deg: finite(60.0),
+                perspective_px: Some(finite(800.0)),
                 ..boxed()
             },
             "edits.0.geometry",

@@ -51,6 +51,7 @@ mod mdct;
 mod psy;
 mod quant;
 mod tables;
+mod tns;
 
 pub use encoder::Encoder;
 pub use mdct::WindowShape;
@@ -81,16 +82,21 @@ pub struct Config {
     pub bit_rate: u32,
     /// The window shape of every frame.
     pub window_shape: WindowShape,
+    /// Whether windows whose spectrum predicts well across frequency are coded with
+    /// temporal noise shaping, so their quantization noise follows the signal's envelope
+    /// in time. On by default.
+    pub tns: bool,
 }
 
 impl Config {
-    /// A configuration with the sine window.
+    /// A configuration with the sine window and temporal noise shaping.
     pub fn new(sample_rate: u32, channels: u8, bit_rate: u32) -> Self {
         Self {
             sample_rate,
             channels,
             bit_rate,
             window_shape: WindowShape::Sine,
+            tns: true,
         }
     }
 

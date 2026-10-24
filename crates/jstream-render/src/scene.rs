@@ -109,8 +109,8 @@ pub enum Placement {
     /// A 0.3 transform, evaluated against the image's size on every render.
     Legacy(LegacyTransform),
     /// A box on the canvas, with the protocol's own type. The cropped image is fitted
-    /// into the box by its fit mode, and `fill` is clipped to the box. Non-neutral 3D is
-    /// [`crate::RenderError::Invalid`] until M3 draws it.
+    /// into the box by its fit mode, and `fill` is clipped to the box. Non-neutral 3D
+    /// draws ADR-0050's drawn polygon.
     Geometry(jstream_protocol::ItemGeometry),
 }
 

@@ -3,7 +3,7 @@
 // seed's Backdrop is 640 × 360 with its top-left corner at 640, 360. The mock engine
 // doesn't implement `scene.set_transitions`, so choosing a scene's transition is covered
 // natively by the Transitions panel's edit.
-import { test, expect, connect, rev } from '../fixtures.js';
+import { test, expect, connect, openAddSource, rev } from '../fixtures.js';
 
 function inspector(page) {
   return page.locator('.panel-inspector');
@@ -131,8 +131,8 @@ test('with no item selected, the scene is inspected', async ({ page, daemon }) =
   await expect(into.locator('option:checked')).toHaveText('Default (Cut)');
 
   // An item selected with another shows "+1" beside its kind.
-  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
-  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  const dialog = await openAddSource(page);
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
   const rows = page.locator('.sources-panel li.row .row-main');
   await expect(rows).toHaveCount(2);
   await rows.nth(0).click();
