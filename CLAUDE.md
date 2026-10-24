@@ -32,7 +32,8 @@ depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
   against your diff. If it's wrong, **edit it**. Either way, once it holds, record it:
   `cargo xtask docs verify <ID#anchor> --by agent:<name> --note "<what you checked>"`.
   When a reviewer asks for a better note on a section that is already fresh, rewrite it
-  with `--renote "<the better note>"` instead of `--note`.
+  with `--renote "<the better note>"` instead of `--note` (on a stacked PR, add
+  `--from <base branch>`, or it rewrites the base PR's notes too).
 - Never type dates, revisions or history into docs; git provides them. Never edit
   `@generated` blocks; run `cargo xtask docs generate` (e.g. after changing an ADR's status).
 - Delivering or advancing a roadmap item → update its entry in `docs/progress.toml` (PR

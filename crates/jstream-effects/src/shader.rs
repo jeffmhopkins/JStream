@@ -7,7 +7,9 @@
 //! field per parameter, in declaration order) bound at group [`PARAMS_GROUP`], binding
 //! [`PARAMS_BINDING`] as `p`, then the effect's own file. That file defines
 //! `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>` and nothing the host has to
-//! bind: no bindings, no immediates, no overrides, no other entry points.
+//! bind: no bindings, no immediates, no overrides, no other entry points. Its memory is
+//! bounded too ([`MAX_VALUE_BYTES`]), since a huge array is a cheap way to make a driver
+//! spill to scratch memory or stall compiling it (#349).
 
 use std::collections::BTreeSet;
 use std::error::Error as _;
@@ -24,6 +26,12 @@ pub const PARAMS_BINDING: u32 = 4;
 
 /// The fragment entry point an effect defines.
 pub const ENTRY_POINT: &str = "fs";
+
+/// The most bytes an effect may hold per invocation in each place: any one value (a type
+/// it names, constructs or declares), all its `var<private>` globals together, and the
+/// local variables of any one function together. 16 KiB fits lookup tables of a few
+/// hundred colours; a fragment shader needing more is a GPU hazard, not an effect.
+pub const MAX_VALUE_BYTES: u32 = 16 * 1024;
 
 /// One `Params` field's WGSL type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -306,6 +314,63 @@ fn check_contract(host: &Module, module: &Module, has_params: bool) -> Result<()
             name.unwrap_or("?"),
             global.space
         ));
+    }
+    check_memory(module)
+}
+
+/// Checks [`MAX_VALUE_BYTES`]: every type in the module (which covers what the effect
+/// declares and what it constructs, such as `array<f32, N>()`), the `var<private>`
+/// globals together, and each function's local variables together. The host prelude's
+/// own types are small, so checking the whole module blames only the effect.
+fn check_memory(module: &Module) -> Result<(), String> {
+    let mut layouter = naga::proc::Layouter::default();
+    layouter
+        .update(module.to_ctx())
+        .map_err(|e| format!("its types have no layout: {e}"))?;
+    let size = |ty: naga::Handle<naga::Type>| u64::from(layouter[ty].size);
+    let limit = u64::from(MAX_VALUE_BYTES);
+    for (handle, ty) in module.types.iter() {
+        if size(handle) > limit {
+            return Err(format!(
+                "uses a {}-byte value{}; an effect's values are at most {MAX_VALUE_BYTES} bytes",
+                size(handle),
+                ty.name
+                    .as_deref()
+                    .map(|n| format!(" (`{n}`)"))
+                    .unwrap_or_default()
+            ));
+        }
+    }
+    let private: u64 = module
+        .global_variables
+        .iter()
+        .filter(|(_, g)| g.space == AddressSpace::Private)
+        .map(|(_, g)| size(g.ty))
+        .sum();
+    if private > limit {
+        return Err(format!(
+            "declares {private} bytes of `var<private>` globals; an effect holds at most \
+             {MAX_VALUE_BYTES}"
+        ));
+    }
+    let functions = module
+        .functions
+        .iter()
+        .map(|(_, f)| f)
+        .chain(module.entry_points.iter().map(|e| &e.function));
+    for function in functions {
+        let locals: u64 = function
+            .local_variables
+            .iter()
+            .map(|(_, v)| size(v.ty))
+            .sum();
+        if locals > limit {
+            return Err(format!(
+                "`{}` declares {locals} bytes of local variables; a function holds at most \
+                 {MAX_VALUE_BYTES}",
+                function.name.as_deref().unwrap_or("?")
+            ));
+        }
     }
     Ok(())
 }

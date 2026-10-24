@@ -29,6 +29,8 @@ tracing.workspace = true
 wgpu = { workspace = true, features = ["vulkan", "dx12", "metal", "wgsl"] }
 
 [dev-dependencies]
+# The video filter kinds' snapshot, reviewed like an API diff (ADR-0025).
+insta.workspace = true
 criterion.workspace = true
 
 [[bench]]

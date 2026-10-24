@@ -111,9 +111,10 @@ pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 pub(crate) const REMOTE_PREFIX: &str = "remote_";
 
 /// The nouns whose ops are for people only, so no tool carries them and a call naming
-/// one is an unknown op (ADR-0058 §3: YouTube is for people, not agents). The protocol
-/// keeps them for the UI.
-pub(crate) const PEOPLE_ONLY: [&str; 1] = ["youtube"];
+/// one is an unknown op: YouTube (ADR-0058 §3), and installing, granting and re-enabling
+/// plugins (ADR-0069 G1), so an agent can't hand its access to code that outlives the
+/// conversation. The protocol keeps them for the UI.
+pub(crate) const PEOPLE_ONLY: [&str; 2] = ["youtube", "plugin"];
 
 impl Tools {
     /// Generates the tools from the protocol schema, without the [`PEOPLE_ONLY`] ops.
@@ -426,8 +427,9 @@ fn events_tool() -> Tool {
     let description = format!(
         "Returns the engine's events after the cursor `after`, oldest first, without \
          waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` \
-         say whose batch did it), `studio.changed` (another scene went on program) and \
-         `output.state_changed`, from every client, yours included, and \
+         say whose batch did it), `studio.changed` (another scene went on program), \
+         `privacy.changed` (the privacy screen went on or off; first in a session that \
+         opens while it is on) and `output.state_changed`, from every client, yours included, and \
          `events.dropped` (the server dropped `count` events because this \
          session fell behind; re-read the state). The once-a-second `stats.tick` \
          is not in `events`: each read returns the newest one as `stats` (running drop \
@@ -939,7 +941,6 @@ mod tests {
                 "events",
                 "kind",
                 "state",
-                "studio",
                 "video"
             ]
         );

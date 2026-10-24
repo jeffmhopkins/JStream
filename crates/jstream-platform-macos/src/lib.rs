@@ -40,6 +40,8 @@ mod decode;
 mod fourcc;
 mod keychain;
 mod media_file;
+#[cfg(target_os = "macos")]
+mod pixel_buffer;
 mod unbuilt;
 mod version;
 mod video_device;

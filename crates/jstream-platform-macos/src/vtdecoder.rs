@@ -25,7 +25,6 @@
 use std::ffi::{c_int, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr::{self, NonNull};
-use std::slice;
 use std::sync::OnceLock;
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -44,12 +43,8 @@ use objc2_core_media::{
     kCMTimeInvalid,
 };
 use objc2_core_video::{
-    CVImageBuffer, CVPixelBuffer, CVPixelBufferGetBaseAddress, CVPixelBufferGetBaseAddressOfPlane,
-    CVPixelBufferGetBytesPerRow, CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferGetHeight,
-    CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
-    CVPixelBufferIsPlanar, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags,
-    CVPixelBufferUnlockBaseAddress, kCVPixelBufferIOSurfacePropertiesKey,
-    kCVPixelBufferPixelFormatTypeKey,
+    CVImageBuffer, CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetPixelFormatType,
+    CVPixelBufferGetWidth, kCVPixelBufferIOSurfacePropertiesKey, kCVPixelBufferPixelFormatTypeKey,
 };
 use objc2_video_toolbox::{
     VTDecodeFrameFlags, VTDecodeInfoFlags, VTDecompressionOutputCallbackRecord,
@@ -65,6 +60,7 @@ use crate::codec::{
 };
 use crate::decode::{Reorder, sets_complete, split_access_unit};
 use crate::fourcc::{os_status, pixel_format_from_cv};
+use crate::pixel_buffer::ReadLocked;
 
 /// Decoded frames waiting for [`poll`](VideoDecoder::poll), at most; beyond that
 /// [`can_accept`](VideoDecoder::can_accept) says no. Frames held for reordering don't
@@ -139,56 +135,6 @@ impl Drop for Session {
     }
 }
 
-/// A pixel buffer locked for reading, unlocked when dropped.
-struct ReadLocked<'a>(&'a CVPixelBuffer);
-
-impl<'a> ReadLocked<'a> {
-    fn lock(buffer: &'a CVPixelBuffer) -> Result<Self, PlatformError> {
-        // SAFETY: the buffer is live; a read-only lock lets us read its planes.
-        let status =
-            unsafe { CVPixelBufferLockBaseAddress(buffer, CVPixelBufferLockFlags::ReadOnly) };
-        check(
-            status,
-            "CVPixelBufferLockBaseAddress",
-            "locking a decoded frame",
-        )?;
-        Ok(Self(buffer))
-    }
-
-    /// Plane `index`'s bytes (the whole buffer for a packed format) and its stride.
-    fn plane(&self, index: usize) -> Option<(&[u8], usize)> {
-        let buffer = self.0;
-        let (base, stride, rows) = if CVPixelBufferIsPlanar(buffer) {
-            (
-                CVPixelBufferGetBaseAddressOfPlane(buffer, index),
-                CVPixelBufferGetBytesPerRowOfPlane(buffer, index),
-                CVPixelBufferGetHeightOfPlane(buffer, index),
-            )
-        } else if index == 0 {
-            (
-                CVPixelBufferGetBaseAddress(buffer),
-                CVPixelBufferGetBytesPerRow(buffer),
-                CVPixelBufferGetHeight(buffer),
-            )
-        } else {
-            return None;
-        };
-        let base = NonNull::new(base.cast::<u8>())?;
-        let len = stride.checked_mul(rows)?;
-        // SAFETY: while the buffer is locked, Core Video's base address for the plane
-        // points at `rows` rows of `stride` bytes it owns. The borrow is tied to `&self`,
-        // so it ends before the unlock.
-        Some((unsafe { slice::from_raw_parts(base.as_ptr(), len) }, stride))
-    }
-}
-
-impl Drop for ReadLocked<'_> {
-    fn drop(&mut self) {
-        // SAFETY: this buffer was locked with the same (read-only) flags in `lock`.
-        let _ = unsafe { CVPixelBufferUnlockBaseAddress(self.0, CVPixelBufferLockFlags::ReadOnly) };
-    }
-}
-
 /// `buffer`'s picture as a tightly packed CPU frame presented at `pts`.
 pub(crate) fn copy_image(
     buffer: &CVPixelBuffer,
@@ -209,18 +155,14 @@ pub(crate) fn copy_image(
         color: ColorInfo::default(),
         pts,
     };
-    let locked = ReadLocked::lock(buffer)?;
+    let locked = ReadLocked::lock(buffer, "a decoded frame")?;
     let mut planes = Vec::with_capacity(format.plane_count());
     for index in 0..format.plane_count() {
         let Some(geometry) = info.plane(index)? else {
             break;
         };
-        let (src, src_stride) = locked
-            .plane(index)
-            .ok_or_else(|| PlatformError::Unsupported {
-                what: format!("plane {index} of a decoded {format:?} frame"),
-            })?;
         let rows = usize::try_from(geometry.height).unwrap_or(usize::MAX);
+        let (src, src_stride) = locked.plane(index, rows)?;
         let mut data = vec![0u8; geometry.row_bytes * rows];
         copy_rows(
             src,

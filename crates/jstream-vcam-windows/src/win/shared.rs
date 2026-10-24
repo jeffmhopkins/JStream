@@ -62,6 +62,39 @@ pub(crate) unsafe fn sid_string(sid: PSID) -> Result<String> {
     Ok(unsafe { text.to_string() }?)
 }
 
+/// The owner SID, as a string, of the kernel object `handle` opens (a section, a shared
+/// texture or a fence). The handle must carry `READ_CONTROL`.
+pub(crate) fn owner_sid(handle: &OwnedHandle) -> Result<String> {
+    let mut owner = PSID::default();
+    let mut sd = PSECURITY_DESCRIPTOR::default();
+    // SAFETY: `GetSecurityInfo(HANDLE, SE_OBJECT_TYPE, SECURITY_INFORMATION, PSID*, PSID*,
+    // PACL*, PACL*, PSECURITY_DESCRIPTOR*) -> DWORD`: `handle` is live while borrowed; the
+    // out-pointers are valid. On success `owner` points into `sd`, which `_free` releases
+    // after the last use.
+    let err = unsafe {
+        GetSecurityInfo(
+            handle.0,
+            SE_KERNEL_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            Some(&mut owner),
+            None,
+            None,
+            None,
+            Some(&mut sd),
+        )
+    };
+    let _free = LocalMem(sd.0);
+    err.to_hresult().ok()?;
+    if owner.0.is_null() {
+        return Err(windows_core::Error::new(
+            windows::Win32::Foundation::E_FAIL,
+            "the object has no owner",
+        ));
+    }
+    // SAFETY: `owner` points into `sd`, which is still allocated.
+    unsafe { sid_string(owner) }
+}
+
 /// The control block's file mapping, mapped read-write into this process.
 pub(crate) struct Mapping {
     handle: OwnedHandle,
@@ -91,32 +124,7 @@ impl Mapping {
     /// The mapping's owner SID, as a string. The contract's DACL grants LOCAL SERVICE
     /// `GA`, so the handle opened with `FILE_MAP_ALL_ACCESS` carries `READ_CONTROL`.
     pub(crate) fn owner_sid(&self) -> Result<String> {
-        let mut owner = PSID::default();
-        let mut sd = PSECURITY_DESCRIPTOR::default();
-        // SAFETY: `handle` is a live section handle; the out-pointers are valid. On
-        // success `owner` points into `sd`, which `_free` releases after the last use.
-        let err = unsafe {
-            GetSecurityInfo(
-                self.handle.0,
-                SE_KERNEL_OBJECT,
-                OWNER_SECURITY_INFORMATION,
-                Some(&mut owner),
-                None,
-                None,
-                None,
-                Some(&mut sd),
-            )
-        };
-        let _free = LocalMem(sd.0);
-        err.to_hresult().ok()?;
-        if owner.0.is_null() {
-            return Err(windows_core::Error::new(
-                windows::Win32::Foundation::E_FAIL,
-                "the control block has no owner",
-            ));
-        }
-        // SAFETY: `owner` points into `sd`, which is still allocated.
-        unsafe { sid_string(owner) }
+        owner_sid(&self.handle)
     }
 
     pub(crate) fn control(&self) -> &Control {

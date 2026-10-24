@@ -4,11 +4,12 @@
 //! only on `jstream-media`, `jstream-plugin-proto` (the CLAP plugin hosts' contract),
 //! `thiserror`, `wgpu` (for the GPU-frame types) and `crossbeam-utils` (for the
 //! mailbox). The [`paths`] module finds the data folder every host keeps its state in
-//! (ADR-0020). Two safe, platform-independent helpers are shared by the platform
+//! (ADR-0066). Two safe, platform-independent helpers are shared by the platform
 //! crates: [`mailbox`], the capture callbacks' latest-frame slot, and [`nv12`], the CPU
-//! RGB-to-NV12 converter.
+//! RGB-to-NV12 converter. [`draw_cursor`] draws a pointer that a capture sent beside its
+//! frames into a CPU frame.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-platform/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0014-media-clock.md, docs/adr/0020-portable-windows-distribution.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-platform/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0014-media-clock.md, docs/adr/0066-portable-windows-distribution-v2.md
 
 #![forbid(unsafe_code)]
 
@@ -17,6 +18,7 @@ mod backends;
 mod capture;
 mod clock;
 mod codec;
+mod cursor;
 mod error;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
@@ -48,6 +50,7 @@ pub use codec::{
     AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, HardwarePreference,
     RateControl, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
 };
+pub use cursor::{CaptureCursor, CursorCapture, CursorImage, draw_cursor};
 pub use error::PlatformError;
 pub use gpu::{AdapterId, ContextKey, FrameSync, GpuContext, GpuFrame, GpuInterop};
 pub use id::DeviceId;

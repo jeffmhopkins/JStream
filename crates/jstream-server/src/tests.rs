@@ -460,6 +460,8 @@ fn a_batch_a_query_and_events_round_trip() {
         next_event(&harness, &mut events),
         Some(Event::StudioChanged {
             program_scene: Some(SceneId::new("main")),
+            preview_scene: Some(SceneId::new("main")),
+            transition: None,
             client_id: client_id.clone(),
             request_id: Some(RequestId::new("req_1")),
         })
@@ -1552,6 +1554,141 @@ fn calls_in_flight_per_connection_are_capped() {
     });
     assert_eq!(answered, sent);
     assert_eq!(entered.load(Ordering::SeqCst), sent);
+}
+
+/// Pings every 100 ms and closes a connection not heard from for 300 ms; the handshake
+/// timeout is long enough not to matter.
+fn quick_liveness(config: &mut ServerConfig) {
+    config.handshake_timeout = Duration::from_secs(60);
+    config.ping_interval = Duration::from_millis(100);
+    config.liveness_timeout = Duration::from_millis(300);
+}
+
+/// The raw `hello` text.
+fn raw_hello() -> String {
+    format!(
+        r#"{{"type":"hello","protocol":{{"major":{},"minor":{}}},"client_name":"raw"}}"#,
+        PROTOCOL_VERSION.major, PROTOCOL_VERSION.minor
+    )
+}
+
+/// A client that completed its handshake and then stops reading, so its WebSocket layer
+/// answers none of the server's pings, is closed with code 1008 once the liveness
+/// timeout has passed, and its session is dropped, which expires its live-value gestures
+/// (ADR-0032).
+#[test]
+fn a_client_that_never_answers_pings_is_closed() {
+    let harness = start_with(&MockEngine::new(), quick_liveness);
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(None, Some(&harness.authority), Some(&bearer)) {
+        Ok(socket) => socket,
+        Err(status) => panic!("upgrade refused: {status}"),
+    };
+    match exchange(&harness, &mut socket, &raw_hello()) {
+        ServerMessage::Welcome(_) => {}
+        other => panic!("unexpected reply {other:?}"),
+    }
+    // Not reading the socket means not answering pings.
+    harness.run(async { tokio::time::sleep(Duration::from_millis(800)).await });
+    let frame = harness.run(async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Close(frame))) => break frame,
+                Some(Ok(_)) => continue,
+                other => panic!("connection ended without a close: {other:?}"),
+            }
+        }
+    });
+    let Some(frame) = frame else {
+        panic!("a close frame without a code");
+    };
+    assert_eq!(u16::from(frame.code), 1008);
+    assert_eq!(frame.reason.as_str(), "no answer to pings in time");
+    harness.wait_until(|| harness.open.load(Ordering::SeqCst) == 0);
+}
+
+/// A client that answers the pings (its WebSocket layer does, while it reads) stays open
+/// however long it sends nothing itself.
+#[test]
+fn a_client_that_answers_pings_stays_open() {
+    let harness = start_with(&MockEngine::new(), quick_liveness);
+    let (control, _) = harness.session();
+    harness.run(async { tokio::time::sleep(Duration::from_millis(1000)).await });
+    let response = ok(harness.run(control.call(create_scene("main"))));
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
+}
+
+/// While the server has stopped reading a connection (here: `MAX_IN_FLIGHT` calls the
+/// engine hasn't answered), the client's silence doesn't count against it, since its
+/// pongs would wait unread behind its requests: the connection outlasts the liveness
+/// timeout and every request is answered.
+#[test]
+fn a_connection_the_server_stopped_reading_is_not_timed_out() {
+    use crate::session::MAX_IN_FLIGHT;
+    let entered = Arc::new(AtomicUsize::new(0));
+    let gate = Arc::new(Semaphore::new(0));
+    let engine = MockEngine::new();
+    let connector: Connector = {
+        let (entered, gate) = (Arc::clone(&entered), Arc::clone(&gate));
+        Arc::new(move || {
+            Box::new(Stalled {
+                inner: engine.connect(),
+                entered: Arc::clone(&entered),
+                gate: Arc::clone(&gate),
+            })
+        })
+    };
+    let harness = serve(
+        connector,
+        quick_liveness,
+        Arc::default(),
+        Arc::default(),
+        Arc::default(),
+        Arc::default(),
+    );
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(None, Some(&harness.authority), Some(&bearer)) {
+        Ok(socket) => socket,
+        Err(status) => panic!("refused: {status}"),
+    };
+    match exchange(&harness, &mut socket, &raw_hello()) {
+        ServerMessage::Welcome(_) => {}
+        other => panic!("unexpected reply {other:?}"),
+    }
+    let sent = MAX_IN_FLIGHT + 1;
+    harness.run(async {
+        for n in 0..sent {
+            let request = format!(
+                r#"{{"type":"request","id":"q{n}","call":{{"kind":"query","query":{{"type":"scene.list"}}}}}}"#
+            );
+            if let Err(error) = socket.send(Message::Text(request.into())).await {
+                panic!("send: {error}");
+            }
+        }
+    });
+    harness.wait_until(|| entered.load(Ordering::SeqCst) >= MAX_IN_FLIGHT);
+    // Well past the liveness timeout, with the client reading nothing, so answering no
+    // ping.
+    harness.run(async { tokio::time::sleep(Duration::from_millis(800)).await });
+    gate.add_permits(sent);
+    let answered = harness.run(async {
+        let mut answered = 0;
+        while answered < sent {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    match serde_json::from_str::<ServerMessage>(text.as_str()) {
+                        Ok(ServerMessage::Response(_)) => answered += 1,
+                        Ok(ServerMessage::Event(_)) => {}
+                        other => panic!("unexpected reply {other:?}"),
+                    }
+                }
+                Some(Ok(_)) => {}
+                other => panic!("connection ended: {other:?}"),
+            }
+        }
+        answered
+    });
+    assert_eq!(answered, sent);
 }
 
 // MCP's streamable-HTTP transport (`mcp.rs`), driven with raw HTTP/1.1 requests.

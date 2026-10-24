@@ -2,15 +2,17 @@
 
 use crate::abi;
 use crate::block_on::block_on;
-use crate::capability::Capabilities;
+use crate::capability::{Capabilities, command_names};
 use crate::error::Error;
+use crate::events::EventSender;
 use crate::limits::{self, Limits};
+use crate::rate::CommandRate;
 use jstream_control::protocol::Call;
 use jstream_control::{Control, ControlError};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use wasmtime::{
     AsContextMut, Caller, Config, Engine, Extern, Instance, Linker, Memory, Module, Store,
     StoreLimits, StoreLimitsBuilder,
@@ -108,6 +110,8 @@ struct HostState {
     result: Vec<u8>,
     /// What the host passed to the current invocation, for `input_read`.
     input: Vec<u8>,
+    /// One instant per command sent to `Control` in the last second, against the cap.
+    rate: CommandRate,
     /// The deadline of one invocation, in epoch ticks.
     call_ticks: u64,
     /// The deadline of the current entry into the plugin, the load's or an
@@ -127,6 +131,8 @@ pub struct Plugin {
     store: Store<HostState>,
     instance: Instance,
     fuel: u64,
+    /// The engine events waiting for the plugin.
+    events: EventSender,
     /// Keeps the epoch advancing while the plugin lives, even after its host is dropped.
     _ticker: Arc<Ticker>,
 }
@@ -165,6 +171,7 @@ impl Plugin {
                 .build(),
             result: Vec::new(),
             input: Vec::new(),
+            rate: CommandRate::new(limits.commands_per_second()),
             call_ticks: limits::ticks(limits.call_deadline(), EPOCH_TICK),
             entry_ticks: limits::ticks(limits.load_deadline(), EPOCH_TICK),
         };
@@ -188,6 +195,7 @@ impl Plugin {
             store,
             instance,
             fuel: limits.fuel(),
+            events: EventSender::default(),
             _ticker: host.ticker.clone(),
         })
     }
@@ -214,6 +222,27 @@ impl Plugin {
             .map_err(|e| Error::from_run(e, Error::Trap))
     }
 
+    /// Where the engine queues events for this plugin, from any thread. The queue holds at
+    /// most [`MAX_QUEUED_EVENTS`](crate::MAX_QUEUED_EVENTS) (ADR-0069): an event that
+    /// finds it full drops the queued events, and the plugin is next handed one
+    /// `events.dropped` notice with their count.
+    pub fn events(&self) -> EventSender {
+        self.events.clone()
+    }
+
+    /// Hands the plugin its next queued event: invokes `entry` (type `() -> ()`) with the
+    /// protocol `Event` as JSON for its input, as [`Self::invoke`] does. `Ok(false)` when
+    /// no event waits. The event is taken off the queue even when the invocation fails.
+    pub fn deliver_event(&mut self, entry: &str) -> Result<bool, Error> {
+        let Some(event) = self.events.next() else {
+            return Ok(false);
+        };
+        // An `Event` is plain data with string keys, so this doesn't fail in practice.
+        let input = serde_json::to_vec(&event).map_err(|e| Error::Engine(e.into()))?;
+        self.invoke(entry, &input)?;
+        Ok(true)
+    }
+
     /// The fuel the last invocation left unused.
     pub fn fuel_left(&self) -> u64 {
         self.store.get_fuel().unwrap_or(0)
@@ -238,7 +267,7 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
             }
             let mut bytes = vec![0; len];
             memory.read(&caller, offset(ptr), &mut bytes)?;
-            let (status, result) = call(caller.data(), &bytes);
+            let (status, result) = call(caller.data_mut(), &bytes);
             caller.data_mut().result = result;
             // The time the engine took to answer doesn't count against the plugin.
             let ticks = caller.data().entry_ticks;
@@ -285,9 +314,9 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
     Ok(linker)
 }
 
-/// Checks one call against the plugin's grants and, if allowed, sends it. Answers the
-/// status and the result bytes the plugin reads back.
-fn call(state: &HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
+/// Checks one call against the plugin's grants and its cap of commands a second and, if
+/// both allow it, sends it. Answers the status and the result bytes the plugin reads back.
+fn call(state: &mut HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
     let call: Call = match serde_json::from_slice(bytes) {
         Ok(call) => call,
         Err(e) => return (abi::STATUS_MALFORMED, e.to_string().into_bytes()),
@@ -295,6 +324,14 @@ fn call(state: &HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
     if let Err(denied) = state.capabilities.check(&call) {
         let body = serde_json::json!({ "denied": denied });
         return (abi::STATUS_DENIED, body.to_string().into_bytes());
+    }
+    // Every edit of a batch is a command (ADR-0013), so each counts against the cap.
+    let commands = command_names(&call).map_or(1, |names| names.len());
+    if !state.rate.admit(Instant::now(), commands) {
+        let body = serde_json::json!({
+            "limited": { "per_second": state.rate.cap(), "commands": commands }
+        });
+        return (abi::STATUS_LIMITED, body.to_string().into_bytes());
     }
     let answer = block_on(state.control.call(call));
     let encoded = match answer {
