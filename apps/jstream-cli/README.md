@@ -183,7 +183,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   refused before it is buffered or sent) is a usage error too, and the key is read
   before connecting. Neither the CLI nor the engine prints a key back: the
   reply is `output.set_key accepted for <id> (<request>)`, and `output status` says
-  only whether one is set.
+  only whether one is set, and warns when a plain `rtmp://` server would receive it
+  unencrypted.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
   the `state.changed` (or `studio.changed`, or `privacy.changed`) event it causes; an event an undo or redo caused ends with
@@ -207,7 +208,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   sends, the transition presets, the folders and labels, and each scene's and source's
   organisation metadata. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
-  `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
+  `, own encoder` or `, encoder shared with <id>, <id>`, then
+  `; warning: plain rtmp://, the stream key is sent unencrypted` when the engine reports
+  `cleartext` (protocol 0.37). An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.

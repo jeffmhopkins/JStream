@@ -600,8 +600,23 @@ fn queries_match_the_parity_fixture() {
             encoder: None,
             encoder_sessions: 0,
             hardware_sessions: 0,
+            cleartext: false,
         })
     );
+    // `cleartext` follows the output's server URL (#562): Twitch's is plain `rtmp://`,
+    // YouTube's `rtmps://`, and the recording and the virtual camera send no key.
+    for (id, want) in [("rec", false), ("tw", true), ("vcam", false), ("yt", false)] {
+        let status = query(
+            &control,
+            Query::OutputStatus {
+                output_id: OutputId::new(id),
+            },
+        );
+        let Ok(QueryResult::OutputStatus { cleartext, .. }) = status else {
+            panic!("{status:?}");
+        };
+        assert_eq!(cleartext, want, "{id}");
+    }
     let missing = query(
         &control,
         Query::OutputStatus {

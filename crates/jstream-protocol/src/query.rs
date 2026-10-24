@@ -265,6 +265,13 @@ pub enum QueryResult {
         /// Of `encoder_sessions`, the hardware ones. Missing parses as 0.
         #[serde(default)]
         hardware_sessions: u32,
+        /// Whether publishing sends the stream key across the network unencrypted:
+        /// a generic RTMP target whose server URL is plain `rtmp://` to a host other than
+        /// the engine's machine (loopback and `localhost` don't count). A client shows it
+        /// as a warning; the engine still publishes. Missing (from a server older than
+        /// 0.37) parses as `false`.
+        #[serde(default)]
+        cleartext: bool,
     },
     /// The result of `source.list`.
     #[serde(rename = "source.list")]

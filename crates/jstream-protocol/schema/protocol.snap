@@ -5954,6 +5954,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `output.status`. Output state is runtime state, not collection\nstate, so it carries no `rev`.",
           "properties": {
+            "cleartext": {
+              "default": false,
+              "description": "Whether publishing sends the stream key across the network unencrypted:\na generic RTMP target whose server URL is plain `rtmp://` to a host other than\nthe engine's machine (loopback and `localhost` don't count). A client shows it\nas a warning; the engine still publishes. Missing (from a server older than\n0.37) parses as `false`.",
+              "type": "boolean"
+            },
             "encoder": {
               "anyOf": [
                 {
@@ -7900,5 +7905,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.36"
+  "title": "JStream protocol 0.37"
 }

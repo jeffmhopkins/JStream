@@ -366,10 +366,10 @@ intercepted connection.
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
 the URL, as the target documentation warns. Plain `rtmp://` to another machine sends
 the key across the network in the clear, since some ingest servers offer nothing else.
-The engine logs a warning naming the host on each start, and the web UI's output card
-shows one (`RtmpUrl::sends_key_in_cleartext`; `localhost` and loopback are exempt).
-`output.status` carries no flag for it yet, so other clients must apply the rule
-themselves.
+The engine logs a warning naming the host on each start, and `output.status` reports
+it as `cleartext` (from protocol 0.37), which the web UI's output card and the CLI
+show. The rule is `jstream-protocol`'s `rtmp_url_sends_key_in_cleartext`; `localhost`
+and loopback are exempt.
 
 **Accepted** ([ADR-0071](../adr/0071-linux-secret-store.md), nothing built): on Linux,
 keys and refresh tokens go to the Secret Service, and only where none is reachable to

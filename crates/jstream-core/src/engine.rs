@@ -1114,6 +1114,7 @@ impl Engine {
                     encoder: _,
                     encoder_sessions: _,
                     hardware_sessions: _,
+                    cleartext,
                 },
         }) = result
         else {
@@ -1138,6 +1139,7 @@ impl Engine {
                 encoder,
                 encoder_sessions,
                 hardware_sessions,
+                cleartext,
             },
         })
     }
@@ -2622,6 +2624,11 @@ impl State {
                     encoder: None,
                     encoder_sessions: 0,
                     hardware_sessions: 0,
+                    cleartext: self
+                        .graph
+                        .state()
+                        .output(output_id)
+                        .is_some_and(|output| output.kind().sends_key_in_cleartext()),
                 },
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),

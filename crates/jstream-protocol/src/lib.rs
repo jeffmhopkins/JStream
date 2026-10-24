@@ -78,7 +78,10 @@ pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use organise::{
     FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon,
 };
-pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
+pub use output::{
+    OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
+    rtmp_url_sends_key_in_cleartext,
+};
 pub use plugin::{
     PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginScope,
     PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope, settings_reach,
