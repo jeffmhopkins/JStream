@@ -470,8 +470,8 @@ id = "V0"
 milestone = "M1b"
 title = "Video filter chain runtime"
 status = "review"
-prs = [595, 607, 626, 717, 730]
-note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
+prs = [595, 607, 626, 712, 717, 730]
+note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers, and #730 uploads LUT tables directly; then effect-pack kinds. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
 needs = ["build"]
 
 [[item]]

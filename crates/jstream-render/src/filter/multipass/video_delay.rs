@@ -209,7 +209,7 @@ impl Pass for VideoDelay {
         if self.ring.wants(now, self.delay / (capacity - 1) as f64) {
             let frame = match self.ring.reuse(capacity) {
                 Some(frame) => frame,
-                None => ctx.scratch(w, h)?,
+                None => ctx.layer(w, h)?,
             };
             copy(ctx, input, &frame)?;
             self.ring.push(now, frame);

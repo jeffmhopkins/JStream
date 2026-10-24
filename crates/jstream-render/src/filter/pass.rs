@@ -2,9 +2,9 @@
 //! on first use, and [`Ctx::draw`], one fullscreen pass from an input (and an optional
 //! auxiliary image) into a target.
 //!
-//! Each draw creates its two small uniform buffers and its bind group. The chain runtime
-//! (V0) pools intermediate images and these buffers; until then a filter costs a few
-//! small allocations per frame.
+//! A multi-pass filter's intermediate layers come from its own [`Scratch`] pool, so a
+//! filter that runs every frame at one size makes them once. Each draw still creates its
+//! two small uniform buffers, two views and its bind group.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,7 +47,9 @@ pub(crate) trait Pass: Send {
     }
 
     /// Records the filter into `ctx`: read `input`, fill all of `output`, a layer of
-    /// [`Self::output_size`]. Multi-pass filters draw into [`Ctx::scratch`] images first.
+    /// [`Self::output_size`]. Multi-pass filters draw into [`Ctx::scratch`] images first,
+    /// and keep nothing from them past the call; an image kept between frames comes from
+    /// [`Ctx::layer`].
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
@@ -301,6 +303,59 @@ fn ready<T>(future: impl Future<Output = Option<T>>) -> Option<T> {
     }
 }
 
+/// One filter's intermediate layers, kept between its calls (V0, #369): the `n`th
+/// [`Ctx::scratch`] of a call gets the `n`th layer of the call before when it has the
+/// size asked for, so a filter at a steady size makes its layers once. A layer of another
+/// size, or of another compositor, is replaced. Commands on the queue run in order, so a
+/// layer redrawn this call doesn't disturb what an earlier submit drew from it, and two
+/// scratch layers of one call are never the same.
+///
+/// It lives in the [`super::VideoFilter`], so a filter the chain runtime retires takes
+/// its layers to the cache's collector with it (R-RT-003). Layers a call didn't ask for
+/// are dropped at its end, and one replaced for a new size at once, on the drawing thread:
+/// a size change or a filter needing fewer layers, not every frame.
+#[derive(Default)]
+pub(crate) struct Scratch {
+    layers: Vec<Image>,
+    /// How many layers this call has taken.
+    taken: usize,
+}
+
+impl Scratch {
+    /// Starts a call: its first [`Self::take`] gets the first layer.
+    pub(crate) fn begin(&mut self) {
+        self.taken = 0;
+    }
+
+    /// Ends a call, dropping the layers it didn't take.
+    pub(crate) fn end(&mut self) {
+        self.layers.truncate(self.taken);
+    }
+
+    /// The call's next layer, of `width` by `height`.
+    fn take(&mut self, maker: &Maker<'_>, width: u32, height: u32) -> Result<Image, RenderError> {
+        let index = self.taken;
+        let fits = self.layers.get(index).is_some_and(|layer| {
+            (layer.width(), layer.height()) == (width, height) && layer.owner().is(maker.owner)
+        });
+        if !fits {
+            let layer = image::layer(maker, width, height)?;
+            match self.layers.get_mut(index) {
+                Some(slot) => *slot = layer,
+                None => self.layers.push(layer),
+            }
+        }
+        self.taken += 1;
+        Ok(self.layers[index].clone())
+    }
+
+    /// The layers kept, for tests.
+    #[cfg(test)]
+    pub(crate) fn kept(&self) -> &[Image] {
+        &self.layers
+    }
+}
+
 /// What a [`Pass`] draws with: the device, the frame's command encoder, and the clock.
 pub(crate) struct Ctx<'a> {
     pub(crate) gpu: &'a Gpu,
@@ -312,6 +367,8 @@ pub(crate) struct Ctx<'a> {
     /// textures: `apply_filter` stages them with the input's before the submit and hands
     /// them back at its end.
     pub(crate) holds: &'a mut Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
+    /// The drawing filter's intermediate layers.
+    pub(crate) scratch: &'a mut Scratch,
 }
 
 impl Ctx<'_> {
@@ -330,9 +387,16 @@ impl Ctx<'_> {
         self.clock
     }
 
-    /// A new premultiplied layer to draw an intermediate pass into, or to keep between
-    /// frames.
-    pub(crate) fn scratch(&self, width: u32, height: u32) -> Result<Image, RenderError> {
+    /// A premultiplied layer to draw an intermediate pass into, from the filter's
+    /// [`Scratch`]: the same texture on the next call when the size holds, so it must not
+    /// be kept past this one.
+    pub(crate) fn scratch(&mut self, width: u32, height: u32) -> Result<Image, RenderError> {
+        self.scratch.take(&self.maker, width, height)
+    }
+
+    /// A new premultiplied layer of the filter's own, to keep between frames (a video
+    /// delay's held frames).
+    pub(crate) fn layer(&self, width: u32, height: u32) -> Result<Image, RenderError> {
         image::layer(&self.maker, width, height)
     }
 

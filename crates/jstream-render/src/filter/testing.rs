@@ -135,10 +135,7 @@ mod tests {
         const R: [u8; 4] = [255, 0, 0, 255];
         const C: [u8; 4] = [0, 0, 255, 128];
         let input = image(&opened, 2, &[R, C, C, R]);
-        let mut filter = VideoFilter {
-            kind: "test-copy".into(),
-            pass: Box::new(Copy),
-        };
+        let mut filter = VideoFilter::of("test-copy", Box::new(Copy));
         let output = opened
             .compositor
             .apply_filter(&mut filter, &input, FilterClock::default())
@@ -165,10 +162,7 @@ mod tests {
             .compositor
             .import_premultiplied(texture, None)
             .expect("a Unorm texture imports premultiplied");
-        let mut filter = VideoFilter {
-            kind: "test-copy".into(),
-            pass: Box::new(Copy),
-        };
+        let mut filter = VideoFilter::of("test-copy", Box::new(Copy));
         let output = opened
             .compositor
             .apply_filter(&mut filter, &input, FilterClock::default())
@@ -186,10 +180,7 @@ mod tests {
         };
         const R: [u8; 4] = [255, 0, 0, 255];
         const G: [u8; 4] = [0, 255, 0, 255];
-        let mut filter = VideoFilter {
-            kind: "test-copy".into(),
-            pass: Box::new(Copy),
-        };
+        let mut filter = VideoFilter::of("test-copy", Box::new(Copy));
         let output = opened.compositor.layer(2, 1).expect("layer");
         for colour in [R, G] {
             let input = image(&opened, 2, &[colour, colour]);
@@ -226,6 +217,91 @@ mod tests {
                 .compositor
                 .apply_filter_into(&mut filter, &input, &upload, clock),
         );
+    }
+
+    /// The scratch layers `filter` keeps, by texture.
+    fn kept(filter: &VideoFilter) -> Vec<wgpu::Texture> {
+        filter
+            .scratch()
+            .kept()
+            .iter()
+            .map(|layer| layer.texture().clone())
+            .collect()
+    }
+
+    /// V0 (#369): a filter's scratch layer is kept between calls at one size and redrawn
+    /// each call, and an input of another size replaces it.
+    #[test]
+    fn a_scratch_layer_is_kept_and_redrawn_at_one_size() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const R: [u8; 4] = [255, 0, 0, 255];
+        const G: [u8; 4] = [0, 255, 0, 255];
+        let mut filter = VideoFilter::of("test-copy", Box::new(Copy));
+        let mut first = None;
+        for colour in [R, G] {
+            let input = image(&opened, 2, &[colour, colour]);
+            let output = opened
+                .compositor
+                .apply_filter(&mut filter, &input, FilterClock::default())
+                .expect("apply_filter");
+            let snapshot = read(&mut opened, &output);
+            near(&snapshot, 0, 0, colour, 1);
+            near(&snapshot, 1, 0, colour, 1);
+            let layers = kept(&filter);
+            assert_eq!(layers.len(), 1, "one scratch layer");
+            match &first {
+                None => first = Some(layers),
+                Some(first) => assert_eq!(&layers, first, "the same layer, redrawn"),
+            }
+        }
+        let wider = image(&opened, 3, &[R, R, R]);
+        let output = opened
+            .compositor
+            .apply_filter(&mut filter, &wider, FilterClock::default())
+            .expect("apply_filter");
+        near(&read(&mut opened, &output), 2, 0, R, 1);
+        let layers = kept(&filter);
+        assert_eq!(layers.len(), 1);
+        assert_ne!(
+            Some(&layers),
+            first.as_ref(),
+            "a new size makes a new layer"
+        );
+        let layer = &filter.scratch().kept()[0];
+        assert_eq!((layer.width(), layer.height()), (3, 1));
+    }
+
+    /// V0 (#369): a real multi-pass kind's two scratch layers are different, are kept for
+    /// the next call, and draw what the first call drew. A video delay's held frames are
+    /// its own, not scratch, so a scratch layer can never overwrite one.
+    #[test]
+    fn a_multi_pass_kind_draws_the_same_from_kept_layers() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const R: [u8; 4] = [255, 0, 0, 255];
+        const T: [u8; 4] = [0, 0, 0, 0];
+        let mut outline = super::filter("outline", serde_json::json!({"width": 2.0}));
+        let input = image(
+            &opened,
+            4,
+            &[T, T, T, T, T, R, R, T, T, R, R, T, T, T, T, T],
+        );
+        let first = super::run(&mut opened, &mut outline, &input, 0.0);
+        let layers = kept(&outline);
+        assert_eq!(layers.len(), 2, "outline uses two scratch layers");
+        assert_ne!(layers[0], layers[1], "two layers of one call are different");
+        let again = super::run(&mut opened, &mut outline, &input, 0.0);
+        assert_eq!(kept(&outline), layers, "kept for the next call");
+        assert_eq!(again, first, "drawn the same from the kept layers");
+
+        let mut delay = super::filter("video_delay", serde_json::json!({"delay_ms": 100}));
+        for i in 0..4 {
+            super::run(&mut opened, &mut delay, &input, f64::from(i) * 0.05);
+        }
+        assert!(kept(&delay).is_empty(), "held frames aren't scratch layers");
     }
 
     /// Every kind is a unique `video_filter` with valid defaults and a pass that its

@@ -370,8 +370,9 @@ impl Compositor {
 
     /// [`Self::apply_filter`] into `output`, a [`Self::layer`] of the filter's
     /// [`VideoFilter::output_size`] for `input`, replacing what it held. The layer is
-    /// reused, so a chain that runs every frame allocates no output texture (a
-    /// multi-pass kind's scratch layers are still its own). Earlier submits that read
+    /// reused, so a chain that runs every frame allocates no output texture, and a
+    /// multi-pass kind keeps its scratch layers between calls at a steady size. Earlier
+    /// submits that read
     /// `output` are ordered before this one, so they keep its old contents.
     ///
     /// # Errors
@@ -413,6 +414,8 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-filter"),
             });
+        let (pass, scratch) = filter.parts();
+        scratch.begin();
         let mut ctx = filter::Ctx {
             gpu: &self.gpu,
             maker: Maker {
@@ -425,13 +428,16 @@ impl Compositor {
             encoder: &mut encoder,
             clock,
             holds: &mut self.staged,
+            scratch,
         };
         ctx.holds.clear();
-        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, output) {
+        let encoded = pass.encode(&mut ctx, input, output);
+        ctx.hold(input);
+        ctx.scratch.end();
+        if let Err(err) = encoded {
             self.staged.clear();
             return Err(err);
         }
-        ctx.hold(input);
         // Staged only once recording succeeded, right before the submit it arms, and
         // handed back to the platform at the end of that submit, as `render` does: the
         // input's hold and those of the images the filter reads besides it, each once.
