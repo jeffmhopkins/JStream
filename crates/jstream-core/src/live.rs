@@ -54,7 +54,7 @@ use jstream_sources::{
 use crate::filter_assets::{self, AssetKey, FilterAsset, FilterAssets, LoadError, Loaded};
 use crate::lock;
 use crate::runtime::{FRAME_DEN, FRAME_NUM};
-use crate::snapshot::{Frame, Look};
+use crate::snapshot::{CaptureKey, Frame, Look};
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
 /// thread never keeps it alive.
@@ -598,7 +598,13 @@ impl LiveSources {
         let running = entry.running.as_mut()?;
         if let Some(spec) = running.source.capture() {
             // A window source with no window chosen shows nothing.
-            return (*spec != CaptureSpec::Window(None)).then(|| Look::Capture(spec.clone()));
+            let show_cursor = running.source.show_cursor();
+            return (*spec != CaptureSpec::Window(None)).then(|| {
+                Look::Capture(
+                    CaptureKey::for_source(spec.clone(), source_id.clone())
+                        .with_cursor(show_cursor),
+                )
+            });
         }
         let at = since(now, running.start);
         if running.planned + 1 < plan {

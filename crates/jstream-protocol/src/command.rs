@@ -18,11 +18,12 @@ use crate::geometry::ItemGeometry;
 use crate::hotkey::Chord;
 use crate::id::{
     BusId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey, ItemId,
-    LabelId, OutputId, Rev, SceneId, SourceId, TransitionPresetId, VideoMixId,
+    LabelId, OutputId, PluginId, Rev, SceneId, SourceId, TransitionPresetId, VideoMixId,
 };
 use crate::mix::VideoMix;
 use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
+use crate::plugin::PluginGrant;
 use crate::preview::PreviewCodec;
 use crate::settings::Settings;
 use crate::transition::{Easing, ItemTransition};
@@ -168,9 +169,13 @@ pub enum Edit {
         transform: ItemTransform,
     },
     /// Replaces an item's placement with a box on the canvas (ADR-0022). A size that is
-    /// not greater than zero, a `perspective_px` that is not greater than zero, and any
-    /// non-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the
-    /// compositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous
+    /// not greater than zero and a `perspective_px` that is not greater than zero are
+    /// `invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is
+    /// accepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one
+    /// whose centre, size, depth or perspective is past 10^15 canvas pixels, or whose
+    /// drawn polygon would not be finite or would reach past that, is `invalid_argument`
+    /// on `geometry`. Earlier minors
+    /// rejected a non-neutral one with `invalid_argument`. Inverse: the previous
     /// placement, as `item.set_geometry` if it was a geometry and `item.set_transform`
     /// if it was legacy.
     #[serde(rename = "item.set_geometry")]
@@ -1211,6 +1216,44 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
+    /// Installs a WASM automation plugin from the package at `path` on the engine's
+    /// machine, with what the person granted it after seeing its manifest (0.35,
+    /// ADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person
+    /// only: no MCP tool carries it, and no plugin is ever granted it. Fails with
+    /// `already_exists` for a plugin ID in use, `invalid_argument` for a grant whose
+    /// `problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and
+    /// `unsupported` from an engine that hosts no plugins.
+    #[serde(rename = "plugin.install")]
+    PluginInstall {
+        /// The ID to install it under.
+        plugin_id: PluginId,
+        /// The plugin's package: its manifest and module.
+        path: String,
+        /// The classes, hosts and folders the person granted it.
+        grant: PluginGrant,
+    },
+    /// Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin
+    /// disabled because an update asks for more (`needs_grant`) stays disabled until a
+    /// grant covers the difference and it is re-enabled. For a person only, like
+    /// `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't
+    /// installed.
+    #[serde(rename = "plugin.grant")]
+    PluginGrant {
+        /// The plugin.
+        plugin_id: PluginId,
+        /// Its new grant.
+        grant: PluginGrant,
+    },
+    /// Re-enables a disabled plugin (0.35). The engine disables a plugin that runs past a
+    /// limit or traps, and never re-enables it by itself. Succeeds for one already
+    /// enabled. Fails with `not_found` for a plugin that isn't installed, and
+    /// `action_failed` for one whose update asks for more than its grant. For a person
+    /// only, like `plugin.install`.
+    #[serde(rename = "plugin.enable")]
+    PluginEnable {
+        /// The plugin.
+        plugin_id: PluginId,
+    },
     /// Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's
     /// video is covered from the next frame: a heavy blur of the outgoing picture, or
     /// black when the blur can't be drawn, never the picture itself. It is runtime
@@ -1248,6 +1291,9 @@ impl Action {
             Action::DeviceRevoke { .. } => "device.revoke",
             Action::StudioSetPreview { .. } => "studio.set_preview",
             Action::PrivacySet { .. } => "privacy.set",
+            Action::PluginInstall { .. } => "plugin.install",
+            Action::PluginGrant { .. } => "plugin.grant",
+            Action::PluginEnable { .. } => "plugin.enable",
         }
     }
 
@@ -1288,7 +1334,10 @@ impl Action {
             | Action::PreviewUnsubscribe { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
-            | Action::PrivacySet { .. } => vec![],
+            | Action::PrivacySet { .. }
+            | Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. } => vec![],
         }
     }
 
@@ -1318,6 +1367,13 @@ impl Action {
                 "type",
                 "a pairing or device action can't be bound: the server answers it for the \
                  client that asks",
+            )),
+            Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. } => Some((
+                "type",
+                "a plugin action can't be bound: a person installs, grants and re-enables \
+                 plugins through the UI (ADR-0069)",
             )),
             Action::YoutubeSignIn
             | Action::YoutubeSignOut

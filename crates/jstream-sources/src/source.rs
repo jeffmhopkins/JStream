@@ -83,6 +83,12 @@ pub trait Source: Send {
         None
     }
 
+    /// Whether the pointer shows in this source's [`capture`](Self::capture): its
+    /// `show_cursor` setting. `true`, the default, for every other source.
+    fn show_cursor(&self) -> bool {
+        true
+    }
+
     /// What draws this source's frames ahead of [`frame`](Self::frame), for a source
     /// whose frames follow something live; `None` (the default) for one whose frames are
     /// made on create and update.

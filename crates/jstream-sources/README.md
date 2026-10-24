@@ -46,9 +46,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   returns it from `audio` as a `SourceAudio`: its format, and `open(handler)`, which
   feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
   its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
-  `capture()` is `Some` for a `display` or `window` source: what the platform captures
-  for it (a `CaptureSpec`). Its frames come from the platform's capture backend on the
-  engine's render thread, so its `frame` is `SourceError::Captured`.
+  `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
+  captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
+  (`true`, the default, for a webcam and every other source). Its frames come from the
+  platform's capture or video-device backend on the engine's render thread, so its
+  `frame` is `SourceError::Captured`.
   `set_density(d)` asks a source to draw its frames `d` times as many pixels each way
   as its own size, so an item that shows it enlarged stays sharp, and returns that own
   size, which its frames are placed at; the default is `None`, a kind whose frames are
@@ -181,7 +183,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   which is what a `display` source showed before it had settings, so the kind keeps
   version 1 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). An
   empty `window` target captures nothing. A new target needs a new source. The engine's
-  `capture.targets` query lists the IDs a `target` can take.
+  `capture.targets` query lists the IDs a `target` can take. `show_cursor` (on by
+  default, which is what the kinds did before it, so they keep version 1) says whether
+  the pointer shows; `Source::show_cursor` reports it, and the engine asks the capture
+  backend to draw the pointer in when it is on and to leave it out when it is off.
+  Changing it needs a new source, so the capture starts again.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), so it plays the

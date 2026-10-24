@@ -67,24 +67,37 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
-            params: vec![ParamDescriptor {
-                id: "target".into(),
-                ty: ParamType::String {
-                    multiline: false,
-                    max_len: 1024,
-                },
-                default: serde_json::Value::from(""),
-                label: "Display".into(),
-                description: Some(
-                    "The ID of the display to capture, as `capture.targets` lists it. Empty \
+            params: vec![
+                ParamDescriptor {
+                    id: "target".into(),
+                    ty: ParamType::String {
+                        multiline: false,
+                        max_len: 1024,
+                    },
+                    default: serde_json::Value::from(""),
+                    label: "Display".into(),
+                    description: Some(
+                        "The ID of the display to capture, as `capture.targets` lists it. Empty \
                      captures the primary display."
-                        .into(),
-                ),
-                group: None,
-                advanced: false,
-                visible_if: None,
-                live: false,
-            }],
+                            .into(),
+                    ),
+                    group: None,
+                    advanced: false,
+                    visible_if: None,
+                    live: false,
+                },
+                ParamDescriptor {
+                    id: "show_cursor".into(),
+                    ty: ParamType::Bool,
+                    default: serde_json::Value::from(true),
+                    label: "Show cursor".into(),
+                    description: Some("Whether the pointer shows in the capture.".into()),
+                    group: None,
+                    advanced: false,
+                    visible_if: None,
+                    live: false,
+                },
+            ],
         },
         KindDescriptor {
             kind_id: "desktop_audio".into(),
@@ -757,20 +770,6 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 item_id: ItemId::new("i1"),
                 scene_id: None,
                 geometry: ItemGeometry {
-                    tilt_deg: finite(10.0),
-                    ..BOXED
-                },
-            }),
-            invalid(
-                "edits.0.geometry.tilt_deg",
-                "tilt, turn, depth and perspective are not drawn yet, so they must be neutral",
-            ),
-        ),
-        (
-            Batch::single(Edit::ItemSetGeometry {
-                item_id: ItemId::new("i1"),
-                scene_id: None,
-                geometry: ItemGeometry {
                     size: Size {
                         width: finite(0.0),
                         height: finite(10.0),
@@ -782,6 +781,23 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 "edits.0.geometry.size",
                 "item size must be greater than zero",
             ),
+        ),
+        (
+            // A tilted item so wide that its near-plane clip lands past MAX_DRAWN_PX.
+            Batch::single(Edit::ItemSetGeometry {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+                geometry: ItemGeometry {
+                    size: Size {
+                        width: finite(1e13),
+                        height: finite(2000.0),
+                    },
+                    tilt_deg: finite(60.0),
+                    perspective_px: Some(finite(800.0)),
+                    ..BOXED
+                },
+            }),
+            invalid("edits.0.geometry", "the item draws too far from the canvas"),
         ),
         (
             Batch::single(Edit::CanvasSetSize {
@@ -1990,9 +2006,12 @@ fn screen() -> SourceInfo {
         kind: SourceKind::Builtin {
             kind: "display".into(),
         },
-        settings: [("target".to_owned(), serde_json::Value::from(""))]
-            .into_iter()
-            .collect(),
+        settings: [
+            ("target".to_owned(), serde_json::Value::from("")),
+            ("show_cursor".to_owned(), serde_json::Value::from(true)),
+        ]
+        .into_iter()
+        .collect(),
         audio: None,
         ..cam()
     }

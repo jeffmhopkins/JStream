@@ -1,6 +1,7 @@
-//! SPA pods for the PipeWire video stream: the parameters JStream offers (formats,
-//! buffer types, metadata), the format PipeWire settles on, and turning a mapped
-//! buffer into a CPU frame (ADR-0060 §3).
+//! SPA pods for the PipeWire video stream: the parameters JStream offers (formats, with
+//! DMA-BUF modifiers on the GPU path, buffer types, metadata), the format PipeWire
+//! settles on, and turning a mapped buffer into a CPU frame (ADR-0060 §3). The audio
+//! streams' pods are in [`audio`].
 //!
 //! libspa builds and parses pods with inline header functions, which no library
 //! exports, so these are written here against the pod layout in `<spa/pod/pod.h>`:
@@ -12,9 +13,12 @@ use jstream_platform::media::{
     VideoFrameInfo,
 };
 
+pub(crate) mod audio;
+
 // `enum spa_type` in <spa/utils/type.h>.
 const TYPE_ID: u32 = 3;
 const TYPE_INT: u32 = 4;
+const TYPE_LONG: u32 = 5;
 const TYPE_RECTANGLE: u32 = 10;
 const TYPE_FRACTION: u32 = 11;
 const TYPE_OBJECT: u32 = 15;
@@ -27,6 +31,12 @@ const TYPE_OBJECT_PARAM_META: u32 = 0x40005;
 const CHOICE_NONE: u32 = 0;
 const CHOICE_RANGE: u32 = 1;
 const CHOICE_ENUM: u32 = 3;
+
+// Property flags in <spa/pod/pod.h>.
+/// `SPA_POD_PROP_FLAG_MANDATORY`.
+const PROP_MANDATORY: u32 = 1 << 3;
+/// `SPA_POD_PROP_FLAG_DONT_FIXATE`.
+const PROP_DONT_FIXATE: u32 = 1 << 4;
 
 // `enum spa_param_type` in <spa/param/param.h>.
 /// `SPA_PARAM_EnumFormat`.
@@ -54,6 +64,8 @@ const META_SIZE: u32 = 2;
 pub(crate) const DATA_MEM_PTR: u32 = 1;
 /// `SPA_DATA_MemFd`.
 pub(crate) const DATA_MEM_FD: u32 = 2;
+/// `SPA_DATA_DmaBuf`.
+pub(crate) const DATA_DMA_BUF: u32 = 3;
 /// `SPA_META_Header`.
 pub(crate) const META_HEADER: u32 = 1;
 /// `SPA_META_VideoCrop`.
@@ -96,7 +108,7 @@ impl SpaVideoFormat {
     }
 
     /// Whether the fourth byte is padding, to be made opaque.
-    fn padded(self) -> bool {
+    pub(crate) fn padded(self) -> bool {
         matches!(self, Self::Bgrx | Self::Rgbx)
     }
 }
@@ -109,6 +121,9 @@ pub(crate) struct VideoFormat {
     pub(crate) height: u32,
     /// Frames per second as a fraction; `0/1` for a variable rate.
     pub(crate) framerate: (u32, u32),
+    /// The DMA-BUF layout's DRM format modifier, when PipeWire settled on DMA-BUF
+    /// buffers; `None` for shared memory.
+    pub(crate) modifier: Option<u64>,
 }
 
 /// A pod under construction. Backed by `u64`s so it is 8-byte aligned, as libspa
@@ -138,12 +153,21 @@ impl Builder {
 
     /// An object of `object_type` for param `id`, with `props` (key, pod bytes).
     fn object(object_type: u32, id: u32, props: &[(u32, Vec<u8>)]) -> Pod {
+        let flagged: Vec<(u32, u32, Vec<u8>)> = props
+            .iter()
+            .map(|(key, value)| (*key, 0, value.clone()))
+            .collect();
+        Self::object_flagged(object_type, id, &flagged)
+    }
+
+    /// As [`object`](Self::object), with each property's flags: (key, flags, pod bytes).
+    fn object_flagged(object_type: u32, id: u32, props: &[(u32, u32, Vec<u8>)]) -> Pod {
         let mut body = Self::default();
         body.u32(object_type);
         body.u32(id);
-        for (key, value) in props {
+        for (key, flags, value) in props {
             body.u32(*key);
-            body.u32(0); // flags
+            body.u32(*flags);
             body.bytes.extend_from_slice(value);
         }
         let mut b = Self::default();
@@ -169,6 +193,22 @@ fn choice(kind: u32, child_type: u32, child_words: usize, values: &[u32]) -> Vec
     body.u32(child_type);
     for v in values {
         body.u32(*v);
+    }
+    let mut b = Builder::default();
+    b.pod(TYPE_CHOICE, &body.bytes);
+    b.bytes
+}
+
+/// An Enum choice pod's bytes over `Long` values (64-bit, such as DRM modifiers): the
+/// default, then the alternatives.
+fn choice_long(values: &[u64]) -> Vec<u8> {
+    let mut body = Builder::default();
+    body.u32(CHOICE_ENUM);
+    body.u32(0); // flags
+    body.u32(8);
+    body.u32(TYPE_LONG);
+    for v in values {
+        body.bytes.extend_from_slice(&v.to_ne_bytes());
     }
     let mut b = Builder::default();
     b.pod(TYPE_CHOICE, &body.bytes);
@@ -213,12 +253,13 @@ impl Pod {
     }
 }
 
-/// The `EnumFormat` param JStream offers: raw video in one of
+/// The `EnumFormat` param JStream offers for shared memory: raw video in one of
 /// [`SpaVideoFormat::OFFERED`], any size up to 8192², any frame rate up to 360/1
 /// (the source's own, 60/1 preferred).
 pub(crate) fn enum_format() -> Pod {
     let mut formats = vec![SpaVideoFormat::OFFERED[0] as u32]; // the default, then the choices
     formats.extend(SpaVideoFormat::OFFERED.iter().map(|f| *f as u32));
+    let [size, rate] = size_and_rate();
     Builder::object(
         TYPE_OBJECT_FORMAT,
         PARAM_ENUM_FORMAT,
@@ -229,28 +270,79 @@ pub(crate) fn enum_format() -> Pod {
                 FORMAT_VIDEO_FORMAT,
                 choice(CHOICE_ENUM, TYPE_ID, 1, &formats),
             ),
-            (
-                FORMAT_VIDEO_SIZE,
-                choice(
-                    CHOICE_RANGE,
-                    TYPE_RECTANGLE,
-                    2,
-                    &[1920, 1080, 1, 1, 8192, 8192],
-                ),
-            ),
-            (
-                FORMAT_VIDEO_FRAMERATE,
-                choice(CHOICE_RANGE, TYPE_FRACTION, 2, &[60, 1, 0, 1, 360, 1]),
-            ),
+            size,
+            rate,
         ],
     )
 }
 
-/// The params to set once a format is settled: buffers in shared or plain memory
-/// (mapped by PipeWire, so a CPU copy can read them), and the header and crop
-/// metadata.
-pub(crate) fn buffer_params() -> [Pod; 3] {
-    let data_types = (1 << DATA_MEM_PTR) | (1 << DATA_MEM_FD);
+/// The size and frame-rate properties every offer has.
+fn size_and_rate() -> [(u32, Vec<u8>); 2] {
+    [
+        (
+            FORMAT_VIDEO_SIZE,
+            choice(
+                CHOICE_RANGE,
+                TYPE_RECTANGLE,
+                2,
+                &[1920, 1080, 1, 1, 8192, 8192],
+            ),
+        ),
+        (
+            FORMAT_VIDEO_FRAMERATE,
+            choice(CHOICE_RANGE, TYPE_FRACTION, 2, &[60, 1, 0, 1, 360, 1]),
+        ),
+    ]
+}
+
+/// The `EnumFormat` params JStream offers, best first: on the GPU path one DMA-BUF
+/// offer per format in `dmabuf` that has modifiers (the format fixed, its modifiers an
+/// Enum choice flagged mandatory and don't-fixate, as PipeWire's DMA-BUF negotiation
+/// asks of a consumer: the producer picks the modifier it allocates with), then the
+/// shared-memory offer, which every producer takes and which is the CPU fallback.
+pub(crate) fn enum_formats(dmabuf: &[(SpaVideoFormat, Vec<u64>)]) -> Vec<Pod> {
+    let mut offers: Vec<Pod> = dmabuf
+        .iter()
+        .filter(|(_, modifiers)| !modifiers.is_empty())
+        .map(|(format, modifiers)| {
+            let mut choices = vec![modifiers[0]]; // the default, then the choices
+            choices.extend_from_slice(modifiers);
+            let [size, rate] = size_and_rate();
+            Builder::object_flagged(
+                TYPE_OBJECT_FORMAT,
+                PARAM_ENUM_FORMAT,
+                &[
+                    (FORMAT_MEDIA_TYPE, 0, value(TYPE_ID, &[MEDIA_TYPE_VIDEO])),
+                    (
+                        FORMAT_MEDIA_SUBTYPE,
+                        0,
+                        value(TYPE_ID, &[MEDIA_SUBTYPE_RAW]),
+                    ),
+                    (FORMAT_VIDEO_FORMAT, 0, value(TYPE_ID, &[*format as u32])),
+                    (
+                        FORMAT_VIDEO_MODIFIER,
+                        PROP_MANDATORY | PROP_DONT_FIXATE,
+                        choice_long(&choices),
+                    ),
+                    (size.0, 0, size.1),
+                    (rate.0, 0, rate.1),
+                ],
+            )
+        })
+        .collect();
+    offers.push(enum_format());
+    offers
+}
+
+/// The params to set once a format is settled: DMA-BUF buffers for a format with a
+/// modifier (`dmabuf`), else buffers in shared or plain memory (mapped by PipeWire, so a
+/// CPU copy can read them); and the header and crop metadata.
+pub(crate) fn buffer_params(dmabuf: bool) -> [Pod; 3] {
+    let data_types = if dmabuf {
+        1 << DATA_DMA_BUF
+    } else {
+        (1 << DATA_MEM_PTR) | (1 << DATA_MEM_FD)
+    };
     [
         Builder::object(
             TYPE_OBJECT_PARAM_BUFFERS,
@@ -311,7 +403,8 @@ fn first_value(r: &PodReader<'_>, pod_at: usize) -> Option<(u32, usize, usize)> 
 }
 
 /// Parses the `Format` param PipeWire settled on. `None` when it is not raw video in a
-/// format JStream offered, or carries a DMA-BUF modifier (not requested yet).
+/// format JStream offered. A DMA-BUF format's modifier is the `Long` value (or a
+/// choice's default) of its modifier property.
 pub(crate) fn parse_format(pod: &[u8]) -> Option<VideoFormat> {
     let r = PodReader { data: pod };
     let size = usize::try_from(r.u32_at(0)?).ok()?;
@@ -323,8 +416,8 @@ pub(crate) fn parse_format(pod: &[u8]) -> Option<VideoFormat> {
     }
     let end = 8 + size;
     let mut at = 16; // past the object type and id
-    let (mut media_type, mut subtype, mut format, mut dims, mut rate) =
-        (None, None, None, None, (0, 1));
+    let (mut media_type, mut subtype, mut format, mut dims, mut rate, mut modifier) =
+        (None, None, None, None, (0, 1), None);
     while at + 16 <= end {
         let key = r.u32_at(at)?;
         let value_at = at + 8;
@@ -334,6 +427,12 @@ pub(crate) fn parse_format(pod: &[u8]) -> Option<VideoFormat> {
             (FORMAT_MEDIA_TYPE, TYPE_ID, 4..) => media_type = r.u32_at(words),
             (FORMAT_MEDIA_SUBTYPE, TYPE_ID, 4..) => subtype = r.u32_at(words),
             (FORMAT_VIDEO_FORMAT, TYPE_ID, 4..) => format = r.u32_at(words),
+            (FORMAT_VIDEO_MODIFIER, TYPE_LONG, 8..) => {
+                let bytes = r.data.get(words..words + 8)?;
+                let mut b = [0u8; 8];
+                b.copy_from_slice(bytes);
+                modifier = Some(u64::from_ne_bytes(b));
+            }
             (FORMAT_VIDEO_MODIFIER, _, _) => return None,
             (FORMAT_VIDEO_SIZE, TYPE_RECTANGLE, 8..) => {
                 dims = Some((r.u32_at(words)?, r.u32_at(words + 4)?));
@@ -354,6 +453,7 @@ pub(crate) fn parse_format(pod: &[u8]) -> Option<VideoFormat> {
         width,
         height,
         framerate: rate,
+        modifier,
     })
 }
 
@@ -378,6 +478,28 @@ pub(crate) struct Crop {
     pub(crate) height: u32,
 }
 
+/// The part of a `format` frame to show: `crop` clamped to the frame (x, y, width,
+/// height), or the whole frame when there is no crop or it is empty.
+pub(crate) fn visible(format: VideoFormat, crop: Option<Crop>) -> (u32, u32, u32, u32) {
+    match crop {
+        Some(c) if c.width > 0 && c.height > 0 => {
+            let x = u32::try_from(c.x.max(0))
+                .unwrap_or(0)
+                .min(format.width.saturating_sub(1));
+            let y = u32::try_from(c.y.max(0))
+                .unwrap_or(0)
+                .min(format.height.saturating_sub(1));
+            (
+                x,
+                y,
+                c.width.min(format.width - x),
+                c.height.min(format.height - y),
+            )
+        }
+        _ => (0, 0, format.width, format.height),
+    }
+}
+
 /// Copies a mapped buffer into a CPU frame, tightly packed, applying `crop` (clamped to
 /// the frame; an empty one is ignored) and making padded formats opaque.
 ///
@@ -398,23 +520,7 @@ pub(crate) fn copy_frame(
         .ok()
         .filter(|&s| s > 0)
         .unwrap_or(row);
-    let (x, y, w, h) = match crop {
-        Some(c) if c.width > 0 && c.height > 0 => {
-            let x = u32::try_from(c.x.max(0))
-                .unwrap_or(0)
-                .min(format.width.saturating_sub(1));
-            let y = u32::try_from(c.y.max(0))
-                .unwrap_or(0)
-                .min(format.height.saturating_sub(1));
-            (
-                x,
-                y,
-                c.width.min(format.width - x),
-                c.height.min(format.height - y),
-            )
-        }
-        _ => (0, 0, format.width, format.height),
-    };
+    let (x, y, w, h) = visible(format, crop);
     let size = FrameSize::new(w, h)?;
     let info = VideoFrameInfo {
         size,
@@ -465,7 +571,7 @@ mod tests {
 
     use super::{
         Chunk, Crop, PARAM_ENUM_FORMAT, PARAM_FORMAT, SpaVideoFormat, VideoFormat, buffer_params,
-        copy_frame, enum_format, frame_pts, parse_format,
+        copy_frame, enum_format, enum_formats, frame_pts, parse_format,
     };
     use crate::timebase;
 
@@ -499,9 +605,49 @@ mod tests {
         assert_eq!(&w[38..44], &[1920, 1080, 1, 1, 8192, 8192]);
     }
 
+    /// A DMA-BUF offer: the format fixed, then the modifiers as an Enum choice of
+    /// Longs flagged mandatory and don't-fixate, as `spa_pod_builder_prop` with
+    /// `SPA_POD_PROP_FLAG_MANDATORY | SPA_POD_PROP_FLAG_DONT_FIXATE` lays it out.
+    #[test]
+    fn dma_buf_offers_come_first_with_their_modifiers() {
+        let modifiers = [0x0100_0000_0000_0001_u64, 0];
+        let offers = enum_formats(&[
+            (SpaVideoFormat::Bgrx, modifiers.to_vec()),
+            (SpaVideoFormat::Rgba, Vec::new()),
+        ]);
+        assert_eq!(offers.len(), 2, "a format without modifiers isn't offered");
+        assert_eq!(offers[1], enum_format(), "shared memory last");
+        let pod = offers[0].bytes();
+        assert_eq!(pod.len() % 8, 0);
+        let w = words(&pod);
+        assert_eq!(w[0] as usize, pod.len() - 8, "body size");
+        assert_eq!((w[2], w[3]), (0x40003, PARAM_ENUM_FORMAT));
+        assert_eq!(&w[4..16], &[1, 0, 4, 3, 2, 0, 2, 0, 4, 3, 1, 0]);
+        // format: a plain Id, BGRx.
+        assert_eq!(&w[16..22], &[0x20001, 0, 4, 3, 8, 0]);
+        // modifier: flags 0b11000, an Enum choice of Longs: default, then each.
+        assert_eq!(&w[22..24], &[0x20002, 0b1_1000]);
+        assert_eq!(&w[24..30], &[16 + 3 * 8, 19, 3, 0, 8, 5]);
+        let longs: Vec<u64> = pod[30 * 4..30 * 4 + 24]
+            .chunks(8)
+            .map(|c| u64::from_ne_bytes(c.try_into().expect("8 bytes")))
+            .collect();
+        assert_eq!(longs, [modifiers[0], modifiers[0], modifiers[1]]);
+        // Then size and rate, as in the shared-memory offer.
+        assert_eq!(&w[36..38], &[0x20003, 0]);
+        // Without a GPU, only shared memory.
+        assert_eq!(enum_formats(&[]), vec![enum_format()]);
+    }
+
     #[test]
     fn buffer_params_ask_for_mappable_memory_and_metadata() {
-        let [buffers, header, crop] = buffer_params();
+        let [dma, _, _] = buffer_params(true);
+        assert_eq!(
+            &words(&dma.bytes())[4..9],
+            &[6, 0, 4, 4, 0b1000],
+            "DMA-BUF only"
+        );
+        let [buffers, header, crop] = buffer_params(false);
         let b = words(&buffers.bytes());
         assert_eq!((b[2], b[3]), (0x40004, 5));
         assert_eq!(&b[4..9], &[6, 0, 4, 4, 0b110]);
@@ -527,7 +673,12 @@ mod tests {
             (0x20004, value(TYPE_FRACTION, &[0, 1])),
         ];
         if modifier {
-            props.push((0x20002, value(5, &[0, 0])));
+            let m = 0x0100_0000_0000_0002_u64.to_ne_bytes();
+            let m = [
+                u32::from_ne_bytes([m[0], m[1], m[2], m[3]]),
+                u32::from_ne_bytes([m[4], m[5], m[6], m[7]]),
+            ];
+            props.push((0x20002, value(5, &m)));
         }
         Builder::object(0x40003, PARAM_FORMAT, &props).bytes()
     }
@@ -541,6 +692,7 @@ mod tests {
                 width: 1280,
                 height: 720,
                 framerate: (0, 1),
+                modifier: None,
             })
         );
         assert_eq!(
@@ -548,10 +700,17 @@ mod tests {
             None,
             "NV12 was not offered"
         );
+        let dma = parse_format(&settled(12, true)).expect("a DMA-BUF format parses");
         assert_eq!(
-            parse_format(&settled(12, true)),
-            None,
-            "DMA-BUF was not offered"
+            (dma.format, dma.modifier),
+            (SpaVideoFormat::Bgra, Some(0x0100_0000_0000_0002))
+        );
+        // The DMA-BUF offer parses to its default modifier.
+        let offer = &enum_formats(&[(SpaVideoFormat::Rgbx, vec![7, 9])])[0];
+        let offer = parse_format(&offer.bytes()).expect("parses");
+        assert_eq!(
+            (offer.format, offer.modifier),
+            (SpaVideoFormat::Rgbx, Some(7))
         );
         // The offer itself parses to its defaults.
         let offer = parse_format(&enum_format().bytes()).expect("parses");
@@ -578,6 +737,7 @@ mod tests {
             width,
             height,
             framerate: (60, 1),
+            modifier: None,
         }
     }
 
