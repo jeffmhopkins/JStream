@@ -1,12 +1,14 @@
 //! SPA pods for the PipeWire video stream: the parameters JStream offers (formats, with
 //! DMA-BUF modifiers on the GPU path, buffer types, metadata), the format PipeWire
-//! settles on, and turning a mapped buffer into a CPU frame (ADR-0060 §3).
+//! settles on, turning a mapped buffer into a CPU frame, and reading the pointer from a
+//! buffer's cursor metadata (ADR-0060 §3).
 //!
 //! libspa builds and parses pods with inline header functions, which no library
 //! exports, so these are written here against the pod layout in `<spa/pod/pod.h>`:
 //! each pod is a `u32` body size and a `u32` type, then the body, padded to 8 bytes.
 //! Platform-independent, so it is tested everywhere.
 
+use jstream_platform::CursorImage;
 use jstream_platform::media::{
     ColorInfo, FrameSize, MediaError, MediaTime, PixelFormat, Plane, Timebase, VideoFrame,
     VideoFrameInfo,
@@ -71,6 +73,20 @@ pub(crate) const META_VIDEO_CROP: u32 = 2;
 pub(crate) const META_HEADER_SIZE: u32 = 32;
 /// `sizeof(struct spa_meta_region)`.
 pub(crate) const META_REGION_SIZE: u32 = 16;
+/// `SPA_META_Cursor`.
+pub(crate) const META_CURSOR: u32 = 5;
+/// `sizeof(struct spa_meta_cursor)`: `id`, `flags`, `position`, `hotspot`,
+/// `bitmap_offset`.
+const CURSOR_STRUCT: usize = 28;
+/// `sizeof(struct spa_meta_bitmap)`: `format`, `size`, `stride`, `offset`.
+const BITMAP_STRUCT: usize = 20;
+/// The largest pointer picture taken, in pixels a side. Pointers are 24 to 96 pixels
+/// at the usual sizes and scales; a bigger picture is ignored.
+const CURSOR_MAX_SIDE: u32 = 256;
+/// The cursor metadata's size to ask for: the structs and a picture of the largest
+/// size, 4 bytes a pixel.
+pub(crate) const META_CURSOR_SIZE: u32 =
+    (CURSOR_STRUCT + BITMAP_STRUCT) as u32 + CURSOR_MAX_SIDE * CURSOR_MAX_SIDE * 4;
 
 /// The raw video formats JStream takes (`enum spa_video_format` in
 /// <spa/param/video/raw.h>): 8-bit RGB, which every portal backend sends and the
@@ -351,6 +367,12 @@ pub(crate) fn buffer_params(dmabuf: bool) -> [Pod; 3] {
     ]
 }
 
+/// The param that asks for the pointer as cursor metadata, for a capture whose portal
+/// session sends it that way.
+pub(crate) fn cursor_param() -> Pod {
+    meta(META_CURSOR, META_CURSOR_SIZE)
+}
+
 fn meta(ty: u32, size: u32) -> Pod {
     Builder::object(
         TYPE_OBJECT_PARAM_META,
@@ -551,6 +573,111 @@ pub(crate) fn copy_frame(
     VideoFrame::new(info, vec![Plane::new(out, out_row)])
 }
 
+/// The pointer, as one buffer's cursor metadata (`struct spa_meta_cursor`) gives it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum CursorMeta {
+    /// Not over the stream (an `id` of 0).
+    Hidden,
+    /// The picture's top-left corner (the position less the hot spot) at `(x, y)`, in
+    /// the buffer's pixels.
+    At {
+        x: i32,
+        y: i32,
+        bitmap: CursorBitmap,
+    },
+}
+
+/// The picture in one buffer's cursor metadata.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum CursorBitmap {
+    /// No picture in this buffer (a `bitmap_offset` of 0), or one JStream can't read
+    /// (an unknown format, too big, or not inside the metadata): keep the last one.
+    Unchanged,
+    /// An empty picture: the pointer is invisible.
+    Empty,
+    /// A new picture.
+    Image(CursorImage),
+}
+
+/// Reads the pointer from `meta`, a buffer's cursor metadata (its whole `size`), or
+/// `None` when it is too short to hold the struct. Every offset and size is checked
+/// against `meta`: the metadata comes from another process.
+pub(crate) fn parse_cursor(meta: &[u8]) -> Option<CursorMeta> {
+    let u32_at = |bytes: &[u8], at: usize| {
+        bytes
+            .get(at..at + 4)
+            .and_then(|b| b.try_into().ok())
+            .map(u32::from_ne_bytes)
+    };
+    let i32_at = |bytes: &[u8], at: usize| {
+        bytes
+            .get(at..at + 4)
+            .and_then(|b| b.try_into().ok())
+            .map(i32::from_ne_bytes)
+    };
+    if meta.len() < CURSOR_STRUCT {
+        return None;
+    }
+    if u32_at(meta, 0)? == 0 {
+        return Some(CursorMeta::Hidden);
+    }
+    let x = i32_at(meta, 8)?.saturating_sub(i32_at(meta, 16)?);
+    let y = i32_at(meta, 12)?.saturating_sub(i32_at(meta, 20)?);
+    let bitmap_offset = u32_at(meta, 24)? as usize;
+    let bitmap = if bitmap_offset == 0 {
+        CursorBitmap::Unchanged
+    } else {
+        meta.get(bitmap_offset..)
+            .map_or(CursorBitmap::Unchanged, parse_bitmap)
+    };
+    Some(CursorMeta::At { x, y, bitmap })
+}
+
+/// The picture in `bitmap`: a `struct spa_meta_bitmap` and, `offset` bytes from its
+/// start, its pixels.
+fn parse_bitmap(bitmap: &[u8]) -> CursorBitmap {
+    let read = || -> Option<CursorBitmap> {
+        let word = |at: usize| {
+            bitmap
+                .get(at..at + 4)
+                .and_then(|b| b.try_into().ok())
+                .map(u32::from_ne_bytes)
+        };
+        if bitmap.len() < BITMAP_STRUCT {
+            return None;
+        }
+        let (format, width, height) = (word(0)?, word(4)?, word(8)?);
+        if width == 0 || height == 0 {
+            return Some(CursorBitmap::Empty);
+        }
+        if width > CURSOR_MAX_SIDE || height > CURSOR_MAX_SIDE {
+            return None;
+        }
+        let format = SpaVideoFormat::from_id(format)?;
+        let row = width as usize * 4;
+        let stride = usize::try_from(word(12)? as i32)
+            .ok()
+            .filter(|&s| s >= row)
+            .unwrap_or(row);
+        let pixels = bitmap.get(word(16)? as usize..)?;
+        let mut rgba = Vec::with_capacity(row * height as usize);
+        for r in 0..height as usize {
+            let line = pixels.get(r * stride..r * stride + row)?;
+            for px in line.chunks_exact(4) {
+                let (red, blue) = match format {
+                    SpaVideoFormat::Rgba | SpaVideoFormat::Rgbx => (px[0], px[2]),
+                    SpaVideoFormat::Bgra | SpaVideoFormat::Bgrx => (px[2], px[0]),
+                };
+                let alpha = if format.padded() { 0xff } else { px[3] };
+                rgba.extend_from_slice(&[red, px[1], blue, alpha]);
+            }
+        }
+        let size = FrameSize::new(width, height).ok()?;
+        CursorImage::new(size, rgba).map(CursorBitmap::Image)
+    };
+    read().unwrap_or(CursorBitmap::Unchanged)
+}
+
 /// A frame's time on the media clock (100 ns ticks): the buffer header's PipeWire time
 /// (`CLOCK_MONOTONIC` nanoseconds) when it is within a second before `now` and no
 /// later than 100 ms after, else `now`. Some compositors stamp frames on another clock.
@@ -567,8 +694,9 @@ mod tests {
     use jstream_platform::media::{MediaTime, PixelFormat};
 
     use super::{
-        Chunk, Crop, PARAM_ENUM_FORMAT, PARAM_FORMAT, SpaVideoFormat, VideoFormat, buffer_params,
-        copy_frame, enum_format, enum_formats, frame_pts, parse_format,
+        Chunk, Crop, CursorBitmap, CursorMeta, META_CURSOR_SIZE, PARAM_ENUM_FORMAT, PARAM_FORMAT,
+        SpaVideoFormat, VideoFormat, buffer_params, copy_frame, cursor_param, enum_format,
+        enum_formats, frame_pts, parse_cursor, parse_format,
     };
     use crate::timebase;
 
@@ -656,6 +784,150 @@ mod tests {
         assert_eq!(&c[4..9], &[1, 0, 4, 3, 2]);
         assert_eq!(c[14], 16);
         assert_eq!(header.as_ptr() as usize % 8, 0, "aligned for libspa");
+    }
+
+    #[test]
+    fn the_cursor_param_asks_for_room_for_a_256_pixel_picture() {
+        let c = words(&cursor_param().bytes());
+        assert_eq!((c[2], c[3]), (0x40005, 6));
+        assert_eq!(&c[4..9], &[1, 0, 4, 3, 5], "SPA_META_Cursor");
+        assert_eq!(c[14], META_CURSOR_SIZE);
+        assert_eq!(META_CURSOR_SIZE, 28 + 20 + 256 * 256 * 4);
+    }
+
+    /// Cursor metadata as a compositor writes it: the cursor struct, then (when
+    /// `bitmap` is given) a bitmap struct at 28 and its pixels `pad` bytes after it, each
+    /// row padded by `row_pad` bytes.
+    fn cursor_meta(
+        id: u32,
+        position: (i32, i32),
+        hotspot: (i32, i32),
+        bitmap: Option<(u32, u32, u32, &[u8])>,
+        row_pad: usize,
+    ) -> Vec<u8> {
+        let mut m = Vec::new();
+        for w in [id, 0] {
+            m.extend_from_slice(&w.to_ne_bytes());
+        }
+        for v in [position.0, position.1, hotspot.0, hotspot.1] {
+            m.extend_from_slice(&v.to_ne_bytes());
+        }
+        let Some((format, width, height, pixels)) = bitmap else {
+            m.extend_from_slice(&0u32.to_ne_bytes());
+            return m;
+        };
+        m.extend_from_slice(&28u32.to_ne_bytes());
+        let row = width as usize * 4;
+        let stride = (row + row_pad) as i32;
+        for w in [format, width, height] {
+            m.extend_from_slice(&w.to_ne_bytes());
+        }
+        m.extend_from_slice(&stride.to_ne_bytes());
+        m.extend_from_slice(&24u32.to_ne_bytes());
+        m.extend_from_slice(&[0; 4]);
+        for line in pixels.chunks(row.max(1)) {
+            m.extend_from_slice(line);
+            m.extend(std::iter::repeat_n(0xee, row_pad));
+        }
+        m
+    }
+
+    #[test]
+    fn cursor_metadata_gives_the_position_less_the_hot_spot_and_the_picture() {
+        // A 2x1 BGRA picture: opaque blue, half-transparent red.
+        let bgra = [255, 0, 0, 255, 0, 0, 255, 128];
+        let m = cursor_meta(7, (100, 50), (3, 4), Some((12, 2, 1, &bgra)), 8);
+        let Some(CursorMeta::At {
+            x,
+            y,
+            bitmap: CursorBitmap::Image(image),
+        }) = parse_cursor(&m)
+        else {
+            panic!("a cursor with a picture: {:?}", parse_cursor(&m));
+        };
+        assert_eq!((x, y), (97, 46));
+        assert_eq!((image.size().width(), image.size().height()), (2, 1));
+        assert_eq!(image.rgba(), &[0, 0, 255, 255, 255, 0, 0, 128], "as RGBA");
+
+        // A padded format's fourth byte is made opaque.
+        let m = cursor_meta(7, (0, 0), (0, 0), Some((8, 1, 1, &[1, 2, 3, 0])), 0);
+        let Some(CursorMeta::At {
+            bitmap: CursorBitmap::Image(image),
+            ..
+        }) = parse_cursor(&m)
+        else {
+            panic!("a picture");
+        };
+        assert_eq!(image.rgba(), &[3, 2, 1, 255]);
+    }
+
+    #[test]
+    fn cursor_metadata_without_a_new_picture_keeps_the_last() {
+        let m = cursor_meta(7, (10, 10), (0, 0), None, 0);
+        assert_eq!(
+            parse_cursor(&m),
+            Some(CursorMeta::At {
+                x: 10,
+                y: 10,
+                bitmap: CursorBitmap::Unchanged
+            })
+        );
+        // An id of 0 is a pointer that isn't over the stream.
+        assert_eq!(
+            parse_cursor(&cursor_meta(0, (1, 1), (0, 0), None, 0)),
+            Some(CursorMeta::Hidden)
+        );
+        // An empty picture is an invisible pointer.
+        let m = cursor_meta(7, (1, 1), (0, 0), Some((11, 0, 0, &[])), 0);
+        assert!(matches!(
+            parse_cursor(&m),
+            Some(CursorMeta::At {
+                bitmap: CursorBitmap::Empty,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn malformed_cursor_metadata_is_refused_without_reading_past_it() {
+        assert_eq!(parse_cursor(&[0; 27]), None, "shorter than the struct");
+        let unchanged = |m: &[u8]| {
+            matches!(
+                parse_cursor(m),
+                Some(CursorMeta::At {
+                    bitmap: CursorBitmap::Unchanged,
+                    ..
+                })
+            )
+        };
+        // A picture whose pixels run past the metadata.
+        let mut m = cursor_meta(7, (0, 0), (0, 0), Some((11, 2, 2, &[9; 16])), 0);
+        m.truncate(m.len() - 1);
+        assert!(unchanged(&m));
+        // A bitmap offset past the end.
+        let mut m = cursor_meta(7, (0, 0), (0, 0), None, 0);
+        m[24..28].copy_from_slice(&1000u32.to_ne_bytes());
+        assert!(unchanged(&m));
+        // An unknown format, and a picture over 256 pixels a side.
+        assert!(unchanged(&cursor_meta(
+            7,
+            (0, 0),
+            (0, 0),
+            Some((99, 1, 1, &[0; 4])),
+            0
+        )));
+        let m = cursor_meta(7, (0, 0), (0, 0), Some((11, 257, 1, &vec![0; 257 * 4])), 0);
+        assert!(unchanged(&m));
+        // Extreme positions saturate rather than overflow.
+        let m = cursor_meta(7, (i32::MIN, i32::MAX), (1, -1), None, 0);
+        assert!(matches!(
+            parse_cursor(&m),
+            Some(CursorMeta::At {
+                x: i32::MIN,
+                y: i32::MAX,
+                ..
+            })
+        ));
     }
 
     /// A settled format, as PipeWire sends it: fixed values, some still wrapped in a
