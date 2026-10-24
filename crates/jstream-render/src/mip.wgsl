@@ -1,19 +1,20 @@
 // The mip chain of a source placed in 3D (ADR-0050 decision 5), premultiplied linear in
 // `Rgba16Float` like an upload.
 //
-// Level 0 is the source texel for texel: the pass is the source's size, so each fragment
-// samples a texel centre exactly. `fs_straight` and `fs_srgb` convert an import to
-// premultiplied linear on the way, as the composite shader's modes 1 and 2 do. Each
-// further level samples the one above at its own texel centre, which falls between four
-// texels, so the linear filter averages them (`fs_premultiplied`).
+// Level 0 is the chain's region of the source (the item's crop) texel for texel: the
+// pass is the region's size and `vs_region` maps it onto the region, so each fragment
+// samples a source texel centre exactly and nothing past the crop is read. `fs_straight`
+// and `fs_srgb` convert an import to premultiplied linear on the way, as the composite
+// shader's modes 1 and 2 do. Each further level samples the one above at its own texel
+// centre, which falls between four texels, so the linear filter averages them
+// (`fs_premultiplied`).
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) uv: vec2<f32>,
 }
 
-@vertex
-fn vs(@builtin(vertex_index) index: u32) -> VsOut {
+fn cover(index: u32) -> VsOut {
     // One triangle covering clip space: (-1, -1), (3, -1), (-1, 3).
     var p = vec2<f32>(-1.0, 3.0);
     if (index == 0u) {
@@ -24,6 +25,21 @@ fn vs(@builtin(vertex_index) index: u32) -> VsOut {
     var out: VsOut;
     out.clip = vec4<f32>(p, 0.0, 1.0);
     out.uv = vec2<f32>(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+    return out;
+}
+
+@vertex
+fn vs(@builtin(vertex_index) index: u32) -> VsOut {
+    return cover(index);
+}
+
+// The region level 0 reads: `[u, v, width, height]` in the source's texture coordinates.
+@group(1) @binding(0) var<uniform> region: vec4<f32>;
+
+@vertex
+fn vs_region(@builtin(vertex_index) index: u32) -> VsOut {
+    var out = cover(index);
+    out.uv = region.xy + out.uv * region.zw;
     return out;
 }
 

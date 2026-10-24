@@ -10,7 +10,7 @@ use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
-use crate::mips::{MipPipelines, Mips};
+use crate::mips::{MipPipelines, Mips, Region};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
 
@@ -25,8 +25,9 @@ struct Draw {
     index: usize,
     first_vertex: u32,
     vertex_count: u32,
-    /// A 3D item: it samples its image's mip chain (ADR-0050 decision 5).
-    mips: bool,
+    /// A 3D item's mip chain, of its crop of its image (ADR-0050 decision 5), which it
+    /// samples instead of the image.
+    mips: Option<Arc<Mips>>,
 }
 
 struct Targets {
@@ -508,7 +509,7 @@ impl Compositor {
                     detail: format!("{} is not a finite value in 0..=1", item.opacity),
                 });
             }
-            let shape = place::shape(
+            let mut shape = place::shape(
                 item.image.width(),
                 item.image.height(),
                 item.placement,
@@ -517,7 +518,9 @@ impl Compositor {
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }
-            let Some(shape) = shape else { continue };
+            let Some(shape) = shape.as_mut() else {
+                continue;
+            };
             let too_many = || RenderError::TooManyItems {
                 count: scene.items.len(),
             };
@@ -525,16 +528,32 @@ impl Compositor {
                 .ok()
                 .filter(|first| first.checked_add(MAX_VERTICES_PER_ITEM).is_some())
                 .ok_or_else(too_many)?;
-            let mips = shape.is_3d();
+            // A 3D item samples a chain of its crop, so its texture coordinates are
+            // mapped from the source's into the chain's.
+            let mips = shape.is_3d().then(|| {
+                let image = item.image;
+                let region = shape
+                    .crop
+                    .unwrap_or_else(|| Region::whole(image.width(), image.height()));
+                let chain = self.chain_of(image, region);
+                let (w, h) = (image.width() as f32, image.height() as f32);
+                shape.remap_uv([
+                    region.x as f32 / w,
+                    region.y as f32 / h,
+                    region.width as f32 / w,
+                    region.height as f32 / h,
+                ]);
+                chain
+            });
             // A chain holds premultiplied linear whatever the source held.
-            let alpha = if mips {
+            let alpha = if mips.is_some() {
                 Alpha::Premultiplied
             } else {
                 item.image.alpha()
             };
             let vertex_count = push_shape(
                 &mut self.vertices,
-                &shape,
+                shape,
                 canvas_w,
                 canvas_h,
                 item.opacity,
@@ -684,26 +703,27 @@ impl Compositor {
         Ok(())
     }
 
-    /// `image`'s mip chain, made the first time it is placed in 3D.
-    fn mips_of<'a>(&self, image: &'a Image) -> &'a Mips {
-        image.mips(|| {
+    /// `image`'s mip chain of `region`, made the first time it is placed in 3D with it.
+    fn chain_of(&self, image: &Image, region: Region) -> Arc<Mips> {
+        image.chain(region, || {
             Mips::new(
                 &self.gpu.device,
+                &self.gpu.queue,
                 &self.image_layout,
                 &self.mip_pipelines,
-                image.width(),
-                image.height(),
+                image,
+                region,
             )
         })
     }
 
-    /// Rebuilds the mip chain of each image a 3D item draws, only when the image changed
-    /// since its last build (ADR-0050 decision 5): an upload rewritten, a layer drawn
-    /// into, an import handed a new frame.
+    /// Rebuilds each mip chain a 3D item draws whose image changed since its last
+    /// build (an upload rewritten, a layer drawn into, an import handed a new frame),
+    /// once however many items and calls draw it (ADR-0050 decision 5).
     fn record_mips(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene<'_>) {
-        for draw in self.draws.iter().filter(|draw| draw.mips) {
+        for draw in &self.draws {
+            let Some(mips) = &draw.mips else { continue };
             let image = scene.items[draw.index].image;
-            let mips = self.mips_of(image);
             if mips.claim(image) {
                 mips.record(encoder, &self.mip_pipelines, image);
             }
@@ -740,10 +760,9 @@ impl Compositor {
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             for draw in &self.draws {
                 let image = scene.items[draw.index].image;
-                let bind_group = if draw.mips {
-                    &self.mips_of(image).bind_group
-                } else {
-                    image.bind_group()
+                let bind_group = match &draw.mips {
+                    Some(mips) => &mips.bind_group,
+                    None => image.bind_group(),
                 };
                 pass.set_bind_group(0, bind_group, &[]);
                 pass.draw(
