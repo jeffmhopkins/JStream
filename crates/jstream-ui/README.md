@@ -59,22 +59,25 @@ Contents ([Design](#design) explains the choices):
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
-  layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`, the
-  modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
+  layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`,
+  the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
-  (`sources.rs`), the Add source dialog (`add_source.rs`: `AddSource` and the
-  `AddSourceDialog` context that opens it, with its type list and the edits it sends,
-  tested natively), the properties form (`properties.rs`), the Properties dialog
-  (`source_properties.rs`: `SourceProperties` and the `PropertiesDialog` context that
-  opens it) and the delete confirmation
-  they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  (`sources.rs`), the Inspector (`inspector.rs`: the selected item's box, crop,
+  blending and settings, or the selected scene's objects, uses and transitions), the
+  properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
+  `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
+  the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
+  `SourceProperties` and the `PropertiesDialog` context that opens it), the number
+  field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (creating, editing and deleting streams, recordings and the virtual camera, their
   stream keys, start and stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (faders, mutes, routing and buses, with meters and the
   master's loudness), also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
-  transition presets and each scene's overrides; [Design](#design)).
+  transition presets and each scene's overrides; [Design](#design)); and
+  `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
+  selected items).
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
@@ -130,7 +133,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   holds no handle of its own, so Disconnecting drops the last one, which closes the
   socket.
 - **Selection.** `Selection` is the scene being edited (shown by the sources list) and
-  the items selected in it: a primary item (edited by the properties form) and any
+  the items selected in it: a primary item (shown in the Inspector) and any
   others the canvas selected with it. A new session reads the program scene
   before the state, so it starts on the scene on program. It is fixed up after every
   change: a
@@ -143,7 +146,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `scene.switch`. The sources list shows the selected scene's items with the top of the
   stack first. New scenes, sources and items get IDs from `fresh_id`, which includes
   the session's client ID so two UIs on one engine don't pick the same one. Sources
-  are added through the Add source dialog (below). Deleting a scene, or a source everywhere, reads `delete.plan` first,
+  are added through the Add source dialog (below). Deleting a scene, or a source
+  everywhere, reads `delete.plan` first,
   shows what else it takes, and sends the plan's edits expecting the plan's revision,
   so a change in between makes the engine refuse it rather than delete more than the
   user saw. Removing an item from its scene is a plain `item.remove`.
@@ -157,17 +161,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Delete scene work; the rest waits on folders, keyframes, transitions and the scene
   Properties dialog). A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
-  (the Inspector, for now), the Audio check (`source.set_audio`), layer order
+  (the Properties dialog), the Audio check (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
   canvas and Reset rotation (`item.set_geometry`), Clear crop, Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
   or as clone (`source.duplicate` first), and Remove from scene, each one batch. A
   nested scene and an audio-only source get the prototype's shorter menus; the first
   can be opened. The scene and object lists fill their dock group, so the space under
-  their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the backdrop
-  cancel, and Enter presses the button marked `data-primary`. The Add source dialog
-  (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the source
-  kinds `kind.list` reports, under the prototype's groups, names, icons and
+  their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
+  backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
+  dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
+  source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions, plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. "Create new" sends `source.create` and
   `item.add` as one batch, with a box of the prototype's native size for the type,
@@ -178,6 +182,41 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and a placement of an existing one shows in the Inspector. A `kind.list`
   that fails leaves only the placed kinds and Scene, and its error shows as any failed
   call's does.
+- **The Inspector** ([UI features › inspector](../../docs/UI-FEATURES.md#inspector))
+  shows the primary selected item, or with none the selected scene, under a header with
+  its name, kind, "+N" for the other selected items and a favourite star
+  (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
+  is placed in another scene too. Its sections fold: Parameters (X and Y of the
+  unrotated box's top-left corner, W, H and Rotation, sent as `item.set_geometry`; the
+  W/H link, on by default, keeps the aspect ratio when either side changes), Crop
+  (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
+  draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
+  Properties, the source's settings form. A scene shows its object count, the scenes
+  that use it as a source, and its Transition in and out (`scene.set_transitions`, with
+  the presets read by `state.get` whenever the collection changes). The panel is built
+  once per selected item or scene and each field follows the collection, so an edit
+  doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
+  shows in them once it is dropped.
+- **Number fields** (`NumberField`, spec-panels.md G10) have − and + steppers and a
+  unit. Typed text is sent on Enter or blur, Escape puts the value back, and `−`
+  (U+2212) and `,` are read as a minus and a decimal point; ArrowUp and ArrowDown step
+  (Shift a tenth for steps under 1, Ctrl, Meta or Alt ten times). A drag across an
+  unfocused field steps once per 3 px (Shift a tenth, Ctrl four times, per move so a
+  modifier never makes the value jump) and is sent once on release, so it is one edit
+  and one undo step; a drag whose release the field never saw ends unsent at the next
+  move with no button held. Values are kept to the field's range and rounded, and
+  negatives are written with `−`. A value its panel doesn't send, because the edit
+  would change nothing, puts the committed value back in the field.
+- **The Transform panel** ([UI features › transform](../../docs/UI-FEATURES.md#transform))
+  aligns, distributes and arranges the selected items with the prototype's rules,
+  on their unrotated boxes: alignment is to the selection's bounds with two or more
+  selected and Align to on Selection, else to the canvas; distributing (three or more)
+  evens the gaps in centre order, keeping the first and last; Center moves the
+  selection as a block; Fit and Stretch also stand the item upright; Match width and
+  height take the primary item's. `plan` works out the new boxes, and each press sends
+  the changed ones as one batch of `item.set_geometry` (Clear crop: `item.set_crop`),
+  so it is one undo step. Items still in the legacy form are left alone, and Match does
+  nothing while the primary item is one.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
   (and slider when bounded), select, colour, text, asset (root and path) or reference
@@ -209,11 +248,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
-  shows one panel with its title, or tabs. Panels are the six the UI has: Scenes,
-  Scene objects (`Sources`), the Inspector (`Properties`, with `Pairing` under it), the
-  Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
-  adds a `PanelId` and a line there. The panels' own `h2` headings are hidden, since
-  the tab is the title. Narrow windows stack the zones, without splitters.
+  shows one panel with its title, or tabs. Panels are the seven the UI has: Scenes,
+  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
+  Transform, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps
+  each to its component, and a new panel adds a `PanelId` and a line there. The
+  panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
+  stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
     switch keeps a panel's state; moving a panel to another group mounts it afresh.
   - A tab drags with pointer events, not HTML drag and drop, which desktop webviews

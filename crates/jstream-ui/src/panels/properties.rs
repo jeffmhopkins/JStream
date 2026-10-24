@@ -254,23 +254,17 @@ pub fn Properties() -> impl IntoView {
 
     move || match current.get() {
         Target::Nothing => view! {
-            <h2>"Properties"</h2>
             <p class="placeholder">"Select a source to edit it."</p>
         }
         .into_any(),
-        Target::Nested(source, scene) => view! {
-            <h2>"Properties"</h2>
-            <p class="source-title">{source.name}</p>
+        Target::Nested(_, scene) => view! {
             <p class="muted">"Shows the scene “" {scene} "”. A nested scene has no settings."</p>
         }
         .into_any(),
         Target::Builtin(source, kind) => {
             let descriptor = move || studio.descriptors.with(|d| d.get(&kind).cloned());
             let source_id = source.source_id.clone();
-            let title = source.name.clone();
             view! {
-                <h2>"Properties"</h2>
-                <p class="source-title">{title}</p>
                 {move || describe_error.get().map(|e| view! { <p class="problem">{e}</p> })}
                 {move || match descriptor() {
                     None => view! { <p class="placeholder">"Loading…"</p> }.into_any(),
@@ -284,7 +278,6 @@ pub fn Properties() -> impl IntoView {
                             Signal::derive(move || settings_of(studio, &source_id))
                         };
                         view! {
-                            <p class="muted">{kind.name.clone()} " source"</p>
                             <Form kind=kind source_id=source_id settings=settings errors=errors commit=commit />
                         }
                         .into_any()
