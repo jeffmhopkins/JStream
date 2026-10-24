@@ -55,12 +55,12 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `████████░░` 80% | 20 | 4 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 5 | 4 | 4 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 5 | 5 | 3 |
 
 105 of 120 items are merged; 11 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 26 items, by next step: 🔨 build 10, 🌊 its wave lands 3, 🧪 Windows run 10, 👤 maintainer 1, ❔ not set 2</summary>
+<summary><b>What's left</b>: 26 items, by next step: 🔨 build 9, 🌊 its wave lands 4, 🧪 Windows run 10, 👤 maintainer 1, ❔ not set 2</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -84,7 +84,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | B11 | Folders and labels | M2 | ❔ not set |  | #323 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 in review into wave/m1-3 | #319 |
 | F6 | HEVC and AV1 encode | M3 | 🧪 Windows run | #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
-| X1 | Full 3D transforms and WGSL effect packs | M3 | 🔨 build | effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), and the mip chains built from the crop and rebuilt once per change (#687), landed in wave/m3-3; lifting the rejection (protocol 0.34) to build | #359, #368, #611, #622, #624, #643, #687 |
+| X1 | Full 3D transforms and WGSL effect packs | M3 | 🌊 its wave lands | effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), and the mip chains built from the crop and rebuilt once per change (#687), landed in wave/m3-3; part 3, accepting 3D at protocol 0.34 (#629), in review into it | #359, #368, #611, #622, #624, #643, #687, #629 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | M3 | 🔨 build, then 🌊 its wave lands | WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722 and the 1,000-event queue #725 are in wave/m3-3; the wire half #642 is in review into wave/m3-3; the engine side to build | #486, #623, #642, #722, #725 |
@@ -259,7 +259,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | E3c | Encode from GPU frames | ✅ merged | #325 |
 | E3d | Composite to NV12 on the GPU | ✅ merged | #280 |
 | F6 | HEVC and AV1 encode | 🧪 merged, Windows run pending: #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), and the mip chains built from the crop and rebuilt once per change (#687), landed in wave/m3-3; lifting the rejection (protocol 0.34) to build | #359, #368, #611, #622, #624, #643, #687 |
+| X1 | Full 3D transforms and WGSL effect packs | 🔍 in review: effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), and the mip chains built from the crop and rebuilt once per change (#687), landed in wave/m3-3; part 3, accepting 3D at protocol 0.34 (#629), in review into it | #359, #368, #611, #622, #624, #643, #687, #629 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned: chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |

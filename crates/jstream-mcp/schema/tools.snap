@@ -941,7 +941,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -2752,7 +2752,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "ItemGeometry": {
-            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
             "properties": {
               "center": {
                 "$ref": "#/$defs/Vec2",
@@ -5739,7 +5739,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -7550,7 +7550,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "ItemGeometry": {
-            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
             "properties": {
               "center": {
                 "$ref": "#/$defs/Vec2",
@@ -8395,7 +8395,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "ItemGeometry": {
-            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
             "properties": {
               "center": {
                 "$ref": "#/$defs/Vec2",
@@ -8779,7 +8779,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -10165,7 +10165,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -11972,7 +11972,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "ItemGeometry": {
-            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]\nand [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022\nreserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
             "properties": {
               "center": {
                 "$ref": "#/$defs/Vec2",

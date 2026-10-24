@@ -2285,8 +2285,9 @@ fn check_canvas_side(value: u32, at: usize, name: &str) -> Result<(), ProtocolEr
     Ok(())
 }
 
-/// Checks a geometry as the engine does (a positive size and perspective, neutral 3D,
-/// finite corners) and returns the deprecated transform view `ItemInfo` reports.
+/// Checks a geometry as the engine does (a positive size and perspective, and drawable
+/// by `ItemGeometry::check_drawable`; any such 3D from protocol 0.34) and returns the deprecated transform view
+/// `ItemInfo` reports.
 fn geometry_view(geometry: &ItemGeometry, at: usize) -> Result<ItemTransform, ProtocolError> {
     if let Err(err) = geometry.validate() {
         let name = match err {
@@ -2296,22 +2297,9 @@ fn geometry_view(geometry: &ItemGeometry, at: usize) -> Result<ItemTransform, Pr
         };
         return Err(invalid(at, name, err.to_string()));
     }
-    let non_neutral = [
-        ("geometry.tilt_deg", geometry.tilt_deg.get() != 0.0),
-        ("geometry.turn_deg", geometry.turn_deg.get() != 0.0),
-        ("geometry.depth_px", geometry.depth_px.get() != 0.0),
-        ("geometry.perspective_px", geometry.perspective_px.is_some()),
-    ];
-    if let Some((name, _)) = non_neutral.iter().find(|(_, set)| *set) {
-        return Err(invalid(
-            at,
-            name,
-            "tilt, turn, depth and perspective are not drawn yet, so they must be neutral",
-        ));
-    }
     geometry
-        .project()
-        .and_then(|_| geometry.transform_view())
+        .check_drawable()
+        .and_then(|()| geometry.transform_view())
         .map_err(|err| invalid(at, "geometry", err.to_string()))
 }
 
