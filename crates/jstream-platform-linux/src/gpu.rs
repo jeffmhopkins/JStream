@@ -17,11 +17,13 @@
 //! - Everything runs on the context's one queue, so a frame needs no fence: wgpu orders
 //!   the copy before every later submit that samples the texture. [`QueueOrder`] is the
 //!   frames' [`FrameSync`], whose `stage` only checks the queue.
-//! - The encoders take CPU frames (VA-API's upload, OpenH264), so there are no encode
-//!   targets yet: [`LinuxGpu::encode_target`] reports `Unsupported`.
+//! - Encode targets ([`LinuxGpu::encode_target`]) are NV12 images exported as
+//!   DMA-BUFs for the VA-API encoder, on a device that can export them
+//!   ([`export`]); elsewhere they are `Unsupported`, and the encoders take CPU frames.
 
 pub(crate) mod blit;
 pub(crate) mod dmabuf;
+pub(crate) mod export;
 
 use std::future::Future;
 use std::pin::pin;
@@ -64,6 +66,9 @@ pub(crate) struct Shared {
     /// The device's raw queue, to recognise it in [`FrameSync::stage`]. (Comparing
     /// `wgpu::Queue`s doesn't work: wgpu-core ids restart in every `Instance`.)
     raw_queue: u64,
+    /// The encode targets' export state, when the device can export them. Declared
+    /// before `device`, so its raw objects go first.
+    pub(crate) export: Option<export::Export>,
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
 }
@@ -72,6 +77,7 @@ impl std::fmt::Debug for Shared {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Shared")
             .field("modifiers", &self.modifiers)
+            .field("export", &self.export)
             .finish_non_exhaustive()
     }
 }
@@ -170,13 +176,17 @@ impl GpuInterop for LinuxGpu {
                 what: "GPU interop: no Vulkan hardware adapter".into(),
             })?;
         let imports = dma_buf(&adapter);
+        let render_node = export::exportable(&adapter);
+        let mut required_features = wgpu::Features::empty();
+        if imports {
+            required_features |= wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
+        }
+        if render_node.is_some() {
+            required_features |= wgpu::Features::TEXTURE_FORMAT_NV12;
+        }
         let (device, queue) = ready(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("jstream"),
-            required_features: if imports {
-                wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF
-            } else {
-                wgpu::Features::empty()
-            },
+            required_features,
             ..Default::default()
         }))
         .ok_or_else(|| not_ready("request_device"))?
@@ -199,9 +209,12 @@ impl GpuInterop for LinuxGpu {
             luid: None,
             vendor: adapter.get_info().vendor,
         };
+        // Without the semaphore there are no encode targets; capture still works.
+        let export = render_node.and_then(|node| export::Export::new(&device, node).ok());
         let shared = Arc::new(Shared {
             modifiers,
             raw_queue,
+            export,
             device: device.clone(),
             queue: queue.clone(),
         });
@@ -214,19 +227,15 @@ impl GpuInterop for LinuxGpu {
         ))
     }
 
+    /// An NV12 image in the `LINEAR` DRM layout, exported as a DMA-BUF, which render
+    /// draws and VA-API encodes. `Unsupported` on a device that can't export one for
+    /// VA-API (no render node, Vulkan before 1.2, no NV12 or DMA-BUF export).
     fn encode_target(
         &self,
         context: &GpuContext,
         size: FrameSize,
     ) -> Result<GpuFrame, PlatformError> {
-        Shared::of(context, "encode_target")?;
-        Err(PlatformError::Unsupported {
-            what: format!(
-                "a {}x{} GPU encode target: Linux's encoders take CPU frames",
-                size.width(),
-                size.height()
-            ),
-        })
+        export::target(&Shared::of(context, "encode_target")?, size)
     }
 }
 
@@ -284,7 +293,8 @@ mod tests {
 
     /// On any machine: a Vulkan device opens (a software one here, if that is all there
     /// is) or the backend says there is none; either way it never panics. The context
-    /// is recognised as ours, and has no encode targets.
+    /// is recognised as ours. A device without a render node to name to VA-API (a
+    /// software one) has no encode targets.
     #[test]
     fn a_context_opens_or_is_unsupported() {
         let gpu = LinuxGpu::with_software();
@@ -295,10 +305,12 @@ mod tests {
         };
         let shared = Shared::of(&context, "test").expect("our context");
         let size = FrameSize::new(64, 64).expect("size");
-        assert!(matches!(
-            gpu.encode_target(&context, size),
-            Err(PlatformError::Unsupported { .. })
-        ));
+        if shared.export.is_none() {
+            assert!(matches!(
+                gpu.encode_target(&context, size),
+                Err(PlatformError::Unsupported { .. })
+            ));
+        }
         // Whatever modifiers there are, each format is listed once.
         let mut formats: Vec<_> = shared.modifiers.iter().map(|(f, _)| *f).collect();
         formats.dedup();
