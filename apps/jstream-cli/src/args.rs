@@ -560,7 +560,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             item_id: ItemId::new(*id),
             scene_id: None,
             // The 3D fields stay neutral: this command sets the 2D box only, though the
-            // engine accepts any 3D from protocol 0.34.
+            // engine accepts any 3D it can draw from protocol 0.34.
             geometry: ItemGeometry {
                 center: Vec2 {
                     x: finite(x, "center-x")?,

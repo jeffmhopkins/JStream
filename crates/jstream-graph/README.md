@@ -137,9 +137,9 @@ the batch **touched**.
   inverse restores the previous placement in its own form, so a conversion undoes to
   `item.set_transform`. A geometry is checked before it is stored: a positive size and
   perspective and finite corners, each failure naming its field
-  (`edits.N.geometry.size`). Any tilt, turn, depth and perspective is accepted from
-  protocol 0.34, since the compositor draws it (ADR-0050); before, a non-neutral one was
-  `invalid_argument`.
+  (`edits.N.geometry.size`). Any tilt, turn, depth and perspective the compositor can
+  draw is accepted from protocol 0.34 (ADR-0050; `ItemGeometry::check_drawable`, else
+  `edits.N.geometry`); before, a non-neutral one was `invalid_argument`.
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
   `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
   accept only `normal` until the compositor draws the other modes. Each is undone by
