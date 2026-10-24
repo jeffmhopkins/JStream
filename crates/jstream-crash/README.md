@@ -24,7 +24,7 @@ implements, and `jstream-protocol`, for `PROTOCOL_VERSION`; its one other is `bl
 Contents:
 - `install(dir, program, secrets, notify)` creates `dir` if it is missing (user-only on Unix),
   prunes old reports there and sets the panic hook. On a panic the hook writes
-  `crash-<UTC time>-<pid>-<n>.txt` (user-only on Unix, its folder's ACL on Windows): the
+  `crash-<UTC time>-<pid>-<n>.txt` (user-only on Unix, through `create_new`): the
   program's name and version, the protocol version, the OS and architecture, the time,
   the process ID, the panicking thread's name, the panic's location and message (cut at
   16 KiB), and a backtrace. Nothing else: no environment, no command line, no settings.
@@ -33,6 +33,14 @@ Contents:
   ([R-RS-005](../../docs/RULES.md#R-RS-005)); both apps write that line to stderr.
   The newest 10 reports are kept (`MAX_REPORTS`); other files in the folder, such as log
   files and the audit log, are never touched.
+- `install_creating(dir, program, secrets, notify, create)` is `install` with the app's
+  own `CreateFile` making each report (a new file, `AlreadyExists` if the name is taken,
+  so the hook tries the next one). On Windows `create_new` leaves a report its folder's
+  ACL, and this crate can't do better: it has no `unsafe`, and `jstream-platform-windows`
+  is on its own layer (R-ARCH-002). So both apps pass
+  `jstream_platform_windows::create_private_file` there (the daemon through its
+  `logs::create_new`), which gives each report a protected DACL for SYSTEM and the user
+  (#656).
 - `Secrets`: the secrets to redact, as a shared handle. The app makes one at startup and
   hands clones to `install` and to each `Redacting` store; it registers its control token
   with it. Only each secret's length and BLAKE3 digest are kept, never its text, and its
@@ -52,7 +60,8 @@ need its own ADR.
 
 **Tests** (`src/tests.rs`): redaction wherever a secret appears and at the message cut,
 UTC dates, `Secrets` shared by clones, `Redacting` on key and token stores, pruning to the
-cap without touching other files, the folder created user-only, and the real hook in a
+cap without touching other files, a report made by the app's `create` (and the next name
+tried through it), the folder created user-only, and the real hook in a
 child process (this test binary again), whose report holds the facts and none of a fake
 token, stream key and refresh token, nor does the line it hands the test's notifier
 (written to the child's stderr).

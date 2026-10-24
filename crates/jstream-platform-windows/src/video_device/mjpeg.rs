@@ -1,5 +1,5 @@
 //! The MJPEG decode hook through Media Foundation's MJPEG decoder MFT: an OS decoder, as
-//! docs/adr/0031-source-types-and-decoding-scope.md asks for video codecs.
+//! docs/adr/0061-source-types-and-decoding-scope-v2.md asks for video codecs.
 
 use std::mem::ManuallyDrop;
 

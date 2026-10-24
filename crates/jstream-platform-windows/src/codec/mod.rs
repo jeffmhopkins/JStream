@@ -2,13 +2,16 @@
 //!
 //! It has the AAC encoder (`aac`) and the H.264, HEVC and AV1 encoders (`video`), from
 //! CPU NV12, RGBA or BGRA frames, or from encode targets on the GPU once the backend is on
-//! a GPU context (`Codecs::on_context`). HEVC and AV1 run where the GPU (or an installed
+//! a GPU context (`Codecs::on_context`). On the CPU path with hardware `Prefer`, a
+//! hardware encoder that refuses its first frame falls back to software (`fallback`). HEVC and AV1 run where the GPU (or an installed
 //! software MFT) offers them. Video decoders follow; until then they report
 //! `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.
 #[cfg(any(windows, test))]
 mod aac;
+#[cfg(any(windows, test))]
+mod fallback;
 #[cfg(windows)]
 mod mf;
 #[cfg(any(windows, test))]
@@ -23,8 +26,9 @@ mod backend {
 
     use jstream_platform::media::Codec;
     use jstream_platform::{
-        AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, GpuContext, PlatformError,
-        VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
+        AudioEncoder, AudioEncoderConfig, CaptureDecoder, CaptureEncoding, CodecInfo, CodecRole,
+        Codecs, GpuContext, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+        VideoEncoderConfig,
     };
     use windows::Win32::Media::MediaFoundation::{
         MFAudioFormat_AAC, MFAudioFormat_PCM, MFMediaType_Audio, MFMediaType_Video,
@@ -34,11 +38,12 @@ mod backend {
     };
 
     use super::aac::MfAacEncoder;
+    use super::fallback::FirstFrameFallback;
     use super::mf::{self, MfRuntime};
     use super::video::{Format, MfVideoEncoder};
     use crate::gpu::EncodeGpu;
 
-    /// Codecs through Media Foundation, the OS codecs ADR-0031 chooses.
+    /// Codecs through Media Foundation, the OS codecs ADR-0061 chooses.
     ///
     /// It holds no COM objects, so it is `Send + Sync`. Each session starts Media
     /// Foundation for itself and can be driven from any thread. Open sessions from a
@@ -104,10 +109,23 @@ mod backend {
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-            Ok(Box::new(match &self.gpu {
-                Some(gpu) => MfVideoEncoder::open_on(config, gpu)?,
-                None => MfVideoEncoder::open(config)?,
-            }))
+            // The GPU path has hardware encoders only, so nothing to fall back to.
+            if let Some(gpu) = &self.gpu {
+                return Ok(Box::new(MfVideoEncoder::open_on(config, gpu)?));
+            }
+            let encoder = MfVideoEncoder::open(config)?;
+            if !FirstFrameFallback::applies(config, encoder.info()) {
+                return Ok(Box::new(encoder));
+            }
+            // A hardware MFT can take the media types and still refuse its first frame
+            // at `ProcessInput` (#443): then the session moves to the software MFT.
+            Ok(Box::new(FirstFrameFallback::new(
+                Box::new(encoder),
+                *config,
+                Box::new(|config: &VideoEncoderConfig| {
+                    Ok(Box::new(MfVideoEncoder::open(config)?) as Box<dyn VideoEncoder>)
+                }),
+            )))
         }
 
         fn audio_encoder(
@@ -124,6 +142,22 @@ mod backend {
             Err(PlatformError::Unsupported {
                 what: format!("{:?} video decoding (not implemented yet)", config.codec),
             })
+        }
+
+        /// MJPEG through Media Foundation's MJPEG decoder ([`MfMjpegDecoder`]), into
+        /// NV12 CPU frames.
+        ///
+        /// [`MfMjpegDecoder`]: crate::MfMjpegDecoder
+        fn capture_decoder(
+            &self,
+            encoding: CaptureEncoding,
+        ) -> Result<Box<dyn CaptureDecoder>, PlatformError> {
+            match encoding {
+                CaptureEncoding::Mjpeg => Ok(Box::new(crate::MfMjpegDecoder::new()?)),
+                other => Err(PlatformError::Unsupported {
+                    what: format!("decoding {other:?} capture frames"),
+                }),
+            }
         }
 
         /// The backend on a context `WindowsGpu` opened. Its video encoders take that

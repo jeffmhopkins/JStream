@@ -31,6 +31,9 @@ pub(crate) const BRANCH: &str = "main";
 pub(crate) struct Merge {
     /// Sections whose conflicting stamp was resolved to main's, as `DOC#anchor`.
     pub(crate) stamps: Vec<String>,
+    /// Sections where an entry whose hash equals main's took main's `by` and `note` (#697),
+    /// as `DOC#anchor`.
+    pub(crate) adopted: Vec<String>,
     /// What `docs migrate` did after the merge, when the branch still had inline stamps.
     pub(crate) migrated: Option<super::Migrate>,
     /// Files whose conflict was only inside `@generated` blocks, rewritten from the merged
@@ -116,30 +119,40 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     }
     git_ok(root, &["fetch", "-q", REMOTE, branch])?;
     let upstream = format!("{REMOTE}/{branch}");
-    // A fixed conflict style, whatever the user's config, so the markers parse.
+    // A fixed conflict style, whatever the user's config, so the markers parse. The merge
+    // isn't committed yet: main's stamps on inputs it verified at the same content are
+    // taken into the merge commit itself, so it stays what `merge-main` left (#697).
     let out = git(
         root,
         &[
             "-c",
             "merge.conflictStyle=merge",
             "merge",
+            "--no-commit",
             "--no-edit",
             "-q",
             &upstream,
         ],
     )?;
     let mut report = Merge::default();
+    let merging = || -> Result<bool> {
+        Ok(git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
+            .status
+            .success())
+    };
     if out.status.success() {
+        // A fast-forward, or nothing to merge, leaves no merge to commit.
+        if merging()? {
+            report.adopted = adopt_matching(root, &upstream).context(MERGE_OPEN)?;
+            git_ok(root, &["commit", "-q", "--no-edit"]).context(MERGE_OPEN)?;
+        }
         report.committed = true;
-        report.migrated = migrate_inline(root)?;
-        report.inputs = stale_report(root)?;
+        report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
+        report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
         return Ok(report);
     }
-    if !git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
-        .status
-        .success()
-    {
+    if !merging()? {
         bail!(
             "`git merge {upstream}` failed: {}",
             String::from_utf8_lossy(&out.stderr).trim()
@@ -197,21 +210,51 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
             git_ok(root, &["add", "--", path])?;
         }
     }
+    // Once the ledger has no conflict left, whether or not another file keeps the merge
+    // open, it takes main's stamps on inputs main verified at the same content.
+    if !report.refused.iter().any(|(p, _)| p == ledger::PATH) {
+        report.adopted = adopt_matching(root, &upstream).context(MERGE_OPEN)?;
+    }
     if report.refused.is_empty() {
-        git_ok(root, &["commit", "-q", "--no-edit"])?;
+        git_ok(root, &["commit", "-q", "--no-edit"]).context(MERGE_OPEN)?;
         report.committed = true;
-        report.migrated = migrate_inline(root)?;
-        report.inputs = stale_report(root)?;
+        report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
+        report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
     }
     Ok(report)
 }
 
-/// The ledger as it was at `rev`; empty when the file is missing or doesn't parse there.
-fn ledger_at(root: &Path, rev: &str) -> Result<ledger::Ledger> {
-    Ok(ledger_text_at(root, rev)?
-        .and_then(|text| ledger::Ledger::parse(&text).ok())
-        .unwrap_or_default())
+/// During the merge, before it is committed: gives each ledger entry whose hash equals
+/// `upstream`'s entry for that input `upstream`'s entry, and stages the ledger; returns the
+/// sections changed (#697). Nothing changes when either side has no ledger.
+fn adopt_matching(root: &Path, upstream: &str) -> Result<Vec<String>> {
+    if !root.join(ledger::PATH).exists() {
+        return Ok(Vec::new());
+    }
+    // A merged ledger that doesn't parse is left for the steps after the commit, which
+    // report it as such (#551 N1).
+    let Ok(mut ours) = ledger::Ledger::read(root) else {
+        return Ok(Vec::new());
+    };
+    let theirs = ledger_at(root, upstream, &format!("on `{upstream}`"))?;
+    let adopted = ours.adopt(&theirs);
+    if !adopted.is_empty() {
+        ours.write(root)?;
+        git_ok(root, &["add", "--", ledger::PATH])?;
+    }
+    Ok(adopted)
+}
+
+/// The ledger as it was at `rev`; empty when the file is missing there, and an error naming
+/// `rev` as `what` (as in "the ledger `what` (`rev`) doesn't parse") when it doesn't parse,
+/// since an empty ledger would change which entries look like this branch's own.
+fn ledger_at(root: &Path, rev: &str, what: &str) -> Result<ledger::Ledger> {
+    match ledger_text_at(root, rev)? {
+        None => Ok(ledger::Ledger::default()),
+        Some(text) => ledger::Ledger::parse(&text)
+            .map_err(|e| anyhow::anyhow!("{} {what} ({rev}) doesn't parse: {e}", ledger::PATH)),
+    }
 }
 
 /// The ledger's text at `rev`; `None` when the file is missing there.
@@ -319,15 +362,7 @@ pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
     let base = git_ok(root, &["merge-base", "HEAD", &upstream])
         .with_context(|| format!("finding where this branch left `{upstream}`"))?;
     let base = String::from_utf8_lossy(&base).trim().to_owned();
-    match ledger_text_at(root, &base)? {
-        None => Ok(ledger::Ledger::default()),
-        Some(text) => ledger::Ledger::parse(&text).map_err(|e| {
-            anyhow::anyhow!(
-                "{} where this branch left `{upstream}` ({base}) doesn't parse: {e}",
-                ledger::PATH
-            )
-        }),
-    }
+    ledger_at(root, &base, &format!("where this branch left `{upstream}`"))
 }
 
 /// Refuses any branch but `main` and `wave/<name>`; `refusal` says what the caller does
@@ -340,12 +375,16 @@ fn check_branch(branch: &str, refusal: &str) -> Result<()> {
 }
 
 /// The ledger entries this branch had written itself before `point`'s merge: those of
-/// the merge's first parent that differ from the merge base's, by section.
+/// the merge's first parent that differ from the merge base's, by section. A missing
+/// ledger counts as empty; one that doesn't parse at either commit is an error, since an
+/// empty base would make every entry look like this branch's own and an empty first
+/// parent would drop the branch's entries.
 pub(crate) fn branch_entries(
     root: &Path,
     point: &MergePoint,
 ) -> Result<BTreeMap<String, ledger::Stamp>> {
-    let (branch, base) = (ledger_at(root, &point.ours)?, ledger_at(root, &point.base)?);
+    let branch = ledger_at(root, &point.ours, "on this branch before its merge")?;
+    let base = ledger_at(root, &point.base, "at the merge's base")?;
     Ok(branch
         .sections
         .into_iter()
@@ -359,6 +398,25 @@ pub(crate) fn branch_entries(
         })
         .collect())
 }
+
+/// The ledger on the side `point` merged in (its second parent): an input whose hash still
+/// equals that side's entry is one this branch changes nothing in. One that doesn't parse
+/// is an error, since an empty one would hand every input back to the branch's notes.
+pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::Ledger> {
+    ledger_at(root, &point.theirs, "on the merged side")
+}
+
+/// Added to an error from the steps after the merge commit (moving inline stamps, listing
+/// stale sections), so the error doesn't read as if the merge failed.
+const AFTER_COMMIT: &str = "the merge is committed, but the steps after it failed; fix what \
+     the error names, then run `cargo xtask docs check` and verify each stale section with \
+     `--note`";
+
+/// The context of an error before the merge is committed, with `MERGE_HEAD` still set
+/// (#704 N1).
+const MERGE_OPEN: &str = "the merge is still in progress and not committed: fix what the \
+     error names and run `git commit --no-edit`, or `git merge --abort` and run `docs \
+     merge-main` again";
 
 /// Each stale section after a merge commit with its stale inputs, each with this branch's
 /// earlier note and the merged commits that changed it (none listed when the branch has no
@@ -375,23 +433,74 @@ fn stale_report(root: &Path) -> Result<BTreeMap<String, Vec<StaleInput>>> {
         let mut list = Vec::new();
         for (input, path) in inputs {
             let Some(p) = &point else { break };
-            let range = format!("{}..{}", p.base, p.theirs);
-            let log = git_ok(root, &["log", "--format=%h %s", &range, "--", &path])?;
             list.push(StaleInput {
                 note: own
                     .get(&key)
                     .and_then(|s| s.get(&input))
                     .and_then(|e| e.note.clone()),
-                commits: String::from_utf8_lossy(&log)
-                    .lines()
-                    .map(str::to_owned)
-                    .collect(),
+                commits: merged_commits(root, p, &[path])?,
                 input,
             });
         }
         out.insert(key, list);
     }
     Ok(out)
+}
+
+/// The commits `point`'s merge brought in that changed any of `paths`, newest first, as
+/// `<hash> <subject>`.
+pub(crate) fn merged_commits(
+    root: &Path,
+    point: &MergePoint,
+    paths: &[String],
+) -> Result<Vec<String>> {
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let range = format!("{}..{}", point.base, point.theirs);
+    let mut args = vec!["log", "--format=%h %s", &range, "--"];
+    args.extend(paths.iter().map(String::as_str));
+    let log = git_ok(root, &args)?;
+    Ok(String::from_utf8_lossy(&log)
+        .lines()
+        .map(str::to_owned)
+        .collect())
+}
+
+/// The PRs named in `<hash> <subject>` lines, from the `(#N)` a squash merge ends its
+/// subject with, in ascending order without repeats. A subject without one names none.
+pub(crate) fn pr_numbers<'a>(commits: impl IntoIterator<Item = &'a String>) -> Vec<u32> {
+    let mut prs: Vec<u32> = commits
+        .into_iter()
+        .filter_map(|c| {
+            let open = c.trim_end().strip_suffix(')')?.rsplit_once("(#")?.1;
+            open.parse().ok()
+        })
+        .collect();
+    prs.sort_unstable();
+    prs.dedup();
+    prs
+}
+
+/// `prs` as `#1, #2`.
+pub(crate) fn pr_list(prs: &[u32]) -> String {
+    prs.iter()
+        .map(|n| format!("#{n}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The PRs among `prs` that `note` doesn't name as `#N`.
+pub(crate) fn unnamed_prs(note: &str, prs: &[u32]) -> Vec<u32> {
+    let named: Vec<u32> = note
+        .split('#')
+        .skip(1)
+        .filter_map(|rest| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            digits.parse().ok()
+        })
+        .collect();
+    prs.iter().copied().filter(|n| !named.contains(n)).collect()
 }
 
 /// After a merge commit: runs `docs migrate` and commits what it changed, if anything, so
@@ -637,6 +746,29 @@ pub(crate) fn input_path(doc: &str, input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #677: the PRs a merge brought in come from the `(#N)` squash subjects end with, and
+    /// a note names one with `#N`.
+    #[test]
+    fn merged_prs_come_from_squash_subjects() {
+        let commits: Vec<String> = [
+            "a1b2c3 docs: fix (#591) ",
+            "d4e5f6 core: frame sync (#581)",
+            "070809 Merge branch 'main' into wave/m1-3",
+            "0a0b0c fix (#12) follow-up",
+            "0d0e0f again (#581)",
+            "101112 not a number (#x)",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        assert_eq!(pr_numbers(&commits), vec![581, 591]);
+        assert_eq!(pr_list(&[581, 591]), "#581, #591");
+        assert_eq!(
+            unnamed_prs("#581's sync is what A says; #5910 too", &[581, 591]),
+            vec![591]
+        );
+        assert!(unnamed_prs("(#581, #591)", &[581, 591]).is_empty());
+    }
 
     const DOC: &str = "<!-- @doc\nid = \"T\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n";
 

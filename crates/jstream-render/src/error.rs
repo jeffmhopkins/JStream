@@ -75,6 +75,14 @@ pub enum RenderError {
     /// Staging a [`jstream_platform::GpuFrame`](jstream_platform::GpuFrame) failed.
     #[error("staging a source frame failed: {0}")]
     Sync(PlatformError),
+    /// wgpu raised an error no call returned, such as a validation error in a submitted
+    /// command, or the invalid resources a lost device leaves
+    /// ([`Compositor::take_error`](crate::Compositor::take_error)).
+    #[error("the GPU reported an error: {detail}")]
+    Uncaptured {
+        /// wgpu's message.
+        detail: String,
+    },
     /// The GPU finished the frame, but mapping the readback buffer failed.
     #[error("reading the frame back failed: {detail}")]
     Readback {

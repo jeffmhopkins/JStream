@@ -342,7 +342,8 @@ when there are none, and `transitions` (each preset with its `kind_version`, and
 default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
 older file has none of these). A scene writes `transition_in` and `transition_out`
 when set, and an item its `transition` when not the default. A source's `audio` is saved
-only where it differs from its kind's defaults. `folders` and `labels` are in their
+only where it differs from its kind's defaults, except a `webcam`'s, which is always
+saved, so a webcam without it can only come from before webcams had audio (#716). `folders` and `labels` are in their
 orders, each omitted when empty. A scene's `folder`, `icon`, `color`, `favourite` and
 `show_in_multiview`, and a source's `labels` and `favourite`, are each omitted while
 they have their default, so a collection without them saves as it did before they
@@ -440,13 +441,18 @@ hotkeys the parity collection gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
-moves on, and a migration has to load it); a file without `encoders` or any
+moves on, and a migration has to load it); the fixture with its `webcam` sources'
+settings taken out (as saved before the kind had a `device`) loading to the same state;
+a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none, and one without
 `video_mixes` or any `video_mix` likewise; a file without `sends`, `buses` or source
 `audio` (as saved before audio existed) keeping its audio sources' master sends at
-0 dB; a file without `master` or any output's `filters` (as saved before their chains
+0 dB, its webcams' with their audio off; a webcam with no audio settings (as saved
+before webcams had audio, #716; a webcam's are written since, even at their defaults)
+loading with its master send and its audio off, so an older collection never starts
+recording a webcam's microphone, and saving that back; a file without `master` or any output's `filters` (as saved before their chains
 existed) loading with those chains empty and the sources' filters intact; a removed
-master send's round trip; a profile's round trip; a geometry's flip loading back and a file without one loading unflipped; a virtual camera's round trip;
+master send's round trip, a webcam's among them (its audio on, no send back); a profile's round trip; a geometry's flip loading back and a file without one loading unflipped; a virtual camera's round trip;
 transitions' round trip (with the initial `cut` deleted, or kept but changed) and a
 preset of another kind version refused; hotkeys' round trip, and a file whose binding
 names a missing scene refused; a clone's

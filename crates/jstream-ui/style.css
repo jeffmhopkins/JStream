@@ -287,6 +287,10 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .zone.horizontal .group-body.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
 .zone.horizontal .group-body.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 .dock-panel[hidden] { display: none; }
+/* The scene and object lists fill their group, so the space under the rows is the
+   panel's own and opens its right-click menu. */
+.dock-panel:not([hidden]):has(> .scenes-panel, > .sources-panel) { display: flex; flex-direction: column; min-height: 100%; }
+.dock-panel > .scenes-panel, .dock-panel > .sources-panel { flex: 1 0 auto; }
 /* The tab is the panel's title. */
 .dock-panel > section:first-child > h2:first-child, .dock-panel > h2:first-child { display: none; }
 
@@ -364,6 +368,66 @@ textarea { width: 100%; min-height: 4rem; resize: vertical; }
 .row:hover .row-tools, .row.selected .row-tools, .row:focus-within .row-tools { visibility: visible; }
 .row .row-tools button, .row .eye { border-color: transparent; background: none; font-size: 0.75rem; }
 .row .row-tools button:hover:not(:disabled) { border-color: var(--line); }
+/* The Scenes and Scene objects panels (spec-panels.md 1 and 2): search, filter and
+   30 px rows with a caret slot, a type icon, the name and hover-revealed buttons. */
+.tree-panel { display: flex; flex-direction: column; gap: 6px; }
+.tree-bar { display: flex; gap: 6px; align-items: center; }
+.tree-search {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px;
+  background: var(--app); border: 1px solid var(--border); border-radius: 5px; color: var(--dim);
+}
+.tree-search input { flex: 1 1 auto; min-width: 0; padding: 0; background: transparent; border: 0; color: var(--text); outline: none; }
+.tree-filter { position: relative; }
+.tree-filter-button {
+  position: relative; width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--app); border: 1px solid var(--border); border-radius: 5px; color: var(--muted);
+}
+.tree-filter-button.on { background: var(--selected); border-color: var(--accent); color: #b5ceff; }
+.tree-filter-count {
+  position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--accent); color: var(--app); font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;
+}
+.tree-pop {
+  position: absolute; z-index: 2; top: 34px; right: 0; width: 220px; padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--menu); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.tree-check {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 5px;
+  background: none; color: var(--text); text-align: left;
+}
+.tree-check:hover:not(:disabled) { background: var(--hover); }
+.tree-box {
+  width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid #4d535e; display: flex; align-items: center;
+  justify-content: center; color: var(--app); font-size: 10px; line-height: 1;
+}
+.tree-box.on { border-color: #f2c14e; background: #f2c14e; }
+.tree-pop-foot { display: flex; justify-content: space-between; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+.tree-pop-foot button { background: none; border: 0; color: var(--muted); padding: 6px 8px; }
+.tree-caption { margin: 0; padding: 2px 4px; color: var(--dim); font-size: 12px; }
+.tree-rows { display: flex; flex-direction: column; gap: 1px; margin: 0; }
+.tree-rows.reordering { cursor: grabbing; }
+.row.tree-row { gap: 2px; height: 30px; padding: 0 4px 0 6px; border-radius: 5px; }
+.tree-row .tree-caret { flex: 0 0 16px; }
+.tree-row .row-main { align-items: center; gap: 7px; height: 100%; padding: 0 2px; color: var(--text); }
+.tree-row .row-main:hover:not(:disabled) { background: none; }
+.tree-row .row-main .icon { flex: 0 0 auto; color: var(--muted); }
+.tree-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tree-label.reference { font-style: italic; }
+.tree-badge { font-size: 11px; color: var(--problem); }
+.row.tree-row.hidden .row-main { opacity: 1; color: #6b717c; }
+.row.tree-row.hidden .row-main .icon { color: #4d535e; }
+.row.tree-row.dragging { opacity: 0.5; }
+.row.tree-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.row.tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.tree-row .hov {
+  flex: 0 0 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: none; color: var(--muted);
+  opacity: 0; transition: opacity 120ms;
+}
+.tree-row:hover .hov, .tree-row .hov:focus-visible, .tree-row .hov.on { opacity: 1; }
+.tree-row .hov:hover:not(:disabled) { background: var(--hover); }
+.tree-star.on .icon { fill: #f2c14e; stroke: #f2c14e; }
+.tree-check .tree-star.on { display: flex; }
 .add { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .add input { flex: 1; min-width: 6rem; }
 .add select { flex-basis: 100%; }
@@ -385,6 +449,98 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 
 .source-title { margin: 0; font-weight: 600; }
 .source-title + .muted { margin: 0 0 0.75rem; }
+.source-title.reference { font-style: italic; }
+
+/* The Inspector (spec-panels.md#inspector): a header row, then foldable sections of
+   labelled number fields with steppers. */
+.inspector { display: grid; gap: 14px; }
+.inspector-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: var(--menu);
+}
+.inspector-head .source-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspector-head .kind-tag { flex: 1 1 auto; color: var(--dim); font-size: 11px; white-space: nowrap; }
+.inspector-head .more-tag { color: #b5ceff; font-size: 11px; }
+.icon-button { display: inline-grid; place-items: center; padding: 2px; border: none; background: none; color: var(--muted); }
+.panel-inspector .icon-button { padding: 2px; }
+.icon-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.fold-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panel-inspector .fold-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.panel-inspector .fold-toggle:hover:not(:disabled) { background: none; color: var(--text); }
+.fold-toggle .caret { width: 10px; font-size: 9px; }
+.fold-hint { color: var(--dim); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.fold-body { margin-top: 8px; }
+.fold-body[hidden] { display: none; }
+.panel-inspector .link-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+.panel-inspector .link-toggle.on { background: var(--selected); border-color: var(--accent); color: #b5ceff; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.number-field, .select-field { display: grid; gap: 4px; min-width: 0; }
+.field-label { color: var(--muted); font-size: 12px; }
+.stepper {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--app);
+}
+.stepper:focus-within { border-color: var(--accent); }
+.panel-inspector .stepper button {
+  flex: none;
+  width: 22px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+.panel-inspector .stepper button:first-child { border-right: 1px solid var(--border); }
+.panel-inspector .stepper button:last-child { border-left: 1px solid var(--border); }
+.stepper input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  text-align: right;
+}
+.stepper input:focus-visible { outline: none; }
+.stepper .unit { padding: 0 6px 0 2px; color: var(--faint); font-size: 11px; }
+.select-field select { height: 30px; }
+.key-value { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 26px; }
+.key-value .key { color: var(--muted); }
+.key-value select { width: 150px; }
+.inspector .note { margin: 6px 0 0; color: var(--dim); font-size: 11px; }
 .section { margin: 0 0 0.75rem; padding: 0; border: none; }
 .section legend, .section summary { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.4rem; }
 .field {
@@ -425,12 +581,16 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .canvas-view .preview { width: min(100cqw, 100cqh * 16 / 9); }
 .inline-check { width: auto; }
 .stage { position: relative; touch-action: none; user-select: none; outline-offset: 2px; }
+/* The preview picture under the overlay; its box is set from the canvas's fit. */
+.stage-screen { position: absolute; pointer-events: none; }
 .stage-overlay {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
+  /* A selection's handles and readout may reach past the frame. */
+  overflow: visible;
 }
 /* The floating tools, top right (§4.17). */
 .canvas-tools {
@@ -512,6 +672,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .output-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .output .target { margin: 0; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
 .output .hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.output .warning { margin: 0; color: var(--problem); font-size: 0.8rem; }
 .output .vcam-status { margin: 0; font-size: 0.85rem; }
 .output .vcam-status.unregistered { color: var(--muted); }
 .output .buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
@@ -666,4 +827,157 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 @media (max-width: 800px) {
   .studio-bar { grid-template-columns: 1fr; }
   .studio-actions { justify-content: flex-start; }
+}
+
+/* The right-click menu (spec-workspace.md 5.1). */
+.ctx-catcher { position: fixed; inset: 0; z-index: 99; }
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 5px;
+  background: var(--menu);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  font-size: 13px;
+}
+.context-menu.submenu { z-index: 101; width: 250px; min-width: 0; }
+.context-menu .menuitem { justify-content: flex-start; gap: 0; padding: 0 10px 0 8px; color: var(--text); }
+.context-menu .menuitem:disabled { opacity: 0.4; }
+.context-menu .menuitem.on { background: var(--menu-hover); }
+.ctx-check { flex: 0 0 14px; font-size: 12px; color: var(--link); }
+.ctx-label { flex: 1 1 auto; min-width: 0; margin-left: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.context-menu .hint { padding-left: 12px; }
+.ctx-arrow { flex: 0 0 10px; margin-left: 8px; font-size: 10px; color: var(--muted); }
+.ctx-head {
+  padding: 6px 10px 2px 30px;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+/* Modal dialogs (spec-workspace.md 0.15, 0.16). */
+.icon { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(5, 6, 8, 0.6);
+}
+.modal {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.modal:focus { outline: none; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.modal-titles { display: flex; flex-direction: column; }
+.modal-title { margin: 0; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.modal-sub { font-size: 11px; color: var(--muted); }
+.modal-close { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); font-size: 16px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.modal-footer button { border-radius: 6px; }
+.modal-footer button.secondary { background: none; padding: 7px 14px; }
+.modal-footer button.primary { padding: 7px 18px; }
+.modal input[type="radio"] { width: auto; margin: 0; accent-color: var(--accent); }
+
+/* The Add source dialog (spec-workspace.md 6.5). */
+.modal.add-source { width: 720px; }
+.add-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+.add-types { display: flex; flex-direction: column; gap: 2px; overflow: auto; padding: 8px; border-right: 1px solid var(--line); }
+.add-cat { padding: 8px 8px 4px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.8px; }
+.menuitem.add-type { justify-content: flex-start; gap: 10px; height: auto; padding: 6px 8px; color: var(--text); }
+.menuitem.add-type .icon { color: var(--muted); }
+.menuitem.add-type.on, .menuitem.add-type.on:hover:not(:disabled) { background: var(--selected); }
+.add-type-name { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.add-detail { display: flex; flex-direction: column; gap: 12px; overflow: auto; padding: 14px 16px; }
+.add-head { display: flex; align-items: center; gap: 10px; color: #c9ced6; }
+.add-head-text { display: flex; flex-direction: column; }
+.add-type-title { font-weight: 600; color: var(--text); }
+.add-desc { font-size: 12px; color: var(--muted); }
+.add-new, .add-existing { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.add-existing { padding: 4px 0; }
+.add-existing span { font-style: italic; }
+.modal input.add-name { width: auto; height: 32px; margin-left: 22px; padding: 0 9px; background: var(--app); border: 1px solid var(--border); border-radius: 5px; }
+.add-existing-list { display: flex; flex-direction: column; gap: 4px; }
+.add-existing-title { font-size: 12px; color: var(--muted); }
+.add-note { font-size: 11px; color: var(--dim); }
+
+/* The Properties dialog (spec-workspace.md 6.2): name and settings on the left, filters
+   on the right; Defaults sits apart from Cancel and OK. */
+.modal.props-dialog { width: 860px; height: 640px; }
+.props-head { display: flex; align-items: center; gap: 10px; }
+.props-head .icon { color: var(--muted); }
+.props-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; }
+.props-settings { min-height: 0; overflow: auto; padding: 14px 16px; }
+.props-name { grid-template-columns: 1fr; gap: 0.25rem; }
+.props-name input { width: 100%; }
+.props-side { min-height: 0; overflow: auto; padding: 14px 16px; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.props-side-head { display: flex; align-items: baseline; gap: 8px; }
+.props-side-title { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); }
+.props-side-note { font-size: 11px; color: var(--dim); }
+.props-chain-head { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.props-filters { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.props-filter { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 6px; background: var(--menu); border-radius: 5px; }
+.props-filter-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.props-filter.off .props-filter-name { color: var(--dim); text-decoration: line-through; }
+.props-eye, .props-remove { width: 24px; height: 24px; padding: 0; border: 0; background: none; color: #c9ced6; }
+.props-filter.off .props-eye { color: var(--faint); }
+.props-empty { margin: 0; font-size: 12px; color: var(--faint); }
+.props-side-foot { margin: auto 0 0; font-size: 11px; color: var(--dim); }
+.props-add-filter { align-self: flex-start; }
+.modal-footer .props-defaults { margin-right: auto; }
+
+/* The Transform panel (spec-panels.md#transform-arrange-panel): a summary, the Align to
+   switch, grids of icon buttons, and the arrange buttons. */
+.transform { display: grid; gap: 8px; }
+.transform .summary { margin: 0; color: var(--muted); }
+.transform h3 {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.align-to { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.align-to .key { color: var(--muted); }
+.segmented { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--app); }
+.panel-transform .segmented button { padding: 2px 10px; border: none; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; }
+.panel-transform .segmented button[aria-pressed="true"] { background: var(--hover); color: var(--text); }
+.tool-grid { display: grid; grid-template-columns: repeat(6, 32px); gap: 6px; }
+.panel-transform .tool-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--app);
+  color: #c9ced6;
+}
+.panel-transform button:disabled { opacity: 0.35; }
+.arrange-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.panel-transform .arrange-grid button {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 5px;
+  background: var(--menu);
+  font-size: 12px;
+  text-align: left;
 }
