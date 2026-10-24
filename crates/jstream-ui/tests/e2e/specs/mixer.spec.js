@@ -41,7 +41,7 @@ test('the master card folds its channels, whose dB fields set the gain', async (
   await channels.getByRole('button', { name: 'Increase Mic · ES-9 Line gain' }).click();
   await expect(mic).toHaveValue('−5.5');
   await expect.poll(() => rev(page)).toBe(start + 2);
-  await expect(channels.getByRole('slider', { name: 'Mic · ES-9 Line fader' })).toHaveAttribute('aria-valuetext', '-5.5 dB');
+  await expect(channels.getByRole('slider', { name: 'Mic · ES-9 Line fader' })).toHaveAttribute('aria-valuetext', '\u22125.5 dB');
 
   // Folding hides them again.
   await fold(page).click();
@@ -76,10 +76,13 @@ test('the master card shows the loudness against the target and warns on true pe
   await expect(rows.nth(1).locator('.master-note')).toHaveText('safe');
   await expect(rows.nth(1).locator('.master-value')).toHaveText('−6.0 dBTP');
   await expect(rows.nth(1)).not.toHaveClass(/\bover\b/);
+  // Only the warning is announced, not the readouts that change every tick.
+  await expect(card.getByRole('status')).toHaveCount(0);
 
   tick({ sources: [], buses: [master([1.2, 1.0])] });
   await expect(rows.nth(1).locator('.master-note')).toHaveText('over 0 dBTP: add a true-peak limiter');
   await expect(rows.nth(1)).toHaveClass(/\bover\b/);
+  await expect(card.getByRole('status')).toHaveText('over 0 dBTP: add a true-peak limiter');
 });
 
 test('the buses fold below the channels, the master first', async ({ page, daemon }) => {

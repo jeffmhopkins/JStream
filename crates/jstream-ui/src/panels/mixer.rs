@@ -286,14 +286,14 @@ pub fn db_to_position(db: f32) -> u16 {
         .unwrap_or(0)
 }
 
-/// A gain for a strip's readout: `+3.0 dB`, `0.0 dB`, `-12.5 dB`.
+/// A gain for a strip's readout: `+3.0 dB`, `0.0 dB`, `−12.5 dB` (with U+2212).
 pub fn format_gain(db: f32) -> String {
     if db > 0.0 {
         format!("+{db:.1} dB")
     } else if db == 0.0 {
         "0.0 dB".into()
     } else {
-        format!("{db:.1} dB")
+        minus(format!("{db:.1} dB"))
     }
 }
 
@@ -900,7 +900,7 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
                     class="master-fold"
                     aria-expanded=move || open.get().to_string()
                     aria-controls="mix-channels"
-                    title="Show or hide the channels feeding the master"
+                    title="Show or hide the mixer's channels"
                     on:click=move |_| open.update(|o| *o = !*o)
                 >
                     <span class="caret" aria-hidden="true">{move || if open.get() { "▾" } else { "▸" }}</span>
@@ -935,13 +935,15 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
                     <div class="level-fill" style:width=fill></div>
                     <div class="level-target" title="Target" style:left=target></div>
                 </div>
-                <span class="master-value mono" role="status" title=loudness_title>
+                <span class="master-value mono" title=loudness_title>
                     {move || format!("{} LUFS", format_lufs(master().loudness.and_then(|l| l.short_term)))}
                 </span>
             </div>
             <div class="master-row" class:over=over>
                 <span class="master-label">"True peak"</span>
-                <span class="master-note">{move || true_peak_note(dbtp()).0}</span>
+                <span class="master-note" role=move || over().then_some("status")>
+                    {move || true_peak_note(dbtp()).0}
+                </span>
                 <span class="master-value mono">{move || format_true_peak(master().true_peak)}</span>
             </div>
         </div>
@@ -977,7 +979,7 @@ fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
                 class="master-fold"
                 aria-expanded=move || open.get().to_string()
                 aria-controls="mix-columns"
-                title="Show or hide the channels feeding the master"
+                title="Show or hide the mixer's channels"
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 <span class="caret" aria-hidden="true">{move || if open.get() { "▾" } else { "▸" }}</span>
@@ -988,11 +990,12 @@ fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
                 <div class="level-fill" style:height=fill></div>
                 <div class="level-target" style:bottom=target></div>
             </div>
-            <span class="master-value mono" role="status">{move || format_lufs(short())}</span>
+            <span class="master-value mono">{move || format_lufs(short())}</span>
             <span class="master-unit">"LUFS"</span>
             <span
                 class="master-value mono"
                 class:over=move || true_peak_note(dbtp()).1
+                role=move || true_peak_note(dbtp()).1.then_some("status")
                 title=move || format!("True peak: {}", true_peak_note(dbtp()).0)
             >
                 {move || format_true_peak(master().true_peak).replace(" dBTP", "")}
@@ -2000,7 +2003,7 @@ mod tests {
         assert!(checked_gain(f32::NAN).is_err());
         assert_eq!(format_gain(3.0), "+3.0 dB");
         assert_eq!(format_gain(0.0), "0.0 dB");
-        assert_eq!(format_gain(-12.5), "-12.5 dB");
+        assert_eq!(format_gain(-12.5), "\u{2212}12.5 dB");
     }
 
     #[test]

@@ -158,7 +158,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true
-  peak "safe", then the warning over 0 dBTP; and the Buses section folded under its
+  peak "safe" with nothing announced, then the warning over 0 dBTP, announced; and the Buses section folded under its
   count, the master first, adding a bus. The title bar's flip button turning the meters
   vertical: the master strip and its channels folded beside it by short name, the
   Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
