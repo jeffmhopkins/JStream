@@ -1,20 +1,27 @@
-//! The sources list: the selected scene's items, top of the stack first, each named by
-//! the source it places. An item is selected for the properties form, shown or hidden,
-//! moved up or down the stack, or removed from the scene; its source is renamed, or
-//! deleted everywhere through `delete.plan`. A right-click on a row opens the selected
-//! items' menu (`item_menu.rs`), and one on the panel's empty space opens the panel's
-//! menu, whose Add source opens the Add source dialog (`add_source.rs`).
+//! The Scene objects panel (spec-panels.md 2): the selected scene's items, top of the
+//! stack first, under the "In “<scene>”, top to bottom" caption and the search box and
+//! favourites filter. Each row shows its source's type icon and name (in italics when
+//! the source is placed in other scenes too), a visibility eye and a favourite star.
+//! A click selects an item (Shift adds or takes it out), a double click opens its
+//! Properties dialog, F2 renames its source in place and Del removes it from the scene;
+//! rows are reordered by dragging them (`item.reorder`). A right-click on a row opens the
+//! selected items' menu (`item_menu.rs`), plus deleting the source everywhere through
+//! `delete.plan`, and one on the panel's empty space opens the panel's menu, whose Add
+//! source opens the Add source dialog (`add_source.rs`).
 //!
-//! Docs: crates/jstream-ui/README.md#design
+//! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#objects
 
 use crate::app::SessionContext;
+use crate::icons::Icon;
 use crate::item_menu;
 use crate::menu::{Entry, Menus};
-use crate::panels::add_source::AddSourceDialog;
+use crate::panels::add_source::{AddSourceDialog, type_label};
 use crate::panels::confirm::{Confirm, Pending};
+use crate::panels::inspector::is_shared;
 use crate::panels::scenes::RenameField;
+use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
-use jstream_control::protocol::{DeleteTarget, Edit, ItemId, SceneId, SourceId};
+use jstream_control::protocol::{DeleteTarget, Edit, ItemId, SceneId, SourceId, SourceKind};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -24,11 +31,21 @@ struct Row {
     item_id: ItemId,
     source_id: SourceId,
     name: String,
-    kind: String,
+    /// The source's type icon.
+    icon: &'static str,
     visible: bool,
-    /// Its stacking index (0 is the bottom), and the scene's item count.
-    index: u32,
-    count: u32,
+    /// Whether the source is placed in other scenes too.
+    shared: bool,
+    favourite: bool,
+}
+
+/// The icon of a source of this kind: its type's, the scene icon for a nested scene.
+fn icon_of(kind: Option<&SourceKind>) -> &'static str {
+    match kind {
+        Some(SourceKind::Builtin { kind }) => type_label(kind).map_or("image", |(_, icon)| icon),
+        Some(SourceKind::Scene { .. }) => "layers",
+        _ => "image",
+    }
 }
 
 /// The selected scene's items, top of the stack first.
@@ -36,22 +53,21 @@ fn rows(collection: &Collection, scene_id: &SceneId) -> Vec<Row> {
     let Some(scene) = collection.scene(scene_id) else {
         return Vec::new();
     };
-    let count = u32::try_from(scene.items.len()).unwrap_or(u32::MAX);
     scene
         .items
         .iter()
-        .enumerate()
         .rev()
-        .map(|(index, item)| Row {
-            item_id: item.item_id.clone(),
-            source_id: item.source_id.clone(),
-            name: collection.source_name(&item.source_id),
-            kind: collection
-                .source(&item.source_id)
-                .map_or_else(String::new, |s| collection.kind_label(&s.kind)),
-            visible: item.visible,
-            index: u32::try_from(index).unwrap_or(u32::MAX),
-            count,
+        .map(|item| {
+            let source = collection.source(&item.source_id);
+            Row {
+                item_id: item.item_id.clone(),
+                source_id: item.source_id.clone(),
+                name: collection.source_name(&item.source_id),
+                icon: icon_of(source.map(|s| &s.kind)),
+                visible: item.visible,
+                shared: is_shared(collection, item),
+                favourite: source.is_some_and(|s| s.meta.favourite),
+            }
         })
         .collect()
 }
@@ -66,8 +82,16 @@ pub fn Sources() -> impl IntoView {
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
     let item_cx = item_menu::Context::from_page();
+    let filter = Filter::new();
+    let reorder = Reorder::new();
 
     let scene = move || studio.selection.with(|s| s.scene.clone());
+    let scene_name = move || {
+        let scene_id = scene()?;
+        studio
+            .collection
+            .with(|c| c.as_ref()?.scene(&scene_id).map(|s| s.name.clone()))
+    };
     let all_rows = move || {
         let Some(scene_id) = scene() else {
             return Vec::new();
@@ -75,6 +99,12 @@ pub fn Sources() -> impl IntoView {
         studio
             .collection
             .with(|c| c.as_ref().map(|c| rows(c, &scene_id)).unwrap_or_default())
+    };
+    let shown_rows = move || {
+        all_rows()
+            .into_iter()
+            .filter(|row| filter.shows(&row.name, row.favourite))
+            .collect::<Vec<_>>()
     };
 
     let ask_delete = move |source_id: SourceId, name: String| {
@@ -104,17 +134,43 @@ pub fn Sources() -> impl IntoView {
             studio.apply(&s, vec![edit]);
         }
     };
+    // The list is top first and `item.reorder` counts from the bottom, so a drop above a
+    // row goes after it in the scene's order.
+    let drop = move |moved: String, target: String, side: Side| {
+        let Some(scene_id) = scene() else { return };
+        let index = studio.collection.with_untracked(|c| {
+            let order: Vec<&str> = c
+                .as_ref()?
+                .scene(&scene_id)?
+                .items
+                .iter()
+                .map(|i| i.item_id.as_str())
+                .collect();
+            let side = match side {
+                Side::Before => Side::After,
+                Side::After => Side::Before,
+            };
+            dropped_at(&order, &moved.as_str(), &target.as_str(), side)
+        });
+        if let Some(index) = index {
+            send(Edit::ItemReorder {
+                item_id: ItemId::new(moved),
+                index,
+            });
+        }
+    };
 
     let row = move |row: Row| {
         let Row {
             item_id,
             source_id,
             name,
-            kind,
+            icon,
             visible,
-            index,
-            count,
+            shared,
+            favourite,
         } = row;
+        let key = item_id.to_string();
         let selected = {
             let id = item_id.clone();
             move || studio.selection.with(|s| s.contains(&id))
@@ -135,9 +191,14 @@ pub fn Sources() -> impl IntoView {
                 }
             }
         };
-        let start_rename = {
-            let id = source_id.clone();
-            move |_| renaming.set(Some(id.clone()))
+        let open_properties = {
+            let id = item_id.clone();
+            move |_| {
+                if let Some(cx) = item_cx {
+                    studio.select_item(Some(id.clone()));
+                    cx.properties(id.clone());
+                }
+            }
         };
         let rename = {
             let id = source_id.clone();
@@ -153,43 +214,57 @@ pub fn Sources() -> impl IntoView {
                 }
             }
         };
-        let item = item_id.clone();
-        let toggle = move |_: leptos::ev::MouseEvent| {
-            send(Edit::ItemSetVisible {
-                item_id: item.clone(),
-                scene_id: None,
-                visible: !visible,
-            });
+        // F2 renames the source, Del removes the item from the scene, as the menu's
+        // hints say.
+        let on_key = {
+            let (item, source) = (item_id.clone(), source_id.clone());
+            move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+                "F2" => {
+                    event.prevent_default();
+                    renaming.set(Some(source.clone()));
+                }
+                "Delete" => {
+                    event.prevent_default();
+                    send(Edit::ItemRemove {
+                        item_id: item.clone(),
+                    });
+                }
+                _ => {}
+            }
         };
-        let item = item_id.clone();
-        let raise = move |_: leptos::ev::MouseEvent| {
-            send(Edit::ItemReorder {
-                item_id: item.clone(),
-                index: index + 1,
-            });
+        let toggle = {
+            let item = item_id.clone();
+            move |_: leptos::ev::MouseEvent| {
+                send(Edit::ItemSetVisible {
+                    item_id: item.clone(),
+                    scene_id: None,
+                    visible: !visible,
+                });
+            }
         };
-        let item = item_id.clone();
-        let lower = move |_: leptos::ev::MouseEvent| {
-            send(Edit::ItemReorder {
-                item_id: item.clone(),
-                index: index.saturating_sub(1),
-            });
-        };
-        let item = item_id.clone();
-        let remove = move |_: leptos::ev::MouseEvent| {
-            send(Edit::ItemRemove {
-                item_id: item.clone(),
-            })
-        };
-        let delete = {
+        let toggle_favourite = {
             let id = source_id.clone();
-            let name = name.clone();
-            move |_| ask_delete(id.clone(), name.clone())
+            move || {
+                let edit = studio.collection.with_untracked(|c| {
+                    let source = c.as_ref()?.source(&id)?;
+                    let mut meta = source.meta.clone();
+                    meta.favourite = !meta.favourite;
+                    Some(Edit::SourceSetMeta {
+                        source_id: id.clone(),
+                        meta,
+                    })
+                });
+                if let Some(edit) = edit {
+                    send(edit);
+                }
+            }
         };
         // A right-click on the row opens the selected items' menu, after selecting the
-        // item alone unless it is already selected.
+        // item alone unless it is already selected. With one item, deleting its source
+        // everywhere follows.
         let on_row_context = {
             let id = item_id.clone();
+            let (source, name) = (source_id.clone(), name.clone());
             move |event: leptos::ev::MouseEvent| {
                 let (Some(menus), Some(cx), Some(scene_id)) = (menus, item_cx, scene()) else {
                     return;
@@ -200,40 +275,89 @@ pub fn Sources() -> impl IntoView {
                 let items: Vec<ItemId> = studio
                     .selection
                     .with_untracked(|s| s.items().cloned().collect());
-                let entries = item_menu::entries(cx, &scene_id, &items, item_menu::Scope::Objects);
-                if !entries.is_empty() {
-                    menus.open(&event, entries);
+                let mut entries =
+                    item_menu::entries(cx, &scene_id, &items, item_menu::Scope::Objects);
+                if entries.is_empty() {
+                    return;
+                }
+                if items.len() == 1 {
+                    let (source, name) = (source.clone(), name.clone());
+                    entries.extend([
+                        Entry::Sep,
+                        Entry::item("Delete source everywhere…", move || {
+                            ask_delete(source.clone(), name.clone());
+                        }),
+                    ]);
+                }
+                menus.open(&event, entries);
+            }
+        };
+        let drop_side = {
+            let key = key.clone();
+            move |side: Side| {
+                let key = key.clone();
+                move || {
+                    reorder
+                        .target
+                        .with(|t| t.as_ref().is_some_and(|(id, s)| *id == key && *s == side))
+                }
+            }
+        };
+        let dragging = {
+            let key = key.clone();
+            move || reorder.dragged.with(|d| d.as_deref() == Some(key.as_str()))
+        };
+        let press = {
+            let key = key.clone();
+            move |event: leptos::ev::PointerEvent| {
+                if !filter.active() && renaming.with_untracked(Option::is_none) {
+                    reorder.down(&key, &event);
                 }
             }
         };
         let shown = name.clone();
+        let eye_label = format!("Show or hide {name}");
+        let star_name = name.clone();
         view! {
-            <li class="row" class:selected=selected class:hidden=!visible on:contextmenu=on_row_context>
-                <button
-                    class="eye"
-                    title=if visible { "Hide" } else { "Show" }
-                    aria-pressed=if visible { "true" } else { "false" }
-                    on:click=toggle
-                >{if visible { "●" } else { "○" }}</button>
+            <li
+                class="row tree-row"
+                class:selected=selected
+                class:hidden=!visible
+                class:drop-before=drop_side(Side::Before)
+                class:drop-after=drop_side(Side::After)
+                class:dragging=dragging
+                data-tree-id=key
+                on:contextmenu=on_row_context
+                on:keydown=on_key
+                on:pointerdown=press
+            >
+                <span class="tree-caret"></span>
                 <Show
                     when=is_renaming
                     fallback=move || {
+                        let name = shown.clone();
                         view! {
-                            <button class="row-main" on:click=select.clone() on:dblclick=start_rename.clone()>
-                                {shown.clone()}
-                                <span class="muted">{kind.clone()}</span>
+                            <button class="row-main" on:click=select.clone() on:dblclick=open_properties.clone()>
+                                <Icon name=icon size=15 />
+                                <span class="tree-label" class:reference=shared>{name}</span>
                             </button>
                         }
                     }
                 >
                     <RenameField value=name.clone() done=rename.clone() />
                 </Show>
-                <span class="row-tools">
-                    <button title="Move up" disabled={index + 1 >= count} on:click=raise>"▲"</button>
-                    <button title="Move down" disabled={index == 0} on:click=lower>"▼"</button>
-                    <button title="Remove from this scene" on:click=remove>"−"</button>
-                    <button title="Delete the source everywhere" on:click=delete>"✕"</button>
-                </span>
+                <button
+                    type="button"
+                    class="hov tree-tool eye"
+                    class:on=!visible
+                    title="Visible in this scene"
+                    aria-label=eye_label
+                    aria-pressed=(!visible).to_string()
+                    on:click=toggle
+                >
+                    <Icon name=if visible { "eye" } else { "eye-off" } size=14 />
+                </button>
+                <Star name=star_name on=Signal::stored(favourite) toggle=toggle_favourite />
             </li>
         }
     };
@@ -269,19 +393,36 @@ pub fn Sources() -> impl IntoView {
     };
 
     view! {
-        <section class="panel sources-panel" on:contextmenu=on_context>
+        <section class="panel sources-panel tree-panel" on:contextmenu=on_context>
             <h2>"Sources"</h2>
+            <SearchBar what="objects" filter=filter />
             <Confirm pending=pending confirm=confirm_delete />
             <Show
                 when=move || scene().is_some()
                 fallback=|| view! { <p class="placeholder">"Select a scene."</p> }
             >
-                <ul class="rows">
-                    <For each=all_rows key=|row| row.clone() children=row />
+                <p class="tree-caption">
+                    "In “" {scene_name} "”, top to bottom"
+                </p>
+                <ul
+                    class="rows tree-rows"
+                    class:reordering=move || reorder.dragged.with(Option::is_some)
+                    on:pointermove=move |event| reorder.moved(&event)
+                    on:pointerup=move |_| reorder.up(drop)
+                    on:pointercancel=move |_| reorder.cancel()
+                >
+                    <For each=shown_rows key=|row| row.clone() children=row />
                 </ul>
-                <Show when=move || all_rows().is_empty()>
-                    <p class="placeholder">"This scene is empty."</p>
-                </Show>
+                {move || {
+                    let none = all_rows().is_empty();
+                    if none {
+                        Some(view! { <p class="placeholder">"This scene is empty."</p> }.into_any())
+                    } else if shown_rows().is_empty() {
+                        Some(view! { <p class="placeholder">"Nothing matches these filters."</p> }.into_any())
+                    } else {
+                        None
+                    }
+                }}
             </Show>
         </section>
     }
@@ -345,13 +486,10 @@ mod tests {
         let rows = rows(&collection(), &SceneId::new("main"));
         let ids: Vec<&str> = rows.iter().map(|r| r.item_id.as_str()).collect();
         assert_eq!(ids, ["top", "bottom"]);
+        assert!(!rows[0].visible && rows[1].visible);
         assert_eq!(
-            (rows[0].index, rows[0].count, rows[0].visible),
-            (1, 2, false)
-        );
-        assert_eq!(
-            (rows[1].name.as_str(), rows[1].kind.as_str()),
-            ("Camera", "webcam")
+            (rows[1].name.as_str(), rows[1].icon, rows[1].shared),
+            ("Camera", "webcam", false)
         );
         assert_eq!(rows[0].name, "gone", "a missing source shows its ID");
         assert!(super::rows(&collection(), &SceneId::new("other")).is_empty());

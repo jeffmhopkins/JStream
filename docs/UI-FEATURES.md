@@ -54,14 +54,14 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
-| [Theme and shared controls](#theme) | 8 | 3 | 2 | 2 | 0 | 1 |
+| [Theme and shared controls](#theme) | 8 | 3 | 3 | 1 | 0 | 1 |
 | [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 11 | 3 | 0 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 5 | 1 | 2 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 2 | 1 | 2 | 3 | 0 |
-| [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
-| [Scene objects panel](#objects) | 9 | 1 | 3 | 4 | 1 | 0 |
+| [Scenes panel](#scenes) | 10 | 4 | 3 | 1 | 2 | 0 |
+| [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 5 | 2 | 0 | 3 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
@@ -69,8 +69,8 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
-| [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **43** | **31** | **23** | **32** | **1** |
+| [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
+| **Total** | **130** | **51** | **31** | **15** | **32** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -89,10 +89,10 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. |
 | WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
-| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | The prototype's icons are in `icons.rs`; the Add source and Properties dialogs and the canvas tools use them. Panel rows still use text glyphs (▲ ▼ ✕ ● ○ ↺). |
+| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | The prototype's icons are in `icons.rs`; the Add source and Properties dialogs, the canvas tools and the Scenes and Scene objects rows use them. Other panels' rows still use text glyphs (● ○ ↺). |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ✅ | `NumberField` (`panels/number.rs`), used by the Inspector; the filters, mixer and dialogs take it as they are rebuilt. A drag shows its value as it goes and is sent once on release, so it is one undo step, where the prototype writes every step. |
 | WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | 🟡 | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", the transitions hint); fold state isn't remembered per title yet, and the Inspector's other users take it as they are built |
-| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ⬜ | Rows already show tools on hover; the prototype's look and "stays on" rule are missing. |
+| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | 🟡 | Built for the Scenes and Scene objects rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye and a favourite's star stay shown. The other panels' rows take it as they are rebuilt. |
 | WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss, in the prototype's toast colours. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
 
 <a id="header"></a>
@@ -185,7 +185,7 @@ on the canvas and in Scene objects but for its last lines.
 |---|---|---|---|---|
 | CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | 🟡 | Built but for the colour swatch column, which comes with the label menus that use it. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
 | CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions, Edit filters and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus), [FL-06](#filters) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
-| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Rename, New scene and Delete scene work, Rename and Delete though the prototype shows them disabled. Transitions and keyframes wait on T1 and K1, folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
+| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, New scene and Delete scene work, though the prototype shows all but New scene disabled. Transitions and keyframes wait on T1 and K1, folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
 | CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | 🟡 | The selected items' menu of [CM-02](#menus), ending with Add source and New group instead of Select all; New group waits on [OB-04](#objects). |
 | CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built. New folder ([SC-06](#scenes)), New group ([OB-04](#objects)) and the two Pastes (decision register D43) show disabled. |
 | CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
@@ -214,43 +214,43 @@ Spec: [workspace › dialogs and floating windows](../design/ui-prototype/spec-w
 <a id="scenes"></a>
 ## Scenes panel
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/scenes.rs"]
+covers = ["crates/jstream-ui/src/panels/scenes.rs", "crates/jstream-ui/src/panels/tree.rs"]
 -->
 
 Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| SC-01 | Scene list | Scenes in display order, with type icons; click selects; groups hidden. | ✅ | Icons come with WS-04. |
-| SC-02 | "program" badge | The scene on program shows "program" in red after its name. | 🟡 | Built as a "Program" pill; restyle. |
-| SC-03 | Search | "Search scenes" filters by name, keeping parents of matches. | ⬜ | |
-| SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Reordering exists as ▲/▼ buttons. Into a folder is `scene.set_folder` (SC-06). |
-| SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | 🟡 | Rename, New scene and Delete scene are in the right-click menus ([CM-03](#menus), [CM-05](#menus)), and still in the inline controls (double-click rename, ✕, "New scene name" field) until the restyle; F2 and Del have no key handlers, as in the prototype. |
+| SC-01 | Scene list | Scenes in display order, with type icons; click selects; groups hidden. | ✅ | Each row has its scene's icon (`scene.set_meta`'s, else the scene icon) in the prototype's 30 px row. |
+| SC-02 | "program" badge | The scene on program shows "program" in red after its name. | ✅ | |
+| SC-03 | Search | "Search scenes" filters by name, keeping parents of matches. | ✅ | Case-insensitive, on the name. Parents of matches wait on folders (SC-06). |
+| SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Rows drag before or after others (`scene.reorder`), with the prototype's drop line, and not while filtering. Into a folder waits on SC-06. A pointer drag rather than HTML drag and drop, as for the dock's tabs. |
+| SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | ✅ | F2 or the menu's Rename renames in place, Del or Delete scene asks with the plan's summary, and the menus' New scene adds one with its name open. A double click renames too, until scenes have their Properties dialog (DL-03). |
 | SC-06 | Folders | Folders organise scenes; collapsible. | ⬜ | `folder.*` and `scene.set_folder`; folders nest ([ADR-0024](adr/0024-scene-structure.md) §3, [ADR-0064](adr/0064-nested-scene-folders.md), #323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | 🔒 | K1. |
-| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | ⬜ | `label.*`, `source.set_meta` and `scene.set_meta` (ADR-0024 §4, #323). |
-| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | ⬜ | Filtering is client-side over `state.get`'s labels and favourites (#323). |
-| SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | 🔒 | Today a hover "Program" button cuts; the click-to-switch rule follows T1's studio mode. |
+| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🟡 | The favourite star is built (`scene.set_meta`). Labels wait on the label manager. |
+| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | 🟡 | The funnel with its count, Favorites only and Clear are built, client-side; the labels part waits on SC-08's labels. |
+| SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | 🔒 | Clicking a scene selects it, as in the prototype. Until T1's studio mode, a hover button (broadcast icon) puts the scene on program, and the row menu's Show in preview sends `studio.set_preview`. |
 
 <a id="objects"></a>
 ## Scene objects panel
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/sources.rs", "crates/jstream-ui/src/store.rs"]
+covers = ["crates/jstream-ui/src/panels/sources.rs", "crates/jstream-ui/src/store.rs", "crates/jstream-ui/src/panels/tree.rs"]
 -->
 
 Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-objects-panel).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| OB-01 | Object list | "In “<scene>”, top to bottom" caption, then the scene's items top first, with type icons. | 🟡 | The list exists as "Sources" with kind text and no caption. |
-| OB-02 | Visibility eye | Hover-revealed eye; stays shown while hidden; hidden rows dimmed. | 🟡 | Built as ●/○; restyle. |
-| OB-03 | References in italics | A placement of a source shared with other scenes reads in italics. | ⬜ | |
+| OB-01 | Object list | "In “<scene>”, top to bottom" caption, then the scene's items top first, with type icons. | ✅ | The caption and each source's type icon (the scene icon for a nested scene) in the prototype's 30 px rows. |
+| OB-02 | Visibility eye | Hover-revealed eye; stays shown while hidden; hidden rows dimmed. | ✅ | |
+| OB-03 | References in italics | A placement of a source shared with other scenes reads in italics. | ✅ | Italics when the source is placed in another scene too, as the Inspector's header does, since a source has no owner scene. |
 | OB-04 | Nested scenes as groups | A nested scene (group) expands to show its items. | ⬜ | `scene.set_role` and `item.move` exist ([ADR-0024](adr/0024-scene-structure.md)). |
 | OB-05 | Scene-input filter rows | An object with a mask, matte, clip or displacement filter shows the scene it uses as a child row with a role badge. | 🔒 | Scene-input video filters (V3, #313). |
-| OB-06 | Drag to reorder and group | Drag before, after or into a group. | ⬜ | Reorder exists as ▲/▼. |
-| OB-07 | Search | "Search objects". | ⬜ | |
+| OB-06 | Drag to reorder and group | Drag before, after or into a group. | 🟡 | Rows drag before or after others (`item.reorder`), not while filtering. Into a group waits on OB-04. |
+| OB-07 | Search | "Search objects". | ✅ | |
 | OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ✅ | Shift-click adds a row or takes it out; every selected item's row is highlighted. |
-| OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | 🟡 | Add source is the dialog (DL-06), from the panel's right-click menu, and Remove from scene is also in the item menu ([CM-04](#menus)). Delete everywhere is still an inline control. |
+| OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | ✅ | Add source is the dialog (DL-06), from the panel's right-click menu; Del or the item menu's Remove from scene removes; the row menu's Delete source everywhere… asks with the plan's summary. |
 
 <a id="inspector"></a>
 ## Inspector
@@ -399,7 +399,7 @@ handlers; the real UI makes them work.
 | KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc, Ctrl+A and arrows built (arrows move every selected item, as one edit); C and V wait on crop (CV-08). |
 | KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Shift half speed and add, and all of Ctrl, built; Alt crop waits on CV-08. |
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
-| KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ⬜ | |
+| KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | 🟡 | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene there, through its plan). Ctrl+D and Ctrl+Shift+D wait. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
 | KB-06 | Privacy key | Pause toggles privacy. | 🔒 | E2b (#317). |
 | KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | 🔒 | K1 (#319). |
