@@ -65,7 +65,8 @@ pub(crate) enum Sink {
 
 impl Sink {
     /// Builds the muxer for `destination`. A recording opens its `.part` file here and
-    /// writes the init segment; it stays provisional until `keep` is set.
+    /// the muxer writes the init segment with the first keyframe. It stays provisional
+    /// until `keep` is set.
     pub(crate) fn open(
         destination: Destination,
         info: &StreamInfo,
@@ -158,8 +159,8 @@ impl Sink {
         }
     }
 
-    /// Sends what goes before the first packet: FLV's header tags. A recording wrote
-    /// its init segment when it was opened.
+    /// Sends what goes before the first packet: FLV's header tags. A recording writes
+    /// its init segment with the first keyframe.
     pub(crate) fn start(&mut self) -> Result<(), String> {
         match self {
             Self::Flv { tagger, publish } => match tagger.start() {

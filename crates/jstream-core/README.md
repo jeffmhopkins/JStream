@@ -1201,9 +1201,9 @@ stops. The file is opened in `launch`, after the devices and encoders and before
 threads, so a path that can't be recorded to (one not absolute on this machine, an existing
 file or `.part`, a missing directory) fails the start with `action_failed` and `opening the recording: <reason>`.
 Until the start has succeeded, the recording is provisional: a start that fails
-after opening the file removes the `.part` file, so it doesn't block the next start,
-and so does one whose init segment can't be written (`DiskFull` or `Write` from
-`Recorder::create`).
+after opening the file removes the `.part` file, so it doesn't block the next start.
+The init segment is written with the first video keyframe, whose parameter sets give
+its `avcC` the encoder's own decoder configuration.
 Once `active`, the `.part` file is kept whatever happens: a write error (a full disk
 among them) settles `failed` and leaves it readable up to its last fragment, and a
 failed rename at stop is logged with the `.part` path. A packet the muxer rejects is
@@ -1213,9 +1213,13 @@ holding up a stream on the same session.
 
 **Video codecs.** The encoder profile's video codec picks the encoder and the FLV
 track (`video_codec` in `runtime/pipeline.rs`, `runtime/sink.rs`). H.264 goes in legacy
-FLV tags with the decoder configuration the start gives the muxer. HEVC and AV1 go in
-enhanced RTMP tags, named by FourCC, with the decoder configuration taken from the
-first keyframe, which their encoders send in-band. The protocol's `VideoCodec` names
+FLV tags and HEVC and AV1 in enhanced RTMP tags, named by FourCC. For every codec the
+muxers take the decoder configuration (the AVC sequence header and MP4 `avcC`, the
+enhanced `SequenceStart`) from the first keyframe, which every real encoder sends with
+its parameter sets in-band. A configuration made up ahead of it would not match the
+stream: a stand-in Baseline 3.0 SPS with no frame size made Windows refuse the
+recordings and YouTube drop the publish. Only the fake encoder sends bare H.264
+keyframes; those get stand-in parameter sets in front (`with_parameter_sets`). The protocol's `VideoCodec` names
 only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
 only: another codec fails the start with `recording … is not supported yet`.
 
