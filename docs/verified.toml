@@ -4185,7 +4185,7 @@ stamp = { hash = "b3:e97684fe742d6756" }
 stamp = { hash = "b3:ad416d69bdb5ceb9", by = "agent:t1-studio", note = "Mock daemon gains the wave's live handling; harness text unchanged and accurate" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/package.json"]
-stamp = { hash = "b3:adf0e4e847f64861", by = "agent:deps-thread", note = "Re-read after @playwright/test 1.56.1 -> 1.64.0: still pinned exactly in package.json and package-lock.json; mock daemon, per-test daemons, console-error rule, global setup and JSTREAM_E2E_CHROMIUM do not depend on the Playwright version" }
+stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #751 bumps @playwright/test 1.64.0 to 1.64.1, a patch release, pinned exactly in package.json and package-lock.json (playwright and playwright-core move with it). The harness section names no version: it still pins @playwright/test exactly, the browser is still Playwright's Chromium or JSTREAM_E2E_CHROMIUM, and nothing it describes about the config or the mock daemon changes; holds" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/playwright.config.js"]
 stamp = { hash = "b3:063a37f95f399bff" }
@@ -4218,7 +4218,7 @@ stamp = { hash = "b3:c24b29d28380aa44", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:cc33975e5ce1cf00", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 
 ["CRATE-jstream-ui-e2e#running"."file:crates/jstream-ui/tests/e2e/package.json"]
-stamp = { hash = "b3:adf0e4e847f64861", by = "agent:deps-thread", note = "Re-read after @playwright/test 1.56.1 -> 1.64.0: npm ci --ignore-scripts and npx playwright test unchanged; no Playwright or Node version named; CI paragraph matches the ui-e2e job, which passed on 1.64.0" }
+stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #751 bumps @playwright/test 1.64.0 to 1.64.1, a patch release, pinned exactly in package.json and package-lock.json. The running section names no version: npm ci --ignore-scripts, npx playwright test, JSTREAM_E2E_CHROMIUM or PLAYWRIGHT_BROWSERS_PATH holding the build this Playwright version expects, show-trace, and CI's ui-e2e job are unchanged by a patch bump; holds" }
 
 ["CRATE-jstream-ui-e2e#running"."file:crates/jstream-ui/tests/e2e/playwright.config.js"]
 stamp = { hash = "b3:063a37f95f399bff" }
