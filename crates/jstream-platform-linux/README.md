@@ -18,8 +18,9 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
 ADR is **accepted**; this crate has its first three parts (the platform basics, screen
-capture, then VA-API H.264 encoding), ALSA audio input and output, and the capture's
-DMA-BUF import into Vulkan, and the rest follows in later PRs. Layer 2, and one
+capture, then VA-API H.264 encoding), the software H.264 and AAC encoders, PipeWire and
+ALSA audio input and output, and the capture's DMA-BUF import into Vulkan, and the rest
+follows in later PRs. Layer 2, and one
 of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
@@ -126,8 +127,33 @@ It has:
   The portal protocol's option values are here too: source types, cursor modes,
   `persist_mode`, request handle tokens and request object paths.
 - **`PipeWire`** loads `libpipewire-0.3.so.0` and checks it is at least ADR-0060's floor
-  (1.0). **`PipeWireAudio`** (`AudioIo`) is built on it; listing devices and opening
-  streams report `Unsupported` for now.
+  (1.0). **`PipeWireAudio`** (`AudioIo`, ADR-0060 §4) is built on it. Each call
+  connects to the user's daemon on its own `pw_thread_loop` (`pipewire/audio.rs`) and
+  reads the registry with two core round trips: nodes, clients, the core's
+  `default.clock.rate`, the `default` metadata's `default.audio.source` and
+  `default.audio.sink`, and each device node's info, bound for its channel count
+  (`audio.channels`, else the length of `audio.position`), which a registry global
+  never carries (a node's proxy is destroyed when its global goes). No daemon is a missing component whose remedy starts it.
+  `pipewire/graph.rs` turns that into devices (`Audio/Source`, `Audio/Source/Virtual`,
+  `Audio/Sink` and `Audio/Duplex` nodes, with `node.name` as the stable id), the
+  processes playing audio (`Stream/Output/Audio` nodes, with the pid from their
+  client's `pipewire.sec.pid` and the executable's name from `/proc`, else the
+  application's name), and which node each target connects to: `target.object`, with
+  `stream.capture.sink` for an output's loopback, and a process's loopback recording
+  its first playback stream. A stream is fixed to interleaved `f32` at the graph's rate
+  in the device's layout (mono, stereo or 5.1; any other count, or a default with no
+  device, as stereo; `spa/audio.rs` builds and parses the format pods), so PipeWire
+  converts and the handler never sees a format change. `process` runs on the stream's
+  own loop thread: input packets carry their device position and a media-clock time
+  from `pw_stream_get_time_n` (the capture time, before the device's delay), a
+  corrupted buffer marks a discontinuity and its frames still count in the position, an
+  empty one (nothing playing into the source) is a silent packet, and output
+  asks the handler to fill each buffer. A named device or process whose node is
+  removed is `DeviceLost`; a default follows the session manager. The callbacks catch
+  panics (R-UNSAFE-005): a panicking handler is told once, with `InvalidState`, and
+  isn't called again. Dropping the stream stops its callbacks before it returns,
+  without telling the handler it failed. Choosing between PipeWire and the ALSA
+  fallback (ADR-0060 §8) isn't wired yet.
 - **`AlsaAudio`** (`AudioIo`): audio input and output through ALSA, the fallback
   ADR-0060 §4 names for a machine without a PipeWire daemon, on `libasound.so.2` loaded
   at run time. `devices` lists the PCMs in ALSA's name hints (`default`, `sysdefault:`,
@@ -235,8 +261,8 @@ Not here yet, in roughly the order they follow:
 - the engine starting each portal source's capture with `start_with` and
   `CaptureOptions::for_source`, and calling `forget_source` when the source is deleted,
   once captures follow sources on this wave (it captures the primary display for now);
-- PipeWire audio streams (ADR-0060 §4), including desktop and application audio, and
-  choosing between PipeWire and ALSA where both are present;
+- choosing between PipeWire and ALSA (ADR-0060 §8): ALSA when no PipeWire daemon runs,
+  and which one where both are present;
 - V4L2 webcams;
 - the stream-key store.
 
@@ -256,9 +282,11 @@ passing a file descriptor over a socket pair, restore token files, the PipeWire 
 libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
 stopping on drop, a capture stream running again after an overrun, loopback refused, an
 unknown PCM and the listing) pass with or without those libraries installed and need no
-GPU, session or daemon. ALSA's sample conversion, channel layouts, listed names and frame
-times are platform-independent. The OpenH264 tests use a fake download and a fake
-encoder behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
+GPU, session or daemon; a missing PipeWire daemon is tried on a socket name nothing
+listens on. The registry reading and stream planning (`pipewire/graph.rs`), the audio
+format pods, and ALSA's sample conversion, channel layouts, listed names and frame times
+are platform-independent. The OpenH264 tests use a fake download and a fake encoder
+behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
@@ -266,5 +294,7 @@ and run by hand: the session bus (`dbus-run-session` is enough), a portal captur
 GNOME or KDE session with PipeWire (on the CPU path, and on the GPU path with a Vulkan
 driver that imports DMA-BUFs), VA-API H.264 encodes on a GPU with an encode driver,
 from CPU frames and from the context's encode targets (which needs the Vulkan and
-VA-API drivers on one render node), and a second of ALSA's default input on a sound
-card (`null` isn't paced, so only a real device shows real-time recording).
+VA-API drivers on one render node), `PipeWireAudio` recording, playing and looping back
+on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes are enough, no sound card),
+and a second of ALSA's default input on a sound card (`null` isn't paced, so only a real
+device shows real-time recording).
