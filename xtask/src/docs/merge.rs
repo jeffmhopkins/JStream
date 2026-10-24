@@ -58,8 +58,35 @@ pub(crate) struct StaleInput {
     pub(crate) input: String,
     /// This branch's note on it before the merge, when the branch had written its own entry.
     pub(crate) note: Option<String>,
-    /// The merged commits that changed the file the input lives in, as `<hash> <subject>`.
-    pub(crate) commits: Vec<String>,
+    /// The merged commits that changed it (docs/DOCS.md#verification).
+    pub(crate) commits: Vec<Commit>,
+}
+
+/// A merged commit that changed a section's input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Commit {
+    /// `<hash> <subject>`.
+    pub(crate) line: String,
+    /// The PRs it came from: the `(#N)` a squash merge ends its subject with and, for a
+    /// wave's landing squash, the `* <subject> (#N)` lines of its body, which are the PRs
+    /// the wave carried (docs/runbooks/waves.md#landing). In ascending order.
+    pub(crate) prs: Vec<u32>,
+}
+
+impl Commit {
+    /// The commit whose `<hash> <subject>` is `line` and whose whole message is `message`.
+    pub(crate) fn new(line: &str, message: &str) -> Self {
+        let mut prs: Vec<u32> = super::progress::merged_in(message)
+            .iter()
+            .filter_map(|m| u32::try_from(m.number).ok())
+            .collect();
+        prs.sort_unstable();
+        prs.dedup();
+        Commit {
+            line: line.to_owned(),
+            prs,
+        }
+    }
 }
 
 /// The merge `docs merge-main` made last on this branch: the latest merge on its
@@ -504,7 +531,7 @@ fn stale_report(root: &Path) -> Result<BTreeMap<String, Vec<StaleInput>>> {
                     .get(&key)
                     .and_then(|s| s.get(&input))
                     .and_then(|e| e.note.clone()),
-                commits: merged_commits(root, p, &[path])?,
+                commits: merged_commits(root, p, &[(input.clone(), path)])?,
                 input,
             });
         }
@@ -513,35 +540,87 @@ fn stale_report(root: &Path) -> Result<BTreeMap<String, Vec<StaleInput>>> {
     Ok(out)
 }
 
-/// The commits `point`'s merge brought in that changed any of `paths`, newest first, as
-/// `<hash> <subject>`.
+/// The commits `point`'s merge brought in that changed any of `inputs`, each a ledger key
+/// with the file it lives in ([`input_path`]), newest first. A commit counts for a `dep:`
+/// input only when it changed the text the input names (the anchor's section or row, or
+/// the whole doc's body), not just any part of its file (#688).
 pub(crate) fn merged_commits(
     root: &Path,
     point: &MergePoint,
-    paths: &[String],
-) -> Result<Vec<String>> {
-    if paths.is_empty() {
+    inputs: &[(String, String)],
+) -> Result<Vec<Commit>> {
+    if inputs.is_empty() {
         return Ok(Vec::new());
     }
     let range = format!("{}..{}", point.base, point.theirs);
-    let mut args = vec!["log", "--format=%h %s", &range, "--"];
-    args.extend(paths.iter().map(String::as_str));
-    let log = git_ok(root, &args)?;
-    Ok(String::from_utf8_lossy(&log)
-        .lines()
-        .map(str::to_owned)
-        .collect())
+    let mut paths: Vec<&str> = inputs.iter().map(|(_, p)| p.as_str()).collect();
+    paths.sort_unstable();
+    paths.dedup();
+    // Per commit: a record separator, its full hash, `<hash> <subject>` and its message,
+    // then the files it changed among `paths` (none for a merge commit).
+    let mut args = vec![
+        "-c",
+        "core.quotePath=false",
+        "log",
+        "--name-only",
+        "--format=%x1e%H%x1f%h %s%x1f%B%x1f",
+        &range,
+        "--",
+    ];
+    args.extend(paths.iter().copied());
+    let log = String::from_utf8_lossy(&git_ok(root, &args)?).into_owned();
+    let mut out = Vec::new();
+    for record in log.split('\x1e').skip(1) {
+        let mut parts = record.splitn(4, '\x1f');
+        let (Some(full), Some(line), Some(message)) = (parts.next(), parts.next(), parts.next())
+        else {
+            bail!("invariant: `git log` wrote a record without its fields: {record:?}");
+        };
+        let changed: Vec<&str> = parts
+            .next()
+            .unwrap_or_default()
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        let mut counts = false;
+        for (input, path) in inputs {
+            if !changed.is_empty() && !changed.contains(&path.as_str()) {
+                continue;
+            }
+            counts = match input.strip_prefix("dep:") {
+                Some(dep) => dep_changed(root, full, path, dep)?,
+                None => true,
+            };
+            if counts {
+                break;
+            }
+        }
+        if counts {
+            out.push(Commit::new(line, message));
+        }
+    }
+    Ok(out)
 }
 
-/// The PRs named in `<hash> <subject>` lines, from the `(#N)` a squash merge ends its
-/// subject with, in ascending order without repeats. A subject without one names none.
-pub(crate) fn pr_numbers<'a>(commits: impl IntoIterator<Item = &'a String>) -> Vec<u32> {
+/// Whether commit `rev` changed the text `dep` names in `path`, against its first parent.
+fn dep_changed(root: &Path, rev: &str, path: &str, dep: &str) -> Result<bool> {
+    let text = |rev: String| -> Result<Option<String>> {
+        let show = git(root, &["show", &format!("{rev}:{path}")])?;
+        Ok(show
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&show.stdout).into_owned())
+            .and_then(|t| hash::dep_text_in(dep, &t)))
+    };
+    Ok(text(format!("{rev}^"))? != text(rev.to_owned())?)
+}
+
+/// The PRs `commits` came from ([`Commit::prs`]), in ascending order without repeats.
+pub(crate) fn pr_numbers<'a>(commits: impl IntoIterator<Item = &'a Commit>) -> Vec<u32> {
     let mut prs: Vec<u32> = commits
         .into_iter()
-        .filter_map(|c| {
-            let open = c.trim_end().strip_suffix(')')?.rsplit_once("(#")?.1;
-            open.parse().ok()
-        })
+        .flat_map(|c| c.prs.iter().copied())
         .collect();
     prs.sort_unstable();
     prs.dedup();
@@ -814,10 +893,11 @@ mod tests {
     use super::*;
 
     /// #677: the PRs a merge brought in come from the `(#N)` squash subjects end with, and
-    /// a note names one with `#N`.
+    /// a note names one with `#N`. #688: a wave's landing squash also names the PRs its
+    /// body lists as `* <subject> (#N)`.
     #[test]
     fn merged_prs_come_from_squash_subjects() {
-        let commits: Vec<String> = [
+        let commits: Vec<Commit> = [
             "a1b2c3 docs: fix (#591) ",
             "d4e5f6 core: frame sync (#581)",
             "070809 Merge branch 'main' into wave/m1-3",
@@ -825,7 +905,7 @@ mod tests {
             "0d0e0f again (#581)",
             "101112 not a number (#x)",
         ]
-        .map(str::to_owned)
+        .map(|l| Commit::new(l, l.split_once(' ').map_or(l, |(_, s)| s)))
         .to_vec();
         assert_eq!(pr_numbers(&commits), vec![581, 591]);
         assert_eq!(pr_list(&[581, 591]), "#581, #591");
@@ -834,6 +914,20 @@ mod tests {
             vec![591]
         );
         assert!(unnamed_prs("(#581, #591)", &[581, 591]).is_empty());
+
+        let wave = Commit::new(
+            "131415 chore(wave): land wave/m2 (#470)",
+            "chore(wave): land wave/m2 (#470)\n\n* feat(cli): b (W2) (#316)\n* feat: a (W1) (#315)\n\n\
+             body that mentions (#9) in passing\n* not a pr\n",
+        );
+        assert_eq!(wave.prs, vec![315, 316, 470]);
+        // Only a landing squash's body is read.
+        let plain = Commit::new("161718 fix: c (#20)", "fix: c (#20)\n\n* reverts (#19)\n");
+        assert_eq!(plain.prs, vec![20]);
+        assert_eq!(
+            pr_numbers([&wave, &plain, &commits[0]]),
+            vec![20, 315, 316, 470, 591]
+        );
     }
 
     const DOC: &str = "<!-- @doc\nid = \"T\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n";

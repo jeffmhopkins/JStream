@@ -349,7 +349,8 @@ resolved this way it commits the merge, runs
 `docs migrate` and commits what that changed separately, and prints the sections that are
 now stale, for `docs verify` after a re-read. Under each one it prints each stale input,
 the note this branch had written on it before the merge, and the merged commits that
-changed the file the input lives in.
+changed the file the input lives in. For a `dep:` input, only those that changed the text
+it names count: the anchor's section or row, or the whole doc's body.
 
 `docs verify <DOC#anchor> --by <who> --merge "<text>"` re-verifies such a section after the
 re-read. It finds the branch's latest merge (one that no `origin/main` or `origin/wave/*`
@@ -487,12 +488,13 @@ holds**. The note says what was checked and why it still holds, e.g.:
   entry, it keeps that entry as it is, which `merge-main` has already given main's note.
   `merge-main` prints the merged commits behind each
   stale input to write it from ([Hash-bound verification](#verification)), and under each
-  stale section the PRs (`(#N)` in their subjects) those commits came from. `--merge` and
+  stale section the PRs (`(#N)` in their subjects) those commits came from. A wave's
+  landing squash (`chore(wave): land …`) counts as its own PR and each PR its body lists
+  as `* <subject> (#N)` ([runbook](runbooks/waves.md#landing)), whether or not that PR
+  touched the input. `--merge` and
   `--renote` print the PRs behind the entries they rewrite (an entry kept as the merged
   side wrote it is left out) and name any the text leaves out: credit each PR whose change
-  the note covers, by number. A wave lands on `main` as one squash commit, so after
-  merging `main` that is the wave's PR; the PRs inside it are in the wave branch's
-  history. The text is
+  the note covers, by number. The text is
   still per section: one stock text across every stale section, such as "rechecked after merging
   main", fails review. A section this PR also changed after the merge takes `--note`, and
   `--merge` refuses it.
