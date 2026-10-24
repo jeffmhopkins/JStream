@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use jstream_media::FrameSize;
 
-use crate::{DeviceId, GpuContext, PlatformError, VideoSurface};
+use crate::{CaptureCursor, CursorCapture, DeviceId, GpuContext, PlatformError, VideoSurface};
 
 /// What to capture.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -14,6 +14,36 @@ pub enum CaptureTarget {
     Display(DeviceId),
     /// One top-level window.
     Window(DeviceId),
+}
+
+/// How [`Capture::start_with`] starts a capture, beyond its target. The default is what
+/// [`Capture::start`] does.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CaptureOptions {
+    /// The source the capture is for (its ID in the collection), or `None` for a capture
+    /// no source owns.
+    pub source: Option<String>,
+    /// How the pointer is captured: drawn into the frames (the default), or sent beside
+    /// them for the consumer to draw.
+    pub cursor: CursorCapture,
+}
+
+impl CaptureOptions {
+    /// The default options, for the source with ID `source`.
+    pub fn for_source(source: impl Into<String>) -> Self {
+        Self {
+            source: Some(source.into()),
+            ..Self::default()
+        }
+    }
+
+    /// These options with the pointer captured as `cursor` says.
+    #[must_use]
+    pub fn with_cursor(mut self, cursor: CursorCapture) -> Self {
+        self.cursor = cursor;
+        self
+    }
 }
 
 /// A capture target as [`Capture::targets`] lists it.
@@ -48,6 +78,32 @@ pub trait Capture: Send + Sync {
     /// [`PlatformError::Unsupported`] when the backend can't capture that kind of
     /// target, and [`PlatformError::Os`] when the OS refuses.
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError>;
+
+    /// Starts capturing `target` as `options` say: for one source, so a backend that
+    /// keeps a grant per source keeps each source's apart (the ScreenCast portal's
+    /// restore token, which reopens the screen or window that source was given without
+    /// asking again, ADR-0060 §3). The default ignores the options and calls
+    /// [`start`](Capture::start); `start` is `start_with` with the default options.
+    ///
+    /// # Errors
+    /// As [`start`](Capture::start).
+    fn start_with(
+        &self,
+        target: &CaptureTarget,
+        options: &CaptureOptions,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        let _ = options;
+        self.start(target)
+    }
+
+    /// Forgets what the backend keeps for `source`, such as its restore token, once the
+    /// source is deleted, including what a capture of it that is still starting would
+    /// keep. The default keeps nothing, so has nothing to forget. Best effort: a grant
+    /// whose file can't be removed stays, and a new source given the same ID would
+    /// reopen it, so call it once the source's captures have stopped.
+    fn forget_source(&self, source: &str) {
+        let _ = source;
+    }
 
     /// This backend on `context`'s device: its captures deliver `VideoSurface::Gpu`
     /// frames that render samples without a CPU copy (README › GPU frames). `Ok(None)`,
@@ -84,6 +140,18 @@ pub trait CaptureStream: Send {
 
     /// Counters since the capture started.
     fn stats(&self) -> CaptureStats;
+
+    /// The pointer as of the newest [`latest`](CaptureStream::latest) call: where it is
+    /// over that frame and what it looks like, when the capture was started with
+    /// [`CursorCapture::Metadata`] and the backend sends it. It can move while the screen
+    /// doesn't, so a `latest` that returns no frame still updates it. The default,
+    /// [`CaptureCursor::NotSent`], is for a stream that draws the pointer into its frames
+    /// or doesn't capture it.
+    ///
+    /// Must not block, as `latest` (R-RT-002).
+    fn cursor(&self) -> CaptureCursor {
+        CaptureCursor::NotSent
+    }
 }
 
 /// A capture stream's counters, reported in `stats.tick`.

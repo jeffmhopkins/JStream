@@ -6,14 +6,18 @@
 //!   token is answered with a `Basic` challenge: the browser asks for a user name and
 //!   password, and the token is the password (the user name is ignored). The browser
 //!   then sends those credentials with every request to this origin, the UI's WebSocket
-//!   upgrade included, so the UI itself never handles the token.
+//!   upgrade included, so the UI itself never handles the token. On a TLS listener the
+//!   refusal's body is a short page linking to the pairing page ([`PAIR_PAGE_PATH`]),
+//!   where a browser pairs into the device cookie instead (ADR-0047); a request the
+//!   cookie admitted, when its use renews the device's lapse, gets the cookie re-set.
 //! - **Paths.** The path is percent-decoded and split into segments. A segment that is
 //!   empty, `.` or `..`, or holds `\`, `:` or NUL is refused (404), and the file found is
 //!   canonicalized and must still be inside the canonical root, so neither `..` nor a
 //!   symbolic link reaches outside it. A directory serves its `index.html`. A missing
 //!   path whose last segment has no `.` serves the root's `index.html`, for the UI's own
 //!   routes; any other missing path is 404. Paths under `/api` and `/mcp` belong to the
-//!   API and are 404 here (with MCP off, or a version the server doesn't serve).
+//!   API and are 404 here (with MCP off, or a version the server doesn't serve), and so
+//!   are paths under `/pair`, which is reserved for the pairing page.
 //! - **Headers.** `Content-Type` from the extension ([`mime`]), `X-Content-Type-Options:
 //!   nosniff`, `Cache-Control: no-cache`, `Referrer-Policy: no-referrer`, and a
 //!   `Content-Security-Policy` ([`csp`]). In an HTML file, trunk's nonce placeholder
@@ -22,8 +26,9 @@
 
 use crate::App;
 use crate::error::ServerError;
-use crate::gate::Refusal;
+use crate::gate;
 use crate::listener::Accepted;
+use crate::pair_page::PAIR_PAGE_PATH;
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
@@ -37,6 +42,17 @@ pub(crate) const NONCE_PLACEHOLDER: &str = "{{__TRUNK NONCE__}}";
 
 /// The realm of the `Basic` challenge, which browsers show in their sign-in prompt.
 const CHALLENGE: &str = "Basic realm=\"JStream\", charset=\"UTF-8\"";
+
+/// The `401` body on a TLS listener: a page that links to the pairing page.
+const PAIR_LINK_PAGE: &str = "<!doctype html>\n<meta charset=\"utf-8\">\n\
+<title>JStream</title>\n\
+<p>A paired browser or the control token is required. \
+Enter the control token as the password, or \
+<a href=\"/pair\">pair this browser</a> with a code from the host.</p>\n";
+
+/// The `Content-Security-Policy` of [`PAIR_LINK_PAGE`]: nothing loads, nothing runs.
+const PAIR_LINK_POLICY: &str =
+    "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 /// The largest file served, in bytes. A UI bundle is a few MiB.
 const MAX_FILE_BYTES: u64 = 64 << 20;
@@ -67,7 +83,9 @@ impl Ui {
     /// The file a request path names, or `None` when there is none to serve.
     fn resolve(&self, path: &str) -> Option<PathBuf> {
         let segments = segments(path)?;
-        if matches!(segments.first().map(String::as_str), Some("api" | "mcp")) {
+        let reserved = PAIR_PAGE_PATH.trim_start_matches('/');
+        if matches!(segments.first().map(String::as_str), Some(first) if first == "api" || first == "mcp" || first == reserved)
+        {
             return None;
         }
         let mut candidate = self.root.clone();
@@ -164,23 +182,45 @@ pub(crate) fn mime(path: &Path) -> &'static str {
     }
 }
 
-/// The `Content-Security-Policy` of every UI response. Scripts, styles, fetches and
-/// WebSockets come only from this origin (the WebSocket named by `host` too, since
-/// older browsers don't let `'self'` match `ws:`), WebAssembly may be compiled, and
-/// the page can't be framed, post forms, change its base URL or embed plugins. With a
-/// `nonce`, scripts and styles carrying it may be inline, as trunk's loader is.
-pub(crate) fn csp(host: &str, nonce: Option<&str>) -> String {
+/// The `Content-Security-Policy` of every UI response, and of the pairing page. Scripts,
+/// styles, fetches and WebSockets come only from this origin (the WebSocket named by
+/// `host` too, `wss://` on a TLS listener, since older browsers don't let `'self'` match
+/// `ws:`), WebAssembly may be compiled, and the page can't be framed, post forms, change
+/// its base URL or embed plugins. With a `nonce`, scripts and styles carrying it may be
+/// inline, as trunk's loader and the pairing page's script are.
+pub(crate) fn csp(host: &str, nonce: Option<&str>, tls: bool) -> String {
     let nonce = nonce.map(|n| format!(" 'nonce-{n}'")).unwrap_or_default();
+    let ws = if tls { "wss" } else { "ws" };
     format!(
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'{nonce}; \
          style-src 'self'{nonce}; img-src 'self' data: blob:; media-src 'self' blob:; \
-         font-src 'self'; connect-src 'self' ws://{host}; worker-src 'self' blob:; \
+         font-src 'self'; connect-src 'self' {ws}://{host}; worker-src 'self' blob:; \
          object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     )
 }
 
+/// Sets the headers every page the server serves carries: its `Content-Type`,
+/// `X-Content-Type-Options: nosniff`, `Cache-Control: no-cache`,
+/// `Referrer-Policy: no-referrer` and `policy` as its `Content-Security-Policy`.
+pub(crate) fn set_page_headers(response: &mut Response, content_type: &'static str, policy: &str) {
+    let set = response.headers_mut();
+    set.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+    set.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    set.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    set.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    if let Ok(policy) = HeaderValue::from_str(policy) {
+        set.insert(header::CONTENT_SECURITY_POLICY, policy);
+    }
+}
+
 /// A fresh nonce: 16 bytes from the OS's random source, as 32 hex digits.
-fn nonce() -> Option<String> {
+pub(crate) fn nonce() -> Option<String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).ok()?;
     Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
@@ -201,18 +241,11 @@ pub(crate) async fn handle(
     let Some(ui) = &app.ui else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    match app.gate.admit(&headers, accepted.peer) {
-        Ok(_) => {}
-        Err(Refusal::Token) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                [(header::WWW_AUTHENTICATE, CHALLENGE)],
-                "the control token is required: enter it as the password\n",
-            )
-                .into_response();
-        }
+    let credential = match app.gate.admit(&headers, accepted.peer) {
+        Ok(credential) => credential,
+        Err(refusal) if refusal.is_credential() => return challenge(app.tls && app.pairing),
         Err(refusal) => return refusal.into_response(),
-    }
+    };
     accepted.request_read();
     if method != Method::GET && method != Method::HEAD {
         return (
@@ -257,25 +290,34 @@ pub(crate) async fn handle(
             Ok(text) => text.replace(NONCE_PLACEHOLDER, &nonce).into_bytes(),
             Err(error) => error.into_bytes(),
         };
-        (body, csp(&host, Some(&nonce)))
+        (body, csp(&host, Some(&nonce), app.tls))
     } else {
-        (body, csp(&host, None))
+        (body, csp(&host, None, app.tls))
     };
     let mut response = body.into_response();
-    let set = response.headers_mut();
-    set.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
-    set.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        HeaderValue::from_static("nosniff"),
-    );
-    set.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
-    set.insert(
-        header::REFERRER_POLICY,
-        HeaderValue::from_static("no-referrer"),
-    );
-    if let Ok(policy) = HeaderValue::from_str(&policy) {
-        set.insert(header::CONTENT_SECURITY_POLICY, policy);
+    set_page_headers(&mut response, content_type, &policy);
+    gate::renew_cookie(&credential, &headers, &mut response);
+    response
+}
+
+/// The answer to a UI path refused for a missing or refused credential: the `Basic`
+/// challenge, and on a TLS listener a page that links to the pairing page.
+fn challenge(tls: bool) -> Response {
+    if !tls {
+        return (
+            StatusCode::UNAUTHORIZED,
+            [(header::WWW_AUTHENTICATE, CHALLENGE)],
+            "the control token is required: enter it as the password\n",
+        )
+            .into_response();
     }
+    let mut response = (
+        StatusCode::UNAUTHORIZED,
+        [(header::WWW_AUTHENTICATE, CHALLENGE)],
+        PAIR_LINK_PAGE,
+    )
+        .into_response();
+    set_page_headers(&mut response, "text/html; charset=utf-8", PAIR_LINK_POLICY);
     response
 }
 
@@ -347,7 +389,7 @@ mod tests {
 
     #[test]
     fn the_policy_allows_only_this_origin_and_wasm() {
-        let policy = csp("127.0.0.1:4455", Some("abc"));
+        let policy = csp("127.0.0.1:4455", Some("abc"), false);
         assert!(policy.starts_with("default-src 'self'; "), "{policy}");
         assert!(
             policy.contains("script-src 'self' 'wasm-unsafe-eval' 'nonce-abc';"),
@@ -360,7 +402,11 @@ mod tests {
         );
         assert!(policy.contains("frame-ancestors 'none'"), "{policy}");
         assert!(!policy.contains("unsafe-inline"), "{policy}");
-        assert!(!csp("localhost:1", None).contains("nonce"));
+        assert!(!csp("localhost:1", None, false).contains("nonce"));
+        assert!(
+            csp("studio.lan:4455", None, true)
+                .contains("connect-src 'self' wss://studio.lan:4455;")
+        );
     }
 
     #[test]

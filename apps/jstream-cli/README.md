@@ -82,8 +82,12 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `hello` | the `hello`/`welcome` handshake |
 | `state get` | query `state.get` |
 | `scene list` | query `scene.list` |
-| `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
-| `studio get` | query `studio.get` (the scene on program) |
+| `scene switch <scene-id> [--preset <preset-id>]` | action `scene.switch` (to that scene, with the preset's transition, else the one the engine resolves) |
+| `studio get` | query `studio.get` (the scenes on program and preview) |
+| `studio set-preview <scene-id>` | action `studio.set_preview` |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
+| `privacy on`, `privacy off` | action `privacy.set` (covers every output, or uncovers them) |
+| `privacy get` | query `privacy.get` |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -105,13 +109,14 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name> [role:scene|role:group]`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings, encoder profiles, `source.create`'s
-  `duplicated_from` and the filter edits. `source.set_settings`,
+  protocol is supported except settings, encoder profiles, video mixes,
+  `source.create`'s `duplicated_from` and the filter edits. `source.set_settings`,
   `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`,
-  `output.set_encoder` and the `filter.*` edits need a JSON argument form the CLI
+  `output.set_encoder`, `video_mix.create`, `video_mix.update`, `video_mix.delete`,
+  `output.set_video_mix` and the `filter.*` edits need a JSON argument form the CLI
   doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
-  default encoder (MCP and the WebSocket API take them). `item.add` of a
+  default encoder and the program (MCP and the WebSocket API take them). `item.add` of a
   `display`, `window` or `webcam` source sends a `geometry` covering the canvas with
   `fit`, so the whole capture is in frame; the canvas is the batch's latest
   `canvas.set_size`, else `state.get`'s, which the CLI also reads for the kind of a
@@ -119,7 +124,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   item is a legacy one at 1:1. Place either with `item.set_geometry <item-id>
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
-  are always sent neutral, since the engine refuses anything else until it draws 3D.
+  are always sent neutral: the command sets the 2D box only, though the engine accepts
+  any 3D it can draw from protocol 0.34. It sends no flip (`flip_h` and `flip_v` false):
+  the command has no flip argument yet.
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
@@ -129,11 +136,21 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
   the item's own scene, which omitting it already means. Protocol 0.19's audio edits
   (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
-  in the CLI either.
+  in the CLI either, and neither are the transition edits (`transition.*`,
+  `scene.set_transitions`, `item.set_transition`) or the folder, label and metadata
+  edits (`folder.*`, `label.*`, `scene.set_folder`, `scene.set_meta`,
+  `source.set_meta`).
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine accepts only `normal` until it draws the
-  others. Several edits on one line go as **one atomic batch**: one new
+  others.
+  `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
+  `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
+  output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
+  A `scene.switch` bound here names no transition preset (MCP and the WebSocket API
+  can bind one), and the `hotkeys:` table lists a bound preset after the scene.
+  Applying a batch prints `removed hotkey <chord>` for each binding its deletes
+  removed. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -148,6 +165,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   command is a new client, so a one-shot `undo` would always find nothing to undo.
   `mcp` is one client for its whole run: its `history` tool undoes and redoes the
   agent's own edits.
+- **No live-value command.** A gesture belongs to its client and expires when the
+  session ends ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so a one-shot
+  `live.set` would be undone as the command exits. `mcp`'s `live` tool keeps one open
+  for the agent's run. `events` shows other clients' gestures: human output prints
+  `live.changed <gesture> by <client>: <setters>` and `live.ended <gesture> by
+  <client> <outcome> [rev N]`.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
@@ -163,7 +186,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` (or `studio.changed`) event it causes; an event an undo or redo caused ends with
+  the `state.changed` (or `studio.changed`, or `privacy.changed`) event it causes; an event an undo or redo caused ends with
   `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
@@ -179,8 +202,10 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   server URL, as `output.create` takes it; for any other output, its kind as JSON).
   `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs; only `--json` shows the sources' audio, the
-  buses and the sends. `output status` prints
+  (<name>):` by its role, then the outputs, then a `hotkeys:` table (`CHORD`,
+  `ACTION`) when any are bound; only `--json` shows the sources' audio, the buses, the
+  sends, the transition presets, the folders and labels, and each scene's and source's
+  organisation metadata. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -256,7 +281,7 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine); `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send; and `unsupported`, which `pair` and `device` get from an engine with no server in front (`--mock`) |
+| 20 | an error code this CLI doesn't know (from a newer engine); `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send; `unsupported`, which `pair` and `device` get from an engine with no server in front (`--mock`); and `forbidden`, which only a plugin's call gets |
 
 <a id="design"></a>
 ## Design

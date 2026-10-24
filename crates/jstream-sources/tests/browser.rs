@@ -71,7 +71,8 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
             ("width", false),
             ("height", false),
             ("fps", false),
-            ("css", true)
+            ("css", true),
+            ("local_network", false)
         ]
     );
 }
@@ -100,6 +101,10 @@ fn a_url_opens_a_web_page_of_the_set_size_and_rate() {
     assert_eq!((spec.size.width(), spec.size.height()), (640, 360));
     assert_eq!(spec.fps, 60);
     assert_eq!(spec.css, DEFAULT_CSS);
+    // #347: off by default, so the page from the internet can't reach the local network.
+    assert!(!spec.local_network);
+    assert!(!pages[0].request("http://127.0.0.1:8080/"));
+    assert!(pages[0].request("https://example.com/font.woff2"));
     // The CPU frame is a transparent stand-in of the page's size; the fake never paints.
     let frame = source
         .frame(MediaTime::zero(Timebase::MILLIS))
@@ -114,6 +119,25 @@ fn a_url_opens_a_web_page_of_the_set_size_and_rate() {
     assert!(!pages[0].is_closed());
     drop(source);
     assert!(pages[0].is_closed());
+}
+
+/// #347: the source's opt-in lets a page from the internet reach a local app.
+#[test]
+fn local_network_opts_a_page_in() {
+    let browser = FakeBrowser::new();
+    let ctx = ctx(&browser, None);
+    let _source = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://widgets.example.com/overlay")),
+            ("local_network", json!(true)),
+        ]),
+    )
+    .expect("a page");
+    let page = &browser.pages()[0];
+    assert!(page.spec().local_network);
+    assert!(page.request("ws://127.0.0.1:8080/"));
+    assert!(page.request("http://192.168.1.10/"));
 }
 
 #[test]

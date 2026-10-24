@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use jstream_media::{AudioBuffer, AudioFormat, Codec, FrameSize, Packet, PixelFormat, Timebase};
 
-use crate::{GpuContext, PlatformError, VideoSurface};
+use crate::{CaptureDecoder, CaptureEncoding, GpuContext, PlatformError, VideoSurface};
 
 /// What a codec does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -152,6 +152,24 @@ pub trait Codecs: Send + Sync {
         config: &VideoDecoderConfig,
     ) -> Result<Box<dyn VideoDecoder>, PlatformError>;
 
+    /// A decoder for a capture device's compressed frames, to pass to
+    /// [`VideoDevices::open`](crate::VideoDevices::open): MJPEG is a video codec, so the
+    /// platform's codec path decodes it, never the device backend
+    /// (docs/adr/0031-source-types-and-decoding-scope.md). Each call makes a new decoder,
+    /// one per stream.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`], the default, when the platform has no decoder for
+    /// `encoding`; the engine then opens the device in an uncompressed format.
+    fn capture_decoder(
+        &self,
+        encoding: CaptureEncoding,
+    ) -> Result<Box<dyn CaptureDecoder>, PlatformError> {
+        Err(PlatformError::Unsupported {
+            what: format!("decoding {encoding:?} capture frames"),
+        })
+    }
+
     /// This backend on `context`'s device: its video encoders take `VideoSurface::Gpu`
     /// frames, the platform's encode targets on that context
     /// ([`GpuInterop::encode_target`](crate::GpuInterop::encode_target)), and read them
@@ -177,7 +195,10 @@ pub trait Codecs: Send + Sync {
 /// instant as its frame's `pts` (on the media clock), and `dts <= pts`. Video packets
 /// follow the engine's framing conventions (H.264 as Annex B, per `jstream-media`).
 pub trait VideoEncoder: Send {
-    /// Which codec implementation was opened.
+    /// Which codec implementation was opened. It changes only when the encoder falls
+    /// back to another implementation before its first packet, as a hardware encoder
+    /// that refuses its first frame does with [`HardwarePreference::Prefer`] (#443); it
+    /// then names the one encoding.
     fn info(&self) -> &CodecInfo;
 
     /// Whether [`encode`](VideoEncoder::encode) would take a frame now. An asynchronous

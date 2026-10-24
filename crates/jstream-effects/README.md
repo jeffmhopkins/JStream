@@ -11,8 +11,8 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-effects/src/**", "crates/jstream-effects/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-effects", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0035-clap-plugins-out-of-process.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
+covers = ["crates/jstream-effects/src/**"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-effects", "crates/jstream-render/README.md#filters", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0035-clap-plugins-out-of-process.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
 -->
 
 Layer-3 loader for third-party **WGSL effect packs**, the data-only extension point of
@@ -21,9 +21,10 @@ pack is a folder holding an `effect.toml` manifest and the `.wgsl` files it name
 effect becomes a `video_filter` kind with the ID `<pack>/<effect>`, so a pack never
 shadows a built-in kind ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
 It depends on [`jstream-protocol`](../jstream-protocol/README.md) for kind descriptors and
-settings, `naga` (the exact version wgpu pins, with only `wgsl-in`) for WGSL, `toml`,
-`serde`/`serde_json`, `thiserror` and `tracing`. It opens no GPU device, starts no threads
-and has no `unsafe`.
+settings, [`jstream-render`](../jstream-render/README.md#filters) for the filter harness
+that draws an effect, `naga` (the exact version wgpu pins, with only `wgsl-in`) for WGSL, `toml`,
+`serde`/`serde_json`, `thiserror` and `tracing`. It opens no GPU device of its own, starts
+no threads and has no `unsafe`.
 
 **The manifest.** A `[pack]` table (`id`, `name`, optional `description`) and one or more
 `[[effect]]` tables (`id`, `name`, `version`, `shader`, optional `renames`), each with its
@@ -56,14 +57,26 @@ order, at group 0, binding 4, as `p`), then the effect's file. `bool` and `enum`
 `vec4<f32>` of linear-light RGB with straight alpha. The effect defines
 `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>` and may add functions, constants
 and `var<private>` globals. It may not add bindings, immediates, overrides (the host has
-no value for them) or entry points.
+no value for them) or entry points. Its memory is capped at `MAX_VALUE_BYTES` (16 KiB) in
+three ways: any one value it names, declares or constructs (`array<f32, N>()` included),
+all its `var<private>` globals together, and each function's local variables together. A
+huge array is a cheap way to make a driver spill to scratch memory or stall while
+compiling (#349).
 `Pack::load` validates the whole text with naga (all validation flags, no optional
 capabilities, so a pack runs on every adapter) and checks that contract. The prelude is
 validated on its own first, so a host mistake is named as one. Errors carry the
 line in the effect's own file. `Effect::uniforms` writes the `Params` bytes for a
 settings map, reading a missing or invalid value as its default. A test checks the
-layout against the offsets naga computes. Until the harness is on `main`, the tests
-validate against a copy of its prelude in `tests/fixtures/`.
+layout against the offsets naga computes.
+
+**Drawing.** `Effect` implements render's `ExternalFilter` (label: the kind ID), and
+`Effect::video_filter(settings)` makes the `VideoFilter` a source's video chain would
+keep; `jstream-core`'s chain runtime bypasses pack kinds until it runs them (a V0
+follow-up). The
+host's prelude is `jstream_render::FILTER_PRELUDE`. A filter made from a reloaded effect
+draws the new WGSL, because the render side rebuilds a label's pipeline when its source
+changes. A test draws an effect on the test adapter, changes its settings in place, and
+draws it again after a reload.
 
 **Hot reload** (`PackWatcher`). The owner polls (`DEFAULT_POLL_INTERVAL`, 500 ms). Each
 poll lists the sub-folders of the packs folder that hold an `effect.toml`. It stamps
@@ -78,6 +91,5 @@ Polling needs no dependency and behaves the same on every file system. The cost 
 poll's latency, and an edit that keeps a file's size within the file system's timestamp
 resolution is seen on the next change.
 
-Not here yet: drawing an effect through the render filter harness (stacked on V0),
-listing pack kinds in `kind.list` and running the watcher in the engine, and pack
+Not here yet: listing pack kinds in `kind.list` and running the watcher in the engine, and pack
 transitions (ADR-0037 §1).

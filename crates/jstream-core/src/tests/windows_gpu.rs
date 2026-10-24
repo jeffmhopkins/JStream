@@ -1,7 +1,9 @@
 //! The GPU capture path on a real Windows machine (R-TEST-004): an output on the WGC
 //! capture of the primary display and the platform's DX12 device, composited with no
-//! CPU copy of the capture. Behind `hw-tests` and `#[ignore]`d, because CI machines have
-//! no display and no GPU. Run it with the screen changing (a video playing), with
+//! CPU copy of the capture, and `capture.targets` naming the displays and windows that
+//! `display` and `window` sources capture (C3). Behind `hw-tests` and `#[ignore]`d,
+//! because CI machines have no display and no GPU. Run it with the screen changing (a
+//! video playing) and a window open (Notepad will do), with
 //! `cargo test -p jstream-core --features hw-tests --lib windows_gpu -- --ignored --nocapture`.
 //!
 //! Audio and the encoders are the fakes: this checks the video path only, and the
@@ -17,9 +19,11 @@ use jstream_media::{ChannelLayout, Timebase};
 use jstream_platform::fake::{FakeAudioIo, FakeClock, FakeCodecs, FakeVideoDevices};
 use jstream_platform::{Backends, Capture};
 use jstream_platform_windows::{QpcClock, WgcCapture, WindowsGpu};
-use jstream_protocol::{DropCounts, Event, OutputId};
+use jstream_protocol::{CaptureTargetKind, DropCounts, Event, OutputId, Query, QueryResult};
+use jstream_sources::CaptureSpec;
 
-use super::{GPU_OPEN_TIMEOUT, block_on, connected, drain, output_call};
+use super::{GPU_OPEN_TIMEOUT, block_on, connected, drain, output_call, query};
+use crate::runtime::{CaptureBackends, start_capture};
 use crate::{Engine, RecordingPublish};
 
 /// How long the output runs.
@@ -40,23 +44,9 @@ fn an_output_composites_wgc_frames_on_the_gpu() {
         .into_iter()
         .find(|target| target.primary)
         .expect("a primary display");
-    // The fake audio has its own clock, which never moves: the mixer mixes silence.
-    let audio_clock = FakeClock::new(Timebase::MICROS);
-    let audio =
-        FakeAudioIo::new(audio_clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
-    let backends = Backends {
-        clock: Arc::new(QpcClock::new().expect("QPC clock")),
-        capture: Arc::new(capture),
-        audio: Arc::new(audio),
-        codecs: Arc::new(FakeCodecs),
-        gpu: Arc::new(WindowsGpu::new()),
-        media: Arc::new(jstream_platform::fake::FakeMediaDecoders::new()),
-        vcam: None,
-        video_devices: Arc::new(FakeVideoDevices::new(audio_clock)),
-    };
     let engine = Engine::new()
         .with_output(OutputId::new("yt"))
-        .with_backends(backends)
+        .with_backends(backends(capture))
         .with_open_timeout(GPU_OPEN_TIMEOUT)
         .with_publish(Box::new(RecordingPublish::new()));
     let control = connected(&engine);
@@ -104,4 +94,95 @@ fn an_output_composites_wgc_frames_on_the_gpu() {
         render_ticks * 100 <= ticks,
         "the render thread skipped {render_ticks} of {ticks} ticks"
     );
+}
+
+/// WGC capture and the platform's GPU device, with the fakes for audio and the
+/// encoders.
+fn backends(capture: WgcCapture) -> Backends {
+    // The fake audio has its own clock, which never moves: the mixer mixes silence.
+    let audio_clock = FakeClock::new(Timebase::MICROS);
+    let audio =
+        FakeAudioIo::new(audio_clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    Backends {
+        clock: Arc::new(QpcClock::new().expect("QPC clock")),
+        capture: Arc::new(capture),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(WindowsGpu::new()),
+        media: Arc::new(jstream_platform::fake::FakeMediaDecoders::new()),
+        vcam: None,
+        video_devices: Arc::new(FakeVideoDevices::new(audio_clock)),
+    }
+}
+
+/// `capture.targets` lists the displays, the primary among them, then the open windows,
+/// and the IDs it gives are what a `display` and a `window` source capture: each starts
+/// a WGC capture that delivers a frame (C3).
+#[test]
+#[ignore = "needs a display, Windows.Graphics.Capture and an open window"]
+fn capture_targets_name_what_wgc_captures() {
+    let engine = Engine::new().with_backends(backends(WgcCapture::new()));
+    let control = connected(&engine);
+    let Ok(QueryResult::CaptureTargets { targets }) = query(&control, Query::CaptureTargets) else {
+        panic!("a capture.targets result");
+    };
+    for target in &targets {
+        let _ = writeln!(
+            std::io::stderr(),
+            "windows_gpu: capture target {:?} {} ({}) {:?}{}",
+            target.kind,
+            target.target,
+            target.name,
+            target.size,
+            if target.primary { ", primary" } else { "" },
+        );
+    }
+    let display = targets
+        .iter()
+        .find(|target| target.kind == CaptureTargetKind::Display && target.primary)
+        .expect("a primary display");
+    let window = targets
+        .iter()
+        .find(|target| target.kind == CaptureTargetKind::Window)
+        .expect("an open window");
+    assert!(
+        targets
+            .iter()
+            .position(|target| target.kind == CaptureTargetKind::Window)
+            > targets
+                .iter()
+                .rposition(|target| target.kind == CaptureTargetKind::Display),
+        "displays come first"
+    );
+
+    let capture = CaptureBackends {
+        cpu: Arc::new(WgcCapture::new()),
+        gpu: None,
+        devices: Arc::new(FakeVideoDevices::new(FakeClock::new(Timebase::MILLIS))),
+        codecs: Arc::new(FakeCodecs),
+    };
+    for spec in [
+        CaptureSpec::Display(Some(display.target.clone())),
+        CaptureSpec::Window(Some(window.target.clone())),
+    ] {
+        let key = crate::snapshot::CaptureKey {
+            spec: spec.clone(),
+            source: None,
+            show_cursor: true,
+        };
+        let mut stream = start_capture(&capture, &key).expect("the capture starts");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let frame = loop {
+            match stream.latest() {
+                Ok(Some(frame)) => break frame,
+                Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+                other => panic!("no frame from {spec:?}: {other:?}"),
+            }
+        };
+        let _ = writeln!(
+            std::io::stderr(),
+            "windows_gpu: {spec:?} delivered a frame of {:?}",
+            frame.info().size
+        );
+    }
 }
