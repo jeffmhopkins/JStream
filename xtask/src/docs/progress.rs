@@ -466,8 +466,8 @@ pub(crate) fn check(root: &Path, docs: &[Doc]) -> Vec<Diag> {
 }
 
 /// A merged PR as its squash commit on the first-parent history records it.
-struct Merged {
-    number: u64,
+pub(crate) struct Merged {
+    pub(crate) number: u64,
     /// The words of the subject's other parenthesised groups, such as `A5` in
     /// `feat(cli): … (A5) (#166)`.
     names: BTreeSet<String>,
@@ -495,8 +495,10 @@ fn merged_from(subject: &str) -> Option<Merged> {
 
 /// The merged PRs in `git log --format=%B%x00` output: each commit's subject, and for a
 /// wave's landing squash (`chore(wave): land …`), the `* <subject> (#N)` lines of its
-/// body, which are the PRs the wave carried (docs/runbooks/waves.md#landing).
-fn merged_in(log: &str) -> Vec<Merged> {
+/// body. That body is GitHub's list of every commit on the wave branch, so its lines
+/// also name PRs earlier waves landed and issues builder commits end with; see
+/// `merge::Commit::new` for the filtering a merged-PR list needs (#775 N4).
+pub(crate) fn merged_in(log: &str) -> Vec<Merged> {
     let mut out = Vec::new();
     for message in log.split('\0') {
         let mut lines = message.trim_start_matches('\n').lines();

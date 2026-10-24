@@ -161,6 +161,27 @@ fn a_webcam_saved_without_settings_loads_with_its_default() {
     );
 }
 
+/// A file saved while `display` had no `show_cursor` (before protocol 0.36) loads with
+/// its default, on, so it matches the fixture saved since.
+#[test]
+fn a_display_saved_without_show_cursor_loads_with_its_default() {
+    let older = edit_file(|file| {
+        for source in file["sources"].as_array_mut().into_iter().flatten() {
+            if source["kind"]["kind"] == "display" {
+                source["settings"]
+                    .as_object_mut()
+                    .map(|s| s.remove("show_cursor"));
+            }
+        }
+    });
+    assert!(!older.contains("\"show_cursor\""));
+    let loaded = load(&older);
+    assert_eq!(
+        loaded.as_ref().map(Graph::state),
+        Ok(fixture_graph().state())
+    );
+}
+
 #[test]
 fn an_empty_collection_round_trips() {
     let graph = Graph::new().with_kinds(kinds());

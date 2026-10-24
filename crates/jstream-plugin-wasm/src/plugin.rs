@@ -2,20 +2,29 @@
 
 use crate::abi;
 use crate::block_on::block_on;
-use crate::capability::Capabilities;
+use crate::capability::{Capabilities, command_names};
 use crate::error::Error;
-use crate::limits::Limits;
+use crate::events::EventSender;
+use crate::limits::{self, Limits};
+use crate::rate::CommandRate;
 use jstream_control::protocol::Call;
 use jstream_control::{Control, ControlError};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 use wasmtime::{
-    Caller, Config, Engine, Extern, Instance, Linker, Memory, Module, Store, StoreLimits,
-    StoreLimitsBuilder,
+    AsContextMut, Caller, Config, Engine, Extern, Instance, Linker, Memory, Module, Store,
+    StoreLimits, StoreLimitsBuilder,
 };
 
 /// The deepest the WASM stack of a plugin may grow, in bytes. Fixed for every plugin,
 /// because wasmtime sets it per engine; overflowing it traps.
 const MAX_WASM_STACK: usize = 512 * 1024;
+
+/// How often the host's ticker advances the engine's epoch. A plugin's deadlines
+/// ([`Limits::call_deadline`], [`Limits::load_deadline`]) are counted in these ticks.
+pub const EPOCH_TICK: Duration = Duration::from_millis(10);
 
 /// What one plugin is allowed: the commands it may call and the resources it may use.
 /// The default grants nothing and uses the default [`Limits`].
@@ -32,17 +41,63 @@ pub struct PluginConfig {
 #[derive(Clone)]
 pub struct PluginHost {
     engine: Engine,
+    ticker: Arc<Ticker>,
 }
 
 impl PluginHost {
-    /// An engine that meters fuel and caps the WASM stack. Proposals that need more of the
-    /// host (threads, the component model, GC) are not compiled into this crate.
+    /// An engine that meters fuel, interrupts plugins at their deadlines and caps the WASM
+    /// stack, with the thread that advances its epoch every [`EPOCH_TICK`]. Proposals that
+    /// need more of the host (threads, the component model, GC) are not compiled into
+    /// this crate.
     pub fn new() -> Result<Self, Error> {
         let mut config = Config::new();
         config.consume_fuel(true);
+        config.epoch_interruption(true);
         config.max_wasm_stack(MAX_WASM_STACK);
         let engine = Engine::new(&config).map_err(|e| Error::Engine(e.into()))?;
-        Ok(PluginHost { engine })
+        let ticker = Ticker::start(engine.clone())?;
+        Ok(PluginHost {
+            engine,
+            ticker: Arc::new(ticker),
+        })
+    }
+}
+
+/// The thread that advances the engine's epoch every [`EPOCH_TICK`], so a plugin running
+/// past its deadline traps. It runs while the host or any plugin loaded on it lives, and
+/// stops when the last of them is dropped.
+struct Ticker {
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Ticker {
+    fn start(engine: Engine) -> Result<Ticker, Error> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopped = stop.clone();
+        let thread = std::thread::Builder::new()
+            .name("jstream-plugin-epoch".into())
+            .spawn(move || {
+                while !stopped.load(Ordering::Relaxed) {
+                    std::thread::sleep(EPOCH_TICK);
+                    engine.increment_epoch();
+                }
+            })
+            .map_err(|e| Error::Engine(e.into()))?;
+        Ok(Ticker {
+            stop,
+            thread: Some(thread),
+        })
+    }
+}
+
+impl Drop for Ticker {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            // The thread only sleeps and ticks, so it ends within a tick.
+            let _ = thread.join();
+        }
     }
 }
 
@@ -55,6 +110,13 @@ struct HostState {
     result: Vec<u8>,
     /// What the host passed to the current invocation, for `input_read`.
     input: Vec<u8>,
+    /// One instant per command sent to `Control` in the last second, against the cap.
+    rate: CommandRate,
+    /// The deadline of one invocation, in epoch ticks.
+    call_ticks: u64,
+    /// The deadline of the current entry into the plugin, the load's or an
+    /// invocation's, in epoch ticks: what each `call` re-arms when it returns.
+    entry_ticks: u64,
 }
 
 /// One loaded plugin: its own store, memory and instance, and the session it calls
@@ -69,12 +131,17 @@ pub struct Plugin {
     store: Store<HostState>,
     instance: Instance,
     fuel: u64,
+    /// The engine events waiting for the plugin.
+    events: EventSender,
+    /// Keeps the epoch advancing while the plugin lives, even after its host is dropped.
+    _ticker: Arc<Ticker>,
 }
 
 impl Plugin {
     /// Compiles and instantiates `wasm`, a binary core module. Every import must be one of the [`abi`] functions, so a module that asks
     /// for WASI or anything else is refused before any of its code runs. The module's
-    /// `start` function, if any, runs with one invocation's fuel.
+    /// `start` function, if any, runs with one invocation's fuel, within
+    /// [`Limits::load_deadline`] of wall time between host calls.
     pub fn load(
         host: &PluginHost,
         wasm: impl AsRef<[u8]>,
@@ -104,12 +171,18 @@ impl Plugin {
                 .build(),
             result: Vec::new(),
             input: Vec::new(),
+            rate: CommandRate::new(limits.commands_per_second()),
+            call_ticks: limits::ticks(limits.call_deadline(), EPOCH_TICK),
+            entry_ticks: limits::ticks(limits.load_deadline(), EPOCH_TICK),
         };
         let mut store = Store::new(&host.engine, state);
         store.limiter(|state| &mut state.limits);
         store
             .set_fuel(limits.fuel())
             .map_err(|e| Error::Engine(e.into()))?;
+        store.epoch_deadline_trap();
+        let ticks = store.data().entry_ticks;
+        store.set_epoch_deadline(ticks);
 
         let linker = linker(&host.engine).map_err(|e| Error::Engine(e.into()))?;
         let instance = linker
@@ -122,10 +195,13 @@ impl Plugin {
             store,
             instance,
             fuel: limits.fuel(),
+            events: EventSender::default(),
+            _ticker: host.ticker.clone(),
         })
     }
 
-    /// Runs the exported function `entry` (type `() -> ()`) with a fresh fuel budget.
+    /// Runs the exported function `entry` (type `() -> ()`) with a fresh fuel budget,
+    /// within [`Limits::call_deadline`] of wall time between host calls.
     /// `input` is what the plugin reads with `input_len` and `input_read` (an event, say).
     pub fn invoke(&mut self, entry: &str, input: &[u8]) -> Result<(), Error> {
         let func = self
@@ -135,12 +211,36 @@ impl Plugin {
         self.store
             .set_fuel(self.fuel)
             .map_err(|e| Error::Engine(e.into()))?;
+        let ticks = self.store.data().call_ticks;
+        self.store.set_epoch_deadline(ticks);
         let state = self.store.data_mut();
+        state.entry_ticks = ticks;
         state.input.clear();
         state.input.extend_from_slice(input);
         state.result.clear();
         func.call(&mut self.store, ())
             .map_err(|e| Error::from_run(e, Error::Trap))
+    }
+
+    /// Where the engine queues events for this plugin, from any thread. The queue holds at
+    /// most [`MAX_QUEUED_EVENTS`](crate::MAX_QUEUED_EVENTS) (ADR-0069): an event that
+    /// finds it full drops the queued events, and the plugin is next handed one
+    /// `events.dropped` notice with their count.
+    pub fn events(&self) -> EventSender {
+        self.events.clone()
+    }
+
+    /// Hands the plugin its next queued event: invokes `entry` (type `() -> ()`) with the
+    /// protocol `Event` as JSON for its input, as [`Self::invoke`] does. `Ok(false)` when
+    /// no event waits. The event is taken off the queue even when the invocation fails.
+    pub fn deliver_event(&mut self, entry: &str) -> Result<bool, Error> {
+        let Some(event) = self.events.next() else {
+            return Ok(false);
+        };
+        // An `Event` is plain data with string keys, so this doesn't fail in practice.
+        let input = serde_json::to_vec(&event).map_err(|e| Error::Engine(e.into()))?;
+        self.invoke(entry, &input)?;
+        Ok(true)
     }
 
     /// The fuel the last invocation left unused.
@@ -167,8 +267,11 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
             }
             let mut bytes = vec![0; len];
             memory.read(&caller, offset(ptr), &mut bytes)?;
-            let (status, result) = call(caller.data(), &bytes);
+            let (status, result) = call(caller.data_mut(), &bytes);
             caller.data_mut().result = result;
+            // The time the engine took to answer doesn't count against the plugin.
+            let ticks = caller.data().entry_ticks;
+            caller.as_context_mut().set_epoch_deadline(ticks);
             Ok(status)
         },
     )?;
@@ -211,9 +314,9 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
     Ok(linker)
 }
 
-/// Checks one call against the plugin's grants and, if allowed, sends it. Answers the
-/// status and the result bytes the plugin reads back.
-fn call(state: &HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
+/// Checks one call against the plugin's grants and its cap of commands a second and, if
+/// both allow it, sends it. Answers the status and the result bytes the plugin reads back.
+fn call(state: &mut HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
     let call: Call = match serde_json::from_slice(bytes) {
         Ok(call) => call,
         Err(e) => return (abi::STATUS_MALFORMED, e.to_string().into_bytes()),
@@ -221,6 +324,14 @@ fn call(state: &HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
     if let Err(denied) = state.capabilities.check(&call) {
         let body = serde_json::json!({ "denied": denied });
         return (abi::STATUS_DENIED, body.to_string().into_bytes());
+    }
+    // Every edit of a batch is a command (ADR-0013), so each counts against the cap.
+    let commands = command_names(&call).map_or(1, |names| names.len());
+    if !state.rate.admit(Instant::now(), commands) {
+        let body = serde_json::json!({
+            "limited": { "per_second": state.rate.cap(), "commands": commands }
+        });
+        return (abi::STATUS_LIMITED, body.to_string().into_bytes());
     }
     let answer = block_on(state.control.call(call));
     let encoded = match answer {
@@ -274,4 +385,104 @@ fn write(memory: &mut [u8], at: usize, bytes: &[u8]) -> wasmtime::Result<()> {
         .ok_or_else(|| wasmtime::format_err!("result_read: out of bounds"))?;
     memory[at..end].copy_from_slice(bytes);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Plugin, PluginConfig, PluginHost};
+    use crate::{Error, Limits};
+    use jstream_control::{Control, MockEngine};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    /// An endless loop, and the same loop as a module's `start` function.
+    const SPIN: &str = r#"(module
+        (memory (export "memory") 1)
+        (func (export "spin") (loop $forever (br $forever))))"#;
+    const SPIN_AT_START: &str = r#"(module
+        (memory (export "memory") 1)
+        (func $start (loop $forever (br $forever)))
+        (start $start))"#;
+    /// A `start` function that makes one (malformed) host call, then loops forever.
+    const CALL_THEN_SPIN_AT_START: &str = r#"(module
+        (import "jstream" "call" (func $call (param i32 i32) (result i32)))
+        (memory (export "memory") 1)
+        (func $spin (loop $forever (br $forever)))
+        (func $start (drop (call $call (i32.const 0) (i32.const 0))) (call $spin))
+        (start $start))"#;
+
+    fn load_on(host: &PluginHost, wat: &str, limits: Limits) -> Result<Plugin, Error> {
+        let control: Arc<dyn Control> = Arc::new(MockEngine::new().connect());
+        let wasm = wat::parse_str(wat).expect("valid WAT");
+        let config = PluginConfig {
+            limits,
+            ..PluginConfig::default()
+        };
+        Plugin::load(host, wasm, config, control)
+    }
+
+    fn load(wat: &str, limits: Limits) -> Result<Plugin, Error> {
+        let host = PluginHost::new().expect("the engine configures");
+        load_on(&host, wat, limits)
+    }
+
+    #[test]
+    fn a_plugin_past_its_deadline_is_interrupted() {
+        let limits = Limits::unmetered().with_call_deadline(Duration::from_millis(30));
+        let mut plugin = load(SPIN, limits).expect("the plugin loads");
+        let started = Instant::now();
+        assert!(matches!(plugin.invoke("spin", &[]), Err(Error::Deadline)));
+        assert!(started.elapsed() < Duration::from_secs(5));
+        // The next invocation gets a fresh deadline, and is interrupted again.
+        assert!(matches!(plugin.invoke("spin", &[]), Err(Error::Deadline)));
+    }
+
+    #[test]
+    fn the_default_deadline_interrupts_a_plugin() {
+        let mut plugin = load(SPIN, Limits::unmetered()).expect("the plugin loads");
+        let started = Instant::now();
+        assert!(matches!(plugin.invoke("spin", &[]), Err(Error::Deadline)));
+        let took = started.elapsed();
+        assert!(took >= Limits::DEFAULT_CALL_DEADLINE, "{took:?}");
+        assert!(took < Duration::from_secs(5), "{took:?}");
+    }
+
+    #[test]
+    fn a_start_function_past_the_load_deadline_fails_the_load() {
+        let limits = Limits::unmetered().with_load_deadline(Duration::from_millis(30));
+        let refused = load(SPIN_AT_START, limits);
+        assert!(
+            matches!(refused, Err(Error::Deadline)),
+            "{:?}",
+            refused.err()
+        );
+    }
+
+    #[test]
+    fn a_host_call_during_the_load_re_arms_the_load_deadline() {
+        let load_deadline = Duration::from_millis(400);
+        let limits = Limits::unmetered()
+            .with_call_deadline(Duration::from_millis(30))
+            .with_load_deadline(load_deadline);
+        let started = Instant::now();
+        let refused = load(CALL_THEN_SPIN_AT_START, limits);
+        let took = started.elapsed();
+        assert!(
+            matches!(refused, Err(Error::Deadline)),
+            "{:?}",
+            refused.err()
+        );
+        // The invocation deadline would have stopped it after about 40 ms.
+        assert!(took >= load_deadline, "{took:?}");
+        assert!(took < Duration::from_secs(5), "{took:?}");
+    }
+
+    #[test]
+    fn a_plugin_outliving_its_host_keeps_its_deadline() {
+        let host = PluginHost::new().expect("the engine configures");
+        let limits = Limits::unmetered().with_call_deadline(Duration::from_millis(30));
+        let mut plugin = load_on(&host, SPIN, limits).expect("the plugin loads");
+        drop(host);
+        assert!(matches!(plugin.invoke("spin", &[]), Err(Error::Deadline)));
+    }
 }
