@@ -894,7 +894,6 @@ mod tests {
             )]),
             policy: SupervisorPolicy {
                 first_retry: Duration::from_millis(20),
-                max_crashes: 2,
                 ..SupervisorPolicy::default()
             },
         };
@@ -1001,23 +1000,88 @@ mod tests {
             "reported once"
         );
 
-        // A second crash in a row disables it: off its block, bypassed, no restart.
-        fake.hosts()[1].crash();
+        // Dropped while its host runs: the host is told to stop.
+        assert!(!fake.hosts()[1].has_exited());
+        assert!(pass(&mut chain, &mut mixer, &[]).is_empty());
+        assert!(fake.hosts()[1].has_exited(), "its host stopped");
+        assert!(
+            fake.hosts()[1]
+                .received()
+                .contains(&jstream_plugin_proto::control::ToHost::Stop),
+            "{:?}",
+            fake.hosts()[1].received()
+        );
+    }
+
+    /// A CLAP filter whose host crashes `max_crashes` times in a row is disabled: taken
+    /// off its block and bypassed, and not restarted.
+    #[test]
+    fn a_disabled_clap_filter_is_bypassed() {
+        use crate::plugins::filter::ClapCatalog;
+        use crate::plugins::supervisor::SupervisorPolicy;
+        use jstream_platform::plugin_host::fake::FakePluginHosts;
+        use std::collections::BTreeMap;
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        let config = MixerConfig::default();
+        let block = config.block_frames;
+        let mut mixer = Mixer::new(config).expect("mixer");
+        let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+            .expect("format");
+        let (_producer, input) = mixer.add_input(format).expect("input");
+        let fake = FakePluginHosts::new();
+        let first_retry = Duration::from_millis(20);
+        let catalog = ClapCatalog {
+            hosts: Arc::new(fake.clone()),
+            plugins: BTreeMap::from([(
+                "clap/org.example.gain".to_owned(),
+                ("a.clap".into(), "org.example.gain".to_owned()),
+            )]),
+            policy: SupervisorPolicy {
+                first_retry,
+                max_crashes: 1,
+                ..SupervisorPolicy::default()
+            },
+        };
+        let wanted = [Chained {
+            id: FilterId::new("verb"),
+            kind: "clap/org.example.gain".into(),
+            settings: Settings::new(),
+        }];
+        let mut chain = Chain::default();
+        let mut out = vec![0.0; block * 2];
+        let mut pass = |chain: &mut Chain, mixer: &mut Mixer| {
+            let notes = chain.apply(&input, &wanted, Some(&catalog), Instant::now());
+            mixer.mix(0, &mut out).expect("mix");
+            notes
+        };
+        pass(&mut chain, &mut mixer);
         let deadline = Instant::now() + Duration::from_secs(5);
+        while chain.filters[0].control.is_none() {
+            assert!(Instant::now() < deadline, "the host never got ready");
+            std::thread::sleep(Duration::from_millis(1));
+            pass(&mut chain, &mut mixer);
+        }
+        fake.hosts()[0].crash();
         loop {
             assert!(Instant::now() < deadline, "the crash was never seen");
             std::thread::sleep(Duration::from_millis(1));
-            let notes = pass(&mut chain, &mut mixer, &missing);
-            if notes.iter().any(|note| note.contains("disabled")) {
+            if pass(&mut chain, &mut mixer)
+                .iter()
+                .any(|note| note.contains("disabled"))
+            {
                 break;
             }
         }
-        pass(&mut chain, &mut mixer, &missing);
+        // Past when a restart would have come, it is still off and alone.
+        let until = Instant::now() + first_retry * 4;
+        while Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(1));
+            pass(&mut chain, &mut mixer);
+        }
         assert!(chain.filters[0].block.is_none());
         assert!(chain.filters[0].control.is_none());
-        assert_eq!(fake.hosts().len(), 2);
-
-        assert!(pass(&mut chain, &mut mixer, &[]).is_empty());
-        assert!(fake.hosts()[1].has_exited(), "its host stopped");
+        assert_eq!(fake.hosts().len(), 1, "never restarted");
     }
 }

@@ -319,8 +319,10 @@ state machine. Contents:
   and their kernels (`filters.rs`: defaults, range edges, and a chain updated in place
   or rebuilt on a real mixer, and new settings a full command queue refuses kept off
   the record and tried again; a CLAP filter bypassed until its fake host is ready, kept
-  on the same host when the chain is rebuilt, a missing plugin reported once, and the
-  host stopped with the filter; `plugins/filter.rs`: settings sent to a ready host's
+  on the same host when the chain is rebuilt, kept on a crashed host's block until the
+  restart, a missing plugin reported once, a running host told to stop when its filter
+  is dropped, a disabled filter taken off its block and not restarted, and one on the
+  master chain bypassed; `plugins/filter.rs`: settings sent to a ready host's
   parameter ring once each, and only CLAP ids with finite values), item opacity in linear light through a nested scene
   (`snapshot.rs`), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
