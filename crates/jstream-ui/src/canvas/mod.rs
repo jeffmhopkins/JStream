@@ -4,28 +4,40 @@
 //! keyboard. The scene and the selected item are the shared [`Studio`] selection, so
 //! the canvas, the sources list and the properties form show the same ones.
 //!
-//! The preview itself is a placeholder background until the preview stream is hooked
-//! up. Pure logic lives in [`transform`], [`snap`] and [`model`], which are tested
+//! Under the boxes is the live program preview: one `preview.subscribe` stream on the
+//! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]). Pure
+//! logic lives in [`transform`], [`snap`], [`model`] and [`preview`], which are tested
 //! natively; this module is the Leptos component that wires them to the page.
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
 pub mod group;
+pub mod live;
 pub mod model;
+pub mod preview;
+pub mod screen;
 pub mod snap;
 pub mod transform;
 
 use crate::app::SessionContext;
 use crate::dock::PanelId;
+use crate::item_menu;
+use crate::menu::{Entry, Menus};
+use crate::panels::add_source::AddSourceDialog;
 use crate::store::Studio;
 use crate::workspace::DockState;
+use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
-use jstream_control::protocol::{HistoryOp, ItemGeometry, ItemId, Placed, Rev};
+use jstream_control::protocol::{GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneId};
 use leptos::ev;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use model::{CanvasError, Layout};
+use preview::PreviewState;
 use snap::{Bounds, Guide, SNAP_DISTANCE, SnapTargets};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use transform::{
     Gesture, GestureKind, HANDLE_SIZE, Handle, KNOB_SIZE, Modifiers, Point, Pointer,
     RESIZE_HANDLES, ROTATE_OFFSET, STEM_LENGTH, Viewport,
@@ -131,6 +143,8 @@ pub fn Canvas() -> impl IntoView {
     let snapping = RwSignal::new(true);
     let viewport = RwSignal::new(None::<Viewport>);
     let drag = StoredValue::new(None::<Drag>);
+    // The drag's gesture, which shows it live on output.
+    let live = StoredValue::new_local(None::<live::Live>);
     // What the drag in progress does, for the readout.
     let active = RwSignal::new(None::<Active>);
     let marquee = RwSignal::new(None::<(Point, Point)>);
@@ -140,6 +154,9 @@ pub fn Canvas() -> impl IntoView {
     // The canvas area around the frame: it takes the pointer, so a marquee can start on
     // the margin and a handle reaching past the frame can still be grabbed.
     let area = NodeRef::<leptos::html::Div>::new();
+    let screen = NodeRef::<leptos::html::Canvas>::new();
+    let preview_state = RwSignal::new(PreviewState::Starting);
+    let alive = Arc::new(AtomicBool::new(true));
 
     let measure = move || {
         let (Some(element), Some(canvas)) = (
@@ -184,33 +201,88 @@ pub fn Canvas() -> impl IntoView {
         });
     };
 
+    // The live preview: once the `<canvas>` is in the page, open the session's binary
+    // channel and one preview stream on it, and draw its frames.
+    {
+        let alive = Arc::clone(&alive);
+        screen.on_load(move |element| {
+            let Some(open) = session.and_then(|s| s.get()) else {
+                return;
+            };
+            let frames = open.control.binary();
+            // Only a weak handle is kept, so disconnecting still closes the socket.
+            let control = Rc::downgrade(&open.control);
+            drop(open);
+            let size = stage.get_untracked().map_or((640.0, 360.0), |stage| {
+                (stage.client_width() as f32, stage.client_height() as f32)
+            });
+            let ratio = window().device_pixel_ratio() as f32;
+            spawn_local(run_preview(
+                frames,
+                control,
+                screen::Screen::new(element, move || {
+                    // Shown once the first picture is drawn, unless the stream has
+                    // already ended.
+                    if preview_state.try_get_untracked() == Some(PreviewState::Starting) {
+                        preview_state.try_set(PreviewState::Live);
+                    }
+                }),
+                size,
+                ratio,
+                preview_state,
+                alive,
+            ));
+        });
+    }
+    {
+        let alive = Arc::clone(&alive);
+        on_cleanup(move || alive.store(false, Ordering::Relaxed));
+    }
+
     // Sends the items' new geometries as one batch, and shows them until the
     // collection has them.
-    let commit = move |placed: Vec<(ItemId, ItemGeometry)>| {
-        let (Some(open), Some((scene_id, _))) = (
-            session.and_then(|s| s.get()),
-            layout.with_untracked(|l| l.as_ref().and_then(|l| l.scene.clone())),
-        ) else {
+    // A drag's commit names its gesture's scene, and ends the gesture if its live
+    // values opened one; a commit that can't be sent or fails cancels the gesture, so
+    // the output doesn't keep the dragged geometry (ADR-0032).
+    let commit = move |placed: Vec<(ItemId, ItemGeometry)>,
+                       scene: Option<SceneId>,
+                       gesture: Option<GestureId>| {
+        let Some(open) = session.and_then(|s| s.get()) else {
             return;
         };
-        if placed.is_empty() {
+        let scene_id = scene.or_else(|| {
+            layout.with_untracked(|l| l.as_ref().and_then(|l| l.scene.clone()).map(|(id, _)| id))
+        });
+        let Some(scene_id) = scene_id.filter(|_| !placed.is_empty()) else {
+            if let Some(gesture) = gesture {
+                spawn_local(async move {
+                    if let Err(error) = model::live_cancel(&*open.control, gesture).await {
+                        problem(&error);
+                    }
+                });
+            }
             return;
-        }
+        };
         show(placed.clone());
         awaiting.update_value(|a| a.in_flight += 1);
         spawn_local(async move {
-            let result = model::commit(&*open.control, scene_id, placed.clone()).await;
-            drop(open);
+            let result =
+                model::commit(&*open.control, scene_id, placed.clone(), gesture.clone()).await;
             awaiting.update_value(|a| a.in_flight = a.in_flight.saturating_sub(1));
             match result {
                 Ok(rev) => awaiting.update_value(|a| a.last = a.last.max(Some(rev))),
                 Err(error) => {
                     problem(&error);
+                    if let Some(gesture) = gesture {
+                        // The engine still holds the gesture: drop its live values.
+                        let _cancelled = model::live_cancel(&*open.control, gesture).await;
+                    }
                     // Stop showing the failed geometries, unless a later gesture has
                     // already replaced them.
                     preview.update(|shown| shown.retain(|entry| !placed.contains(entry)));
                 }
             }
+            drop(open);
             drop_preview_if_caught_up();
         });
     };
@@ -288,6 +360,18 @@ pub fn Canvas() -> impl IntoView {
             Action::Group(gesture) => Some(Active::Group(gesture.kind)),
             Action::Marquee { .. } => None,
         });
+        // A box drag opens a gesture, so the output follows it before the drop.
+        let gesture = match (&action, session, current.scene.as_ref()) {
+            (Action::One { .. } | Action::Group(_), Some(session), Some((scene_id, _))) => {
+                // Unique for the session, so a remounted canvas never reuses one.
+                session.get().map(|open| {
+                    let id = GestureId::new(studio.fresh_id(&open, "drag"));
+                    live::Live::new(id, scene_id.clone(), session, problem)
+                })
+            }
+            _ => None,
+        };
+        live.set_value(gesture);
         drag.set_value(Some(Drag {
             action,
             pointer: Pointer::new(point),
@@ -451,13 +535,16 @@ pub fn Canvas() -> impl IntoView {
             Action::One { item_id, gesture } => {
                 let at = current.pointer.follow(point, event.shift_key());
                 if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
-                    show(vec![(item_id.clone(), update.geometry)]);
+                    let placed = vec![(item_id.clone(), update.geometry)];
+                    live.with_value(|l| l.iter().for_each(|l| l.show(placed.clone())));
+                    show(placed);
                     guides.set(update.guides);
                 }
             }
             Action::Group(gesture) => {
                 let at = current.pointer.follow(point, event.shift_key());
                 if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
+                    live.with_value(|l| l.iter().for_each(|l| l.show(update.geometries.clone())));
                     show(update.geometries);
                     guides.set(update.guides);
                 }
@@ -494,13 +581,33 @@ pub fn Canvas() -> impl IntoView {
                 .cloned()
                 .collect()
         });
+        let gesture = live.with_value(Clone::clone);
+        live.set_value(None);
         if keep && !moved.is_empty() {
-            commit(moved);
+            match gesture {
+                // The commit waits for the live values sent before it.
+                Some(gesture) => {
+                    gesture.commit(move |scene, ending| commit(moved, Some(scene), ending));
+                }
+                None => commit(moved, None, None),
+            }
         } else {
+            if let Some(gesture) = gesture {
+                gesture.cancel();
+            }
             // Back to where the gesture started, which is any commit's pending geometry.
             show(starts);
             drop_preview_if_caught_up();
         }
+    };
+
+    let select_all = move || {
+        let all = layout.with_untracked(|l| {
+            l.iter()
+                .flat_map(|l| l.boxes().map(|(id, _)| id.clone()))
+                .collect::<Vec<_>>()
+        });
+        studio.select_items(all);
     };
 
     let on_key = move |event: ev::KeyboardEvent| {
@@ -510,14 +617,7 @@ pub fn Canvas() -> impl IntoView {
             "z" | "Z" if command && event.shift_key() => step(HistoryOp::Redo),
             "z" | "Z" if command => step(HistoryOp::Undo),
             "y" | "Y" if command => step(HistoryOp::Redo),
-            "a" | "A" if command => {
-                let all = layout.with_untracked(|l| {
-                    l.iter()
-                        .flat_map(|l| l.boxes().map(|(id, _)| id.clone()))
-                        .collect::<Vec<_>>()
-                });
-                studio.select_items(all);
-            }
+            "a" | "A" if command => select_all(),
             "Escape" if drag.with_value(Option::is_some) => end(false),
             "Escape" => studio.select_item(None),
             "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" => {
@@ -538,14 +638,15 @@ pub fn Canvas() -> impl IntoView {
                 if moved.is_empty() {
                     return;
                 }
-                commit(moved);
+                commit(moved, None, None);
             }
             _ => return,
         }
         event.prevent_default();
     };
 
-    // A double click on an item selects it alone and shows its properties.
+    // A double click on an item selects it alone and opens its properties.
+    let item_cx = item_menu::Context::from_page();
     let on_double = move |event: ev::MouseEvent| {
         let Some((_, point)) = canvas_at(event.client_x(), event.client_y()) else {
             return;
@@ -554,12 +655,97 @@ pub fn Canvas() -> impl IntoView {
             l.as_ref()
                 .and_then(|l| transform::topmost_at(l.boxes(), point).cloned())
         });
-        if let Some(hit) = hit {
-            studio.select_item(Some(hit));
-            if let Some(dock) = dock {
-                dock.0.update(|d| d.show(PanelId::Inspector));
+        match (hit, item_cx) {
+            (Some(hit), Some(cx)) => cx.properties(hit),
+            (Some(hit), None) => {
+                studio.select_item(Some(hit));
+                if let Some(dock) = dock {
+                    dock.0.update(|d| d.show(PanelId::Inspector));
+                }
+            }
+            _ => {}
+        }
+    };
+
+    // A right-click opens the canvas menu: the frame's, or the margin's around it.
+    let menus = use_context::<Menus>();
+    let adder = use_context::<AddSourceDialog>();
+    let on_context = move |event: ev::MouseEvent| {
+        let Some(menus) = menus else {
+            return;
+        };
+        let at = canvas_at(event.client_x(), event.client_y());
+        // On an item: the selected items' menu, after selecting the item alone unless it
+        // is already selected.
+        let hit = at.and_then(|(_, point)| {
+            layout.with_untracked(|l| {
+                let l = l.as_ref()?;
+                let hit = transform::topmost_at(l.boxes(), point)?.clone();
+                Some((l.scene.as_ref()?.0.clone(), hit))
+            })
+        });
+        if let (Some(cx), Some((scene_id, hit))) = (item_cx, hit) {
+            if !chosen.get_untracked().contains(&hit) {
+                studio.select_item(Some(hit));
+            }
+            let items = chosen.get_untracked();
+            let entries = item_menu::entries(
+                cx,
+                &scene_id,
+                &items,
+                item_menu::Scope::Canvas(Rc::new(select_all)),
+            );
+            if !entries.is_empty() {
+                menus.open(&event, entries);
+                return;
             }
         }
+        let on_frame = at
+            .zip(layout.with_untracked(|l| l.as_ref().map(|l| l.canvas)))
+            .is_some_and(|((_, p), canvas)| {
+                p.x >= 0.0
+                    && p.y >= 0.0
+                    && p.x <= canvas.width as f32
+                    && p.y <= canvas.height as f32
+            });
+        let scene = studio.selection.with_untracked(|s| s.scene.clone());
+        let snap = if snapping.get_untracked() {
+            "Turn snapping off"
+        } else {
+            "Turn snapping on"
+        };
+        let snap = Entry::item(snap, move || snapping.update(|on| *on = !*on));
+        let select = Entry::item("Select all", select_all).hint("Ctrl+A");
+        let has_scene = scene.is_some();
+        let entries = if on_frame {
+            let add = Entry::item("Add source…", move || {
+                if let (Some(adder), Some(scene)) = (adder, scene.clone()) {
+                    adder.open(scene, false);
+                }
+            })
+            .disabled_if(adder.is_none() || !has_scene);
+            vec![
+                select,
+                snap,
+                Entry::Sep,
+                add,
+                Entry::unavailable("Paste").hint("Ctrl+V"),
+            ]
+        } else {
+            vec![
+                Entry::submenu("Pop out", Vec::new()),
+                Entry::Sep,
+                select,
+                snap,
+                Entry::Sep,
+                Entry::submenu("Transition in", Vec::new()),
+                Entry::submenu("Transition out", Vec::new()),
+                Entry::Sep,
+                Entry::unavailable("Scene properties…"),
+                Entry::unavailable("Edit scene filters…"),
+            ]
+        };
+        menus.open(&event, entries);
     };
 
     // The boxes to draw: the collection's, with the dragged or pending ones replaced.
@@ -603,6 +789,34 @@ pub fn Canvas() -> impl IntoView {
     let view_box = move || {
         let (width, height) = canvas_size();
         format!("0 0 {width} {height}")
+    };
+    // The preview is the program mix, so it lies under the boxes only while the canvas
+    // shows the program scene; another selected scene gets the placeholder instead.
+    let on_program = move || {
+        let shown = layout.with(|l| {
+            l.as_ref()
+                .and_then(|l| l.scene.as_ref().map(|s| s.0.clone()))
+        });
+        shown.is_some() && studio.program.with(|program| *program == shown)
+    };
+    let preview_message = move || {
+        if on_program() {
+            preview_state.get().message()
+        } else {
+            Some("The preview shows the program scene".to_owned())
+        }
+    };
+    // Where the preview picture goes in the stage, in CSS pixels: the canvas's own fit,
+    // so the picture lies exactly under the boxes.
+    let screen_box = move || {
+        let fit = viewport.get()?;
+        let (width, height) = canvas_size();
+        Some((
+            fit.offset_x,
+            fit.offset_y,
+            width as f32 * fit.scale,
+            height as f32 * fit.scale,
+        ))
     };
     // Screen pixels in canvas units, for handle sizes and label text.
     let px = move |screen: f32| viewport.get().map_or(screen, |v| v.canvas_len(screen));
@@ -901,6 +1115,7 @@ pub fn Canvas() -> impl IntoView {
             on:pointercancel=move |_| end(false)
             on:lostpointercapture=move |_| end(true)
             on:dblclick=on_double
+            on:contextmenu=on_context
         >
             <div
                 class="preview stage"
@@ -909,27 +1124,42 @@ pub fn Canvas() -> impl IntoView {
                 aria-label=move || format!("Scene canvas, {}", scene_name())
                 on:keydown=on_key
             >
+                <canvas
+                    node_ref=screen
+                    class="stage-screen"
+                    style:left=move || screen_box().map(|b| format!("{}px", b.0))
+                    style:top=move || screen_box().map(|b| format!("{}px", b.1))
+                    style:width=move || screen_box().map(|b| format!("{}px", b.2))
+                    style:height=move || screen_box().map(|b| format!("{}px", b.3))
+                    style:visibility=move || {
+                        if on_program() && preview_state.get() == PreviewState::Live {
+                            "visible"
+                        } else {
+                            "hidden"
+                        }
+                    }
+                ></canvas>
                 <svg
                     viewBox=view_box
                     preserveAspectRatio="xMidYMid meet"
                     class="stage-overlay"
                 >
-                    <rect
-                        x="0"
-                        y="0"
-                        width=move || canvas_size().0
-                        height=move || canvas_size().1
-                        fill="#141a22"
-                    />
-                    <text
-                        x=move || canvas_size().0 / 2
-                        y=move || canvas_size().1 / 2
-                        text-anchor="middle"
-                        font-size=move || px(13.0)
-                        fill="#5a606b"
-                    >
-                        "Preview stream not connected yet"
-                    </text>
+                    {move || {
+                        let message = preview_message()?;
+                        let (width, height) = canvas_size();
+                        Some(view! {
+                            <rect x="0" y="0" width=width height=height fill="#1d1d21" />
+                            <text
+                                x=width / 2
+                                y=height / 2
+                                text-anchor="middle"
+                                font-size=px(13.0)
+                                fill="#77777f"
+                            >
+                                {message}
+                            </text>
+                        })
+                    }}
                     {boxes}
                     {guide_lines}
                     {selection_chrome}
@@ -942,6 +1172,10 @@ pub fn Canvas() -> impl IntoView {
                 aria-label="Canvas tools"
                 on:pointerdown=|event: ev::PointerEvent| event.stop_propagation()
                 on:dblclick=|event: ev::MouseEvent| event.stop_propagation()
+                on:contextmenu=|event: ev::MouseEvent| {
+                    event.prevent_default();
+                    event.stop_propagation();
+                }
             >
                 <button
                     class="canvas-tool"
@@ -1058,6 +1292,86 @@ fn describe(error: &CanvasError) -> String {
             "Can't undo that: someone else has changed it since.".to_owned()
         }
         other => other.to_string(),
+    }
+}
+
+/// Runs the canvas's preview stream: subscribes, then draws each frame of its channel
+/// until the session, the stream or the canvas ends. When the browser's H.264 decoder
+/// fails, it subscribes again for JPEG only.
+async fn run_preview(
+    mut frames: jstream_control::BinaryStream,
+    control: std::rc::Weak<dyn jstream_control::Control>,
+    screen: Option<screen::Screen>,
+    (width, height): (f32, f32),
+    ratio: f32,
+    state: RwSignal<PreviewState>,
+    alive: Arc<AtomicBool>,
+) {
+    let Some(mut screen) = screen else {
+        state.set(PreviewState::Unavailable(
+            "this browser can't draw on a canvas".into(),
+        ));
+        return;
+    };
+    let subscribe = |h264: bool| {
+        let control = control.clone();
+        async move {
+            let control = control.upgrade()?;
+            let action = preview::subscribe(width, height, ratio, h264);
+            Some(
+                control
+                    .call(jstream_control::protocol::Call::Action { action })
+                    .await,
+            )
+        }
+    };
+    let mut h264 = screen::Screen::supports_h264();
+    match subscribe(h264).await {
+        Some(Ok(_)) => {}
+        Some(Err(error)) => {
+            state.try_set(PreviewState::Unavailable(error.to_string()));
+            return;
+        }
+        None => return,
+    }
+    while let Some(frame) = frames.next().await {
+        if !alive.load(Ordering::Relaxed) {
+            return;
+        }
+        let header = frame.header;
+        if header.channel != preview::CHANNEL {
+            continue;
+        }
+        if header.end {
+            let reason = String::from_utf8_lossy(&frame.payload).into_owned();
+            state.try_set(PreviewState::Unavailable(reason));
+            return;
+        }
+        if let Err(reason) = screen.show(&header, &frame.payload)
+            && !screen.h264_failed()
+        {
+            state.try_set(PreviewState::Unavailable(reason));
+            return;
+        }
+        if h264 && screen.h264_failed() {
+            // Fall back to JPEG once. The channel can only be reused once its stream is
+            // closed, so close it first.
+            h264 = false;
+            let Some(control) = control.upgrade() else {
+                return;
+            };
+            let close = jstream_control::protocol::Action::PreviewUnsubscribe {
+                channel: preview::CHANNEL,
+            };
+            let _closed = control
+                .call(jstream_control::protocol::Call::Action { action: close })
+                .await;
+            drop(control);
+            if let Some(Err(error)) = subscribe(false).await {
+                state.try_set(PreviewState::Unavailable(error.to_string()));
+                return;
+            }
+        }
     }
 }
 

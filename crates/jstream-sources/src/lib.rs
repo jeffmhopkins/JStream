@@ -1,4 +1,4 @@
-//! Source kinds (ADR-0031, ADR-0025). A [`Registry`] holds every kind by ID: its
+//! Source kinds (ADR-0061, ADR-0025). A [`Registry`] holds every kind by ID: its
 //! [`KindDescriptor`](jstream_protocol::KindDescriptor), which the engine reports through
 //! `kind.list` and `kind.describe` and validates settings against, and how to create its
 //! sources. A [`Source`] produces video frames on request, for snapshots and tests.
@@ -23,7 +23,7 @@
 //!
 //! [`MediaDecoders`]: jstream_platform::MediaDecoders
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-sources/README.md#purpose, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0025-typed-settings-kind-descriptors.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-sources/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0025-typed-settings-kind-descriptors.md
 
 #![forbid(unsafe_code)]
 
@@ -44,9 +44,10 @@ mod youtube_chat;
 
 pub use audio::AudioTarget;
 pub use browser::opens_browser;
-pub use capture::CaptureSpec;
+pub use capture::{CaptureSpec, webcam_device};
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use error::SourceError;
+pub use image::{StillImage, decode_still};
 /// The browser engine seam `browser` sources open their pages through, which the host
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;

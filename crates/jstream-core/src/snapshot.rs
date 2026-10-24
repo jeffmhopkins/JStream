@@ -38,6 +38,7 @@ use jstream_render::{
 use jstream_sources::CaptureSpec;
 
 use crate::chain::{Chain, Chains};
+use crate::filter_assets::FilterAssets;
 use crate::lock;
 use crate::runtime::RenderSnapshot;
 use crate::transition::{self, From, Planned, Running, Visual};
@@ -281,6 +282,9 @@ pub(crate) struct Shot {
     /// The transition running on program, which replaces the program pass: `passes`
     /// then holds only the nested scenes its tracks show.
     transition: Option<Transitioning>,
+    /// [`schedule_chains`]: the order the video chains run in once per frame, with the
+    /// passes of the scenes they read, made once here like `passes`.
+    chain_steps: Vec<ChainStep>,
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -306,6 +310,7 @@ impl Default for Shot {
             uploads: Vec::new(),
             captures: captures(&[]),
             transition: None,
+            chain_steps: Vec::new(),
         }
     }
 }
@@ -368,6 +373,12 @@ impl Shot {
         self.chains.len()
     }
 
+    /// The video chain of `source_id` in this shot, for tests.
+    #[cfg(test)]
+    pub(crate) fn chain(&self, source_id: &SourceId) -> Option<&Chain> {
+        self.chains.get(source_id)
+    }
+
     /// How many tracks the running transition draws, or `None` without one, for tests.
     #[cfg(test)]
     pub(crate) fn transition_tracks(&self) -> Option<usize> {
@@ -399,9 +410,13 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
         .scenes()
         .first()
         .map(|scene| scene.id().clone());
-    plan_with(graph, first.as_ref(), None, &mut |id| {
-        frames.get(id).map(|f| Look::Frame(f.clone(), None))
-    })
+    plan_with(
+        graph,
+        first.as_ref(),
+        None,
+        &mut |id| frames.get(id).map(|f| Look::Frame(f.clone(), None)),
+        &FilterAssets::default(),
+    )
     .shot
 }
 
@@ -421,7 +436,8 @@ pub(crate) struct Planning {
 /// Copies the program scene `program` (ADR-0030), the scene each `scene` video mix
 /// shows, and the scenes they nest out of `graph`, and schedules them, asking `look`
 /// what each source an item they reach places shows: its frame and when that frame is
-/// next replaced, or what the pipeline captures for it.
+/// next replaced, or what the pipeline captures for it. A video filter that reads an
+/// asset gets it from `assets`, the ones loaded now.
 ///
 /// With a `running` transition (ADR-0029) toward `program` that has not ended at `now`,
 /// the shot draws the transition instead of the program scene: its tracks, planned from
@@ -432,6 +448,7 @@ pub(crate) fn plan_with(
     program: Option<&SceneId>,
     running: Option<(&Running, MediaTime)>,
     look: &mut LookUp<'_>,
+    assets: &FilterAssets,
 ) -> Planning {
     let state = graph.state();
     let program = program.cloned();
@@ -443,6 +460,7 @@ pub(crate) fn plan_with(
     let mut planner = Planner {
         state,
         look,
+        assets,
         wake: None,
     };
     let mut finished = running.is_some();
@@ -521,6 +539,13 @@ pub(crate) fn plan_with(
             GpuKey::Capture(spec) => Some(spec.clone()),
             _ => None,
         }));
+    shot.chain_steps = schedule_chains(&shot);
+    let read = placed_captures(shot.chain_steps.iter().filter_map(|step| match step {
+        ChainStep::Pass(pass) => Some(pass),
+        ChainStep::Run(_) => None,
+    }))
+    .collect::<Vec<_>>();
+    shot.captures.extend(read);
     Planning {
         shot,
         wake: planner.wake,
@@ -537,6 +562,7 @@ pub(crate) fn on_screen(
     running: &Running,
     now: MediaTime,
     look: &mut LookUp<'_>,
+    assets: &FilterAssets,
 ) -> Vec<Visual> {
     let state = graph.state();
     let mut shot = Shot {
@@ -546,6 +572,7 @@ pub(crate) fn on_screen(
     let mut planner = Planner {
         state,
         look,
+        assets,
         wake: None,
     };
     let planned = planner.transition(running, &mut shot);
@@ -633,6 +660,8 @@ pub(crate) type LookUp<'a> = dyn FnMut(&SourceId) -> Option<Look> + 'a;
 struct Planner<'a, 'f> {
     state: &'a State,
     look: &'f mut LookUp<'f>,
+    /// The assets loaded for video filters.
+    assets: &'a FilterAssets,
     /// The earliest time a frame in the shot is replaced.
     wake: Option<MediaTime>,
 }
@@ -828,9 +857,14 @@ impl Planner<'_, '_> {
         if out.chains.contains_key(id) {
             return Some(SourceRef::Filtered(id.clone()));
         }
-        match Chain::of(source, key(&image)) {
+        match Chain::of(source, key(&image), self.assets) {
             Some(chain) => {
+                let scenes: Vec<SceneId> = chain.scenes().cloned().collect();
                 out.chains.insert(id.clone(), chain);
+                // What a `scene_mask` reads is planned like a nested scene.
+                for scene in &scenes {
+                    self.collect(scene, out, &mut BTreeSet::new());
+                }
                 Some(SourceRef::Filtered(id.clone()))
             }
             None => Some(image),
@@ -857,6 +891,28 @@ pub(crate) enum GpuKey {
     /// One step of the privacy blur at that width and height: the output itself, then
     /// halved until it is at most [`PRIVACY_SIDE`] on its longest side (ADR-0027 §4).
     Privacy(u32, u32),
+}
+
+/// The depth a scene that a video filter reads (`scene_mask`) is drawn at: as a scene
+/// nested one level down, so what it nests counts toward [`MAX_NESTING`] the same way.
+const REFERENCE_DEPTH: usize = 1;
+
+impl GpuKey {
+    /// The layer `scene` is drawn into for the video filters that read it.
+    pub(crate) fn reference(scene: &SceneId) -> Self {
+        Self::Layer(scene.clone(), REFERENCE_DEPTH)
+    }
+}
+
+/// One step of the work a frame does once, before any mix draws: a source's video
+/// chain, or a scene pass a chain reads, in an order where each comes after what it
+/// reads ([`schedule_chains`]).
+#[derive(Debug, PartialEq)]
+enum ChainStep {
+    /// A scene a `scene_mask` reads, or a scene that one nests.
+    Pass(Pass),
+    /// The video chain of a source.
+    Run(SourceId),
 }
 
 /// What [`compose`] draws: which mix, and whether the privacy stage applies.
@@ -913,13 +969,92 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
     passes
 }
 
+/// Where [`visit`] puts the passes it schedules.
+trait Passes {
+    /// Takes `pass`, after every pass it reads.
+    fn pass(&mut self, pass: Pass);
+
+    /// Called when a pass places `source`'s video chain output, before the pass is
+    /// taken. A mix's passes ignore it: every chain runs before any mix draws.
+    fn filtered(
+        &mut self,
+        _shot: &Shot,
+        _source: &SourceId,
+        _done: &mut BTreeSet<(SceneId, usize)>,
+    ) {
+    }
+}
+
+impl Passes for Vec<Pass> {
+    fn pass(&mut self, pass: Pass) {
+        self.push(pass);
+    }
+}
+
+/// The work a frame does once, before any mix draws, in order: each video chain after
+/// the passes of the scenes it reads (`scene_mask`), and each such pass after the
+/// chains of the sources it places and the scenes it nests. A scene a chain reads is
+/// drawn at [`REFERENCE_DEPTH`] into [`GpuKey::reference`]. The graph refuses a cycle
+/// through a filter's scene reference (ADR-0026); were one there, the chain that
+/// closes it would read its source's output from the frame before.
+fn schedule_chains(shot: &Shot) -> Vec<ChainStep> {
+    let mut order = ChainOrder::default();
+    let mut done = BTreeSet::new();
+    for source in shot.chains.keys() {
+        order.chain(shot, source, &mut done);
+    }
+    order.steps
+}
+
+#[derive(Default)]
+struct ChainOrder {
+    steps: Vec<ChainStep>,
+    /// The chains already in `steps`.
+    ran: BTreeSet<SourceId>,
+    /// The chains being ordered, whose scenes are being scheduled.
+    open: BTreeSet<SourceId>,
+}
+
+impl ChainOrder {
+    fn chain(&mut self, shot: &Shot, source: &SourceId, done: &mut BTreeSet<(SceneId, usize)>) {
+        if self.ran.contains(source) || !self.open.insert(source.clone()) {
+            return;
+        }
+        if let Some(chain) = shot.chains.get(source) {
+            for scene in chain.scenes() {
+                visit(
+                    shot,
+                    scene,
+                    REFERENCE_DEPTH,
+                    &mut BTreeSet::new(),
+                    done,
+                    self,
+                );
+            }
+        }
+        self.open.remove(source);
+        self.ran.insert(source.clone());
+        self.steps.push(ChainStep::Run(source.clone()));
+    }
+}
+
+impl Passes for ChainOrder {
+    fn pass(&mut self, pass: Pass) {
+        self.steps.push(ChainStep::Pass(pass));
+    }
+
+    fn filtered(&mut self, shot: &Shot, source: &SourceId, done: &mut BTreeSet<(SceneId, usize)>) {
+        self.chain(shot, source, done);
+    }
+}
+
 fn visit(
     shot: &Shot,
     id: &SceneId,
     depth: usize,
     path: &mut BTreeSet<SceneId>,
     done: &mut BTreeSet<(SceneId, usize)>,
-    passes: &mut Vec<Pass>,
+    passes: &mut impl Passes,
 ) -> GpuKey {
     let key = GpuKey::Layer(id.clone(), depth);
     if !done.insert((id.clone(), depth)) {
@@ -931,7 +1066,10 @@ fn visit(
         let image = match &placed.source {
             SourceRef::Frame(source) => GpuKey::Frame(source.clone()),
             SourceRef::Capture(spec) => GpuKey::Capture(spec.clone()),
-            SourceRef::Filtered(source) => GpuKey::Filtered(source.clone()),
+            SourceRef::Filtered(source) => {
+                passes.filtered(shot, source, done);
+                GpuKey::Filtered(source.clone())
+            }
             SourceRef::Scene(inner) => {
                 if depth >= MAX_NESTING {
                     tracing::debug!(
@@ -956,7 +1094,7 @@ fn visit(
         });
     }
     path.remove(id);
-    passes.push(Pass {
+    passes.pass(Pass {
         scene: id.clone(),
         depth,
         key: key.clone(),
@@ -1374,7 +1512,7 @@ fn draw(
         View::default(),
         live,
         &NoCaptures,
-        shot.canvas().map_err(from_render)?,
+        DrawAt::read(shot.canvas().map_err(from_render)?),
     );
     drop(cache.end_frame(compositor));
     let full = output
@@ -1441,9 +1579,28 @@ impl Captures for NoCaptures {
     }
 }
 
+/// What [`compose`] draws into: the output's size, and whether the output carries a CPU
+/// readback ([`Output::pixels`]). Without, only its texture is drawn, for a GPU consumer
+/// such as an encode target's conversion.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DrawAt {
+    pub(crate) size: FrameSize,
+    pub(crate) readback: bool,
+}
+
+impl DrawAt {
+    /// `size`, read back.
+    pub(crate) fn read(size: FrameSize) -> Self {
+        Self {
+            size,
+            readback: true,
+        }
+    }
+}
+
 /// Draws `view.mix` of `shot` (the program mix for `None`) as it is at `at` (a running
-/// transition samples it) at `output`, over opaque black, blurred when `view.privacy`
-/// is `Some(true)` (ADR-0027 §4), and reads it back,
+/// transition samples it) at `to`'s size, over opaque black, blurred when `view.privacy`
+/// is `Some(true)` (ADR-0027 §4), and reads it back when `to` asks for that,
 /// between the caller's [`ResourceCache::begin_frame`] and
 /// [`ResourceCache::end_frame`]. Several mixes may be drawn between the two, so their
 /// shared uploads and layers are kept for all of them.
@@ -1451,7 +1608,8 @@ impl Captures for NoCaptures {
 /// crop in `shot`.
 ///
 /// Every image comes from `cache`, and every source's video chain runs in `chains`
-/// once per frame of the cache, however many mixes draw it ([`Chains::run`]): a source
+/// once per frame of the cache, however many mixes draw it (`run_chains`, through
+/// [`Chains::begin`] and [`Chains::run_one`]), after the passes of the scenes they read: a source
 /// frame is uploaded only when its version changed, and each nested scene is composited into the layer it had last frame
 /// ([`Compositor::render_into`]), so a steady frame allocates no texture. Each nested
 /// scene is premultiplied linear `Rgba16Float` that stays on the GPU, transparent where
@@ -1470,8 +1628,12 @@ pub(crate) fn compose(
     view: View<'_>,
     live: &LiveParams,
     captures: &dyn Captures,
-    output: FrameSize,
+    to: DrawAt,
 ) -> Result<Output, RenderError> {
+    let DrawAt {
+        size: output,
+        readback,
+    } = to;
     let canvas = shot.canvas()?;
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
@@ -1522,7 +1684,7 @@ pub(crate) fn compose(
         };
         fallback = Some(key);
     }
-    chains.run(compositor, cache, &shot.chains, at);
+    run_chains(compositor, (&mut *cache, &mut *chains), shot, live, at)?;
     if view.privacy.is_some() {
         privacy_layers(compositor, cache, output)?;
     }
@@ -1553,7 +1715,7 @@ pub(crate) fn compose(
                 })
                 .collect();
             let shown = scene(output, Color::BLACK, &items);
-            return present(compositor, cache, &shown, view.privacy);
+            return present(compositor, cache, &shown, view.privacy, readback);
         }
     };
     let direct = output == canvas;
@@ -1589,27 +1751,29 @@ pub(crate) fn compose(
     }
     if direct {
         let shown = scene(output, Color::BLACK, &items);
-        return present(compositor, cache, &shown, view.privacy);
+        return present(compositor, cache, &shown, view.privacy, readback);
     }
     let layer = image(&GpuKey::Program)?;
     compositor.render_into(&scene(canvas, Color::BLACK, &items), layer)?;
     let placed = [fitted(layer, canvas, output)];
     let shown = scene(output, Color::BLACK, &placed);
-    present(compositor, cache, &shown, view.privacy)
+    present(compositor, cache, &shown, view.privacy, readback)
 }
 
 /// Draws `shown`, the finished picture at the output size: as it is, or with the
 /// privacy screen on, blurred by halving it step by step into the [`GpuKey::Privacy`]
-/// layers and scaling the smallest back up, and reads it back. An error here fails the frame, and the
+/// layers and scaling the smallest back up, and reads it back when `readback` is set. An
+/// error here fails the frame, and the
 /// render thread then sends black, never the picture (ADR-0027 §4: it fails closed).
 fn present(
     compositor: &mut Compositor,
     cache: &ResourceCache<GpuKey>,
     shown: &Scene<'_>,
     privacy: Option<bool>,
+    readback: bool,
 ) -> Result<Output, RenderError> {
     if privacy != Some(true) {
-        return compositor.render(shown, true);
+        return compositor.render(shown, readback);
     }
     let layer = |size: FrameSize| {
         cache
@@ -1628,7 +1792,47 @@ fn present(
         from = to;
     }
     let placed = [stretched(layer(from)?, from, output)];
-    compositor.render(&scene(output, Color::BLACK, &placed), true)
+    compositor.render(&scene(output, Color::BLACK, &placed), readback)
+}
+
+/// Runs `shot`'s video chains, once per frame of the cache however many mixes draw it
+/// ([`Chains::begin`]), each after the passes of the scenes it reads, which are drawn
+/// into their [`GpuKey::reference`] layers first ([`schedule_chains`]).
+///
+/// # Errors
+/// What the compositor reports for a scene layer or pass. That fails the frame, as a
+/// failed nested pass does: the chains after it don't run, and since [`Chains::begin`]
+/// has marked the frame, no later mix of the tick runs them either.
+fn run_chains(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    shot: &Shot,
+    live: &LiveParams,
+    at: MediaTime,
+) -> Result<(), RenderError> {
+    if !chains.begin(compositor, cache, &shot.chains) {
+        return Ok(());
+    }
+    let canvas = shot.canvas()?;
+    for step in &shot.chain_steps {
+        match step {
+            ChainStep::Run(source) => {
+                if let Some(chain) = shot.chains.get(source) {
+                    chains.run_one(compositor, cache, (source, chain), at);
+                }
+            }
+            ChainStep::Pass(pass) => {
+                cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+                let mut items = Vec::new();
+                fill_items(&mut items, (&*cache, &*chains), pass, live);
+                let Some(layer) = cache.get(&pass.key) else {
+                    continue;
+                };
+                compositor.render_into(&scene(canvas, Color::TRANSPARENT, &items), layer)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Keeps the privacy blur's layers for an output of `output`'s size in the cache, so
@@ -1667,6 +1871,11 @@ pub(crate) fn claim_layers(
 ) -> Result<(), RenderError> {
     chains.claim(compositor, cache);
     let canvas = shot.canvas()?;
+    for step in &shot.chain_steps {
+        if let ChainStep::Pass(pass) = step {
+            cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+        }
+    }
     let passes = shot.passes_of(mix);
     let nested = match passes.split_last() {
         // A running transition draws its tracks over every pass, all of them nested.
@@ -2251,12 +2460,18 @@ pub(crate) mod tests {
             )
             .expect("edits");
         let second = CaptureSpec::Display(Some("monitor:2".into()));
-        let shot = super::plan_with(&graph, Some(&SceneId::new("main")), None, &mut |id| {
-            Some(super::Look::Capture(match id.as_str() {
-                "second" => second.clone(),
-                _ => CaptureSpec::Display(None),
-            }))
-        })
+        let shot = super::plan_with(
+            &graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(super::Look::Capture(match id.as_str() {
+                    "second" => second.clone(),
+                    _ => CaptureSpec::Display(None),
+                }))
+            },
+            &crate::filter_assets::FilterAssets::default(),
+        )
         .shot;
         assert_eq!(
             shot.captures(),
@@ -2511,7 +2726,7 @@ pub(crate) mod tests {
             View::default(),
             live,
             &captures,
-            size,
+            super::DrawAt::read(size),
         )
         .expect("compose");
         drop(cache.end_frame(compositor));
@@ -2650,7 +2865,7 @@ pub(crate) mod tests {
                 View { mix, privacy: None },
                 &LiveParams::default(),
                 &super::NoCaptures,
-                square,
+                super::DrawAt::read(square),
             )
             .expect("compose");
             drop(cache.end_frame(&compositor));
@@ -2890,7 +3105,7 @@ pub(crate) mod tests {
                 View { mix: None, privacy },
                 &LiveParams::default(),
                 &super::NoCaptures,
-                square,
+                super::DrawAt::read(square),
             )
             .expect("compose");
             drop(cache.end_frame(&compositor));
@@ -2986,7 +3201,7 @@ pub(crate) mod tests {
                 View::default(),
                 &LiveParams::default(),
                 &super::NoCaptures,
-                canvas,
+                super::DrawAt::read(canvas),
             )
             .expect("program");
             if index.is_multiple_of(2) {
@@ -3000,7 +3215,7 @@ pub(crate) mod tests {
                     },
                     &LiveParams::default(),
                     &super::NoCaptures,
-                    small,
+                    super::DrawAt::read(small),
                 )
                 .expect("half");
             } else {

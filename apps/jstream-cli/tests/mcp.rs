@@ -228,12 +228,16 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
 /// `initialize`: an agent that initializes and then stays idle past the timeout keeps
 /// its session.
 ///
-/// The server counts the timeout from the TCP accept, so it also covers the proxy's
-/// start and the agent's `initialize`. 2 s leaves room for those when the machine is
-/// loaded (#660); 300 ms didn't.
+/// The deadline runs from the server's accept, and the proxy's `hello` has to beat it.
+/// Before `hello` arrives, the process has to start, the WebSocket has to upgrade, the
+/// proxy has to read `initialize`, and the server's runtime has to be scheduled. A
+/// 300 ms timeout made that a race on a loaded machine (#660). So the timeout is
+/// generous, and the idle time is counted from `initialize`'s reply. That reply comes
+/// after the accept, because the proxy connects before it reads stdin.
 #[test]
 fn an_idle_agent_keeps_its_session_past_the_handshake_timeout() {
-    let running = serve(|config| config.handshake_timeout = Duration::from_secs(2));
+    const TIMEOUT: Duration = Duration::from_secs(3);
+    let running = serve(|config| config.handshake_timeout = TIMEOUT);
     let Proxy {
         child,
         mut stdin,
@@ -241,8 +245,8 @@ fn an_idle_agent_keeps_its_session_past_the_handshake_timeout() {
         token,
     } = proxy(&running.url, "mcp-idle-token");
     initialize(&mut stdin, &mut stdout);
-    // Idle well past the timeout.
-    std::thread::sleep(Duration::from_secs(3));
+    // Idle past the deadline, which started before `initialize` was answered.
+    std::thread::sleep(TIMEOUT + Duration::from_millis(500));
     let created = exchange(
         &mut stdin,
         &mut stdout,

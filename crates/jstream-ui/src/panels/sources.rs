@@ -1,19 +1,20 @@
 //! The sources list: the selected scene's items, top of the stack first, each named by
 //! the source it places. An item is selected for the properties form, shown or hidden,
 //! moved up or down the stack, or removed from the scene; its source is renamed, or
-//! deleted everywhere through `delete.plan`. New items place a new source of a kind
-//! `kind.list` reports, an existing source, or another scene.
+//! deleted everywhere through `delete.plan`. A right-click on a row opens the selected
+//! items' menu (`item_menu.rs`), and one on the panel's empty space opens the panel's
+//! menu, whose Add source opens the Add source dialog (`add_source.rs`).
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
 use crate::app::SessionContext;
+use crate::item_menu;
+use crate::menu::{Entry, Menus};
+use crate::panels::add_source::AddSourceDialog;
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::scenes::RenameField;
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
-use jstream_control::protocol::{
-    DeleteTarget, Edit, ItemGeometry, ItemId, KindCategory, KindSummary, SceneId, Settings,
-    SourceId, SourceKind,
-};
+use jstream_control::protocol::{DeleteTarget, Edit, ItemId, SceneId, SourceId};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -55,108 +56,6 @@ fn rows(collection: &Collection, scene_id: &SceneId) -> Vec<Row> {
         .collect()
 }
 
-/// What "Add" places, as the add form's select encodes it in its value.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Choice {
-    /// A new source of this built-in kind.
-    New(String),
-    /// An existing source.
-    Existing(SourceId),
-    /// A new `scene` source showing this scene.
-    Scene(SceneId),
-}
-
-impl Choice {
-    fn encode(&self) -> String {
-        match self {
-            Choice::New(kind) => format!("new:{kind}"),
-            Choice::Existing(id) => format!("source:{id}"),
-            Choice::Scene(id) => format!("scene:{id}"),
-        }
-    }
-
-    fn decode(value: &str) -> Option<Choice> {
-        let (tag, rest) = value.split_once(':')?;
-        match tag {
-            "new" => Some(Choice::New(rest.into())),
-            "source" => Some(Choice::Existing(rest.into())),
-            "scene" => Some(Choice::Scene(rest.into())),
-            _ => None,
-        }
-    }
-}
-
-/// The edits that place `choice` in `scene_id` as item `item_id`, covering the canvas:
-/// a `source.create` first unless it places an existing source, then `item.add`.
-fn place_edits(
-    choice: Choice,
-    scene_id: SceneId,
-    item_id: ItemId,
-    new_source_id: SourceId,
-    name: String,
-    collection: &Collection,
-) -> Vec<Edit> {
-    let mut edits = Vec::new();
-    let source_id = match choice {
-        Choice::Existing(id) => id,
-        Choice::New(kind) => {
-            edits.push(source_create(
-                new_source_id.clone(),
-                name,
-                SourceKind::Builtin { kind },
-            ));
-            new_source_id
-        }
-        Choice::Scene(shown) => {
-            let name = if name.is_empty() {
-                collection
-                    .scene(&shown)
-                    .map_or_else(|| shown.to_string(), |s| s.name.clone())
-            } else {
-                name
-            };
-            edits.push(source_create(
-                new_source_id.clone(),
-                name,
-                SourceKind::Scene { scene_id: shown },
-            ));
-            new_source_id
-        }
-    };
-    let canvas = collection.canvas;
-    edits.push(Edit::ItemAdd {
-        scene_id,
-        item_id,
-        source_id,
-        transform: None,
-        geometry: ItemGeometry::covering_canvas(canvas.width, canvas.height).ok(),
-        opacity: None,
-        blend: None,
-    });
-    edits
-}
-
-fn source_create(source_id: SourceId, name: String, kind: SourceKind) -> Edit {
-    Edit::SourceCreate {
-        source_id,
-        name,
-        kind,
-        settings: Settings::new(),
-        duplicated_from: None,
-    }
-}
-
-/// The name a new source gets when the user gives none: the kind's display name.
-fn default_name(choice: &Choice, kinds: &[KindSummary]) -> String {
-    match choice {
-        Choice::New(kind) => kinds
-            .iter()
-            .find(|k| &k.kind_id == kind)
-            .map_or_else(|| kind.clone(), |k| k.name.clone()),
-        _ => String::new(),
-    }
-}
-
 /// The sources list.
 #[component]
 pub fn Sources() -> impl IntoView {
@@ -164,8 +63,9 @@ pub fn Sources() -> impl IntoView {
     let session = expect_context::<SessionContext>();
     let renaming = RwSignal::new(None::<SourceId>);
     let pending = RwSignal::new(None::<Pending>);
-    let choice = RwSignal::new(String::new());
-    let new_name = RwSignal::new(String::new());
+    let menus = use_context::<Menus>();
+    let adder = use_context::<AddSourceDialog>();
+    let item_cx = item_menu::Context::from_page();
 
     let scene = move || studio.selection.with(|s| s.scene.clone());
     let all_rows = move || {
@@ -175,32 +75,6 @@ pub fn Sources() -> impl IntoView {
         studio
             .collection
             .with(|c| c.as_ref().map(|c| rows(c, &scene_id)).unwrap_or_default())
-    };
-
-    let add = move || {
-        let (Some(s), Some(scene_id)) = (session.get(), scene()) else {
-            return;
-        };
-        let Some(picked) = Choice::decode(&choice.get_untracked()) else {
-            return;
-        };
-        let mut name = new_name.get_untracked().trim().to_owned();
-        if name.is_empty() {
-            name = studio
-                .kinds
-                .with_untracked(|k| default_name(&picked, k.as_deref().unwrap_or_default()));
-        }
-        let item_id = ItemId::new(studio.fresh_id(&s, "item"));
-        let source_id = SourceId::new(studio.fresh_id(&s, "source"));
-        let edits = studio.collection.with_untracked(|c| {
-            c.as_ref()
-                .map(|c| place_edits(picked, scene_id, item_id.clone(), source_id, name, c))
-        });
-        if let Some(edits) = edits {
-            studio.apply(&s, edits);
-            studio.select_item(Some(item_id));
-            new_name.set(String::new());
-        }
     };
 
     let ask_delete = move |source_id: SourceId, name: String| {
@@ -312,9 +186,29 @@ pub fn Sources() -> impl IntoView {
             let name = name.clone();
             move |_| ask_delete(id.clone(), name.clone())
         };
+        // A right-click on the row opens the selected items' menu, after selecting the
+        // item alone unless it is already selected.
+        let on_row_context = {
+            let id = item_id.clone();
+            move |event: leptos::ev::MouseEvent| {
+                let (Some(menus), Some(cx), Some(scene_id)) = (menus, item_cx, scene()) else {
+                    return;
+                };
+                if !studio.selection.with_untracked(|s| s.contains(&id)) {
+                    studio.select_item(Some(id.clone()));
+                }
+                let items: Vec<ItemId> = studio
+                    .selection
+                    .with_untracked(|s| s.items().cloned().collect());
+                let entries = item_menu::entries(cx, &scene_id, &items, item_menu::Scope::Objects);
+                if !entries.is_empty() {
+                    menus.open(&event, entries);
+                }
+            }
+        };
         let shown = name.clone();
         view! {
-            <li class="row" class:selected=selected class:hidden=!visible>
+            <li class="row" class:selected=selected class:hidden=!visible on:contextmenu=on_row_context>
                 <button
                     class="eye"
                     title=if visible { "Hide" } else { "Show" }
@@ -344,59 +238,38 @@ pub fn Sources() -> impl IntoView {
         }
     };
 
-    let options = move || {
-        let current = scene();
-        let (sources, scenes) = studio.collection.with(|c| {
-            let Some(c) = c else {
-                return (Vec::new(), Vec::new());
-            };
-            let sources: Vec<(String, String)> = c
-                .sources
-                .iter()
-                .map(|s| {
-                    (
-                        Choice::Existing(s.source_id.clone()).encode(),
-                        s.name.clone(),
-                    )
-                })
-                .collect();
-            let scenes: Vec<(String, String)> = c
-                .scenes
-                .iter()
-                .filter(|s| Some(&s.scene_id) != current.as_ref())
-                .map(|s| (Choice::Scene(s.scene_id.clone()).encode(), s.name.clone()))
-                .collect();
-            (sources, scenes)
-        });
-        let kinds: Vec<(String, String)> = studio.kinds.with(|k| {
-            k.iter()
-                .flatten()
-                .filter(|k| k.category == KindCategory::Source)
-                .map(|k| (Choice::New(k.kind_id.clone()).encode(), k.name.clone()))
-                .collect()
-        });
-        let group = |label: &'static str, entries: Vec<(String, String)>| {
-            (!entries.is_empty()).then(|| {
-                view! {
-                    <optgroup label=label>
-                        {entries
-                            .into_iter()
-                            .map(|(value, text)| view! { <option value=value>{text}</option> })
-                            .collect_view()}
-                    </optgroup>
-                }
-            })
+    // A right-click in the panel opens its menu (spec-workspace.md 5.2.4).
+    let on_context = move |event: leptos::ev::MouseEvent| {
+        let (Some(menus), Some(scene_id)) = (menus, scene()) else {
+            return;
         };
-        view! {
-            <option value="">"Add…"</option>
-            {group("New source", kinds)}
-            {group("Existing source", sources)}
-            {group("Scene", scenes)}
-        }
+        let open = move |scene_type: bool| {
+            let scene_id = scene_id.clone();
+            move || {
+                if let Some(adder) = adder {
+                    adder.open(scene_id.clone(), scene_type);
+                }
+            }
+        };
+        let select_all = move || {
+            let items: Vec<ItemId> = all_rows().into_iter().rev().map(|r| r.item_id).collect();
+            studio.select_items(items);
+        };
+        menus.open(
+            &event,
+            vec![
+                Entry::item("Add source…", open(false)).disabled_if(adder.is_none()),
+                Entry::item("Add scene as source…", open(true)).disabled_if(adder.is_none()),
+                Entry::unavailable("New group"),
+                Entry::Sep,
+                Entry::item("Select all", select_all).hint("Ctrl+A"),
+                Entry::unavailable("Paste").hint("Ctrl+V"),
+            ],
+        );
     };
 
     view! {
-        <section class="panel sources-panel">
+        <section class="panel sources-panel" on:contextmenu=on_context>
             <h2>"Sources"</h2>
             <Confirm pending=pending confirm=confirm_delete />
             <Show
@@ -409,20 +282,6 @@ pub fn Sources() -> impl IntoView {
                 <Show when=move || all_rows().is_empty()>
                     <p class="placeholder">"This scene is empty."</p>
                 </Show>
-                <form class="add" on:submit=move |event| {
-                    event.prevent_default();
-                    add();
-                }>
-                    <select
-                        aria-label="What to add"
-                        prop:value=move || choice.get()
-                        on:change=move |event| choice.set(event_target_value(&event))
-                    >
-                        {options}
-                    </select>
-                    <input type="text" placeholder="Name (optional)" bind:value=new_name />
-                    <button type="submit" disabled=move || choice.with(String::is_empty)>"Add"</button>
-                </form>
             </Show>
         </section>
     }
@@ -430,11 +289,11 @@ pub fn Sources() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::{Choice, default_name, place_edits, rows};
+    use super::rows;
     use crate::store::Collection;
     use jstream_control::protocol::{
-        Canvas, Crop, Edit, Finite32, ItemInfo, ItemTransform, KindCategory, KindSummary,
-        PlacementForm, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
+        Canvas, Crop, Finite32, ItemInfo, ItemTransform, PlacementForm, SceneId, SceneInfo,
+        SceneRole, SourceInfo, SourceKind,
     };
 
     fn collection() -> Collection {
@@ -496,90 +355,5 @@ mod tests {
         );
         assert_eq!(rows[0].name, "gone", "a missing source shows its ID");
         assert!(super::rows(&collection(), &SceneId::new("other")).is_empty());
-    }
-
-    #[test]
-    fn choices_round_trip_through_the_select() {
-        for choice in [
-            Choice::New("color".into()),
-            Choice::Existing("a:b".into()),
-            Choice::Scene("s".into()),
-        ] {
-            assert_eq!(Choice::decode(&choice.encode()), Some(choice));
-        }
-        assert_eq!(Choice::decode(""), None);
-        assert_eq!(Choice::decode("bogus:x"), None);
-    }
-
-    #[test]
-    fn placing_creates_the_source_and_covers_the_canvas() {
-        let c = collection();
-        let edits = place_edits(
-            Choice::New("color".into()),
-            "main".into(),
-            "i".into(),
-            "s".into(),
-            "Backdrop".into(),
-            &c,
-        );
-        let [
-            Edit::SourceCreate {
-                source_id, kind, ..
-            },
-            Edit::ItemAdd { geometry, .. },
-        ] = edits.as_slice()
-        else {
-            panic!("expected source.create then item.add: {edits:?}");
-        };
-        assert_eq!(source_id, &SourceId::new("s"));
-        assert_eq!(
-            kind,
-            &SourceKind::Builtin {
-                kind: "color".into()
-            }
-        );
-        let geometry = geometry.unwrap_or_else(|| panic!("no geometry"));
-        assert_eq!(
-            (geometry.size.width.get(), geometry.size.height.get()),
-            (1280.0, 720.0)
-        );
-
-        let existing = place_edits(
-            Choice::Existing("cam".into()),
-            "main".into(),
-            "i".into(),
-            "unused".into(),
-            String::new(),
-            &c,
-        );
-        assert!(
-            matches!(existing.as_slice(), [Edit::ItemAdd { source_id, .. }] if source_id.as_str() == "cam")
-        );
-
-        let nested = place_edits(
-            Choice::Scene("main".into()),
-            "other".into(),
-            "i".into(),
-            "s".into(),
-            String::new(),
-            &c,
-        );
-        assert!(
-            matches!(&nested[0], Edit::SourceCreate { name, kind: SourceKind::Scene { .. }, .. } if name == "Main"),
-            "a nested scene is named after its scene"
-        );
-    }
-
-    #[test]
-    fn a_new_source_is_named_after_its_kind() {
-        let kinds = [KindSummary {
-            kind_id: "color".into(),
-            category: KindCategory::Source,
-            name: "Colour".into(),
-            version: 1,
-        }];
-        assert_eq!(default_name(&Choice::New("color".into()), &kinds), "Colour");
-        assert_eq!(default_name(&Choice::New("text".into()), &kinds), "text");
-        assert_eq!(default_name(&Choice::Existing("x".into()), &kinds), "");
     }
 }

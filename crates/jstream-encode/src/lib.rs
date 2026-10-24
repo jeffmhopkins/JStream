@@ -7,7 +7,7 @@
 //! other outputs (R-RT-004). [`SessionRegistry`] shares one session between outputs
 //! with the same mix and settings. Layer 3: depends only on `jstream-platform`.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-encode/README.md#purpose, crates/jstream-encode/README.md#design, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0014-media-clock.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-encode/README.md#purpose, crates/jstream-encode/README.md#design, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md
 
 #![forbid(unsafe_code)]
 

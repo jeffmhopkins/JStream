@@ -200,7 +200,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   clock the mixer runs on. Its pages paint onto a device of the media adapter the app
   opens for them (`WindowsGpu::open_device`) until a program stage runs; the engine then
   lends the backend the stage's own context in its place, so the mix draws the pages,
-  and takes it back when the stage stops. The backend is added after the OS backends, so sources open on the media
+  and takes it back when the stage stops or leaves the GPU path mid-run, after which
+  the pages deliver no frames for the rest of that stage. The backend is added after the OS backends, so sources open on the media
   clock. CEF runs only in the sandboxed browser helper, which the backend starts on the
   first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
   doesn't link CEF, so a missing helper or missing CEF files fail that source, not the
@@ -220,6 +221,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   Manager store is behind `jstream_crash::Redacting`) are replaced by `***` in the report and
   in its stderr line (R-SEC-001). Only their length and BLAKE3 digest are kept. The
   hook replaces the default one, whose stderr line would quote the message
-  unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Before each report the oldest beyond 10 are deleted; the log file and
+  unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Each report is user-only: mode `0600` on Unix, and on Windows a protected DACL for
+  SYSTEM and the user (`jstream_platform_windows::create_private_file`, passed to
+  `jstream_crash::install_creating`, #656). Before each report the oldest beyond 10 are deleted; the log file and
   the audit log in the same folder are left alone. A native crash writes nothing yet
   (the daemon's open question 4 holds here too).

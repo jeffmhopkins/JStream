@@ -216,6 +216,16 @@ pub fn render_tick_drops(ticks: u64) -> DropCounts {
     }
 }
 
+/// Video frames the render thread dropped for the GPU encoder sessions because a queued
+/// or encoding frame still held every encode target.
+#[must_use]
+pub fn encode_frame_drops(frames: u64) -> DropCounts {
+    DropCounts {
+        encode_frames: frames,
+        ..DropCounts::default()
+    }
+}
+
 /// Packets an output's own queue dropped.
 ///
 /// Distinct from [`video_encode_drops`] / [`audio_encode_drops`], which already count
