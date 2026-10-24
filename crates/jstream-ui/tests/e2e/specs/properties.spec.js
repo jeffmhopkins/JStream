@@ -1,5 +1,6 @@
 // The Properties dialog: opened from an item's menu, it edits a draft of the source's
-// name and settings that only OK sends, and lists the source's filters. The mock engine
+// name and settings that only OK sends, and lists the source's filters (seeded: Sharpen,
+// then Blur turned off). The mock engine
 // describes no kinds, so the settings form itself is covered natively.
 import { test, expect, connect, rev } from '../fixtures.js';
 
@@ -22,8 +23,9 @@ test('the dialog shows the source, and Cancel drops the draft', async ({ page, d
   const dialog = await openProperties(page);
   await expect(dialog.locator('.modal-title')).toHaveText('Color properties');
   await expect(dialog.locator('.modal-sub')).toHaveText('Backdrop');
-  await expect(dialog.getByText('No video filters.')).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '+ Add filter…' })).toBeDisabled();
+  // The source's filters, as the Filters panel shows them (filters.spec.js).
+  await expect(dialog.getByRole('list', { name: 'Video filters' }).getByRole('listitem')).toHaveCount(2);
+  await expect(dialog.getByRole('button', { name: '+ Add filter…' })).toBeEnabled();
 
   const startRev = await rev(page);
   await dialog.getByRole('textbox', { name: 'Name' }).fill('Sky');

@@ -13,8 +13,8 @@
 #![forbid(unsafe_code)]
 
 use jstream_control::protocol::{
-    Action, Batch, Call, Edit, EncoderProfile, EncoderProfileId, Hello, ItemGeometry,
-    PROTOCOL_VERSION, Settings, Size, SourceId, SourceKind, Vec2,
+    Action, Batch, Call, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
+    FilterOwner, Hello, ItemGeometry, PROTOCOL_VERSION, Settings, Size, SourceId, SourceKind, Vec2,
 };
 use jstream_control::{Control, MockEngine};
 use jstream_server::{Connector, Server, ServerConfig, Token};
@@ -53,7 +53,8 @@ fn parse_args() -> Result<Args> {
 }
 
 /// The studio every test starts from: two scenes with `Main` on program, holding one
-/// colour item as a 640×360 box at the canvas's centre, and one encoder profile. No
+/// colour item as a 640×360 box at the canvas's centre, whose source has two video
+/// filters (Sharpen, then Blur turned off), and one encoder profile. No
 /// outputs: the tests create them through the UI.
 async fn seed(engine: &MockEngine) -> Result<()> {
     let control = engine.connect();
@@ -85,6 +86,28 @@ async fn seed(engine: &MockEngine) -> Result<()> {
             },
             settings: Settings::default(),
             duplicated_from: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("color"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("sharp"),
+            kind: "sharpen".into(),
+            settings: Settings::default(),
+            enabled: None,
+            index: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("color"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("soft"),
+            kind: "blur".into(),
+            settings: Settings::default(),
+            enabled: Some(false),
+            index: None,
         },
         Edit::ItemAdd {
             scene_id: "main".into(),

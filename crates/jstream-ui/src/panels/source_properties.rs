@@ -2,19 +2,19 @@
 //! left, its filters on the right. The settings form is the Inspector's (`properties.rs`),
 //! here editing a draft: OK sends what the user changed since it opened as one batch,
 //! Cancel, Escape and the backdrop drop it, and Defaults empties it, so OK resets each
-//! value the dialog opened with. Filter changes apply at once, as in the prototype.
+//! value the dialog opened with. Filter changes apply at once, as in the prototype; the
+//! filter rows and dialogs are the Filters panel's (`filters.rs`).
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
 use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::icons::Icon;
-use crate::panels::add_source::{has_picture, type_label};
+use crate::panels::add_source::type_label;
+use crate::panels::filters::{Chains, FilterDialogs, chains_of};
 use crate::panels::properties::{Form, draft_patch};
 use crate::store::{Studio, apply};
-use jstream_control::protocol::{
-    Edit, FilterInfo, FilterOwner, KindCategory, Settings, SourceId, SourceKind,
-};
+use jstream_control::protocol::{Edit, Settings, SourceId, SourceKind};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde_json::Value;
@@ -107,8 +107,7 @@ fn PropertiesBody(
         _ => String::new(),
     };
     let (type_name, icon) = type_label(&kind_id).unwrap_or(("Source", "image"));
-    let picture = has_picture(&kind_id);
-    let audio = source.audio.is_some();
+    let (picture, audio) = chains_of(&source);
 
     // What the dialog opened on: OK sends only what the user changed from it, so an
     // edit another client made meanwhile stays (ADR-0032, last writer wins per field).
@@ -236,7 +235,7 @@ fn PropertiesBody(
                     {form}
                     {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
                 </div>
-                <Filters source_id=source_id.clone() video=picture audio=audio />
+                <FilterSide source_id=source_id.clone() video=picture audio=audio />
             </div>
             <div class="modal-footer">
                 <button type="button" class="secondary props-defaults" on:click=defaults>"Defaults"</button>
@@ -248,99 +247,13 @@ fn PropertiesBody(
     .into_any()
 }
 
-/// The source's filter chains, each change sent at once.
+/// The source's filter chains, each change sent at once, and the Add filter button.
 #[component]
-fn Filters(source_id: SourceId, video: bool, audio: bool) -> impl IntoView {
-    let studio = expect_context::<Studio>();
-    let session = expect_context::<SessionContext>();
-    let chains = {
+fn FilterSide(source_id: SourceId, video: bool, audio: bool) -> impl IntoView {
+    let dialogs = expect_context::<FilterDialogs>();
+    let add = {
         let source_id = source_id.clone();
-        Memo::new(move |_| {
-            studio.collection.with(|c| {
-                c.as_ref()
-                    .and_then(|c| c.source(&source_id))
-                    .map(|s| s.filters.clone())
-                    .unwrap_or_default()
-            })
-        })
-    };
-    let send = move |edit: Edit| {
-        if let Some(s) = session.get() {
-            studio.apply(&s, vec![edit]);
-        }
-    };
-    // A filter kind's name from `kind.list`, or its ID.
-    let filter_name = move |kind: &str| {
-        studio.kinds.with_untracked(|k| {
-            k.iter()
-                .flatten()
-                .find(|k| {
-                    k.kind_id == kind
-                        && matches!(
-                            k.category,
-                            KindCategory::VideoFilter | KindCategory::AudioFilter
-                        )
-                })
-                .map_or_else(|| kind.to_owned(), |k| k.name.clone())
-        })
-    };
-    let row = move |filter: FilterInfo| {
-        let name = filter_name(&filter.kind);
-        let owner = FilterOwner::Source {
-            source_id: source_id.clone(),
-        };
-        let enabled = filter.enabled;
-        let toggle = {
-            let owner = owner.clone();
-            let filter_id = filter.filter_id.clone();
-            move |_| {
-                send(Edit::FilterSetEnabled {
-                    owner: owner.clone(),
-                    filter_id: filter_id.clone(),
-                    enabled: !enabled,
-                });
-            }
-        };
-        let remove = {
-            let filter_id = filter.filter_id.clone();
-            move |_| {
-                send(Edit::FilterRemove {
-                    owner: owner.clone(),
-                    filter_id: filter_id.clone(),
-                });
-            }
-        };
-        let eye = if enabled {
-            format!("Turn off {name}")
-        } else {
-            format!("Turn on {name}")
-        };
-        view! {
-            <li class="props-filter" class:off=!enabled>
-                <button type="button" class="props-eye" aria-label=eye aria-pressed=enabled.to_string() on:click=toggle>
-                    {if enabled { "●" } else { "○" }}
-                </button>
-                <span class="props-filter-name">{name}</span>
-                <button type="button" class="props-remove" aria-label="Remove" on:click=remove>"×"</button>
-            </li>
-        }
-    };
-    let chain = move |title: &'static str, icon: &'static str, empty: &'static str, video: bool| {
-        let row = row.clone();
-        view! {
-            <div class="props-chain">
-                <div class="props-chain-head"><Icon name=icon size=14 />{title}</div>
-                {move || {
-                    let list = chains.with(|c| if video { c.video.clone() } else { c.audio.clone() });
-                    if list.is_empty() {
-                        view! { <p class="props-empty">{empty}</p> }.into_any()
-                    } else {
-                        view! { <ul class="props-filters">{list.into_iter().map(row.clone()).collect_view()}</ul> }
-                            .into_any()
-                    }
-                }}
-            </div>
-        }
+        move |_| dialogs.add(source_id.clone())
     };
     view! {
         <div class="props-side">
@@ -348,10 +261,9 @@ fn Filters(source_id: SourceId, video: bool, audio: bool) -> impl IntoView {
                 <span class="props-side-title">"Filters"</span>
                 <span class="props-side-note">"everywhere this source appears"</span>
             </div>
-            {video.then(|| chain("Video", "monitor", "No video filters.", true))}
-            {audio.then(|| chain("Audio", "speaker", "No audio filters.", false))}
+            <Chains source_id=source_id video=video audio=audio />
             <p class="props-side-foot">"Changes apply right away. Fine-tune settings in the Filters panel."</p>
-            <button type="button" class="primary props-add-filter" disabled>"+ Add filter…"</button>
+            <button type="button" class="primary props-add-filter" on:click=add>"+ Add filter…"</button>
         </div>
     }
 }

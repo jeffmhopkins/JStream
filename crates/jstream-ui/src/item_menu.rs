@@ -258,6 +258,15 @@ impl Context {
         }
     }
 
+    /// Selects the item alone and shows the Filters panel, which shows its source's
+    /// chains.
+    pub fn filters(self, item_id: ItemId) {
+        self.studio.select_item(Some(item_id));
+        if let Some(dock) = self.dock {
+            dock.0.update(|d| d.show(PanelId::Filters));
+        }
+    }
+
     /// Opens the Add source dialog on `scene_id`.
     fn add_source(self, scene_id: SceneId) {
         if let Some(adder) = self.adder {
@@ -344,7 +353,10 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         let id = primary.clone();
         Entry::item("Properties…", move || cx.properties(id.clone())).hint("Double-click")
     };
-    let filters = Entry::unavailable("Edit filters…");
+    let filters = {
+        let id = primary.clone();
+        Entry::item("Edit filters…", move || cx.filters(id.clone()))
+    };
     let pop_out = Entry::submenu("Pop out", Vec::new());
     let audio = facts.audio.map(|on| {
         let source_id = facts.source_id.clone();

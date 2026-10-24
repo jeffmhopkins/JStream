@@ -26,7 +26,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   ephemeral port, serves the UI's `dist/` from the same port, and prints the page's URL
   as its first line. It seeds a small studio: scenes `Intro` and `Main` (on program),
   one colour source `Backdrop` placed in `Main` as a 640×360 box at the centre of the
-  1920×1080 canvas, and the encoder profile `High quality`. It has no outputs. It stops
+  1920×1080 canvas, with two video filters (`sharpen`, then `blur` turned off), and the
+  encoder profile `High quality`. It has no outputs. It stops
   when its standard input closes. It is a crate of its own because `jstream-ui` (layer
   3) may not depend on `jstream-server` (layer 4), not even for tests
   ([R-ARCH-002](../../../../docs/RULES.md#R-ARCH-002)). Nothing ships it.
@@ -38,7 +39,10 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   `openAddSource` opens the Add source dialog from the Scene objects panel's menu, by a
   right-click just under its last row, and
   `nestScene` nests a scene through it; `rev` reads the revision the header last heard
-  of; `showPanel` makes sure a docked panel's tab is the shown one.
+  of; `showPanel` makes sure a docked panel's tab is the shown one; `describeKinds`
+  routes the page's WebSocket so that `kind.list` and `kind.describe` answer for the
+  descriptors a test gives, which the mock engine can't, and passes every other message
+  on.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -78,13 +82,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
-- **Docking** (`docking.spec.js`): the Editing layout's zones (Transform under the
-  Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
+- **Docking** (`docking.spec.js`): the Editing layout's zones (Filters and Transform as
+  tabs under the Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked
   "(modified)"; dragging a tab onto a tab strip groups it, and onto an empty zone,
   which shows while dragging, docks it there; a lone panel collapses by its title,
-  closes on a second click of its ×, and doesn't collapse once it is alone in its
-  zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
+  closes on a second click of its ×, and the Inspector doesn't collapse once it is alone
+  in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
   the Layout menu switches to Live and resets to Editing.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
@@ -113,7 +117,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   both; a nested scene's menu opens it; a scene row's Rename renames, and the Scenes
   panel's New scene adds one with its name field focused.
 - **Properties dialog** (`properties.spec.js`): opened from an item's menu, it shows
-  the type's title, the source's name and its empty video chain; Cancel and Escape drop
+  the type's title, the source's name, its two filters and an enabled Add filter
+  button; Cancel and Escape drop
   a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
   The mock describes no kinds, so the settings form and the draft patch are covered
   natively.
@@ -126,7 +131,22 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   star are sent; with no item selected the scene's object count, uses and Transition
   in and out show, and a second selected item shows "+1". The mock engine doesn't
   implement `scene.set_transitions`, so choosing one isn't run.
-- **Transform** (`transform.spec.js`): the summary and the disabled buttons with
+- **Filters** (`filters.spec.js`): with nothing selected the panel says so and offers
+  no Add filter; with the Backdrop selected, its title, note, one video chain with its
+  count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
+  drag putting it above Sharpen as one more, and × removing Sharpen; Edit filters… in
+  an item's menu selecting the item and showing the panel behind the Transform tab; the
+  Add filter dialog from the panel and over the Properties dialog, which Escape leaves
+  open; and the Filter settings dialog on a double-click, with the prototype's hint for
+  Blur, whose switch applies at once, Cancel puts back, OK keeps and Remove deletes.
+  With three kinds described (`describeKinds`): the rows' summaries and carets, a click
+  on a filter with four settings opening the dialog, Cancel pressed straight after a
+  change there still putting the filter back (the change and its restore as two
+  edits), the Add filter dialog offering
+  only the video kinds under their group, its search, the picked kind's details, and
+  Add as one edit, the new filter opening in place, where a changed setting is one more
+  edit and updates the summary.
+- **Transform** (`transform.spec.js`, on the Transform tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
   changes; with two items, Selection on, Distribute off, and Match width and height
