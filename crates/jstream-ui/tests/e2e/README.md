@@ -92,6 +92,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   canvas takes one out and Shift-click on its row in the sources list adds it back; a
   double click brings the closed Inspector back showing the item, and a double click
   on the canvas tools over an item leaves the selection alone.
+- **Inspector** (`inspector.spec.js`): the selected Backdrop's X, Y, W, H and Rotation;
+  a new width with the W/H link on scales the height and the canvas readout follows,
+  and with it off the other side stays; a stepper is one edit Ctrl+Z on the canvas
+  undoes; arrow keys step (Ctrl by 10), Escape drops typed text, a drag across the
+  field is sent once on release, and text that isn't a number sends nothing while `−`
+  and `,` are read; crop (with the folded "cropped" hint), opacity and the favourite
+  star are sent; with no item selected the scene's object count, uses and Transition
+  in and out show, and a second selected item shows "+1". The mock engine doesn't
+  implement `scene.set_transitions`, so choosing one isn't run.
 - **Transform** (`transform.spec.js`): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
