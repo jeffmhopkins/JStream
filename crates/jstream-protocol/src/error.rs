@@ -107,12 +107,25 @@ pub enum ProtocolError {
         reason: String,
     },
     /// The call is valid, but whoever answered it doesn't serve it: `pairing.start`,
-    /// `device.list` and `device.revoke` sent to an engine with no server in front.
+    /// `device.list` and `device.revoke` sent to an engine with no server in front, or
+    /// a `plugin.*` action sent to an engine that hosts no plugins yet.
     /// Retrying won't help.
     #[error("`{call}` is not served here")]
     Unsupported {
         /// The call's name (`pairing.start`).
         call: String,
+    },
+    /// The caller may not make this call (0.35): a plugin's call outside its granted
+    /// capability classes, a command no plugin is ever granted, or a plugin past its cap
+    /// of commands a second (ADR-0069). Nothing was applied. Retrying won't help until
+    /// a person widens the grant, except after the command cap, which clears within a
+    /// second.
+    #[error("`{call}` is forbidden: {reason}")]
+    Forbidden {
+        /// The call's name (`output.start`), or for a batch, its first edit's.
+        call: String,
+        /// Why: the class the caller lacks, or that no plugin may make it.
+        reason: String,
     },
     /// The engine hit a bug or an unexpected condition. The request may be retried.
     #[error("internal error: {reason}")]
@@ -153,6 +166,7 @@ impl ProtocolError {
             ProtocolError::HistoryEmpty { .. } => "history_empty",
             ProtocolError::ActionFailed { .. } => "action_failed",
             ProtocolError::Unsupported { .. } => "unsupported",
+            ProtocolError::Forbidden { .. } => "forbidden",
             ProtocolError::Internal { .. } => "internal",
             ProtocolError::Unknown => "unknown",
         }
@@ -187,6 +201,9 @@ pub enum EntityKind {
     Device,
     /// A hotkey binding, named by its chord.
     Hotkey,
+    /// An installed plugin (0.35). Only an error answering a `plugin.*` action names it,
+    /// so a client older than 0.35, which sends none, never reads it.
+    Plugin,
 }
 
 impl fmt::Display for EntityKind {
@@ -202,6 +219,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Bus => "bus",
             EntityKind::Device => "device",
             EntityKind::Hotkey => "hotkey",
+            EntityKind::Plugin => "plugin",
         })
     }
 }
