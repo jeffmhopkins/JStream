@@ -6,6 +6,7 @@
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
+pub mod add_source;
 mod confirm;
 pub mod mixer;
 pub mod outputs;
@@ -14,6 +15,7 @@ mod scenes;
 mod sources;
 pub mod studio;
 
+pub use add_source::AddSource;
 pub use mixer::Mixer;
 pub use outputs::Outputs;
 pub use properties::Properties;

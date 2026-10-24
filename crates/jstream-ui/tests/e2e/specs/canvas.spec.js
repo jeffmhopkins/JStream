@@ -1,6 +1,6 @@
 // The canvas editor over the selected scene: selecting, dragging, nudging, the readout,
 // and undo and redo through the engine. The seed's box is 640×360 at the centre of a 1920×1080 canvas.
-import { test, expect, connect, rev } from '../fixtures.js';
+import { test, expect, connect, nestScene, rev } from '../fixtures.js';
 
 /** The seed item's outline: its polygon's corners, in canvas pixels. It is the bottom
  *  item, so the first of the Backdrop source's outlines. */
@@ -193,9 +193,8 @@ test('a marquee from the margin selects what it touches', async ({ page, daemon 
 test('several items are selected, moved and dropped from the selection together', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(outline(page)).toBeVisible();
-  // A second item of the same source, which covers the canvas.
-  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
-  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  // A second item, which covers the canvas: the Intro scene, nested.
+  await nestScene(page, 'Intro');
   await expect(page.locator('.sources-panel li.row')).toHaveCount(2);
   const before = await corners(page);
 
@@ -241,10 +240,9 @@ test('a double click shows the item in the Inspector', async ({ page, daemon }) 
 test('a double click on the canvas tools selects nothing under them', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(outline(page)).toBeVisible();
-  // A second item covering the canvas, nudged up and right so it reaches under the
-  // tools, which sit above the frame's top-right corner.
-  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
-  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  // A second item covering the canvas (the Intro scene, nested), nudged up and right
+  // so it reaches under the tools, which sit above the frame's top-right corner.
+  await nestScene(page, 'Intro');
   await expect(page.locator('.sources-panel li.row')).toHaveCount(2);
   await page.getByLabel('Scene canvas, Main').focus();
   for (let i = 0; i < 25; i += 1) {

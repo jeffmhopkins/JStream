@@ -58,8 +58,8 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 9 | 4 | 1 | 4 | 0 |
-| [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
-| [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
+| [Context menus](#menus) | 8 | 0 | 3 | 3 | 2 | 0 |
+| [Dialogs and windows](#dialogs) | 8 | 1 | 2 | 2 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
 | [Scene objects panel](#objects) | 9 | 1 | 3 | 4 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 0 | 0 | 6 | 4 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **29** | **25** | **42** | **33** | **1** |
+| **Total** | **130** | **30** | **28** | **38** | **33** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -78,7 +78,7 @@ must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
 <a id="theme"></a>
 ## Theme and shared controls
 <!-- @section
-covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/index.html"]
+covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/index.html", "crates/jstream-ui/src/icons.rs"]
 -->
 
 Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts-and-global-styling),
@@ -89,7 +89,7 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. |
 | WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
-| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | Today: text glyphs (▲ ▼ ✕ ● ○ ↺), except the canvas tools' two stroke icons. |
+| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | The prototype's icons are in `icons.rs`; the Add source dialog and the canvas tools use them. Panel rows still use text glyphs (▲ ▼ ✕ ● ○ ↺). |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ⬜ | Used by the Inspector, filters, mixer and dialogs. |
 | WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ⬜ | |
 | WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ⬜ | Rows already show tools on hover; the prototype's look and "stays on" rule are missing. |
@@ -173,18 +173,20 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 <a id="menus"></a>
 ## Context menus
 <!-- @section
+covers = ["crates/jstream-ui/src/menu.rs"]
 -->
 
 Spec: [workspace › context menus](../design/ui-prototype/spec-workspace.md#context-menus-and-submenus).
-The real UI has no menus yet.
+One right-click menu at a time (`menu.rs`): the canvas and the Scene objects panel open
+theirs; the item, scene row and Scenes panel menus are still to build.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | ⬜ | |
-| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | ⬜ | Pop out needs [DL-07](#dialogs). |
+| CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | 🟡 | Built but for the colour swatch column, which comes with the label menus that use it. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
+| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | The empty canvas and margin menus are built. On the margin, Pop out, Transition in and out, Scene properties and Edit scene filters show disabled until [DL-07](#dialogs), [CM-07](#menus), [DL-03](#dialogs) and [FL-06](#filters). A right-click on an item opens the empty canvas menu until the item menu is built. |
 | CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | ⬜ | Transitions, keyframes and folders are 🔒 until T1 and K1; the menu shows what the engine supports. |
 | CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | ⬜ | |
-| CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | ⬜ | |
+| CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Scene objects' menu is built; New group (OB-04) and Paste (decision register D43) show disabled. The Scenes panel's menu is still to build. |
 | CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
 | CM-07 | Transition in/out submenus | Default (preset), then each preset, then "Manage presets…". | 🔒 | T1 (#260). |
 | CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🔒 | K1 (#319). |
@@ -192,19 +194,19 @@ The real UI has no menus yet.
 <a id="dialogs"></a>
 ## Dialogs and windows
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/confirm.rs"]
+covers = ["crates/jstream-ui/src/panels/confirm.rs", "crates/jstream-ui/src/dialog.rs", "crates/jstream-ui/src/panels/add_source.rs"]
 -->
 
 Spec: [workspace › dialogs and floating windows](../design/ui-prototype/spec-workspace.md#dialogs-and-floating-windows).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| DL-01 | Modal dialog frame | Centred dialog over a dim backdrop; Esc and the backdrop cancel, Enter presses the primary button. | ⬜ | Today the only dialog is an inline delete confirmation, which stays. |
+| DL-01 | Modal dialog frame | Centred dialog over a dim backdrop; Esc and the backdrop cancel, Enter presses the primary button. | ✅ | `dialog.rs`. Enter isn't taken from a text area, a button or a select. The inline delete confirmation stays. |
 | DL-02 | Properties dialog | 860 × 640: Name and the source's settings on the left, its video and audio filters on the right; Defaults, Cancel, OK; settings change only on OK. Opens on double-click and after Add source. | 🟡 | The settings form exists (from `kind.describe`) as the Properties tab, applying each change at once. |
 | DL-03 | Scene properties | Transition in and out, hotkey, background colour, multiview, "Include its audio when nested". | 🔒 | Transitions are T1; hotkeys K1. |
 | DL-04 | Filter settings dialog | Live-preview settings with an on/off switch; Cancel restores; Defaults; Remove. | ⬜ | Needs [filters](#filters). |
 | DL-05 | Add filter dialog | 720 × 520: searchable catalogue grouped by chain and group, details pane, "Uses the scene" picker for scene-input filters. | ⬜ | The catalogue comes from `kind.list`, not the prototype's list. |
-| DL-06 | Add source dialog | 720 wide: types grouped Capture, Audio, Media and web, Generated, Scenes; "Create new" with a name, or add an existing source as a reference; new sources placed at native size and their Properties opened. | 🟡 | Today: a select plus name field under the sources list; new items cover the canvas. |
+| DL-06 | Add source dialog | 720 wide: types grouped Capture, Audio, Media and web, Generated, Scenes; "Create new" with a name, or add an existing source as a reference; new sources placed at native size and their Properties opened. | 🟡 | Built and opened from the right-click menus, with the prototype's names, icons and descriptions for the engine's kinds. A kind the prototype doesn't name goes under Other, and a placed source whose kind the engine doesn't list can be added again but not created. Native sizes are the prototype's per-type table, as boxes with the `fit` mode, because the protocol has no source sizes (see [CV-08](#canvas)). Until the Properties dialog (DL-02) exists, a new item is selected with the Inspector shown. A blank name becomes "<type> N", counting that kind's sources. |
 | DL-07 | Pop-out and projectors | A scene or source in a floating window, or full screen on a monitor. | 🔒 | Previews of any scene or source (decision register D36). |
 | DL-08 | Create YouTube stream | Title, description, visibility, latency, start now or schedule, category, DVR, made for kids. | 🔒 | Y4 and the OAuth client ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 
@@ -247,7 +249,7 @@ Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-obj
 | OB-06 | Drag to reorder and group | Drag before, after or into a group. | ⬜ | Reorder exists as ▲/▼. |
 | OB-07 | Search | "Search objects". | ⬜ | |
 | OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ✅ | Shift-click adds a row or takes it out; every selected item's row is highlighted. |
-| OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | 🟡 | Built with inline controls; the dialog is DL-06. |
+| OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | 🟡 | Add source is the dialog (DL-06), from the panel's right-click menu. Remove and delete are still inline controls. |
 
 <a id="inspector"></a>
 ## Inspector

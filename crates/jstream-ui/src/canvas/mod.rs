@@ -20,6 +20,8 @@ pub mod transform;
 
 use crate::app::SessionContext;
 use crate::dock::PanelId;
+use crate::menu::{Entry, Menus};
+use crate::panels::add_source::AddSourceDialog;
 use crate::store::Studio;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
@@ -552,6 +554,15 @@ pub fn Canvas() -> impl IntoView {
         }
     };
 
+    let select_all = move || {
+        let all = layout.with_untracked(|l| {
+            l.iter()
+                .flat_map(|l| l.boxes().map(|(id, _)| id.clone()))
+                .collect::<Vec<_>>()
+        });
+        studio.select_items(all);
+    };
+
     let on_key = move |event: ev::KeyboardEvent| {
         let key = event.key();
         let command = event.ctrl_key() || event.meta_key();
@@ -559,14 +570,7 @@ pub fn Canvas() -> impl IntoView {
             "z" | "Z" if command && event.shift_key() => step(HistoryOp::Redo),
             "z" | "Z" if command => step(HistoryOp::Undo),
             "y" | "Y" if command => step(HistoryOp::Redo),
-            "a" | "A" if command => {
-                let all = layout.with_untracked(|l| {
-                    l.iter()
-                        .flat_map(|l| l.boxes().map(|(id, _)| id.clone()))
-                        .collect::<Vec<_>>()
-                });
-                studio.select_items(all);
-            }
+            "a" | "A" if command => select_all(),
             "Escape" if drag.with_value(Option::is_some) => end(false),
             "Escape" => studio.select_item(None),
             "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" => {
@@ -609,6 +613,61 @@ pub fn Canvas() -> impl IntoView {
                 dock.0.update(|d| d.show(PanelId::Inspector));
             }
         }
+    };
+
+    // A right-click opens the canvas menu: the frame's, or the margin's around it.
+    let menus = use_context::<Menus>();
+    let adder = use_context::<AddSourceDialog>();
+    let on_context = move |event: ev::MouseEvent| {
+        let Some(menus) = menus else {
+            return;
+        };
+        let on_frame = canvas_at(event.client_x(), event.client_y())
+            .zip(layout.with_untracked(|l| l.as_ref().map(|l| l.canvas)))
+            .is_some_and(|((_, p), canvas)| {
+                p.x >= 0.0
+                    && p.y >= 0.0
+                    && p.x <= canvas.width as f32
+                    && p.y <= canvas.height as f32
+            });
+        let scene = studio.selection.with_untracked(|s| s.scene.clone());
+        let snap = if snapping.get_untracked() {
+            "Turn snapping off"
+        } else {
+            "Turn snapping on"
+        };
+        let snap = Entry::item(snap, move || snapping.update(|on| *on = !*on));
+        let select = Entry::item("Select all", select_all).hint("Ctrl+A");
+        let has_scene = scene.is_some();
+        let entries = if on_frame {
+            let add = Entry::item("Add source…", move || {
+                if let (Some(adder), Some(scene)) = (adder, scene.clone()) {
+                    adder.open(scene, false);
+                }
+            })
+            .disabled_if(adder.is_none() || !has_scene);
+            vec![
+                select,
+                snap,
+                Entry::Sep,
+                add,
+                Entry::unavailable("Paste").hint("Ctrl+V"),
+            ]
+        } else {
+            vec![
+                Entry::submenu("Pop out", Vec::new()),
+                Entry::Sep,
+                select,
+                snap,
+                Entry::Sep,
+                Entry::submenu("Transition in", Vec::new()),
+                Entry::submenu("Transition out", Vec::new()),
+                Entry::Sep,
+                Entry::unavailable("Scene properties…"),
+                Entry::unavailable("Edit scene filters…"),
+            ]
+        };
+        menus.open(&event, entries);
     };
 
     // The boxes to draw: the collection's, with the dragged or pending ones replaced.
@@ -978,6 +1037,7 @@ pub fn Canvas() -> impl IntoView {
             on:pointercancel=move |_| end(false)
             on:lostpointercapture=move |_| end(true)
             on:dblclick=on_double
+            on:contextmenu=on_context
         >
             <div
                 class="preview stage"
@@ -1034,6 +1094,10 @@ pub fn Canvas() -> impl IntoView {
                 aria-label="Canvas tools"
                 on:pointerdown=|event: ev::PointerEvent| event.stop_propagation()
                 on:dblclick=|event: ev::MouseEvent| event.stop_propagation()
+                on:contextmenu=|event: ev::MouseEvent| {
+                    event.prevent_default();
+                    event.stop_propagation();
+                }
             >
                 <button
                     class="canvas-tool"

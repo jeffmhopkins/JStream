@@ -86,3 +86,27 @@ export async function showPanel(page, name) {
 export async function rev(page) {
   return Number(await page.locator('header.app-header').getAttribute('data-rev'));
 }
+
+/** Opens the Add source dialog from the Scene objects panel's right-click menu, on the
+ * Scene type with `scene: true`, and returns it. */
+export async function openAddSource(page, { scene = false } = {}) {
+  const panel = page.locator('.sources-panel');
+  const box = await panel.boundingBox();
+  await panel.click({ button: 'right', position: { x: 12, y: box.height - 12 } });
+  await page
+    .getByRole('menu', { name: 'Context menu' })
+    .getByRole('menuitem', { name: scene ? 'Add scene as source…' : 'Add source…' })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Add source' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** Nests scene `name` in the selected scene, through the Add source dialog: an item
+ * covering the canvas. */
+export async function nestScene(page, name) {
+  const dialog = await openAddSource(page, { scene: true });
+  await dialog.getByRole('radio', { name }).check();
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(dialog).toBeHidden();
+}

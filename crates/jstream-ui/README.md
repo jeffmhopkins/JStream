@@ -56,8 +56,13 @@ Contents ([Design](#design) explains the choices):
   last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
+- **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
+  `Menus`, the context that opens it with a list of `Entry`s), `dialog.rs` (`Modal`, the
+  modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
-  (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
+  (`sources.rs`), the Add source dialog (`add_source.rs`: `AddSource` and the
+  `AddSourceDialog` context that opens it, with its type list and the edits it sends,
+  tested natively), the properties form (`properties.rs`) and the delete confirmation
   they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (creating, editing and deleting streams, recordings and the virtual camera, their
   stream keys, start and stop, and the pipeline's health), and the calls and
@@ -133,15 +138,30 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   groups (ADR-0024), marks the program scene, and puts a scene on program with
   `scene.switch`. The sources list shows the selected scene's items with the top of the
   stack first. New scenes, sources and items get IDs from `fresh_id`, which includes
-  the session's client ID so two UIs on one engine don't pick the same one. "Add"
-  creates a source of a kind `kind.list` reports, or places an existing source or
-  another scene (a `scene` source), as one batch, with a geometry covering the canvas
-  (ADR-0022). An engine that lists no kinds (the mock) offers no new kinds, only
-  existing sources and scenes. A `kind.list` that fails does the same, and its
-  error shows as any failed call's does. Deleting a scene, or a source everywhere, reads `delete.plan` first,
+  the session's client ID so two UIs on one engine don't pick the same one. Sources
+  are added through the Add source dialog (below). Deleting a scene, or a source everywhere, reads `delete.plan` first,
   shows what else it takes, and sends the plan's edits expecting the plan's revision,
   so a change in between makes the engine refuse it rather than delete more than the
   user saw. Removing an item from its scene is a plain `item.remove`.
+- **Right-click menus and dialogs.** `menu.rs` draws the one right-click menu, which
+  the shell provides as `Menus` context: a component opens a list of entries (items
+  with a check, a shortcut hint or a submenu, heads and separators) at the pointer, and
+  the menu keeps itself on screen, opens submenus on hover or the right arrow, moves
+  the focus with the arrows, Home and End, and closes on a choice, a press outside,
+  Escape or Tab. The canvas opens the empty canvas or margin menu, and the sources list
+  opens its panel's menu. `dialog.rs` is the modal frame: Escape and the backdrop
+  cancel, and Enter presses the button marked `data-primary`. The Add source dialog
+  (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the source
+  kinds `kind.list` reports, under the prototype's groups, names, icons and
+  descriptions, plus the kinds of placed sources it didn't report, which can be
+  placed again but not created, and Scene. "Create new" sends `source.create` and
+  `item.add` as one batch, with a box of the prototype's native size for the type,
+  centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
+  aspect within it). An existing source is placed again 40 pixels right of and below
+  its first placement. A scene is nested through a `scene` source, reusing one that
+  already shows it. The new item is selected and the Inspector shown. A `kind.list`
+  that fails leaves only the placed kinds and Scene, and its error shows as any failed
+  call's does.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
   (and slider when bounded), select, colour, text, asset (root and path) or reference
@@ -311,7 +331,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
-  what "Add" sends, the form's sections, parsing and checks); only the components
+  the Add source dialog's types and edits, the menu's placement and keys, the form's
+  sections, parsing and checks); only the components
   themselves need a browser.
 - **Debug bundle size.** A leptos view's type spells out every element and closure
   inside it, and an unstripped build names each function with those types in the
@@ -402,7 +423,9 @@ browser, and `mod.rs` is the component.
   using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
   upright box's resized edges snap the same way. Ctrl moves without snapping, a
   rotated box never snaps, and the Snapping button in the floating tools (top right)
-  turns it off.
+  turns it off. So does the canvas's right-click menu: on the frame it offers Select
+  all, the snapping toggle and Add source, and on the margin around the frame the
+  scene's menu ([Design](#design)).
 - **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
   draws the gesture locally, and on release one batch with an `item.set_geometry` per
   item it changed commits it, so each gesture (and each nudge) is one undo step. The

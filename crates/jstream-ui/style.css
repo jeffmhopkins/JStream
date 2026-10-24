@@ -672,3 +672,91 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   .studio-bar { grid-template-columns: 1fr; }
   .studio-actions { justify-content: flex-start; }
 }
+
+/* The right-click menu (spec-workspace.md 5.1). */
+.ctx-catcher { position: fixed; inset: 0; z-index: 99; }
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 5px;
+  background: var(--menu);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  font-size: 13px;
+}
+.context-menu.submenu { z-index: 101; width: 250px; min-width: 0; }
+.context-menu .menuitem { justify-content: flex-start; gap: 0; padding: 0 10px 0 8px; color: var(--text); }
+.context-menu .menuitem:disabled { opacity: 0.4; }
+.context-menu .menuitem.on { background: var(--menu-hover); }
+.ctx-check { flex: 0 0 14px; font-size: 12px; color: var(--link); }
+.ctx-label { flex: 1 1 auto; min-width: 0; margin-left: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.context-menu .hint { padding-left: 12px; }
+.ctx-arrow { flex: 0 0 10px; margin-left: 8px; font-size: 10px; color: var(--muted); }
+.ctx-head {
+  padding: 6px 10px 2px 30px;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+/* Modal dialogs (spec-workspace.md 0.15, 0.16). */
+.icon { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(5, 6, 8, 0.6);
+}
+.modal {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.modal:focus { outline: none; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.modal-titles { display: flex; flex-direction: column; }
+.modal-title { margin: 0; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.modal-sub { font-size: 11px; color: var(--muted); }
+.modal-close { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); font-size: 16px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.modal-footer button { border-radius: 6px; }
+.modal-footer button.secondary { background: none; padding: 7px 14px; }
+.modal-footer button.primary { padding: 7px 18px; }
+.modal input[type="radio"] { width: auto; margin: 0; accent-color: var(--accent); }
+
+/* The Add source dialog (spec-workspace.md 6.5). */
+.modal.add-source { width: 720px; }
+.add-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+.add-types { display: flex; flex-direction: column; gap: 2px; overflow: auto; padding: 8px; border-right: 1px solid var(--line); }
+.add-cat { padding: 8px 8px 4px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.8px; }
+.menuitem.add-type { justify-content: flex-start; gap: 10px; height: auto; padding: 6px 8px; color: var(--text); }
+.menuitem.add-type .icon { color: var(--muted); }
+.menuitem.add-type.on, .menuitem.add-type.on:hover:not(:disabled) { background: var(--selected); }
+.add-type-name { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.add-detail { display: flex; flex-direction: column; gap: 12px; overflow: auto; padding: 14px 16px; }
+.add-head { display: flex; align-items: center; gap: 10px; color: #c9ced6; }
+.add-head-text { display: flex; flex-direction: column; }
+.add-type-title { font-weight: 600; color: var(--text); }
+.add-desc { font-size: 12px; color: var(--muted); }
+.add-new, .add-existing { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.add-existing { padding: 4px 0; }
+.add-existing span { font-style: italic; }
+.modal input.add-name { width: auto; height: 32px; margin-left: 22px; padding: 0 9px; background: var(--app); border: 1px solid var(--border); border-radius: 5px; }
+.add-existing-list { display: flex; flex-direction: column; gap: 4px; }
+.add-existing-title { font-size: 12px; color: var(--muted); }
+.add-note { font-size: 11px; color: var(--dim); }

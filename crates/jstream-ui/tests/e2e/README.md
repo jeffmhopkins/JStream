@@ -34,9 +34,10 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   token, so tests share no state and run in parallel. The browser signs in with HTTP
   Basic, the token as the password, as a person's browser does when the daemon serves
   the UI; the connect form's token field can then stay empty. `connect` opens the page
-  and connects; `disconnect` disconnects through the header's File menu; `rev` reads the
-  revision the header last heard of; `showPanel` makes sure a docked panel's tab is the
-  shown one.
+  and connects; `disconnect` disconnects through the header's File menu;
+  `openAddSource` opens the Add source dialog from the Scene objects panel's menu and
+  `nestScene` nests a scene through it; `rev` reads the revision the header last heard
+  of; `showPanel` makes sure a docked panel's tab is the shown one.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -62,8 +63,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
   program scene marked and selected, and its item listed; putting a scene on program,
   which a second client follows; adding a scene, which is selected, and renaming it in
-  place; hiding and showing an item, placing an existing source again and removing that
-  item; selecting an item opens its properties. The mock engine lists no kinds and makes
+  place; hiding and showing an item, placing an existing source again through the Add source
+  dialog and removing that item; selecting an item opens its properties. The mock engine lists no kinds and makes
   no delete plans, so new-kind sources, the properties form's fields and deletes are
   tested natively.
 - **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start
@@ -86,11 +87,19 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   and shows the top-left readout meanwhile, then one edit that Ctrl+Z and Ctrl+Shift+Z
   reverse; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
   (Shift by 10) and Ctrl+Z undoes; a second client sees a move; a marquee started on
-  the margin selects the box it touches and Escape clears it; with a second item
-  placed, Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
+  the margin selects the box it touches and Escape clears it; with a second item placed
+  (the Intro scene, nested), Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
   canvas takes one out and Shift-click on its row in the sources list adds it back; a
   double click brings the closed Inspector back showing the item, and a double click
   on the canvas tools over an item leaves the selection alone.
+- **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
+  frame (its items, Paste disabled, turning snapping off and Select all) and on the
+  margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
+  item and wrapping, Enter chooses, and a press outside closes it; the Scene objects
+  panel's menu opens the Add source dialog, which places the seed's Backdrop again as
+  a reference 40 px down and right, selected (the mock lists no kinds, so its Color
+  type can't create); a scene nests once and isn't offered again, and the backdrop
+  cancels the dialog.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
   preview goes to program with Transition, and the old program scene comes back on
   preview; Transition and Cut are off while preview is the program scene; a value the
