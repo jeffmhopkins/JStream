@@ -7,13 +7,15 @@
 //! straight sRGB (a captured frame), or premultiplied sRGB code values (a browser page),
 //! which the shader converts to premultiplied linear after the filter.
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use jstream_platform::{FrameSync, GpuFrame};
 
 use crate::color::srgb_channel_to_linear;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
+use crate::mips::Mips;
 
 /// The format uploaded images are stored in: premultiplied linear light.
 pub(crate) const UPLOAD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -73,6 +75,10 @@ pub struct Image {
     /// The render-target view of a layer, kept so drawing into it again allocates no
     /// view. `None` for uploads and imports, which are never drawn into.
     target: Option<wgpu::TextureView>,
+    /// How many times an upload has been rewritten, so its mips know when to rebuild.
+    generation: AtomicU64,
+    /// The mip chain, made the first time the image is placed in 3D.
+    mips: OnceLock<Mips>,
 }
 
 impl Image {
@@ -94,6 +100,22 @@ impl Image {
 
     pub(crate) fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
+    }
+
+    /// Whether only [`rewrite`] changes the texels: an upload. A layer is drawn into and
+    /// an import is the platform's, so neither is.
+    pub(crate) fn is_static(&self) -> bool {
+        self.alpha == Alpha::Premultiplied && self.target.is_none()
+    }
+
+    /// How many times [`rewrite`] has refilled the image.
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
+    }
+
+    /// The mip chain, made by `make` the first time it is asked for.
+    pub(crate) fn mips(&self, make: impl FnOnce() -> Mips) -> &Mips {
+        self.mips.get_or_init(make)
     }
 
     pub(crate) fn alpha(&self) -> Alpha {
@@ -241,7 +263,9 @@ pub(crate) fn rewrite(maker: &Maker<'_>, image: &Image, rgba: &[u8]) -> Result<(
         });
     }
     check_bytes(image.width, image.height, rgba)?;
-    write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)
+    write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)?;
+    image.generation.fetch_add(1, Ordering::Relaxed);
+    Ok(())
 }
 
 fn check_bytes(width: u32, height: u32, rgba: &[u8]) -> Result<(), RenderError> {
@@ -416,6 +440,8 @@ fn finish(
         owner: maker.owner.clone(),
         sync,
         target: None,
+        generation: AtomicU64::new(0),
+        mips: OnceLock::new(),
     }
 }
 

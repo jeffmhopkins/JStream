@@ -6,7 +6,7 @@
 //! traps the plugin.
 //!
 //! - `call(ptr, len) -> status`: `len` bytes at `ptr` are one protocol `Call` as JSON.
-//!   The host checks it against the plugin's capabilities and its cap of calls a second,
+//!   The host checks it against the plugin's capabilities and its cap of commands a second,
 //!   then sends it through `Control`. Answers one of the `STATUS_*` codes and leaves a result to read.
 //! - `result_len() -> len` and `result_read(ptr)`: the length of the last call's result,
 //!   and a copy of it into the plugin's memory at `ptr`.
@@ -48,11 +48,14 @@ pub const STATUS_MALFORMED: i32 = 2;
 /// JSON when the engine answered one, else `{"message": <text>}`.
 pub const STATUS_FAILED: i32 = 3;
 
-/// The call was well formed and granted, but the plugin had already sent its cap of
-/// calls to `Control` in the last second ([`Limits::calls_per_second`](crate::Limits::calls_per_second),
-/// 50 by default). It never reached `Control`, and doesn't count against the cap. The
-/// result is a JSON object `{"limited": {"per_second": <cap>}}`. The plugin keeps
-/// running; a later call gets through once its earlier calls are a second old.
+/// The call was well formed and granted, but its commands (every edit of a batch, or its
+/// one action, query or history operation) don't fit in what is left of the plugin's cap
+/// of commands to `Control` in the last second
+/// ([`Limits::commands_per_second`](crate::Limits::commands_per_second), 50 by default).
+/// It never reached `Control`, and doesn't count against the cap. The result is a JSON
+/// object `{"limited": {"per_second": <cap>, "commands": <the call's>}}`. The plugin keeps
+/// running; a later call gets through once its earlier commands are a second old, and a
+/// batch of more commands than the cap never does.
 pub const STATUS_LIMITED: i32 = 4;
 
 /// The longest call the host reads, in bytes.

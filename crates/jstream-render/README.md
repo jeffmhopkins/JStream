@@ -99,8 +99,11 @@ and calls this crate.
   same fields as the protocol's `ItemTransform` (top-left `position`, `scale`,
   clockwise `rotation_deg`); `Crop` has the protocol's insets in source pixels. So the
   engine's mapping is field by field, and `place` evaluates both with the protocol's
-  shared functions ([Placement math](#design)). 3D is not drawn: a geometry with a
-  non-neutral 3D field is `RenderError::Invalid`.
+  shared functions ([Placement math](#design)). A geometry with non-neutral 3D draws
+  [ADR-0050](../../docs/adr/0050-3d-transforms-rendering.md)'s drawn polygon,
+  perspective-correct, with antialiased edges, and sampled from a mip chain of its
+  source with 16× anisotropic filtering. The engine still refuses non-neutral 3D before
+  it reaches here.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
@@ -120,9 +123,8 @@ and calls this crate.
 not here: P010 conversion, BT.601 and BT.2020 matrices, encode-target allocation,
 loading WGSL effect packs (`jstream-effects`; this crate only draws them), the video
 filter chain runtime (the built-in filters' passes are here, see
-[Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
-stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
-fields stay neutral until M3. The GPU pipeline's encode
+[Filters](#filters)), transitions, the master chain and the privacy
+stage. The GPU pipeline's encode
 steps stay in
 [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline).
 
@@ -171,24 +173,45 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    the shader then divides by alpha, decodes sRGB and multiplies by alpha again.
    Averaging code values rather than linear light differs from an upload only where
    the filter mixes texels of different colour.
-2. **Composite.** One render pass clears the FP16 target to the background converted
+2. **Mips** (ADR-0050 decision 5). Before the composite pass, each source a visible 3D
+   item draws gets its mip chain rebuilt: an `Rgba16Float` texture with every level down
+   to 1×1, premultiplied linear. Level 0 copies the source texel for texel, converting
+   an import as the composite shader would. Each further level is one pass that samples
+   the level above at its own texel centres, so the linear filter averages 2×2 texels.
+   A chain is rebuilt at most once per `render` or `render_into` call. An upload is
+   rebuilt only after `rewrite_rgba8`. A layer or an import is rebuilt every call that
+   draws it in 3D, since a nested scene, a filter or the platform changes it out of
+   sight. A 3D item samples its chain, which is always premultiplied linear (mode 0),
+   with trilinear filtering and `anisotropy_clamp` 16; wgpu clamps that to 1 on an
+   adapter without anisotropic filtering. A source with no 3D placement gets no chain.
+3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
-   by alpha). Each visible item is two triangles. The vertex buffer holds clip-space
-   positions, UVs, opacity and the image's alpha mode (six `f32`s, 24 bytes). The
-   fragment shader samples; for a straight import it multiplies RGB by the sampled
+   by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
+   is its quad (two triangles), a 3D item three to five vertices (up to three
+   triangles). The vertex buffer holds clip-space positions, UVs, opacity, the image's
+   alpha mode, ADR-0050's `w`, the item's five edge lines and its UV bounds (26
+   `f32`s, 104 bytes).
+   The vertex shader writes `(pos · w, 0, w)`, so the GPU interpolates UVs
+   perspective-correctly; a 2D item has `w = 1`, the plain affine path. The fragment
+   shader clamps its UV to the item's bounds (a 3D item's content before the one-pixel
+   push, so a fringe pixel never samples past the crop or what `fill` clips; a 2D item's
+   bounds never clamp) and samples at the clamped UV (a 3D item from its
+   source's mip chain, step 2); for a straight import it multiplies RGB by the sampled
    alpha, and for a premultiplied import it divides RGB by alpha (zero where alpha is
    0), decodes sRGB and multiplies by alpha; then it multiplies all four channels by
-   opacity and outputs premultiplied
-   linear. Blend is `One, OneMinusSrcAlpha` on colour and alpha. No depth buffer:
+   opacity and by its edge coverage, `clamp(d + 0.5, 0, 1)` for the distance `d` in
+   pixels to the nearest edge line (ADR-0050 decision 6), and outputs premultiplied
+   linear. A 2D item's edge lines are never crossed, so its coverage is 1 and its edges
+   are drawn as before. Blend is `One, OneMinusSrcAlpha` on colour and alpha. No depth buffer:
    stacking order is draw order. No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
-3. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
+4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
    alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
    alpha is stored as-is. The output usage is `RENDER_ATTACHMENT | COPY_SRC |
    TEXTURE_BINDING`, so a snapshot or a later consumer can use it.
 
-   **`render_image`** (a nested scene) stops after pass 2. It composites into a new
+   **`render_image`** (a nested scene) stops after step 3. It composites into a new
    `Rgba16Float` texture (`RENDER_ATTACHMENT | TEXTURE_BINDING`) of the canvas size
    and returns it as an `Image` read as premultiplied, the same as an upload. So
    placing it filters exactly at partly transparent edges, and nothing is quantised
@@ -202,12 +225,12 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    layer earlier are ordered before the redraw, so they keep the old contents.
    **`rewrite_rgba8`** refills an upload in place the same way (pass 1 into the
    existing texture).
-4. **Readback**, only when asked. `copy_texture_to_buffer` into a map-read buffer,
+5. **Readback**, only when asked. `copy_texture_to_buffer` into a map-read buffer,
    rows padded to 256 bytes, then a map and a pack into tightly packed RGBA8. This
    waits on the GPU. The tick that feeds an encoder does not call it. Snapshots and
    tests do.
 
-5. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
+6. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
    source (`Rgba8UnormSrgb` or `Bgra8UnormSrgb`, the compositor's output) to a target
    once: it makes the bind group and a 16-byte uniform with the range constants, so
    `Nv12Pass::encode` allocates nothing per frame. Bind again when either texture is
@@ -250,6 +273,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, dropped with it |
+| Mip chain, its level views and bind groups | Made the first time the `Image` is drawn in 3D; dropped with it |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `Nv12Converter` pipelines and layout | The converter |
@@ -299,8 +323,17 @@ box, which only changes `fill`, and cuts the UVs in proportion, so the clip need
 scissor or shader change. Clipping in the local frame is exact for any in-plane
 rotation. `ItemGeometry::place` then maps the four clipped corners: rotation about the
 centre, then `center` added. With 3D neutral that mapping is affine, so linear UVs
-across the quad are correct; a non-neutral 3D field would need perspective-correct
-UVs, and is refused until M3.
+across the quad are correct.
+
+**3D.** With non-neutral 3D, `place` takes `ItemGeometry::drawn_polygon`: the content
+clipped to the box and then by the near plane, three to five vertices with canvas
+point, UV and `w`. Its edge lines (inward normal and offset, in canvas pixels, for
+either winding) go to the shader for coverage. Each vertex is then pushed out one
+pixel, to where its two edges moved out a pixel cross (capped at 4 pixels from the
+corner for a sharp one), and that point is mapped back into the plane with
+`unplace` and `drawn_vertex`, so its `w` and UV stay exact. A point that can't be
+mapped back, past the near plane, keeps the unpushed vertex. An item seen edge-on or
+wholly behind the viewer draws nothing.
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)` and crop `(left, top, right, bottom)` that
@@ -590,6 +623,25 @@ the expected layout in the diff. These are not R-TEST-003's golden PNGs under
 rotated 90° about the box centre, crop before fitting, a legacy item beside them, and
 a non-axis-aligned box turning about its centre.
 
+**3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a
+240×136 canvas from a 64² checkerboard with a texel grid (512² for C), against a CPU
+reference that averages 8×8 (16×16 for C and D) point samples per pixel, each mapped
+back with `unplace` and sampled bilinearly from level 0. The tests assert a mean and a
+p99 error per channel in sRGB 8-bit steps. On lavapipe:
+
+| Scenario | Pixels | Limit (mean) | Measured | Without the feature |
+|---|---|---|---|---|
+| A, an item turned 50° with perspective | interior | 3 | 1.1 | 67 drawn affinely (`w = 1`) |
+| B, tilted toward the viewer, a corner behind it | all | 2 | 0.24 | 78 affinely |
+| C, a floor tilted 75°, minified | interior | 8 | 6.2 | 18 with trilinear mips alone, 29 with one level |
+| D, a small rotated and turned item | edge | 6 | 3.2 | 53 with a hard edge, 13 affinely |
+| D cropped, a smaller D cropped just past a texel ring | edge | 8 | 6.6 | 8.2 without the UV clamp |
+| E, two items turned through each other | all | 2 | 0.53 | 15 affinely |
+
+The p99 limit is 40 throughout. C's pattern is much finer than the spike's (one-texel
+rings every 16 texels), which is why its mean is higher than the spike's 1.16. A
+further test checks that an upload's chain is rebuilt after `rewrite_rgba8`.
+
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
@@ -678,9 +730,16 @@ a hardware GPU.
 <!-- @section
 -->
 
-- **3D.** `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` are fields on
-  `ItemGeometry` and default to neutral. `is_neutral_3d` is the check an engine uses
-  to reject a non-neutral value until M3 draws it. No 3D uniforms here.
+- **3D.** The compositor draws ADR-0050 decisions 1, 2, 4, 5 and 6. Open: whether
+  rotated 2D items should get edge coverage too, which changes their goldens; whether
+  strongly minified 2D items should get mips; and whether a layer or an import should
+  carry a change count, so its chain is rebuilt only when it changed rather than each
+  call that draws it in 3D. Decision 5 asks for once per source and frame; a source
+  drawn in 3D by two mixes, or inside a nested scene, is rebuilt once per call that
+  draws it. Also open: a cropped 3D item samples the whole source's chain, so at coarser
+  levels, and along the anisotropic footprint, texels just past the crop bleed into its
+  edge (the UV clamp keeps the sample point inside, not the footprint). Clamping the
+  level near the crop, or building the chain from the cropped region, would fix that.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and

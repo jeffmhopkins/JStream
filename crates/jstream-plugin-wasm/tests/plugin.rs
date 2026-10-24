@@ -382,10 +382,10 @@ fn stop_granted(limits: Limits) -> PluginConfig {
 
 #[test]
 fn calls_past_the_cap_a_second_never_reach_control() {
-    // ADR-0069: 50 calls a second by default. Sixty in one invocation, well inside a
+    // ADR-0069: 50 commands a second by default. Sixty in one invocation, well inside a
     // second: the first fifty reach `Control`, the last ten are limited, and the plugin
     // isn't stopped.
-    assert_eq!(Limits::DEFAULT_CALLS_PER_SECOND, 50);
+    assert_eq!(Limits::DEFAULT_COMMANDS_PER_SECOND, 50);
     let (plugin, fake) = load(&repeating_plugin(STOP), stop_granted(Limits::default()));
     let mut plugin = plugin.expect("the plugin loads");
     let limited = u8::try_from(abi::STATUS_LIMITED).expect("fits");
@@ -397,7 +397,7 @@ fn calls_past_the_cap_a_second_never_reach_control() {
 
 #[test]
 fn a_lowered_cap_holds_across_invocations_and_frees_after_a_second() {
-    let limits = Limits::default().with_calls_per_second(3);
+    let limits = Limits::default().with_commands_per_second(3);
     let (plugin, fake) = load(&repeating_plugin(STOP), stop_granted(limits));
     let mut plugin = plugin.expect("the plugin loads");
     let ok = u8::try_from(abi::STATUS_OK).expect("fits");
@@ -419,7 +419,7 @@ fn a_denied_call_does_not_use_the_cap() {
     // Denied calls never reach `Control`, so they don't count: with a cap of three, three
     // denied calls leave room for three granted ones.
     let start = r#"{"kind":"action","action":{"type":"output.start","output_id":"main"}}"#;
-    let limits = Limits::default().with_calls_per_second(3);
+    let limits = Limits::default().with_commands_per_second(3);
     let both = format!(
         r#"(module
             (import "jstream" "call" (func $call (param i32 i32) (result i32)))
@@ -450,6 +450,61 @@ fn a_denied_call_does_not_use_the_cap() {
         .invoke("run", &[])
         .expect("denials leave the cap for granted calls");
     assert_eq!(fake.calls().len(), 3);
+}
+
+/// A batch of `n` `scene.create` edits.
+fn batch(n: usize) -> String {
+    let edits: Vec<String> = (0..n)
+        .map(|i| format!(r#"{{"type":"scene.create","scene_id":"scn_{i}","name":"S"}}"#))
+        .collect();
+    format!(r#"{{"kind":"batch","edits":[{}]}}"#, edits.join(","))
+}
+
+fn create_granted(limits: Limits) -> PluginConfig {
+    PluginConfig {
+        capabilities: Capabilities::from_names(["scene.create"]),
+        limits,
+    }
+}
+
+#[test]
+fn every_edit_of_a_batch_counts_against_the_cap() {
+    // ADR-0069 caps commands, and each edit of a batch is one (ADR-0013). With a cap of
+    // five, one batch of three reaches `Control` and a second doesn't fit.
+    let limits = Limits::default().with_commands_per_second(5);
+    let (plugin, fake) = load(&repeating_plugin(&batch(3)), create_granted(limits));
+    let mut plugin = plugin.expect("the plugin loads");
+    let limited = u8::try_from(abi::STATUS_LIMITED).expect("fits");
+    plugin
+        .invoke("run", &[2, limited])
+        .expect("the second batch of three is limited");
+    assert_eq!(fake.calls().len(), 1);
+}
+
+#[test]
+fn a_batch_of_more_commands_than_the_cap_never_reaches_control() {
+    // Fifty-one edits against the default 50: limited even with the window empty.
+    let (plugin, fake) = load(
+        &repeating_plugin(&batch(51)),
+        create_granted(Limits::default()),
+    );
+    let mut plugin = plugin.expect("the plugin loads");
+    let limited = u8::try_from(abi::STATUS_LIMITED).expect("fits");
+    plugin
+        .invoke("run", &[1, limited])
+        .expect("an oversized batch is limited, not fatal");
+    assert!(fake.calls().is_empty());
+
+    let (plugin, fake) = load(
+        &repeating_plugin(&batch(50)),
+        create_granted(Limits::default()),
+    );
+    let mut plugin = plugin.expect("the plugin loads");
+    let ok = u8::try_from(abi::STATUS_OK).expect("fits");
+    plugin
+        .invoke("run", &[1, ok])
+        .expect("a batch of exactly the cap fits");
+    assert_eq!(fake.calls().len(), 1);
 }
 
 /// A plugin with one entry point per expected input: each traps unless the invocation's

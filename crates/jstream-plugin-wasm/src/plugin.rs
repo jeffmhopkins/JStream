@@ -2,11 +2,11 @@
 
 use crate::abi;
 use crate::block_on::block_on;
-use crate::capability::Capabilities;
+use crate::capability::{Capabilities, command_names};
 use crate::error::Error;
 use crate::events::EventSender;
 use crate::limits::{self, Limits};
-use crate::rate::CallRate;
+use crate::rate::CommandRate;
 use jstream_control::protocol::Call;
 use jstream_control::{Control, ControlError};
 use std::sync::Arc;
@@ -110,8 +110,8 @@ struct HostState {
     result: Vec<u8>,
     /// What the host passed to the current invocation, for `input_read`.
     input: Vec<u8>,
-    /// The calls sent to `Control` in the last second, against the plugin's cap.
-    rate: CallRate,
+    /// One instant per command sent to `Control` in the last second, against the cap.
+    rate: CommandRate,
     /// The deadline of one invocation, in epoch ticks.
     call_ticks: u64,
     /// The deadline of the current entry into the plugin, the load's or an
@@ -171,7 +171,7 @@ impl Plugin {
                 .build(),
             result: Vec::new(),
             input: Vec::new(),
-            rate: CallRate::new(limits.calls_per_second()),
+            rate: CommandRate::new(limits.commands_per_second()),
             call_ticks: limits::ticks(limits.call_deadline(), EPOCH_TICK),
             entry_ticks: limits::ticks(limits.load_deadline(), EPOCH_TICK),
         };
@@ -314,8 +314,8 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<HostState>> {
     Ok(linker)
 }
 
-/// Checks one call against the plugin's grants and its cap of calls a second and, if both
-/// allow it, sends it. Answers the status and the result bytes the plugin reads back.
+/// Checks one call against the plugin's grants and its cap of commands a second and, if
+/// both allow it, sends it. Answers the status and the result bytes the plugin reads back.
 fn call(state: &mut HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
     let call: Call = match serde_json::from_slice(bytes) {
         Ok(call) => call,
@@ -325,8 +325,12 @@ fn call(state: &mut HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
         let body = serde_json::json!({ "denied": denied });
         return (abi::STATUS_DENIED, body.to_string().into_bytes());
     }
-    if !state.rate.admit(Instant::now()) {
-        let body = serde_json::json!({ "limited": { "per_second": state.rate.cap() } });
+    // Every edit of a batch is a command (ADR-0013), so each counts against the cap.
+    let commands = command_names(&call).map_or(1, |names| names.len());
+    if !state.rate.admit(Instant::now(), commands) {
+        let body = serde_json::json!({
+            "limited": { "per_second": state.rate.cap(), "commands": commands }
+        });
         return (abi::STATUS_LIMITED, body.to_string().into_bytes());
     }
     let answer = block_on(state.control.call(call));
