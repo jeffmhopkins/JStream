@@ -46,10 +46,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   returns it from `audio` as a `SourceAudio`: its format, and `open(handler)`, which
   feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
   its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
-  `capture()` is `Some` for a `display` or `window` source: what the platform captures
-  for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it (`true`,
-  the default, for every other source). Its frames come from the platform's capture backend on the
-  engine's render thread, so its `frame` is `SourceError::Captured`.
+  `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
+  captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
+  (`true`, the default, for a webcam and every other source). Its frames come from the
+  platform's capture or video-device backend on the engine's render thread, so its
+  `frame` is `SourceError::Captured`.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
