@@ -413,8 +413,10 @@ the registry and runs the colour and image kinds through the public API on files
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
 the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
-alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
-`tests/data/text` (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
+alignment, padding, outline, live updates, font assets and limits, drawing at a
+density (twice the pixels for the same extent, kept across an update, clamped to
+`MAX_DENSITY`, halved to fit the limits), plus golden PNGs in `tests/data/text`, one of
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
 waveform column's range, the dB scale, a tone lighting its own spectrum bar, every

@@ -315,6 +315,9 @@ returns the retired images whose last frame has finished. A steady frame allocat
 only that callback; a frame that fails before `end_frame` leaves its retirees to the
 next frame's fence, which covers it. `frame` names the frame being built, so work that
 several draws of one frame share (a source's video chain) can run once in it.
+`set_extent` places a key's image as if it were another size (ADR-0071); a reused entry
+keeps the extent it had, so a caller that sets one sets it on every frame, and a new
+texture starts at its own size.
 `retire_filter` hands the cache a `VideoFilter` no frame runs any more: it may hold
 textures of its own (a video delay's ring), so it waits for the same fence and comes
 back in `Reclaimed` (`Reclaimed::filters` counts them) to be dropped with the images.
@@ -662,7 +665,8 @@ is in the box's own frame), and a flipped `fill`; another checks that a legacy
 negative scale and the geometry `from_legacy` makes of it draw the same grid.
 
 **What is checked.** Background only; an opaque rect over a background (position and
-stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
+stacking); crop; an image placed at an extent of half its pixels (its size and its crop
+count in the extent, ADR-0071); integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
 staged once per submit, and not staged when the item is hidden or when a readback
