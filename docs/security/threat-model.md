@@ -120,10 +120,13 @@ a stolen token, local denial of service.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
-  **In flight** (#548, the fix for #344): on Windows the token, devices and log files are created
-  with a protected DACL for SYSTEM and the user, and an existing token or devices file
-  is refused unless its owner is the user, SYSTEM or Administrators and its DACL lets
-  no one else in.
+  On Windows (#548) the token, devices and log files, and the daemon's and the desktop
+  app's crash reports (#656), are created with a protected DACL for SYSTEM and the user
+  in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
+  they never carry their folder's inherited entries. An existing token or devices file
+  is refused unless its owner is the user, SYSTEM or Administrators and its DACL grants
+  no one else more than reading its descriptor or attributes (`check_private_file`).
+  Log files and crash reports are always new files, so nothing existing is checked.
 
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
 It doesn't expire or rotate; deleting the file and restarting makes a new one. A browser
@@ -132,7 +135,9 @@ ambient credential until it is closed. Failed tokens are not delayed or locked o
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
-**Gaps:** the Windows token file only inherits its folder's ACL (#344, fix in flight in #548).
+**Gaps:** the Windows DACLs above are tested only on CI's `windows-latest` runner, not
+yet on Windows hardware (#546), so #344 stays open until that run. The engine's audit
+log still inherits its folder's ACL on Windows (see [Files](#files)).
 
 <a id="pairing"></a>
 ## Pairing and remote browsers
@@ -169,8 +174,8 @@ its device token, and the cookie is never compared with the control token.
 
 **Accepted:** a device token has the control token's full power ("no tiers").
 
-**Gaps:** the devices file has the same Windows ACL gap as the token file (#344, fix
-in flight in #548).
+**Gaps:** the devices file's Windows DACL, like the token file's, waits on a Windows
+hardware run (#546, for #344).
 
 <a id="browser"></a>
 ## Browser source
@@ -255,6 +260,8 @@ write recordings anywhere the user can. That follows from ADR-0006's full access
 Windows send the user's NTLM hash to a remote host (#345); a file created between the
 recording's last check and its rename is replaced (#355). The Media Foundation file
 reader (in flight, #245) will parse untrusted media in native code inside the engine.
+On Windows the collection file and the audit log only inherit their folder's ACL, and an
+existing audit log isn't checked (#547, fix in flight in #574).
 
 <a id="plugins"></a>
 ## Plugins
@@ -415,7 +422,8 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 
 | Issue | Area | Gap | Severity |
 |---|---|---|---|
-| #344 | Server, pairing | Windows token, devices and log files only inherit their folder's ACL | Medium |
+| #344 | Server, pairing | Windows user-only token, devices and log files not yet checked on Windows hardware (#546) | Low |
+| #547 | Files | Windows audit log and collection file only inherit their folder's ACL (fix in #574) | Medium |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
 | #348 | WASM | CPU, memory and API-scope limits decided ([ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) but not built (WA1) | Medium |
