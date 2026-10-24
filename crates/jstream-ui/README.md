@@ -78,8 +78,9 @@ Contents ([Design](#design) explains the choices):
   (creating, editing and deleting streams, recordings and the virtual camera, their
   stream keys, start and stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
-  audio mixer (faders, mutes, routing and buses, with meters and the
-  master's loudness), also tested natively against `MockEngine`; and `studio.rs`:
+  audio mixer (the master card with its loudness and true peak, the channels folded
+  under it with their meters, faders, dB fields, mutes and routing, and the buses),
+  also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
   transition presets and each scene's overrides; [Design](#design)); and
   `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
@@ -400,17 +401,24 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Mixer** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)). The panel reads
   the audio sources (those `state.get` reports with `audio`), the buses and the sends
   into a copy of its own, not `Studio`'s, and re-reads them on `state.changed` and
-  `events.dropped`. Each source gets a strip,
-  ordered by name: its meter, fader, mute and, folded under "Routing", whether its
-  audio is on, when it is heard (`always` or `when_shown`) and its send into each bus
-  (on or off, and its gain). A nested scene's strip has only the routing toggles,
-  since it has no fader or sends of its own. Each bus gets a strip too, the master
-  first, with renaming and (except the master) deleting. A delete reads `delete.plan`
+  `events.dropped`. It follows the prototype's layout
+  ([UI features › mixer](../../docs/UI-FEATURES.md#mixer)): the master card on top, the
+  channels folded under it (folded at first), then the buses under a folded Buses
+  header. The master card's button shows and hides the channels and counts them; it
+  has the master's short-term loudness on a bar from −60 to +6 LUFS with a marker at
+  the −14 LUFS target (70% along, where the prototype draws it), the three loudness
+  readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
+  button that resets the integrated loudness (`audio.reset_loudness`). Its monitor
+  and FX buttons show disabled, since the engine has no monitor output and no master
+  chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
+  (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
+  on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
+  off, and its gain). A nested scene's row has only the routing toggles, since it has
+  no fader or sends of its own. Each bus gets a strip, the master first, with renaming
+  and (except the master) deleting. A delete reads `delete.plan`
   first, as a scene's or source's does: the strip asks, saying how many `waveform` or
   `spectrum` settings drawing the bus the plan clears, and sends the plan's edits
-  expecting the plan's revision. The master's adds its
-  momentary, short-term and integrated loudness, its true peak, and a button that
-  resets the integrated loudness (`audio.reset_loudness`). New buses take the first
+  expecting the plan's revision. New buses take the first
   free `bus-N` ID; the button is off at the protocol's bus limit (`MAX_BUSES`, 16).
   - **Faders** run from −100 to +24 dB on a console taper: unity at three quarters
     of the travel, the quiet end compressed, and snapping to 0 dB within a quarter of
@@ -418,7 +426,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     go (or each key press) sends one `source.set_audio` or `bus.set_fader`, so a drag
     is one undo step. Hearing the fader during the drag needs live values
     ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which `live.set` doesn't
-    take for faders yet. Clicking the readout sets 0 dB. An accepted edit is applied to the shown
+    take for faders yet. A source's dB field shows the fader's value during the drag
+    and sends its own value the same way: typed, stepped or scrubbed, one edit each.
+    Clicking a bus's readout sets 0 dB. An accepted edit is applied to the shown
     state at once, so the strip doesn't jump back before the re-read.
   - **Meters** take `meters.tick`: an RMS bar over a fainter peak bar per channel,
     from −60 dBFS to full scale, and a peak hold that waits about 1.5 s, then falls

@@ -157,3 +157,20 @@ export async function describeKinds(page, kinds, { refuse = () => null } = {}) {
   });
   return { release: () => held.splice(0).forEach((send) => send()) };
 }
+
+/** Lets a test send the page `meters.tick` events, which the mock engine never sends:
+ * the page's WebSocket goes through a route that passes every message on, and the
+ * returned function sends `{ sources, buses }` as one tick. Call it before `connect`. */
+export async function meterTicks(page) {
+  let socket = null;
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => ws.send(message));
+    socket = ws;
+  });
+  return (tick) => {
+    if (!socket) throw new Error('the page has no socket yet');
+    socket.send(JSON.stringify({ type: 'event', event: { type: 'meters.tick', ...tick } }));
+  };
+}
