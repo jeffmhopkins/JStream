@@ -758,6 +758,9 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             for s in &m.stamps {
                 eprintln!("took {branch}'s stamp: {s}");
             }
+            for s in &m.adopted {
+                eprintln!("took {branch}'s note where it verified the same content: {s}");
+            }
             for path in &m.generated {
                 if m.committed {
                     eprintln!("regenerated after a conflict in its @generated blocks: {path}");
@@ -911,6 +914,17 @@ mod tests {
                 .output()
                 .is_ok_and(|o| o.status.success());
             assert!(ok, "git {args:?} failed");
+        }
+
+        /// The commit `rev` names.
+        fn rev(&self, rev: &str) -> String {
+            let out = Command::new("git")
+                .args(["rev-parse", rev])
+                .current_dir(&self.0)
+                .output()
+                .expect("invariant: git runs");
+            assert!(out.status.success(), "git rev-parse {rev} failed");
+            String::from_utf8_lossy(&out.stdout).trim().to_owned()
         }
 
         /// `docs check` messages containing `needle`.
@@ -1371,6 +1385,78 @@ mod tests {
             format!("{err:#}").contains("already in progress"),
             "{err:#}"
         );
+    }
+
+    /// #697: after `docs merge-main`, an entry the branch holds at the same hash as main's,
+    /// but with a note of its own (as an older `verify --merge` left on inputs a PR into a
+    /// wave doesn't change, #607 review B5), takes main's entry; one the branch verified at
+    /// other content keeps the branch's note. The change is part of the merge commit, so
+    /// nothing follows it, and a merge with nothing new adopts nothing.
+    #[test]
+    fn merge_main_takes_main_entries_at_the_same_hash() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        let t = s.replace("\"S\"", "\"T\"").replace("src/**", "lib/**");
+        files.extend([
+            ("S.md", s),
+            ("T.md", t.as_str()),
+            ("src/a.rs", "a\n"),
+            ("src/b.rs", "b\n"),
+            ("lib/c.rs", "c\n"),
+        ]);
+        let (origin, work) = origin_and_clone("merge-adopt", &files);
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies");
+        verify(&origin.0, "T#a", "agent:main", NOTE).expect("T verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+
+        // The branch changes b.rs and verifies it, then carries its own note on a.rs,
+        // which it leaves alone, at main's hash.
+        work.write("src/b.rs", "b work\n");
+        let work_note = "b is the branch's change to b.rs and the text still describes it";
+        verify(&work.0, "S#a", "agent:work", work_note).expect("S verifies on work");
+        let mut l = ledger::Ledger::read(&work.0).expect("reads");
+        let a = l
+            .sections
+            .get_mut("S#a")
+            .and_then(|s| s.get_mut("file:src/a.rs"))
+            .expect("invariant: a.rs is stamped");
+        let main_a = a.clone();
+        a.by = Some("agent:work".into());
+        a.note = Some("a note of the branch's on an input it leaves alone".into());
+        l.write(&work.0).expect("writes");
+        commit_all(&work, "work: b");
+        let before = work.rev("HEAD");
+        // Main moves on elsewhere, so the merge is a real one with no ledger conflict.
+        origin.write("lib/c.rs", "c main\n");
+        verify(&origin.0, "T#a", "agent:main", NOTE).expect("T verifies on main");
+        commit_all(&origin, "main: c");
+
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert!(
+            m.committed && m.refused.is_empty() && m.stamps.is_empty(),
+            "{m:?}"
+        );
+        assert_eq!(m.adopted, vec!["S#a".to_owned()]);
+        assert!(m.stale.is_empty(), "{m:?}");
+        let s = &ledger::Ledger::read(&work.0).expect("reads").sections["S#a"];
+        assert_eq!(s["file:src/a.rs"], main_a);
+        assert_eq!(s["file:src/b.rs"].note.as_deref(), Some(work_note));
+        // In the merge commit itself: HEAD is the merge, its first parent the branch.
+        assert_eq!(work.rev("HEAD^1"), before);
+        assert_eq!(work.rev("HEAD^2"), origin.rev("HEAD"));
+        let status = Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(&work.0)
+            .output()
+            .expect("invariant: git runs");
+        assert!(status.stdout.is_empty(), "{status:?}");
+        assert!(work.diags("is stale").is_empty());
+
+        // Nothing new on main: no merge, nothing adopted.
+        let m = merge::merge_main(&work.0, "main").expect("up to date");
+        assert!(m.committed && m.adopted.is_empty(), "{m:?}");
+        assert_eq!(work.rev("HEAD^1"), before);
     }
 
     /// #679 B2: `merge-main`, `--merge` and `--renote` report the same PRs: those behind the
