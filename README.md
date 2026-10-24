@@ -57,10 +57,10 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M2: UI](ROADMAP.md#m2) | `████████░░` 82% | 23 | 2 | 3 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 31% | 5 | 2 | 9 |
 
-110 of 130 items are merged; 12 of those still wait on a run on Windows hardware.
+110 of 130 items are merged; 11 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 32 items, by next step: 🔨 build 21, 🧪 Windows run 9, 👤 maintainer 2</summary>
+<summary><b>What's left</b>: 31 items, by next step: 🔨 build 21, 🧪 Windows run 8, 👤 maintainer 2</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -70,14 +70,13 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A6b | Daemon YouTube wiring | M1a | 👤 maintainer, then 🧪 Windows run | #312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
 | C4c | Webcam source (CPU path, MJPEG on Windows, paired audio) | M1b | 🧪 Windows run | landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam) | #654, #658, #726 |
 | C5 | Audio sources | M1b | 🧪 Windows run | the WASAPI device tests on real devices (#778, item 18 of the Windows hardware pass) | #238 |
-| C8 | Browser source (CEF) | M1b | 🔨 build, then 🧪 Windows run | the Windows runs #335 (steps 1 to 4) and #336 passed; the browser page checks (#341, #347) are still to run; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
+| C8 | Browser source (CEF) | M1b | 🔨 build, then 🧪 Windows run | the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
 | V0 | Video filter chain runtime | M1b | 🔨 build | part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #730 |
 | V4 | Scene filter chains and item effects | M1b | 🔨 build | ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529) |  |
 | D9 | Audio monitoring: a bus's monitor device and tap point | M1b | 🔨 build | ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it |  |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | the pacing rerun (#777, with item 6 of the Windows hardware pass) | #174, #195, #200, #229 |
 | G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
-| G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | its Windows run passed (#390) | #316 |
-| H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | M1d | 🧪 Windows run | #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); #738 (#733) is in wave/m1-4; Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667 | #437, #568, #569, #580, #604, #708 |
+| H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | M1d | 🧪 Windows run | #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667 | #437, #568, #569, #580, #604, #708 |
 | Q6 | Threat-model follow-ups | M1d | 🔨 build, then 🌊 its wave lands, then 🧪 Windows run | from the Q5 threat model: user-only token, devices and log files (#548) and crash reports (#662) on Windows, browser pages refused every permission and local-network requests decided by policy (#535, #549, #714, #729), the vcam's owner checks (#540), local redacted desktop crash reports (#552) and a warning on cleartext rtmp:// (#555) landed with wave/m1-3 (#754); in review: the audit log and collection file user-only (#574, for #547), the rtmp:// flag in output.status (#653, for #562) and the CLAP IPC hardening (#573, for #351); open: #344, #347, #349 (with X1) and #353; Windows runs #546 and #557 | #535, #540, #548, #549, #552, #555, #662, #714, #729, #573, #574, #653 |
 | U4p | Live preview on canvas | M2 | 🧪 Windows run | the canvas's H.264 preview path on Windows (#380) | #302 |
 | T1 | Studio mode and transitions | M2 | 🧪 Windows run | #260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029) | #260 |
@@ -172,7 +171,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: the WASAPI device tests on real devices (#778, item 18 of the Windows hardware pass) | #238 |
 | C3 | Display and window capture sources | ✅ merged: #365 landed with wave/m1-2 (#545); its Windows run passed (#378) | #365 |
-| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: the Windows runs #335 (steps 1 to 4) and #336 passed; the browser page checks (#341, #347) are still to run; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
+| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |
@@ -203,7 +202,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
 | G3b | VirtualCam output kind | ✅ merged | #213, #297 |
 | G3c | --register-vcam | 🧪 merged, Windows run pending: Windows run (#563) | #235, #565 |
-| G3d | Virtual camera in the UI and the desktop app | 🧪 merged, Windows run pending: its Windows run passed (#390) | #316 |
+| G3d | Virtual camera in the UI and the desktop app | ✅ merged: its Windows run passed (#390) | #316 |
 | P1 | Portable Windows zip | ✅ merged | #271 |
 
 </details>
@@ -222,7 +221,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F4 | Keyframe on demand | ✅ merged | #146 |
 | Q1 | Fuzz and property tests | ✅ merged | #277 |
 | Q2 | Headless end-to-end test | ✅ merged | #269 |
-| H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | 🧪 merged, Windows run pending: #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); #738 (#733) is in wave/m1-4; Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667 | #437, #568, #569, #580, #604, #708 |
+| H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | 🧪 merged, Windows run pending: #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667 | #437, #568, #569, #580, #604, #708 |
 | Q6 | Threat-model follow-ups | 🔍 in review: from the Q5 threat model: user-only token, devices and log files (#548) and crash reports (#662) on Windows, browser pages refused every permission and local-network requests decided by policy (#535, #549, #714, #729), the vcam's owner checks (#540), local redacted desktop crash reports (#552) and a warning on cleartext rtmp:// (#555) landed with wave/m1-3 (#754); in review: the audit log and collection file user-only (#574, for #547), the rtmp:// flag in output.status (#653, for #562) and the CLAP IPC hardening (#573, for #351); open: #344, #347, #349 (with X1) and #353; Windows runs #546 and #557 | #535, #540, #548, #549, #552, #555, #662, #714, #729, #573, #574, #653 |
 
 </details>

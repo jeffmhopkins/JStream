@@ -100,9 +100,9 @@ $Sources = [ordered]@{
 # (Test-<Fn>, below). In run order: grouped by source, so each source builds once.
 $Tasks = @(
     @{ Id = 'smoke';          Src = 'main';  Issues = 'go-live runbook'; Fn = 'Smoke';         Title = 'Go-live smoke test and graceful stop';          Needs = 'ffmpeg' }
-    @{ Id = 'render';         Src = 'main';  Issues = '#336';            Fn = 'Render';        Title = 'Render pixel tests on the hardware adapter';    Needs = '' }
+    @{ Id = 'render';         Src = 'main';  Issues = '#336 (passed)';   Fn = 'Render';        Title = 'Render pixel tests on the hardware adapter';    Needs = '' }
     @{ Id = 'nv12';           Src = 'main';  Issues = '#492';            Fn = 'Nv12';          Title = 'NV12 encode targets into Media Foundation';     Needs = 'ffprobe' }
-    @{ Id = 'media';          Src = 'main';  Issues = '#382';            Fn = 'Media';         Title = 'Looping and MP3 media sound';                   Needs = 'ffmpeg, ffprobe' }
+    @{ Id = 'media';          Src = 'main';  Issues = '#445';            Fn = 'Media';         Title = 'Looping and MP3 media sound';                   Needs = 'ffmpeg, ffprobe' }
     @{ Id = 'browser';        Src = 'main';  Issues = '#341';            Fn = 'Browser';       Title = 'Browser page check, refused requests';          Needs = 'MSVC tools, CMake, Ninja' }
     @{ Id = 'youtube';        Src = 'main';  Issues = '#337 (part)';     Fn = 'YouTube';       Title = 'YouTube live without OAuth';                    Needs = '-YouTubeUrl, -YouTubeKeyFile, you in YouTube Studio' }
     @{ Id = 'preview';        Src = 'main';  Issues = '#380';            Fn = 'Preview';       Title = 'Canvas H.264 preview in the desktop app';       Needs = 'trunk, wasm-bindgen, you' }

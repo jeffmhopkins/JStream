@@ -141,7 +141,10 @@ set up an N-edition VM, so the issue stays open to keep the gap on record.
 
 Build `main` in release once: `cargo build --release -p jstream-daemon -p jstream-cli`.
 
-### 1. Render pixel tests on the hardware adapter (closes #336)
+### 1. Render pixel tests on the hardware adapter (#336, passed)
+
+This passed on `main`, and #336 is closed. Run it again only after a change to the
+render tests or their adapter choice.
 
 Steps 2 to 4 of #336 passed. Step 1 ran on WARP, and then on the 780M with #437, but on
 a branch without C8b5's three premultiplied-import tests. Both #326 and #437 are on
@@ -186,7 +189,11 @@ left needs a real YouTube channel. Part B waits for JStream's built-in OAuth cli
 4. Search `%APPDATA%\JStream\logs` and `audit.jsonl` for the key. **Pass:** it never
    appears.
 
-### 4. Looping and MP3 media sound (closes #382)
+### 4. Looping and MP3 media sound (#445)
+
+#382 is closed: on `main` every file below passed but `audio.mp3`, which still leaves a
+56 ms gap at each loop wrap and a dropout of about 12 ms in each pass. That residual is
+#445; rerun this item once its fix lands.
 
 Everything else in #382 passed. Its remaining steps failed on #445 (a gap at each loop
 wrap) and #446 (an MP3 playing about 0.2 s of every second). #448 and #447 fixed them,
@@ -228,7 +235,7 @@ keyframe, within 2 s; and a decoder failure falls back to JPEG, not "No preview"
 
 C5's audio input, desktop audio and application audio sit on the WASAPI backend, whose
 device tests need a microphone and speakers. On `main`:
-`cargo test -p jstream-platform-windows --features hw-tests -- --ignored audio::device_tests --test-threads=1`.
+`cargo test --release -p jstream-platform-windows --features hw-tests -- --ignored audio::device_tests --test-threads=1`.
 The last test plays a quiet 440 Hz tone. **Pass:** all five pass: devices with one default
 each, the input format, this process's loopback, the default input on the media clock, and
 the default output's loopback.
@@ -406,5 +413,5 @@ or after Ctrl-C.
 These reruns can't pass until an open bug is fixed. Run them in the next pass after the
 fix lands:
 
-- **#335, step 5 (C8b4 daemon browser sources):** Ctrl-C with CEF running should print
+- **#436 (#335's step 5, C8b4 daemon browser sources):** Ctrl-C with CEF running should print
   `stopped` and write the shutdown log. It waits on #436. Steps 1 to 4 passed.
