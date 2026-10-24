@@ -823,9 +823,6 @@ mod tests {
         );
     }
 
-    /// A CLAP filter is bypassed until its host is ready, then runs on the host's
-    /// block; a rebuilt chain keeps the same host, and dropping the filter stops it. A
-    /// CLAP filter without a plugin is reported once and bypassed.
     /// The master chain and output taps bypass a CLAP filter, logged once, and start
     /// no host for it.
     #[test]
@@ -869,6 +866,9 @@ mod tests {
         assert!(fake.hosts().is_empty());
     }
 
+    /// A CLAP filter is bypassed until its host is ready, then runs on the host's
+    /// block; a rebuilt chain keeps the same host, and dropping the filter stops it. A
+    /// CLAP filter without a plugin is reported once and bypassed.
     #[test]
     fn a_clap_filter_runs_on_its_hosts_block() {
         use crate::plugins::filter::ClapCatalog;
@@ -894,6 +894,7 @@ mod tests {
             )]),
             policy: SupervisorPolicy {
                 first_retry: Duration::from_millis(20),
+                max_crashes: 2,
                 ..SupervisorPolicy::default()
             },
         };
@@ -999,6 +1000,22 @@ mod tests {
             pass(&mut chain, &mut mixer, &missing).is_empty(),
             "reported once"
         );
+
+        // A second crash in a row disables it: off its block, bypassed, no restart.
+        fake.hosts()[1].crash();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            assert!(Instant::now() < deadline, "the crash was never seen");
+            std::thread::sleep(Duration::from_millis(1));
+            let notes = pass(&mut chain, &mut mixer, &missing);
+            if notes.iter().any(|note| note.contains("disabled")) {
+                break;
+            }
+        }
+        pass(&mut chain, &mut mixer, &missing);
+        assert!(chain.filters[0].block.is_none());
+        assert!(chain.filters[0].control.is_none());
+        assert_eq!(fake.hosts().len(), 2);
 
         assert!(pass(&mut chain, &mut mixer, &[]).is_empty());
         assert!(fake.hosts()[1].has_exited(), "its host stopped");

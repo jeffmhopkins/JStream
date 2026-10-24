@@ -112,7 +112,8 @@ state machine. Contents:
     filter's settings (the supervisor keeps the state for its restarts only, so a new
     host after an engine restart starts from the plugin's defaults and the filter's
     settings); a new mixer filter when a restarted plugin reports a new latency; the
-    plugin's editor; and rescanning.
+    plugin's editor; rescanning; and stopping a removed filter's host off the
+    `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program

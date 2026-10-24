@@ -486,8 +486,9 @@ model; a change that would contradict it edits it in the same PR.
 (`jstream-plugin-proto`), the mixer's side of it (`jstream-audio`) and the host
 process (`jstream-plugin-host`) are built, and so are starting hosts
 (`jstream-platform-windows`) and watching and restarting them on a control thread
-(`jstream-core`'s `HostSupervisor`); running a CLAP filter from the graph, which would
-start that supervisor, and the `stats.tick` count are not yet. Each CLAP filter
+(`jstream-core`'s `HostSupervisor`), and a source's audio chain runs CLAP filters, each
+with its own supervisor; CLAP filters on the master's and outputs' chains, and the
+`stats.tick` count, are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
 processes read from the same OS counter (not built yet: for now the host sleeps a
