@@ -1,6 +1,6 @@
 //! `glow`: soft light around the shape. It is a drop shadow with no offset, a colour
-//! and a strength that scales the blurred alpha (clamped to 1), drawn under the input;
-//! the frame grows by the radius on every side.
+//! and a strength that scales the blurred alpha (clamped to 1), drawn under the input,
+//! within the input's frame (ADR-0065 §5).
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 
@@ -57,10 +57,6 @@ impl Pass for Glow {
         self.0 = read(settings);
     }
 
-    fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
-        self.0.insets().grow(width, height)
-    }
-
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
@@ -73,8 +69,9 @@ impl Pass for Glow {
 
 #[cfg(test)]
 mod tests {
+    use crate::filter::multipass::square;
     use crate::filter::testing::{filter, run};
-    use crate::tests::{near, open, solid};
+    use crate::tests::{near, open};
     use serde_json::json;
 
     #[test]
@@ -82,11 +79,16 @@ mod tests {
         let Some(mut opened) = open() else {
             return;
         };
-        let input = solid(&opened.compositor, 8, 8, [0, 0, 255, 255]);
+        // An 8x8 blue square at (6..14, 6..14) in a transparent 20x20 frame.
+        let input = square(&opened, 20, 6, 8, [0, 0, 255, 255]);
         let mut glow = filter("glow", json!({"color": "#ffff00", "radius": 6.0}));
-        assert_eq!(glow.output_size(8, 8), (20, 20));
+        // ADR-0065 §5: the frame keeps its size.
+        assert_eq!(glow.output_size(20, 20), (20, 20));
         let out = run(&mut opened, &mut glow, &input, 0.0);
+        assert_eq!((out.width(), out.height()), (20, 20));
         near(&out, 10, 10, [0, 0, 255, 255], 0);
+        near(&out, 6, 6, [0, 0, 255, 255], 0);
+        near(&out, 13, 13, [0, 0, 255, 255], 0);
         let a = |x, y| out.pixel(x, y).expect("inside")[3];
         // Even on all four sides.
         assert!(a(4, 10).abs_diff(a(15, 10)) <= 2 && a(10, 4).abs_diff(a(10, 15)) <= 2);

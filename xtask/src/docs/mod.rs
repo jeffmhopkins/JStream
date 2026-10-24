@@ -326,10 +326,11 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Vec<u
     Ok(reported.into_inner())
 }
 
-/// `docs verify <DOC#anchor> --by <who> --renote <text> [--from wave/<name>]`: replaces the
+/// `docs verify <DOC#anchor> --by <who> --renote <text> [--from <branch>]`: replaces the
 /// `by` and `note` of the entries this branch wrote on a section that is already fresh,
 /// keeping their hashes, as when a reviewer asks for a better note. The branch's entries are
-/// those that differ from the ledger where it left `origin/main` (or the wave it targets).
+/// those that differ from the ledger where it left `origin/main`, the wave it targets, or
+/// the PR branch it is stacked on (#715).
 /// A stale section is refused: re-read it and verify with `--note` or `--merge`. Returns the
 /// PRs this branch's last merge brought in on those entries' files, which it reports.
 fn verify_renote(
@@ -340,7 +341,7 @@ fn verify_renote(
     branch: &str,
 ) -> Result<Vec<u32>> {
     let note = check_stamp(by, note)?;
-    let base = merge::base_ledger(root, branch)?;
+    let bases = merge::base_ledgers(root, branch)?;
     let point = merge::last_merge(root)?;
     let reported = std::cell::RefCell::new(Vec::new());
     stamp_section(root, target, &|doc, key, old, inputs| {
@@ -351,19 +352,20 @@ fn verify_renote(
             );
         }
         let old = old.context("invariant: a fresh section has a stamp")?;
+        let stamps: Vec<&ledger::Stamp> =
+            bases.iter().filter_map(|b| b.sections.get(key)).collect();
         if let Some(p) = &point {
-            // The entries `renote` rewrites: this branch's own.
-            let base = base.sections.get(key);
+            // The entries `renote` rewrites: this branch's own, equal to no base's.
             let mut paths: Vec<String> = old
                 .iter()
-                .filter(|(k, e)| base.and_then(|b| b.get(*k)) != Some(*e))
+                .filter(|(k, e)| !stamps.iter().any(|b| b.get(*k) == Some(*e)))
                 .map(|(k, _)| merge::input_path(doc, k))
                 .collect();
             paths.sort();
             paths.dedup();
             *reported.borrow_mut() = report_merged_prs(root, p, key, &paths, note)?;
         }
-        ledger::renote(old, base.sections.get(key), by, note).with_context(|| {
+        ledger::renote(old, &stamps, by, note).with_context(|| {
             format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
         })
     })?;
@@ -679,7 +681,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                 _ => bail!(
                     "usage: cargo xtask docs verify <DOC#anchor> --by <human:..|agent:..> \
                      (--note \"<what you checked>\" | --merge \"<what the merge changed>\" \
-                     | --renote \"<the better note>\" [--from wave/<name>])"
+                     | --renote \"<the better note>\" [--from <base branch>])"
                 ),
             }
             Ok(true)
@@ -758,6 +760,9 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             let m = merge::merge_main(root, branch)?;
             for s in &m.stamps {
                 eprintln!("took {branch}'s stamp: {s}");
+            }
+            for s in &m.adopted {
+                eprintln!("took {branch}'s note where it verified the same content: {s}");
             }
             for path in &m.generated {
                 if m.committed {
@@ -912,6 +917,17 @@ mod tests {
                 .output()
                 .is_ok_and(|o| o.status.success());
             assert!(ok, "git {args:?} failed");
+        }
+
+        /// The commit `rev` names.
+        fn rev(&self, rev: &str) -> String {
+            let out = Command::new("git")
+                .args(["rev-parse", rev])
+                .current_dir(&self.0)
+                .output()
+                .expect("invariant: git runs");
+            assert!(out.status.success(), "git rev-parse {rev} failed");
+            String::from_utf8_lossy(&out.stdout).trim().to_owned()
         }
 
         /// `docs check` messages containing `needle`.
@@ -1374,6 +1390,78 @@ mod tests {
         );
     }
 
+    /// #697: after `docs merge-main`, an entry the branch holds at the same hash as main's,
+    /// but with a note of its own (as an older `verify --merge` left on inputs a PR into a
+    /// wave doesn't change, #607 review B5), takes main's entry; one the branch verified at
+    /// other content keeps the branch's note. The change is part of the merge commit, so
+    /// nothing follows it, and a merge with nothing new adopts nothing.
+    #[test]
+    fn merge_main_takes_main_entries_at_the_same_hash() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        let t = s.replace("\"S\"", "\"T\"").replace("src/**", "lib/**");
+        files.extend([
+            ("S.md", s),
+            ("T.md", t.as_str()),
+            ("src/a.rs", "a\n"),
+            ("src/b.rs", "b\n"),
+            ("lib/c.rs", "c\n"),
+        ]);
+        let (origin, work) = origin_and_clone("merge-adopt", &files);
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies");
+        verify(&origin.0, "T#a", "agent:main", NOTE).expect("T verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+
+        // The branch changes b.rs and verifies it, then carries its own note on a.rs,
+        // which it leaves alone, at main's hash.
+        work.write("src/b.rs", "b work\n");
+        let work_note = "b is the branch's change to b.rs and the text still describes it";
+        verify(&work.0, "S#a", "agent:work", work_note).expect("S verifies on work");
+        let mut l = ledger::Ledger::read(&work.0).expect("reads");
+        let a = l
+            .sections
+            .get_mut("S#a")
+            .and_then(|s| s.get_mut("file:src/a.rs"))
+            .expect("invariant: a.rs is stamped");
+        let main_a = a.clone();
+        a.by = Some("agent:work".into());
+        a.note = Some("a note of the branch's on an input it leaves alone".into());
+        l.write(&work.0).expect("writes");
+        commit_all(&work, "work: b");
+        let before = work.rev("HEAD");
+        // Main moves on elsewhere, so the merge is a real one with no ledger conflict.
+        origin.write("lib/c.rs", "c main\n");
+        verify(&origin.0, "T#a", "agent:main", NOTE).expect("T verifies on main");
+        commit_all(&origin, "main: c");
+
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert!(
+            m.committed && m.refused.is_empty() && m.stamps.is_empty(),
+            "{m:?}"
+        );
+        assert_eq!(m.adopted, vec!["S#a".to_owned()]);
+        assert!(m.stale.is_empty(), "{m:?}");
+        let s = &ledger::Ledger::read(&work.0).expect("reads").sections["S#a"];
+        assert_eq!(s["file:src/a.rs"], main_a);
+        assert_eq!(s["file:src/b.rs"].note.as_deref(), Some(work_note));
+        // In the merge commit itself: HEAD is the merge, its first parent the branch.
+        assert_eq!(work.rev("HEAD^1"), before);
+        assert_eq!(work.rev("HEAD^2"), origin.rev("HEAD"));
+        let status = Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(&work.0)
+            .output()
+            .expect("invariant: git runs");
+        assert!(status.stdout.is_empty(), "{status:?}");
+        assert!(work.diags("is stale").is_empty());
+
+        // Nothing new on main: no merge, nothing adopted.
+        let m = merge::merge_main(&work.0, "main").expect("up to date");
+        assert!(m.committed && m.adopted.is_empty(), "{m:?}");
+        assert_eq!(work.rev("HEAD^1"), before);
+    }
+
     /// #679 B2: `merge-main`, `--merge` and `--renote` report the same PRs: those behind the
     /// entries they rewrite, not a merged PR on an input whose entry comes from the merged
     /// side as it is.
@@ -1716,13 +1804,110 @@ mod tests {
         assert_eq!(after["body"], before["body"]);
         assert!(work.diags("is stale").is_empty());
         // The refusal fits --renote, which merges nothing (#534).
-        let err = verify_renote(&work.0, "S#a", "agent:work", better, "dev").expect_err("branch");
+        let err = verify_renote(&work.0, "S#a", "agent:work", better, "-x").expect_err("branch");
         let err = format!("{err:#}");
         assert!(
-            err.contains("can only compare against `main` or a `wave/<name>` branch, not `dev`"),
+            err.contains("can only compare against `main`, a `wave/<name>` branch or a stacked"),
             "{err}"
         );
         assert!(!err.contains("merge"), "{err}");
+    }
+
+    /// #715: `docs verify --renote --from <base>` on a PR stacked on another PR's branch
+    /// rewrites only the entries written above that base, keeping the base's own, and
+    /// main's after the stacked PR merges main ahead of its base (#719 B1); it refuses a
+    /// base that isn't on the remote or isn't an ancestor of `HEAD`.
+    #[test]
+    fn verify_renote_takes_a_stacked_base() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([
+            ("S.md", s),
+            ("src/a.rs", "a\n"),
+            ("src/b.rs", "b\n"),
+            ("src/c.rs", "c\n"),
+        ]);
+        let (origin, work) = origin_and_clone("verify-renote-stacked", &files);
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        // The base PR changes a.rs; the stacked PR above it changes b.rs.
+        work.git(&["checkout", "-q", "-b", "base-pr"]);
+        work.write("src/a.rs", "a base\n");
+        verify(&work.0, "S#a", "agent:base", "the base PR's a.rs edit").expect("verifies");
+        commit_all(&work, "base PR");
+        work.git(&["push", "-q", "origin", "base-pr"]);
+        work.git(&["checkout", "-q", "-b", "stacked-pr"]);
+        work.write("src/b.rs", "b stacked\n");
+        verify(
+            &work.0,
+            "S#a",
+            "agent:stacked",
+            "the stacked PR's b.rs edit",
+        )
+        .expect("verifies");
+        commit_all(&work, "stacked PR");
+        let better = "b.rs now returns early; the section's sentence on b.rs still says so";
+        verify_renote(&work.0, "S#a", "agent:review", better, "base-pr").expect("renotes");
+        let after = ledger::Ledger::read(&work.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        assert_eq!(after["file:src/b.rs"].note.as_deref(), Some(better));
+        assert_eq!(
+            after["file:src/a.rs"].note.as_deref(),
+            Some("the base PR's a.rs edit"),
+            "the base PR's entry keeps its note"
+        );
+
+        // #719 B1: main moves on (another PR restamps c.rs) and the stacked PR merges it
+        // ahead of its base. Main's entry is still not this branch's own.
+        commit_all(&work, "stacked PR: renoted");
+        origin.write("src/c.rs", "c main\n");
+        let mains = "main changed c.rs and the text still holds";
+        verify(&origin.0, "S#a", "agent:main", mains).expect("verifies");
+        commit_all(&origin, "main: c.rs");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert!(m.committed, "{:?}", m.refused);
+        for key in &m.stale {
+            verify_merge(&work.0, key, "agent:stacked", "main's c.rs edit").expect("verifies");
+        }
+        if !m.stale.is_empty() {
+            commit_all(&work, "stacked PR: re-verified after merging main");
+        }
+        let best = "b.rs now returns early and logs why; the sentence on b.rs still says so";
+        verify_renote(&work.0, "S#a", "agent:review", best, "base-pr").expect("renotes");
+        let after = ledger::Ledger::read(&work.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        assert_eq!(after["file:src/b.rs"].note.as_deref(), Some(best));
+        assert_eq!(
+            after["file:src/c.rs"].note.as_deref(),
+            Some(mains),
+            "main's note"
+        );
+        assert_eq!(
+            after["file:src/a.rs"].note.as_deref(),
+            Some("the base PR's a.rs edit")
+        );
+
+        let err = verify_renote(&work.0, "S#a", "agent:review", better, "gone")
+            .expect_err("not on the remote");
+        assert!(
+            format!("{err:#}").contains("`origin/gone` doesn't exist"),
+            "{err:#}"
+        );
+        // The base PR moves on; until the stacked PR merges it, it isn't an ancestor.
+        commit_all(&work, "stacked PR: renoted again");
+        work.git(&["checkout", "-q", "base-pr"]);
+        work.write("src/a.rs", "a base 2\n");
+        commit_all(&work, "base PR, round 2");
+        work.git(&["push", "-q", "origin", "base-pr"]);
+        work.git(&["checkout", "-q", "stacked-pr"]);
+        let err = verify_renote(&work.0, "S#a", "agent:review", better, "base-pr")
+            .expect_err("not an ancestor");
+        assert!(format!("{err:#}").contains("isn't an ancestor"), "{err:#}");
     }
 
     /// `docs verify --renote` fails when the ledger where the branch left main doesn't

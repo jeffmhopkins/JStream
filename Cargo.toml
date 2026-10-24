@@ -71,6 +71,7 @@ jstream-audio = { path = "crates/jstream-audio" }
 jstream-browser = { path = "crates/jstream-browser" }
 jstream-control = { path = "crates/jstream-control" }
 jstream-core = { path = "crates/jstream-core" }
+jstream-crash = { path = "crates/jstream-crash" }
 jstream-effects = { path = "crates/jstream-effects" }
 jstream-encode = { path = "crates/jstream-encode" }
 jstream-graph = { path = "crates/jstream-graph" }
@@ -280,6 +281,16 @@ panic = "unwind"   # R-UNSAFE-005: catch_unwind at FFI boundaries needs unwindin
 [profile.dev.package.jstream-audio]
 opt-level = 3
 
+# The web UI's debug build (`trunk build` without `--release`, which the UI tests use):
+# `crates/jstream-ui/index.html` picks it with `data-cargo-profile-dev`. Without it, the
+# wasm's name section alone is larger than the server serves a UI file at
+# (`MAX_FILE_BYTES` in `jstream-server`'s `ui.rs`), and every page load gets a 500.
+# The cost: a panic's stack frames in the browser console are unnamed. No DWARF either:
+# trunk drops it unless asked to keep it.
+[profile.ui-dev]
+inherits = "dev"
+debug = false
+strip = "symbols"
 # The AAC encoder likewise: unoptimised, its quantization loops can't keep up with
 # real time in a debug app, and its round-trip tests encode seconds of audio.
 [profile.dev.package.jstream-aac]

@@ -420,6 +420,32 @@ fn shaders_are_checked_against_the_contract() {
             "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> { return p.missing; }\n",
             "line 2:",
         ),
+        // #349: memory a fragment shader has no business holding.
+        (
+            "huge-local",
+            "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n\
+             var a: array<f32, 1000000>;\n    a[0] = 1.0;\n    return src(in.uv) * a[0];\n}\n",
+            "uses a 4000000-byte value",
+        ),
+        (
+            "huge-constructed",
+            "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n\
+             let a = array<f32, 5000>();\n    return src(in.uv) * a[1];\n}\n",
+            "uses a 20000-byte value",
+        ),
+        (
+            "private-total",
+            "var<private> a: array<vec4<f32>, 600>;\nvar<private> b: array<vec4<f32>, 600>;\n\
+             @fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> { return src(in.uv) + a[0] + b[0]; }\n",
+            "declares 19200 bytes of `var<private>` globals",
+        ),
+        (
+            "locals-total",
+            "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n\
+             var a: array<vec4<f32>, 600>;\n    var b: array<vec4<f32>, 600>;\n\
+             return src(in.uv) + a[0] + b[0];\n}\n",
+            "`fs` declares 19200 bytes of local variables",
+        ),
     ];
     for (name, wgsl, expect) in cases {
         let message = error(name, MANIFEST, wgsl);
@@ -431,6 +457,10 @@ fn shaders_are_checked_against_the_contract() {
     let manifest = MANIFEST.replacen(r#"id = "flicker""#, r#"id = "loop""#, 1);
     let message = error("reserved", &manifest, SCANLINES);
     assert!(message.contains("generated `Params`"), "{message}");
+
+    // A lookup table within the limit loads.
+    let table = format!("const LUT = array<vec4<f32>, 256>();\n{SCANLINES}");
+    load("lut-ok", MANIFEST, &table).expect("a 4 KiB table is within MAX_VALUE_BYTES");
 }
 
 #[test]
