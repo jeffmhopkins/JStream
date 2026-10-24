@@ -1020,7 +1020,7 @@ fn Row(
 }
 
 /// A filter's settings, sent one at a time as `filter.set_settings` patches, with each
-/// refusal under its field.
+/// refusal under its field, or in the problem bar once the row has closed.
 #[component]
 fn Editor(
     kind: KindDescriptor,
@@ -1030,6 +1030,7 @@ fn Editor(
     settings: Signal<Settings>,
 ) -> impl IntoView {
     let session = expect_context::<SessionContext>();
+    let studio = expect_context::<Studio>();
     let errors = RwSignal::new(HashMap::<String, String>::new());
     let owner = StoredValue::new(owner);
     let filter_id = StoredValue::new(filter_id);
@@ -1045,9 +1046,14 @@ fn Editor(
             filter_id: filter_id.get_value(),
             patch,
         };
+        // Once the row has closed, the problem bar shows a refusal.
         spawn_local(async move {
-            if let Err(error) = apply(&s, vec![edit], None).await {
-                errors.try_update(|e| _ = e.insert(param, error.to_string()));
+            if let Err(error) = apply(&s, vec![edit], None).await
+                && errors
+                    .try_update(|e| _ = e.insert(param, error.to_string()))
+                    .is_none()
+            {
+                studio.report(&error);
             }
         });
     };

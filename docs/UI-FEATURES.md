@@ -296,6 +296,7 @@ All of it is client-side geometry, sent as `item.set_geometry` edits (`item.set_
 <a id="filters"></a>
 ## Filters
 <!-- @section
+covers = ["crates/jstream-ui/src/panels/filters.rs"]
 -->
 
 Spec: [panels › filters](../design/ui-prototype/spec-panels.md#filters-panel). The protocol
@@ -309,7 +310,7 @@ Outputs panel can pick them (FL-07).
 |---|---|---|---|---|
 | FL-01 | Filters panel | For the selected source: separate Video and Audio chains, count per chain, "No video filters." when empty. | ✅ | The selected item's source, with its type icon, name and "Applies everywhere this source appears, top to bottom."; a reference shows its source's chains, which it shares. Video unless the source is audio-only, audio when it has a mixer channel and isn't a nested scene. With nothing selected: "Nothing selected" and "Select a source to see its filters.", as scenes own no chains yet (FL-06). |
 | FL-02 | Filter rows | Eye toggle, name (struck through when off), summary, caret; drag to reorder within a chain; × removes. | ✅ | `filter.set_enabled`, `filter.reorder` (a pointer drag, as for the tree rows; a drop on the other chain does nothing) and `filter.remove`. The summary follows F6 from the kind's descriptor: a scene input's scene (or "no scene"), a lone number with its unit, else up to two changed numbers or "defaults". The Properties dialog shows the same rows without the caret. |
-| FL-03 | Edit in place or in a dialog | Filters with three settings or fewer expand in place; others open the settings dialog; double-click always does. | ✅ | In place, the kind's settings form in two columns under the row, each change a `filter.set_settings`. A filter just added opens in place. |
+| FL-03 | Edit in place or in a dialog | Filters with three settings or fewer expand in place; others open the settings dialog; double-click always does. | ✅ | In place, the kind's settings form in two columns under the row, each change a `filter.set_settings`; a refusal shows under its field, or in the problem bar once the row has closed. A filter just added opens in place. |
 | FL-04 | Add filter | "+ Add filter…" opens DL-05. | ✅ | Under the chains, and in the Properties dialog. |
 | FL-05 | Settings from descriptors | Each filter's settings come from its kind descriptor ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). | ✅ | The Inspector's form (`properties.rs`) on `kind.describe`'s descriptor. The prototype's catalogue is a wish list; the engine lists gain, noise gate, compressor, limiter and delay, its built-in video filters and effect-pack kinds. A scene setting's select is the form's, listing every scene with None, not F8's "Choose a scene…" over the allowed scenes. |
 | FL-06 | Scene filters | A scene's video chain. | 🔒 | Filter owners are sources only today. |
