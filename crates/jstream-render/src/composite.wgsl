@@ -26,6 +26,7 @@
 // premultiplied after the filter: exact where alpha is 1, a fringe at partly transparent
 // edges. 2: an imported texture of sRGB code values already multiplied by alpha (a
 // browser page), read raw: divided by alpha, decoded, and multiplied by alpha again.
+// 3: an opaque import (a captured frame), decoded by the sampler, its alpha read as 1.
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
@@ -87,7 +88,10 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let uv = clamp(in.uv, in.uv_bounds.xy, in.uv_bounds.zw);
     let c = textureSample(tex, samp, uv);
     var rgb = c.rgb;
-    if in.mode > 1.5 {
+    var alpha = c.a;
+    if in.mode > 2.5 {
+        alpha = 1.0;
+    } else if in.mode > 1.5 {
         // Premultiplied code values: a filtered texel keeps rgb <= a, up to rounding.
         let straight = select(vec3<f32>(0.0), min(c.rgb / c.a, vec3<f32>(1.0)), c.a > 0.0);
         rgb = srgb_to_linear(straight) * c.a;
@@ -100,5 +104,5 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         edge(in.e4, at),
     );
     let coverage = clamp(d + 0.5, 0.0, 1.0);
-    return vec4<f32>(rgb, c.a) * (in.opacity * coverage);
+    return vec4<f32>(rgb, alpha) * (in.opacity * coverage);
 }

@@ -36,7 +36,7 @@ pub fn desktop() -> Option<HostEngine> {
 }
 
 /// What the desktop app says about its virtual camera (the global's `vcam`), if the
-/// page runs in it: `registered`, `not_registered`, `moved` or `off`.
+/// page runs in it: `registered`, `not_registered`, `outdated` or `off`.
 pub fn desktop_vcam() -> Option<String> {
     let global = Reflect::get(&window(), &JsValue::from_str(DESKTOP_GLOBAL)).ok()?;
     Reflect::get(&global, &JsValue::from_str("vcam"))
