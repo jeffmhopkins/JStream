@@ -51,44 +51,54 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `██████████` 100% | 18 | 0 | 0 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `██████████` 97% | 36 | 1 | 0 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 92% | 36 | 1 | 2 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
-| [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `█████████░` 92% | 23 | 0 | 2 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 5 | 1 | 7 |
+| [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 1 | 0 |
+| [M2: UI](ROADMAP.md#m2) | `████████░░` 82% | 23 | 2 | 3 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 31% | 5 | 2 | 9 |
 
-109 of 120 items are merged; 12 of those still wait on a run on Windows hardware.
+110 of 130 items are merged; 13 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 23 items, by next step: 🔨 build 11, 🧪 Windows run 11, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 33 items, by next step: 🔨 build 21, 🧪 Windows run 10, 👤 maintainer 2</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
 | ID | Item | Milestone | Needs, in order | Note | PRs |
 |---|---|---|---|---|---|
-| A3 | Daemon goes live on Windows | M1a | 🧪 Windows run | Windows 11 Pro N run (#333) | #226 |
-| A4 | Go-live runbook and smoke | M1a | 🧪 Windows run | smoke script run | #234 |
+| A3 | Daemon goes live on Windows | M1a | 🧪 Windows run | Windows 11 Pro N run (#333); the maintainer chose not to set up an N-edition VM, so #333 stays open to keep the gap on record | #226 |
+| A4 | Go-live runbook and smoke | M1a | 🧪 Windows run | the go-live smoke and graceful stop (item 11 of the Windows hardware pass); its live YouTube steps are #337 | #234 |
 | A6b | Daemon YouTube wiring | M1a | 👤 maintainer, then 🧪 Windows run | #312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
 | C4c | Webcam source (CPU path, MJPEG on Windows, paired audio) | M1b | 🧪 Windows run | landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam) | #654, #658, #726 |
 | C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
-| C3 | Display and window capture sources | M1b | 🧪 Windows run | #365 landed with wave/m1-2 (#545); Windows run #378 | #365 |
-| C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
+| C8 | Browser source (CEF) | M1b | 🔨 build, then 🧪 Windows run | the Windows runs #335 (steps 1 to 4) and #336 passed; the browser page checks (#341, #347) are still to run; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
 | V0 | Video filter chain runtime | M1b | 🔨 build | part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, and #730 uploads LUT tables directly; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #730 |
+| V4 | Scene filter chains and item effects | M1b | 🔨 build | ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529) |  |
+| D9 | Audio monitoring: a bus's monitor device and tap point | M1b | 🔨 build | ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it |  |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
 | G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
-| G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
+| G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | its Windows run passed (#390) | #316 |
+| H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | M1d | 🧪 Windows run | #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); #738 (#733) is in wave/m1-4; Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667 | #437, #568, #569, #580, #604, #708 |
+| Q6 | Threat-model follow-ups | M1d | 🔨 build, then 🌊 its wave lands, then 🧪 Windows run | from the Q5 threat model: user-only token, devices and log files (#548) and crash reports (#662) on Windows, browser pages refused every permission and local-network requests decided by policy (#535, #549, #714, #729), the vcam's owner checks (#540), local redacted desktop crash reports (#552) and a warning on cleartext rtmp:// (#555) landed with wave/m1-3 (#754); in review: the audit log and collection file user-only (#574, for #547), the rtmp:// flag in output.status (#653, for #562) and the CLAP IPC hardening (#573, for #351); open: #344, #347, #349 (with X1) and #353; Windows runs #546 and #557 | #535, #540, #548, #549, #552, #555, #662, #714, #729, #573, #574, #653 |
+| U4p | Live preview on canvas | M2 | 🧪 Windows run | the canvas's H.264 preview path on Windows (#380) | #302 |
+| T1 | Studio mode and transitions | M2 | 🧪 Windows run | #260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029) | #260 |
 | E2b | Privacy screen and encoder sharing key | M2 | 🔨 build | on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
-| C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
-| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754) | #319 |
-| F6 | HEVC and AV1 encode | M3 | 🧪 Windows run | #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
+| C9 | Media file source | M2 | 🔨 build, then 🧪 Windows run | the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun | #245, #322 |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, #702), is in review into wave/m1-4 | #319, #720 |
+| U6 | Desktop UI as a 1:1 match of the UI prototype | M2 | 🔨 build, then 🌊 its wave lands, then 👤 maintainer | #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747) are in wave/m1-4; the Scenes and Scene objects panels (#770) are in review; the filters, mixer and keyboard batches are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770 |
+| B12 | Source sizes as runtime state (source.sizes) | M2 | 🔨 build | ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement |  |
+| C2b | Crisp text at any item scale | M2 | 🔨 build | #749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR |  |
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🔨 build | effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build | #359, #368 |
-| Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
-| CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
+| Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696) are in review into wave/m1-4; signed-in features need the OAuth client (ADR-0058) | #363, #375, #594, #696 |
+| CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), is a draft into wave/m3-3, and the IPC hardening (#573, for #351) is in review; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407, #488, #573 |
 | WA1 | WASM automation plugins | M3 | 🔨 build, then 🌊 its wave lands | WASM host #486 landed with wave/m3-2 (#663); the wire half #642 is in review into wave/m3-3; the engine side to build | #486, #642 |
 | MAC1 | macOS platform crate | M3 | 🔨 build | ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663) | #511, #513, #533, #543, #554, #566, #570, #583, #586 |
 | LNX1 | Linux codec path and platform crate | M3 | 🔨 build | ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); the rest of the codec path to build | #481, #490, #509, #510 |
 | LNX2 | Linux OpenH264 download (ADR-0061) | M3 | 🔨 build | store, check, loader and encoder (#536, landed with wave/m3-2, #663); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come | #536 |
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | M3 | 🔨 build | patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518 |
+| F6b | Choose HEVC or AV1 from a client | M3 | 🔨 build | F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet |  |
+| F7 | Direct NVENC and AMF encoders, if measurements justify them | M3 | 🔨 build | ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
+| CL2 | A too_large error for oversized plugin state | M3 | 👤 maintainer, then 🔨 build | ROADMAP M3 and #102: a maintainer-tier ADR superseding ADR-0037's state clause adds a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection |  |
 
 </details>
 
@@ -124,9 +134,9 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A2a | Credential store (Windows) | ✅ merged | #141 |
 | A2b | Stream key actions | ✅ merged | #142 |
 | A5 | Outputs in CLI and mock | ✅ merged | #166 |
-| A3 | Daemon goes live on Windows | 🧪 merged, Windows run pending: Windows 11 Pro N run (#333) | #226 |
+| A3 | Daemon goes live on Windows | 🧪 merged, Windows run pending: Windows 11 Pro N run (#333); the maintainer chose not to set up an N-edition VM, so #333 stays open to keep the gap on record | #226 |
 | A6 | Daemon --collection and audit log | ✅ merged | #232 |
-| A4 | Go-live runbook and smoke | 🧪 merged, Windows run pending: smoke script run | #234 |
+| A4 | Go-live runbook and smoke | 🧪 merged, Windows run pending: the go-live smoke and graceful stop (item 11 of the Windows hardware pass); its live YouTube steps are #337 | #234 |
 | E3a | GPU capture frames | ✅ merged | #173 |
 | E3b | Render takes GPU frames | ✅ merged | #219 |
 | Y1 | jstream-youtube crate | ✅ merged | #167 |
@@ -138,7 +148,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M1b</b> Scenes and mixing: 36 of 37 merged</summary>
+<summary><b>M1b</b> Scenes and mixing: 36 of 39 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -162,8 +172,8 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C1b | Sources render live | ✅ merged | #222 |
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
-| C3 | Display and window capture sources | 🧪 merged, Windows run pending: #365 landed with wave/m1-2 (#545); Windows run #378 | #365 |
-| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341, #335, #336 | #283, #289, #298, #326 |
+| C3 | Display and window capture sources | ✅ merged: #365 landed with wave/m1-2 (#545); its Windows run passed (#378) | #365 |
+| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: the Windows runs #335 (steps 1 to 4) and #336 passed; the browser page checks (#341, #347) are still to run; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |
@@ -179,6 +189,8 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F2b | Record output kind | ✅ merged | #170 |
 | F3 | Encoder profiles and sharing | ✅ merged | #208 |
 | I2 | Live values | ✅ merged | #244 |
+| V4 | Scene filter chains and item effects | ⏳ planned: ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529) |  |
+| D9 | Audio monitoring: a bus's monitor device and tap point | ⏳ planned: ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it |  |
 
 </details>
 
@@ -192,13 +204,13 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
 | G3b | VirtualCam output kind | ✅ merged | #213, #297 |
 | G3c | --register-vcam | 🧪 merged, Windows run pending: Windows run (#563) | #235, #565 |
-| G3d | Virtual camera in the UI and the desktop app | 🧪 merged, Windows run pending: Windows run (#390) | #316 |
+| G3d | Virtual camera in the UI and the desktop app | 🧪 merged, Windows run pending: its Windows run passed (#390) | #316 |
 | P1 | Portable Windows zip | ✅ merged | #271 |
 
 </details>
 
 <details>
-<summary><b>M1d</b> Hardening: 9 of 9 merged</summary>
+<summary><b>M1d</b> Hardening: 10 of 11 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -211,11 +223,13 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F4 | Keyframe on demand | ✅ merged | #146 |
 | Q1 | Fuzz and property tests | ✅ merged | #277 |
 | Q2 | Headless end-to-end test | ✅ merged | #269 |
+| H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | 🧪 merged, Windows run pending: #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); #738 (#733) is in wave/m1-4; Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667 | #437, #568, #569, #580, #604, #708 |
+| Q6 | Threat-model follow-ups | 🔍 in review: from the Q5 threat model: user-only token, devices and log files (#548) and crash reports (#662) on Windows, browser pages refused every permission and local-network requests decided by policy (#535, #549, #714, #729), the vcam's owner checks (#540), local redacted desktop crash reports (#552) and a warning on cleartext rtmp:// (#555) landed with wave/m1-3 (#754); in review: the audit log and collection file user-only (#574, for #547), the rtmp:// flag in output.status (#653, for #562) and the CLAP IPC hardening (#573, for #351); open: #344, #347, #349 (with X1) and #353; Windows runs #546 and #557 | #535, #540, #548, #549, #552, #555, #662, #714, #729, #573, #574, #653 |
 
 </details>
 
 <details>
-<summary><b>M2</b> UI: 23 of 25 merged</summary>
+<summary><b>M2</b> UI: 23 of 28 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -227,44 +241,50 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
 | U3c | Mixer panel | ✅ merged | #308 |
 | U4 | Canvas editing | ✅ merged | #255, #302 |
-| U4p | Live preview on canvas | ✅ merged | #302 |
+| U4p | Live preview on canvas | 🧪 merged, Windows run pending: the canvas's H.264 preview path on Windows (#380) | #302 |
 | U1 | Preview stream | ✅ merged | #251 |
 | U5 | Tauri desktop app | ✅ merged | #258 |
 | Q3 | UI end-to-end tests | ✅ merged | #309 |
 | Q4 | Performance benchmarks | ✅ merged | #361 |
 | Q5 | Threat model | ✅ merged | #358 |
-| T1 | Studio mode and transitions | ✅ merged: #260 landed with wave/m1-3 (#754) | #260 |
+| T1 | Studio mode and transitions | 🧪 merged, Windows run pending: #260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029) | #260 |
 | T1u | Studio-mode UI | ✅ merged: #304 landed with wave/m1-3 (#754) | #304 |
 | E2 | Video mixes | ✅ merged | #259 |
 | E2b | Privacy screen and encoder sharing key | ⏳ planned: on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
 | D8 | Master and output audio chains | ✅ merged | #249, #303 |
 | D8p | Audio chain protocol fields | ✅ merged | #303 |
-| C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
+| C9 | Media file source | 🧪 merged, Windows run pending: the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
 | B11 | Folders and labels | ✅ merged: #323 landed with wave/m1-3 (#754) | #323 |
-| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned: hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754) | #319 |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | 🔍 in review: hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, #702), is in review into wave/m1-4 | #319, #720 |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
+| U6 | Desktop UI as a 1:1 match of the UI prototype | 🔍 in review: #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747) are in wave/m1-4; the Scenes and Scene objects panels (#770) are in review; the filters, mixer and keyboard batches are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770 |
+| B12 | Source sizes as runtime state (source.sizes) | ⏳ planned: ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement |  |
+| C2b | Crisp text at any item scale | ⏳ planned: #749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR |  |
 
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 5 of 13 merged</summary>
+<summary><b>M3</b> Depth and reach: 5 of 16 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ✅ merged | #325 |
 | E3d | Composite to NV12 on the GPU | ✅ merged | #280 |
-| F6 | HEVC and AV1 encode | 🧪 merged, Windows run pending: #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
+| F6 | HEVC and AV1 encode | ✅ merged: #364 landed with wave/m1-2 (#545); its Windows run passed (#366); choosing HEVC or AV1 from a client is F6b | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build | #359, #368 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
-| Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned: chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
-| CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
+| Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696) are in review into wave/m1-4; signed-in features need the OAuth client (ADR-0058) | #363, #375, #594, #696 |
+| CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), is a draft into wave/m3-3, and the IPC hardening (#573, for #351) is in review; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407, #488, #573 |
 | WA1 | WASM automation plugins | 🔍 in review: WASM host #486 landed with wave/m3-2 (#663); the wire half #642 is in review into wave/m3-3; the engine side to build | #486, #642 |
 | MAC1 | macOS platform crate | ⏳ planned: ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663) | #511, #513, #533, #543, #554, #566, #570, #583, #586 |
 | LNX1 | Linux codec path and platform crate | ⏳ planned: ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); the rest of the codec path to build | #481, #490, #509, #510 |
 | LNX2 | Linux OpenH264 download (ADR-0061) | ⏳ planned: store, check, loader and encoder (#536, landed with wave/m3-2, #663); downloading stays off until the pin's two SHA-256 values are recorded from Cisco's server, and the UI's download offer, with Cisco's notice re-read, is still to come | #536 |
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | ⏳ planned: patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS and intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518 |
+| F6b | Choose HEVC or AV1 from a client | ⏳ planned: F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet |  |
+| F7 | Direct NVENC and AMF encoders, if measurements justify them | ⏳ planned: ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
+| CL2 | A too_large error for oversized plugin state | ⏳ planned: ROADMAP M3 and #102: a maintainer-tier ADR superseding ADR-0037's state clause adds a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection |  |
 
 </details>
 <!-- @generated end progress -->
