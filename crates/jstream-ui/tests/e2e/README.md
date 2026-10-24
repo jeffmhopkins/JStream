@@ -42,7 +42,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   of; `showPanel` makes sure a docked panel's tab is the shown one; `describeKinds`
   routes the page's WebSocket so that `kind.list` and `kind.describe` answer for the
   descriptors a test gives, which the mock engine can't, and passes every other message
-  on.
+  on; given `refuse`, it also holds back the requests that function names and refuses
+  them, as `invalid_argument`, when the test calls the `release()` it returns.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -145,7 +146,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   edits), the Add filter dialog offering
   only the video kinds under their group, its search, the picked kind's details, and
   Add as one edit, the new filter opening in place, where a changed setting is one more
-  edit and updates the summary.
+  edit and updates the summary. With one setting refused late: a refusal that arrives
+  after its row was closed, and one after the Filter settings dialog was cancelled,
+  each in the problem bar.
 - **Transform** (`transform.spec.js`, on the Transform tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

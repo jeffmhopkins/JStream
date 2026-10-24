@@ -1020,7 +1020,7 @@ fn Row(
 }
 
 /// A filter's settings, sent one at a time as `filter.set_settings` patches, with each
-/// refusal under its field.
+/// refusal under its field, or in the problem bar once the row has closed.
 #[component]
 fn Editor(
     kind: KindDescriptor,
