@@ -1,0 +1,2016 @@
+---
+source: crates/jstream-core/src/kinds.rs
+---
+[
+  {
+    "kind_id": "app_audio",
+    "category": "source",
+    "name": "Application audio",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "exe",
+        "type": "string",
+        "multiline": false,
+        "max_len": 260,
+        "default": "",
+        "label": "Application",
+        "description": "The application's executable file name, such as game.exe. It is found again when the application restarts.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "apply_lut",
+    "category": "video_filter",
+    "name": "Apply LUT",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "lut",
+        "type": "asset",
+        "accept": [
+          "cube",
+          "png"
+        ],
+        "default": null,
+        "label": "LUT file",
+        "live": true
+      },
+      {
+        "id": "amount",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "label": "Amount",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "aspect_ratio",
+    "category": "video_filter",
+    "name": "Aspect ratio",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "ratio",
+        "type": "enum",
+        "options": [
+          {
+            "value": "16:9",
+            "label": "16:9 (widescreen)"
+          },
+          {
+            "value": "9:16",
+            "label": "9:16 (vertical)"
+          },
+          {
+            "value": "4:3",
+            "label": "4:3 (standard)"
+          },
+          {
+            "value": "1:1",
+            "label": "1:1 (square)"
+          },
+          {
+            "value": "21:9",
+            "label": "21:9 (ultrawide)"
+          },
+          {
+            "value": "custom",
+            "label": "Custom"
+          }
+        ],
+        "default": "16:9",
+        "label": "Ratio",
+        "description": "The shape to give the frame, width:height.",
+        "live": true
+      },
+      {
+        "id": "custom_width",
+        "type": "int",
+        "min": 1,
+        "max": 10000,
+        "default": 4,
+        "label": "Custom width",
+        "description": "The width part of a custom ratio.",
+        "visible_if": {
+          "param": "ratio",
+          "equals": "custom"
+        },
+        "live": true
+      },
+      {
+        "id": "custom_height",
+        "type": "int",
+        "min": 1,
+        "max": 10000,
+        "default": 5,
+        "label": "Custom height",
+        "description": "The height part of a custom ratio.",
+        "visible_if": {
+          "param": "ratio",
+          "equals": "custom"
+        },
+        "live": true
+      },
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "crop",
+            "label": "Crop to fill"
+          },
+          {
+            "value": "pad",
+            "label": "Pad (letterbox or pillarbox)"
+          },
+          {
+            "value": "stretch",
+            "label": "Stretch"
+          }
+        ],
+        "default": "crop",
+        "label": "Mode",
+        "description": "Crop cuts the long side down, pad adds bars to the short side, stretch resamples the whole frame.",
+        "live": true
+      },
+      {
+        "id": "anchor",
+        "type": "enum",
+        "options": [
+          {
+            "value": "center",
+            "label": "Centre"
+          },
+          {
+            "value": "top",
+            "label": "Top"
+          },
+          {
+            "value": "bottom",
+            "label": "Bottom"
+          },
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          },
+          {
+            "value": "top_left",
+            "label": "Top left"
+          },
+          {
+            "value": "top_right",
+            "label": "Top right"
+          },
+          {
+            "value": "bottom_left",
+            "label": "Bottom left"
+          },
+          {
+            "value": "bottom_right",
+            "label": "Bottom right"
+          }
+        ],
+        "default": "center",
+        "label": "Anchor",
+        "description": "Crop: the part of the frame kept. Pad: where the frame sits among the bars. Unused by stretch.",
+        "live": true
+      },
+      {
+        "id": "pad_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Pad colour",
+        "description": "The colour of the bars; may be transparent.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "pad"
+        },
+        "live": true
+      },
+      {
+        "id": "resampling",
+        "type": "enum",
+        "options": [
+          {
+            "value": "bilinear",
+            "label": "Bilinear"
+          },
+          {
+            "value": "bicubic",
+            "label": "Bicubic"
+          },
+          {
+            "value": "lanczos",
+            "label": "Lanczos"
+          }
+        ],
+        "default": "bicubic",
+        "label": "Resampling",
+        "description": "How stretch scales: bilinear, bicubic (Catmull-Rom) or Lanczos-3.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "stretch"
+        },
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "audio_input",
+    "category": "source",
+    "name": "Audio input",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "device",
+        "type": "string",
+        "multiline": false,
+        "max_len": 512,
+        "default": "",
+        "label": "Device",
+        "description": "The input device's ID. Empty follows the system's default input.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "blur",
+    "category": "video_filter",
+    "name": "Blur",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Radius",
+        "description": "How far each pixel spreads, in source pixels. Large radii blur a downsampled copy, so the cost stays bounded.",
+        "live": true
+      },
+      {
+        "id": "area",
+        "type": "enum",
+        "options": [
+          {
+            "value": "whole",
+            "label": "Whole frame"
+          },
+          {
+            "value": "inside",
+            "label": "Inside the rectangle"
+          },
+          {
+            "value": "outside",
+            "label": "Outside the rectangle"
+          }
+        ],
+        "default": "whole",
+        "label": "Area",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_x",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.25,
+        "label": "Left",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_y",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.25,
+        "label": "Top",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Width",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_height",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Height",
+        "group": "Area",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "browser",
+    "category": "source",
+    "name": "Browser",
+    "version": 1,
+    "video": true,
+    "audio": true,
+    "params": [
+      {
+        "id": "url",
+        "type": "string",
+        "multiline": false,
+        "max_len": 8192,
+        "default": "",
+        "label": "URL",
+        "description": "The page's address, http:// or https://. Ignored when a local file is set.",
+        "live": false
+      },
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "html",
+          "htm"
+        ],
+        "default": null,
+        "label": "Local file",
+        "description": "A local HTML file to show instead of a URL. The page can load files beside it.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1920,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1080,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "fps",
+        "type": "int",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "unit": "fps",
+        "default": 30,
+        "label": "Frame rate",
+        "description": "The most frames a second the page paints. It paints less when nothing changes.",
+        "live": false
+      },
+      {
+        "id": "css",
+        "type": "string",
+        "multiline": true,
+        "max_len": 65536,
+        "default": "body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }",
+        "label": "Custom CSS",
+        "description": "CSS added to the page after it loads. The default makes the page's background transparent.",
+        "live": true
+      },
+      {
+        "id": "local_network",
+        "type": "bool",
+        "default": false,
+        "label": "Allow local network",
+        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. A local file or a page on the local network may always.",
+        "advanced": true,
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "chat_message",
+    "category": "source",
+    "name": "Chat message",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "font",
+        "type": "asset",
+        "accept": [
+          "ttf",
+          "otf",
+          "ttc"
+        ],
+        "default": null,
+        "label": "Font",
+        "description": "A TrueType or OpenType font. None uses the bundled Roboto, which covers Latin text only.",
+        "live": false
+      },
+      {
+        "id": "size",
+        "type": "float",
+        "min": 1.0,
+        "max": 256.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 32.0,
+        "label": "Size",
+        "live": true
+      },
+      {
+        "id": "author_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffd54fff",
+        "label": "Author colour",
+        "live": true
+      },
+      {
+        "id": "text_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Text colour",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000b3",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "padding",
+        "type": "int",
+        "min": 0,
+        "max": 1024,
+        "step": 1,
+        "unit": "px",
+        "default": 16,
+        "label": "Padding",
+        "live": true
+      },
+      {
+        "id": "max_width",
+        "type": "int",
+        "min": 0,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 600,
+        "label": "Maximum width",
+        "description": "Lines wrap at this width. 0 doesn't wrap.",
+        "live": true
+      },
+      {
+        "id": "outline_width",
+        "type": "int",
+        "min": 0,
+        "max": 64,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Outline width",
+        "live": true
+      },
+      {
+        "id": "outline_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Outline colour",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "chroma_key",
+    "category": "video_filter",
+    "name": "Chroma key",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "key_color_type",
+        "type": "enum",
+        "options": [
+          {
+            "value": "green",
+            "label": "Green"
+          },
+          {
+            "value": "blue",
+            "label": "Blue"
+          },
+          {
+            "value": "magenta",
+            "label": "Magenta"
+          },
+          {
+            "value": "custom",
+            "label": "Custom"
+          }
+        ],
+        "default": "green",
+        "label": "Key color type",
+        "live": true
+      },
+      {
+        "id": "key_color",
+        "type": "color",
+        "alpha": false,
+        "default": "#00ff00",
+        "label": "Key color",
+        "visible_if": {
+          "param": "key_color_type",
+          "equals": "custom"
+        },
+        "live": true
+      },
+      {
+        "id": "similarity",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 400,
+        "label": "Similarity",
+        "description": "How far in chroma from the key colour is removed, in thousandths.",
+        "live": true
+      },
+      {
+        "id": "smoothness",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 80,
+        "label": "Smoothness",
+        "description": "How far past the similarity the edge fades back in, in thousandths.",
+        "live": true
+      },
+      {
+        "id": "spill",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 100,
+        "label": "Key color spill reduction",
+        "description": "How far past the similarity kept colour is desaturated, removing the key colour's cast from edges.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "color",
+    "category": "source",
+    "name": "Colour",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Colour",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1920,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1080,
+        "label": "Height",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "color_correction",
+    "category": "video_filter",
+    "name": "Color correction",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "gamma",
+        "type": "float",
+        "min": -3.0,
+        "max": 3.0,
+        "default": 0.0,
+        "label": "Gamma",
+        "description": "Above 0 brightens the mid-tones, below 0 darkens them; black and white stay.",
+        "live": true
+      },
+      {
+        "id": "contrast",
+        "type": "float",
+        "min": -4.0,
+        "max": 4.0,
+        "default": 0.0,
+        "label": "Contrast",
+        "description": "0 is unchanged, -1 is flat grey; below -1 inverts.",
+        "live": true
+      },
+      {
+        "id": "brightness",
+        "type": "float",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Brightness",
+        "description": "Added to every channel.",
+        "live": true
+      },
+      {
+        "id": "saturation",
+        "type": "float",
+        "min": -1.0,
+        "max": 5.0,
+        "default": 0.0,
+        "label": "Saturation",
+        "description": "0 is unchanged, -1 is greyscale.",
+        "live": true
+      },
+      {
+        "id": "hue_shift",
+        "type": "float",
+        "min": -180.0,
+        "max": 180.0,
+        "unit": "°",
+        "default": 0.0,
+        "label": "Hue shift",
+        "description": "Rotates every colour around the grey axis; 120° turns red green.",
+        "live": true
+      },
+      {
+        "id": "multiply",
+        "type": "color",
+        "alpha": false,
+        "default": "#ffffff",
+        "label": "Multiply color",
+        "description": "Multiplies each channel; white is unchanged. Sepia is saturation -1 times a warm colour.",
+        "live": true
+      },
+      {
+        "id": "opacity",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "%",
+        "default": 100.0,
+        "label": "Opacity",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "color_key",
+    "category": "video_filter",
+    "name": "Color key",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "key_color",
+        "type": "color",
+        "alpha": false,
+        "default": "#00ff00",
+        "label": "Key color",
+        "live": true
+      },
+      {
+        "id": "similarity",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 80,
+        "label": "Similarity",
+        "description": "How far in RGB from the key colour is removed, in thousandths.",
+        "live": true
+      },
+      {
+        "id": "smoothness",
+        "type": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 50,
+        "label": "Smoothness",
+        "description": "How far past the similarity the edge fades back in, in thousandths.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "compressor",
+    "category": "audio_filter",
+    "name": "Compressor",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "threshold_db",
+        "type": "float",
+        "min": -60.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -18.0,
+        "label": "Threshold",
+        "live": true
+      },
+      {
+        "id": "ratio",
+        "type": "float",
+        "min": 1.0,
+        "max": 100.0,
+        "unit": ":1",
+        "default": 10.0,
+        "label": "Ratio",
+        "description": "Input dB over the threshold per output dB. 100 is a limiter's curve.",
+        "live": true
+      },
+      {
+        "id": "knee_db",
+        "type": "float",
+        "min": 0.0,
+        "max": 24.0,
+        "unit": "dB",
+        "default": 6.0,
+        "label": "Knee",
+        "live": true
+      },
+      {
+        "id": "attack_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 500.0,
+        "unit": "ms",
+        "default": 6.0,
+        "label": "Attack",
+        "live": true
+      },
+      {
+        "id": "release_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 60.0,
+        "label": "Release",
+        "live": true
+      },
+      {
+        "id": "makeup_db",
+        "type": "float",
+        "min": 0.0,
+        "max": 24.0,
+        "unit": "dB",
+        "default": 0.0,
+        "label": "Makeup gain",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "delay",
+    "category": "audio_filter",
+    "name": "Delay",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "delay_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 0.0,
+        "label": "Delay",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "desktop_audio",
+    "category": "source",
+    "name": "Desktop audio",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": []
+  },
+  {
+    "kind_id": "display",
+    "category": "source",
+    "name": "Display capture",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "target",
+        "type": "string",
+        "multiline": false,
+        "max_len": 1024,
+        "default": "",
+        "label": "Display",
+        "description": "The ID of the display to capture, as `capture.targets` lists it. Empty captures the primary display.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "drop_shadow",
+    "category": "video_filter",
+    "name": "Drop shadow",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000b3",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "offset_x",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Offset X",
+        "live": true
+      },
+      {
+        "id": "offset_y",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Offset Y",
+        "live": true
+      },
+      {
+        "id": "blur",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Blur",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "gain",
+    "category": "audio_filter",
+    "name": "Gain",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "gain_db",
+        "type": "float",
+        "min": -96.0,
+        "max": 24.0,
+        "unit": "dB",
+        "default": 0.0,
+        "label": "Gain",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "glow",
+    "category": "video_filter",
+    "name": "Glow",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Radius",
+        "live": true
+      },
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "label": "Strength",
+        "description": "Multiplies the glow's opacity before it is clamped, so values above 1 widen its bright core.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "image",
+    "category": "source",
+    "name": "Image",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif"
+        ],
+        "default": null,
+        "label": "Image file",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "image_mask",
+    "category": "video_filter",
+    "name": "Image mask",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "image",
+        "type": "asset",
+        "accept": [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif"
+        ],
+        "default": null,
+        "label": "Mask image",
+        "live": true
+      },
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "alpha",
+            "label": "Alpha mask"
+          },
+          {
+            "value": "luma",
+            "label": "Luma mask"
+          }
+        ],
+        "default": "alpha",
+        "label": "Mode",
+        "live": true
+      },
+      {
+        "id": "invert",
+        "type": "bool",
+        "default": false,
+        "label": "Invert",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "limiter",
+    "category": "audio_filter",
+    "name": "Limiter",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "ceiling_db",
+        "type": "float",
+        "min": -30.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -1.0,
+        "label": "Ceiling",
+        "live": true
+      },
+      {
+        "id": "release_ms",
+        "type": "float",
+        "min": 1.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 60.0,
+        "label": "Release",
+        "live": true
+      },
+      {
+        "id": "lookahead_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 20.0,
+        "unit": "ms",
+        "default": 5.0,
+        "label": "Look-ahead",
+        "description": "How far ahead it looks, which is also the delay it adds. Changing it rebuilds the filter.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "luma_key",
+    "category": "video_filter",
+    "name": "Luma key",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "luma_max",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "label": "Luma max",
+        "description": "Brighter than this is removed.",
+        "live": true
+      },
+      {
+        "id": "luma_max_smooth",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Luma max smooth",
+        "live": true
+      },
+      {
+        "id": "luma_min",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Luma min",
+        "description": "Darker than this is removed.",
+        "live": true
+      },
+      {
+        "id": "luma_min_smooth",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Luma min smooth",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "media",
+    "category": "source",
+    "name": "Media file",
+    "version": 1,
+    "video": true,
+    "audio": true,
+    "params": [
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "mp4",
+          "mkv",
+          "mov",
+          "webm",
+          "mp3",
+          "m4a",
+          "wav",
+          "flac",
+          "ogg"
+        ],
+        "default": null,
+        "label": "Media file",
+        "description": "A video or audio file the platform can play. Its sound plays while the program shows it, at speed 1.",
+        "live": false
+      },
+      {
+        "id": "loop",
+        "type": "bool",
+        "default": true,
+        "label": "Loop",
+        "live": true
+      },
+      {
+        "id": "speed",
+        "type": "float",
+        "min": 0.25,
+        "max": 4.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Speed",
+        "description": "1 is normal speed.",
+        "live": true
+      },
+      {
+        "id": "restart_on_show",
+        "type": "bool",
+        "default": true,
+        "label": "Restart when shown",
+        "description": "Plays from the start each time the program shows it again.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "noise_gate",
+    "category": "audio_filter",
+    "name": "Noise gate",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "open_threshold_db",
+        "type": "float",
+        "min": -96.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -26.0,
+        "label": "Open threshold",
+        "live": true
+      },
+      {
+        "id": "close_threshold_db",
+        "type": "float",
+        "min": -96.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -32.0,
+        "label": "Close threshold",
+        "description": "Where an open gate starts to close. Above the open threshold, it is the open threshold.",
+        "live": true
+      },
+      {
+        "id": "attack_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 1000.0,
+        "unit": "ms",
+        "default": 25.0,
+        "label": "Attack",
+        "live": true
+      },
+      {
+        "id": "hold_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 200.0,
+        "label": "Hold",
+        "live": true
+      },
+      {
+        "id": "release_ms",
+        "type": "float",
+        "min": 0.0,
+        "max": 5000.0,
+        "unit": "ms",
+        "default": 150.0,
+        "label": "Release",
+        "live": true
+      },
+      {
+        "id": "range_db",
+        "type": "float",
+        "min": -96.0,
+        "max": 0.0,
+        "unit": "dB",
+        "default": -96.0,
+        "label": "Range",
+        "description": "The level while closed. −96 dB is silence.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "outline",
+    "category": "video_filter",
+    "name": "Outline",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "width",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 4.0,
+        "label": "Width",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "position",
+        "type": "enum",
+        "options": [
+          {
+            "value": "outside",
+            "label": "Outside"
+          },
+          {
+            "value": "inside",
+            "label": "Inside"
+          }
+        ],
+        "default": "outside",
+        "label": "Position",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "pixelate",
+    "category": "video_filter",
+    "name": "Pixelate",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "block_size",
+        "type": "int",
+        "min": 1,
+        "max": 256,
+        "unit": "px",
+        "default": 16,
+        "label": "Block size",
+        "live": true
+      },
+      {
+        "id": "area",
+        "type": "enum",
+        "options": [
+          {
+            "value": "whole",
+            "label": "Whole frame"
+          },
+          {
+            "value": "inside",
+            "label": "Inside the rectangle"
+          },
+          {
+            "value": "outside",
+            "label": "Outside the rectangle"
+          }
+        ],
+        "default": "whole",
+        "label": "Area",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_x",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.25,
+        "label": "Left",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_y",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.25,
+        "label": "Top",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Width",
+        "group": "Area",
+        "live": true
+      },
+      {
+        "id": "area_height",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Height",
+        "group": "Area",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "rounded_corners",
+    "category": "video_filter",
+    "name": "Rounded corners",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Corner radius",
+        "description": "In source pixels. Past half the shorter side it stays at half.",
+        "live": true
+      },
+      {
+        "id": "border_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 500.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Border width",
+        "description": "Drawn inside the frame, over the picture. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "border_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Border color",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "scene_mask",
+    "category": "video_filter",
+    "name": "Scene mask",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "scene",
+        "type": "scene",
+        "default": null,
+        "label": "Mask scene",
+        "live": true
+      },
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "alpha",
+            "label": "Alpha mask"
+          },
+          {
+            "value": "luma",
+            "label": "Luma matte"
+          },
+          {
+            "value": "clip",
+            "label": "Clip to scene"
+          }
+        ],
+        "default": "alpha",
+        "label": "Mode",
+        "live": true
+      },
+      {
+        "id": "invert",
+        "type": "bool",
+        "default": false,
+        "label": "Invert",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "scroll",
+    "category": "video_filter",
+    "name": "Scroll",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "speed_x",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 0.0,
+        "label": "Horizontal speed",
+        "description": "Positive moves the picture right.",
+        "live": true
+      },
+      {
+        "id": "speed_y",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 0.0,
+        "label": "Vertical speed",
+        "description": "Positive moves the picture down.",
+        "live": true
+      },
+      {
+        "id": "loop_x",
+        "type": "bool",
+        "default": true,
+        "label": "Loop horizontally",
+        "description": "Wrap the picture around. Off, the area it leaves is transparent.",
+        "live": true
+      },
+      {
+        "id": "loop_y",
+        "type": "bool",
+        "default": true,
+        "label": "Loop vertically",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "sharpen",
+    "category": "video_filter",
+    "name": "Sharpen",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "amount",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 0.5,
+        "label": "Amount",
+        "description": "How far each pixel is pushed away from its neighbourhood's mean. 0 is unchanged.",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "int",
+        "min": 1,
+        "max": 3,
+        "unit": "px",
+        "default": 1,
+        "label": "Radius",
+        "description": "The neighbourhood's half-width. Larger sharpens coarser detail.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "spectrum",
+    "category": "source",
+    "name": "Audio spectrum",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "audio",
+        "type": "bus",
+        "default": null,
+        "label": "Audio",
+        "description": "What it draws. None draws the program mix: the master after its filters, as the outputs hear it. A bus draws that bus after its fader, before the master's filters. Either is silent while no output runs.",
+        "live": false
+      },
+      {
+        "id": "audio_source",
+        "type": "source",
+        "media": "audio",
+        "default": null,
+        "label": "Audio source",
+        "description": "A source to draw instead of the audio above: that source after its own filters, fader, mute and follow, before any bus, as the audience hears it. Silent while that source isn't playing into the mixer, and while no output runs.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 640,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 240,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Colour",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "bars",
+        "type": "int",
+        "min": 1,
+        "max": 1024,
+        "step": 1,
+        "default": 64,
+        "label": "Bars",
+        "live": true
+      },
+      {
+        "id": "smoothing",
+        "type": "float",
+        "min": 0.0,
+        "max": 0.99,
+        "step": 0.01,
+        "default": 0.7,
+        "label": "Smoothing",
+        "description": "How slowly a bar falls back: 0 follows the audio exactly.",
+        "live": true
+      },
+      {
+        "id": "scale",
+        "type": "enum",
+        "options": [
+          {
+            "value": "log",
+            "label": "Logarithmic"
+          },
+          {
+            "value": "linear",
+            "label": "Linear"
+          }
+        ],
+        "default": "log",
+        "label": "Scale",
+        "description": "How frequencies spread across the bars: log gives each octave the same width from 20 Hz, as the ear hears them; linear gives each hertz the same width from 0 Hz.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "text",
+    "category": "source",
+    "name": "Text",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "text",
+        "type": "string",
+        "multiline": true,
+        "max_len": 4096,
+        "default": "",
+        "label": "Text",
+        "live": true
+      },
+      {
+        "id": "font",
+        "type": "asset",
+        "accept": [
+          "ttf",
+          "otf",
+          "ttc"
+        ],
+        "default": null,
+        "label": "Font",
+        "description": "A TrueType or OpenType font, or the first font of a collection. None uses the bundled Roboto.",
+        "live": false
+      },
+      {
+        "id": "size",
+        "type": "float",
+        "min": 1.0,
+        "max": 1024.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 64.0,
+        "label": "Size",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Colour",
+        "live": true
+      },
+      {
+        "id": "align",
+        "type": "enum",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Centre"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "default": "left",
+        "label": "Alignment",
+        "live": true
+      },
+      {
+        "id": "wrap_width",
+        "type": "int",
+        "min": 0,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Wrap width",
+        "description": "Lines wrap at this width. 0 doesn't wrap.",
+        "live": true
+      },
+      {
+        "id": "outline_width",
+        "type": "int",
+        "min": 0,
+        "max": 64,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Outline width",
+        "live": true
+      },
+      {
+        "id": "outline_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Outline colour",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "padding",
+        "type": "int",
+        "min": 0,
+        "max": 1024,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Padding",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "video_delay",
+    "category": "video_filter",
+    "name": "Video delay",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "delay_ms",
+        "type": "int",
+        "min": 0,
+        "max": 5000,
+        "unit": "ms",
+        "default": 0,
+        "label": "Delay",
+        "live": true
+      },
+      {
+        "id": "max_memory_mb",
+        "type": "int",
+        "min": 64,
+        "max": 16384,
+        "unit": "MB",
+        "default": 1024,
+        "label": "Memory limit",
+        "description": "The most GPU memory the held frames take. Past it, frames are held farther apart: the delay holds and the delayed picture's frame rate drops.",
+        "advanced": true,
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "waveform",
+    "category": "source",
+    "name": "Audio waveform",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "audio",
+        "type": "bus",
+        "default": null,
+        "label": "Audio",
+        "description": "What it draws. None draws the program mix: the master after its filters, as the outputs hear it. A bus draws that bus after its fader, before the master's filters. Either is silent while no output runs.",
+        "live": false
+      },
+      {
+        "id": "audio_source",
+        "type": "source",
+        "media": "audio",
+        "default": null,
+        "label": "Audio source",
+        "description": "A source to draw instead of the audio above: that source after its own filters, fader, mute and follow, before any bus, as the audience hears it. Silent while that source isn't playing into the mixer, and while no output runs.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 640,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 160,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Colour",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "smoothing",
+        "type": "float",
+        "min": 0.0,
+        "max": 0.99,
+        "step": 0.01,
+        "default": 0.0,
+        "label": "Smoothing",
+        "description": "How slowly a peak falls back: 0 follows the audio exactly.",
+        "live": true
+      },
+      {
+        "id": "scale",
+        "type": "enum",
+        "options": [
+          {
+            "value": "linear",
+            "label": "Linear"
+          },
+          {
+            "value": "db",
+            "label": "dB"
+          }
+        ],
+        "default": "linear",
+        "label": "Scale",
+        "description": "Linear draws the samples as they are; dB draws their level from -60 dBFS, so quiet audio shows.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "webcam",
+    "category": "source",
+    "name": "Webcam",
+    "version": 1,
+    "video": true,
+    "audio": true,
+    "params": [
+      {
+        "id": "device",
+        "type": "string",
+        "multiline": false,
+        "max_len": 1024,
+        "default": "",
+        "label": "Device",
+        "description": "The ID of the webcam or capture card, as the platform lists it. Empty captures the first device listed.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "window",
+    "category": "source",
+    "name": "Window capture",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "target",
+        "type": "string",
+        "multiline": false,
+        "max_len": 1024,
+        "default": "",
+        "label": "Window",
+        "description": "The ID of the window to capture, as `capture.targets` lists it. Empty captures nothing.",
+        "live": false
+      }
+    ]
+  },
+  {
+    "kind_id": "youtube_chat",
+    "category": "source",
+    "name": "YouTube chat",
+    "version": 1,
+    "video": true,
+    "audio": true,
+    "params": [
+      {
+        "id": "video",
+        "type": "string",
+        "multiline": false,
+        "max_len": 2048,
+        "default": "",
+        "label": "Live video",
+        "description": "The live video: its ID, or a youtube.com/watch, youtube.com/live, youtube.com/live_chat or youtu.be link. Empty shows nothing.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 400,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 600,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "fps",
+        "type": "int",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "unit": "fps",
+        "default": 30,
+        "label": "Frame rate",
+        "live": false
+      },
+      {
+        "id": "css",
+        "type": "string",
+        "multiline": true,
+        "max_len": 65536,
+        "default": "html, body, yt-live-chat-app, yt-live-chat-renderer, #item-list, #item-scroller, #items { background: transparent !important; } body { margin: 0; overflow: hidden; } yt-live-chat-header-renderer, #ticker, #input-panel, yt-live-chat-message-input-renderer, #panel-pages { display: none !important; }",
+        "label": "Custom CSS",
+        "description": "CSS added to the chat page. The default makes it transparent and hides everything but the messages.",
+        "live": true
+      }
+    ]
+  }
+]
