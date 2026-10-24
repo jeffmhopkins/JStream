@@ -4425,8 +4425,8 @@ mod cpu_pipeline {
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
 
-    /// A publish target whose send, once `stalled`, blocks until `release` fires (or
-    /// 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
+    /// A publish target whose next send, once `stalled`, blocks until `release` fires
+    /// (or 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
     /// send has blocked (`blocked`) and when the output thread has finished it
     /// (`finished`), so the test waits on those instead of on the clock.
     struct StuckPeer {
@@ -4439,7 +4439,10 @@ mod cpu_pipeline {
 
     impl LivePublish for StuckPeer {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
-            if self.stalled.load(Ordering::Acquire) {
+            // One send stalls; once released, the rest go through. A packet can make
+            // more than one tag (the first H.264 keyframe brings its sequence header),
+            // and a second stall would outlast the test's wait for the thread to end.
+            if self.stalled.swap(false, Ordering::AcqRel) {
                 self.blocked.store(true, Ordering::Release);
                 let _ = self.release.recv_timeout(Duration::from_secs(30));
             }

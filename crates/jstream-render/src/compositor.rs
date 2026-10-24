@@ -521,7 +521,7 @@ impl Compositor {
         })
     }
 
-    fn maker(&self) -> Maker<'_> {
+    pub(crate) fn maker(&self) -> Maker<'_> {
         Maker {
             gpu: &self.gpu,
             layout: &self.image_layout,

@@ -170,14 +170,17 @@ pub enum PanelId {
     Outputs,
     /// Studio mode (preview, program, Transition and Cut) and the transition presets.
     Transitions,
+    /// Align, distribute and arrange the selected items.
+    Transform,
 }
 
 impl PanelId {
     /// Every panel, in the View menu's order.
-    pub const ALL: [PanelId; 6] = [
+    pub const ALL: [PanelId; 7] = [
         PanelId::Scenes,
         PanelId::Objects,
         PanelId::Inspector,
+        PanelId::Transform,
         PanelId::Mixer,
         PanelId::Outputs,
         PanelId::Transitions,
@@ -192,6 +195,7 @@ impl PanelId {
             PanelId::Mixer => "Audio mixer",
             PanelId::Outputs => "Outputs",
             PanelId::Transitions => "Transitions",
+            PanelId::Transform => "Transform",
         }
     }
 
@@ -204,6 +208,7 @@ impl PanelId {
             PanelId::Mixer => "mixer",
             PanelId::Outputs => "outputs",
             PanelId::Transitions => "transitions",
+            PanelId::Transform => "transform",
         }
     }
 
@@ -211,7 +216,7 @@ impl PanelId {
     pub fn home(self) -> Zone {
         match self {
             PanelId::Scenes | PanelId::Objects => Zone::Left,
-            PanelId::Inspector => Zone::Right,
+            PanelId::Inspector | PanelId::Transform => Zone::Right,
             PanelId::Mixer | PanelId::Outputs | PanelId::Transitions => Zone::Bottom,
         }
     }
@@ -281,8 +286,8 @@ pub struct Layout {
 /// outer right.
 const SIZES: [f64; 8] = [260.0, 140.0, 300.0, 140.0, 170.0, 340.0, 190.0, 280.0];
 
-/// The default layout: Scenes over Scene objects on the left, the inspector on the
-/// right, and the mixer and the outputs (with Transitions as a second tab) along the
+/// The default layout: Scenes over Scene objects on the left, the inspector over the
+/// Transform panel on the right, and the mixer and the outputs (with Transitions as a second tab) along the
 /// bottom.
 pub fn editing() -> Arrangement {
     use PanelId::*;
@@ -290,7 +295,10 @@ pub fn editing() -> Arrangement {
         SIZES,
         &[
             (Zone::Left, vec![(vec![Scenes], 1.0), (vec![Objects], 1.0)]),
-            (Zone::Right, vec![(vec![Inspector], 2.0)]),
+            (
+                Zone::Right,
+                vec![(vec![Inspector], 2.0), (vec![Transform], 1.0)],
+            ),
             (
                 Zone::Bottom,
                 vec![(vec![Mixer], 1.0), (vec![Outputs, Transitions], 1.0)],
@@ -794,7 +802,7 @@ mod tests {
             shape(&dock),
             vec![
                 (Zone::Left, vec![vec![Scenes], vec![Objects]]),
-                (Zone::Right, vec![vec![Inspector]]),
+                (Zone::Right, vec![vec![Inspector], vec![Transform]]),
                 (Zone::Bottom, vec![vec![Mixer], vec![Outputs, Transitions]]),
             ]
         );
@@ -834,7 +842,7 @@ mod tests {
                 (Zone::Left, vec![vec![Objects]]),
                 (
                     Zone::Right,
-                    vec![vec![Scenes], vec![Inspector], vec![Mixer]]
+                    vec![vec![Scenes], vec![Inspector], vec![Mixer], vec![Transform]]
                 ),
                 (Zone::Bottom, vec![vec![Outputs, Transitions]]),
             ]
@@ -855,8 +863,10 @@ mod tests {
     fn dropping_on_a_zone_appends_and_empties_are_removed() {
         let mut dock = Dock::new();
         assert!(dock.place(Inspector, Target::End(Zone::OuterRight)));
-        assert!(dock.groups(Zone::Right).is_empty());
+        assert_eq!(dock.groups(Zone::Right).len(), 1);
         assert_eq!(dock.groups(Zone::OuterRight)[0].tabs, [Inspector]);
+        assert!(dock.place(Transform, Target::End(Zone::OuterRight)));
+        assert!(dock.groups(Zone::Right).is_empty());
     }
 
     #[test]
@@ -876,7 +886,10 @@ mod tests {
         assert!(!dock.shown(Inspector));
         assert_eq!(dock.current, "Editing (modified)");
         dock.toggle(Inspector);
-        assert_eq!(dock.groups(Zone::Right)[0].tabs, [Inspector]);
+        assert_eq!(
+            dock.groups(Zone::Right).last().expect("group").tabs,
+            [Inspector]
+        );
         dock.close(Mixer);
         dock.show(Mixer);
         assert_eq!(
@@ -894,12 +907,13 @@ mod tests {
         assert!(dock.group(scenes).expect("group").collapsed);
         dock.click_tab(scenes, Scenes);
         assert!(!dock.group(scenes).expect("group").collapsed);
+        // Collapsing isn't a layout change.
+        assert_eq!(dock.current, "Editing");
+        dock.close(Transform);
         let inspector = id_of(&dock, Inspector);
         assert!(!dock.collapsible(inspector));
         dock.click_tab(inspector, Inspector);
         assert!(!dock.group(inspector).expect("group").collapsed);
-        // Collapsing isn't a layout change.
-        assert_eq!(dock.current, "Editing");
     }
 
     #[test]

@@ -31,6 +31,9 @@ pub(crate) const BRANCH: &str = "main";
 pub(crate) struct Merge {
     /// Sections whose conflicting stamp was resolved to main's, as `DOC#anchor`.
     pub(crate) stamps: Vec<String>,
+    /// Sections where an entry whose hash equals main's took main's `by` and `note` (#697),
+    /// as `DOC#anchor`.
+    pub(crate) adopted: Vec<String>,
     /// What `docs migrate` did after the merge, when the branch still had inline stamps.
     pub(crate) migrated: Option<super::Migrate>,
     /// Files whose conflict was only inside `@generated` blocks, rewritten from the merged
@@ -116,30 +119,40 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     }
     git_ok(root, &["fetch", "-q", REMOTE, branch])?;
     let upstream = format!("{REMOTE}/{branch}");
-    // A fixed conflict style, whatever the user's config, so the markers parse.
+    // A fixed conflict style, whatever the user's config, so the markers parse. The merge
+    // isn't committed yet: main's stamps on inputs it verified at the same content are
+    // taken into the merge commit itself, so it stays what `merge-main` left (#697).
     let out = git(
         root,
         &[
             "-c",
             "merge.conflictStyle=merge",
             "merge",
+            "--no-commit",
             "--no-edit",
             "-q",
             &upstream,
         ],
     )?;
     let mut report = Merge::default();
+    let merging = || -> Result<bool> {
+        Ok(git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
+            .status
+            .success())
+    };
     if out.status.success() {
+        // A fast-forward, or nothing to merge, leaves no merge to commit.
+        if merging()? {
+            report.adopted = adopt_matching(root, &upstream).context(MERGE_OPEN)?;
+            git_ok(root, &["commit", "-q", "--no-edit"]).context(MERGE_OPEN)?;
+        }
         report.committed = true;
         report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
         report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
         return Ok(report);
     }
-    if !git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
-        .status
-        .success()
-    {
+    if !merging()? {
         bail!(
             "`git merge {upstream}` failed: {}",
             String::from_utf8_lossy(&out.stderr).trim()
@@ -197,14 +210,40 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
             git_ok(root, &["add", "--", path])?;
         }
     }
+    // Once the ledger has no conflict left, whether or not another file keeps the merge
+    // open, it takes main's stamps on inputs main verified at the same content.
+    if !report.refused.iter().any(|(p, _)| p == ledger::PATH) {
+        report.adopted = adopt_matching(root, &upstream).context(MERGE_OPEN)?;
+    }
     if report.refused.is_empty() {
-        git_ok(root, &["commit", "-q", "--no-edit"])?;
+        git_ok(root, &["commit", "-q", "--no-edit"]).context(MERGE_OPEN)?;
         report.committed = true;
         report.migrated = migrate_inline(root).context(AFTER_COMMIT)?;
         report.inputs = stale_report(root).context(AFTER_COMMIT)?;
         report.stale = report.inputs.keys().cloned().collect();
     }
     Ok(report)
+}
+
+/// During the merge, before it is committed: gives each ledger entry whose hash equals
+/// `upstream`'s entry for that input `upstream`'s entry, and stages the ledger; returns the
+/// sections changed (#697). Nothing changes when either side has no ledger.
+fn adopt_matching(root: &Path, upstream: &str) -> Result<Vec<String>> {
+    if !root.join(ledger::PATH).exists() {
+        return Ok(Vec::new());
+    }
+    // A merged ledger that doesn't parse is left for the steps after the commit, which
+    // report it as such (#551 N1).
+    let Ok(mut ours) = ledger::Ledger::read(root) else {
+        return Ok(Vec::new());
+    };
+    let theirs = ledger_at(root, upstream, &format!("on `{upstream}`"))?;
+    let adopted = ours.adopt(&theirs);
+    if !adopted.is_empty() {
+        ours.write(root)?;
+        git_ok(root, &["add", "--", ledger::PATH])?;
+    }
+    Ok(adopted)
 }
 
 /// The ledger as it was at `rev`; empty when the file is missing there, and an error naming
@@ -372,6 +411,12 @@ pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::L
 const AFTER_COMMIT: &str = "the merge is committed, but the steps after it failed; fix what \
      the error names, then run `cargo xtask docs check` and verify each stale section with \
      `--note`";
+
+/// The context of an error before the merge is committed, with `MERGE_HEAD` still set
+/// (#704 N1).
+const MERGE_OPEN: &str = "the merge is still in progress and not committed: fix what the \
+     error names and run `git commit --no-edit`, or `git merge --abort` and run `docs \
+     merge-main` again";
 
 /// Each stale section after a merge commit with its stale inputs, each with this branch's
 /// earlier note and the merged commits that changed it (none listed when the branch has no

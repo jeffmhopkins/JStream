@@ -163,7 +163,10 @@ pub enum LinkState {
     /// Publishing: packets reach the server (after a reconnect, video from the next
     /// keyframe on).
     Active,
-    /// The connection was lost; packets are dropped while attempts run.
+    /// The connection was lost; packets are dropped while attempts run. A session
+    /// that came back after dropping again soon after an earlier reconnect stays here
+    /// until it has been up for `stable_after`, though its packets reach the server: a
+    /// server that keeps accepting and then dropping the stream is not live.
     Reconnecting,
     /// The policy's limit was reached. Every later call fails with
     /// [`RtmpError::ReconnectGaveUp`].
@@ -207,9 +210,13 @@ struct Resync {
     audio_header: bool,
 }
 
-/// One outage: the connection was lost at `since`.
+/// One outage: the connection was first lost at `since`, and last at `lost_at`. They
+/// differ when sessions dropped again soon after reconnecting (`flaps` times), which
+/// continues the outage.
 struct Outage<S> {
     since: Instant,
+    lost_at: Instant,
+    flaps: u32,
     attempts: u32,
     failures: u32,
     next_at: Instant,
@@ -409,7 +416,16 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
 
     /// The link's state after the last call.
     pub fn state(&self) -> LinkState {
-        match self.link {
+        match &self.link {
+            Link::Up {
+                reconnected: Some((up_at, outage)),
+                ..
+            } if outage.flaps > 0
+                && self.clock.now().saturating_duration_since(*up_at)
+                    < self.policy.stable_after =>
+            {
+                LinkState::Reconnecting
+            }
             Link::Up { .. } => LinkState::Active,
             Link::Down(_) => LinkState::Reconnecting,
             Link::Failed { .. } => LinkState::Failed,
@@ -619,6 +635,8 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
                 tracing::warn!(error = %err, "RTMP connection lost again soon after reconnecting");
                 self.stats.failed_attempts += 1;
                 outage.failures += 1;
+                outage.flaps += 1;
+                outage.lost_at = now;
                 outage.pending = None;
                 outage
             }
@@ -626,6 +644,8 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
                 tracing::warn!(error = %err, "RTMP connection lost; reconnecting");
                 Outage {
                     since: now,
+                    lost_at: now,
+                    flaps: 0,
                     attempts: 0,
                     failures: 0,
                     next_at: now,
@@ -771,9 +791,12 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
     fn reconnected(&mut self, publisher: RtmpPublisher<S>, mut outage: Outage<S>, now: Instant) {
         outage.pending = None;
         self.stats.reconnects += 1;
+        // `outage` is this gap alone; `unstable_for` spans the sessions that dropped
+        // again soon after reconnecting, which the outage limit counts.
         tracing::info!(
             attempts = outage.attempts,
-            outage = ?now.saturating_duration_since(outage.since),
+            outage = ?now.saturating_duration_since(outage.lost_at),
+            unstable_for = ?now.saturating_duration_since(outage.since),
             "reconnected to the RTMP server"
         );
         self.link = Link::Up {
