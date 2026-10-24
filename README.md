@@ -82,7 +82,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | E2b | Privacy screen and encoder sharing key | M2 | ❔ not set |  | #317 |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
 | B11 | Folders and labels | M2 | ❔ not set |  | #323 |
-| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build, then 🌊 its wave lands | hotkeys #319 landed with wave/m1-2 (#545) and organisation metadata #323 merged into wave/m1-3; keyframe scenes #720 (protocol 0.39) open on wave/m1-3; a group's children and the UI follow (#702) | #319, #323, #720 |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build, then 🌊 its wave lands | hotkeys #319 landed with wave/m1-2 (#545) and organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes #720 (protocol 0.39) open on wave/m1-4; a group's children and the UI follow (#702) | #319, #323, #720 |
 | F6 | HEVC and AV1 encode | M3 | 🧪 Windows run | #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🔨 build | effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build | #359, #368 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
@@ -245,7 +245,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
 | B11 | Folders and labels | 🔍 in review | #323 |
-| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | 🔍 in review: hotkeys #319 landed with wave/m1-2 (#545) and organisation metadata #323 merged into wave/m1-3; keyframe scenes #720 (protocol 0.39) open on wave/m1-3; a group's children and the UI follow (#702) | #319, #323, #720 |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | 🔍 in review: hotkeys #319 landed with wave/m1-2 (#545) and organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes #720 (protocol 0.39) open on wave/m1-4; a group's children and the UI follow (#702) | #319, #323, #720 |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 
 </details>
