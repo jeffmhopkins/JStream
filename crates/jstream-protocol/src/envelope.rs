@@ -13,6 +13,7 @@ use crate::event::Event;
 use crate::history::HistoryCall;
 use crate::hotkey::HotkeyBinding;
 use crate::id::{ClientId, RequestId, Rev};
+use crate::keyframe::DroppedOverride;
 use crate::output::SecretString;
 use crate::query::{Query, QueryResult};
 use crate::version::ProtocolVersion;
@@ -139,6 +140,12 @@ pub enum CallResult {
         /// parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         removed_hotkeys: Vec<HotkeyBinding>,
+        /// The keyframe-scene overrides the batch dropped because their item left the
+        /// variant's parent (ADR-0040 §1), in the order it dropped them. Undoing the
+        /// batch restores them. Omitted when there are none, and missing (from a server
+        /// older than 0.39) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        dropped_overrides: Vec<DroppedOverride>,
     },
     /// The action was accepted. Its progress is reported by events. An action whose
     /// answer carries data (`pairing.start`, `youtube.sign_in` and the YouTube broadcast
@@ -181,6 +188,7 @@ impl CallResult {
         CallResult::Batch {
             rev,
             removed_hotkeys: Vec::new(),
+            dropped_overrides: Vec::new(),
         }
     }
 }

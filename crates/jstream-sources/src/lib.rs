@@ -13,11 +13,11 @@
 //! [`BrowserBackend`] from [`Context::browser`], its frames on the GPU and its audio a
 //! [`SourceAudio`]), with its `youtube_chat` preset (a live video's public popout chat
 //! page, no sign-in), `chat_message` (the featured live chat message, ADR-0041 §2,
-//! which the host sets through the context's [`ChatFeature`]), and `display` and
-//! `window`, which say what the platform captures ([`CaptureSpec`]). The audio-only
-//! kinds (`audio_input`, `desktop_audio` and `app_audio`) make no frames: the engine
-//! records the [`AudioTarget`] their settings name. The other built-in kinds are
-//! described only. `jstream-core` drives sources from its `jstream-sources` thread
+//! which the host sets through the context's [`ChatFeature`]), and `display`, `window`
+//! and `webcam` (a webcam or capture card), which say what the platform captures
+//! ([`CaptureSpec`]). The audio-only kinds (`audio_input`, `desktop_audio` and
+//! `app_audio`) make no frames: the engine records the [`AudioTarget`] their settings
+//! name. `jstream-core` drives sources from its `jstream-sources` thread
 //! through [`Registry::create`], [`Source::frame`], [`Source::next_change`],
 //! [`Source::show`], [`Source::painter`] and [`Source::capture`].
 //!
@@ -47,6 +47,7 @@ pub use browser::opens_browser;
 pub use capture::CaptureSpec;
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use error::SourceError;
+pub use image::{StillImage, decode_still};
 /// The browser engine seam `browser` sources open their pages through, which the host
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;
