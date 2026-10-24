@@ -1160,7 +1160,12 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
                         then();
                     }
                 }
-                Err(error) => _ = problem.try_set(Some(error.to_string())),
+                // Once the dialog has closed, the problem bar shows it.
+                Err(error) => {
+                    if problem.try_set(Some(error.to_string())).is_some() {
+                        studio.report(&error);
+                    }
+                }
             }
         });
     };
@@ -1191,8 +1196,12 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
             return;
         };
         spawn_local(async move {
-            if let Err(error) = apply(&s, vec![edit], None).await {
-                errors.try_update(|e| _ = e.insert(param, error.to_string()));
+            if let Err(error) = apply(&s, vec![edit], None).await
+                && errors
+                    .try_update(|e| _ = e.insert(param, error.to_string()))
+                    .is_none()
+            {
+                studio.report(&error);
             }
         });
     };
