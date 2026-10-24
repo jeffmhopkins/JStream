@@ -166,9 +166,8 @@ pub enum GeometryError {
     /// An input or a computed canvas coordinate is NaN or infinite.
     #[error("a placement coordinate is not finite")]
     NotFinite,
-    /// A 3D item's drawn polygon reaches further than
-    /// [`MAX_DRAWN_PX`](drawn::MAX_DRAWN_PX) from the canvas origin
-    /// ([`ItemGeometry::check_drawable`]).
+    /// A 3D item's centre, size, depth or perspective, or a vertex of its drawn polygon,
+    /// is past [`MAX_DRAWN_PX`](drawn::MAX_DRAWN_PX) ([`ItemGeometry::check_drawable`]).
     #[error("the item draws too far from the canvas")]
     TooFar,
 }

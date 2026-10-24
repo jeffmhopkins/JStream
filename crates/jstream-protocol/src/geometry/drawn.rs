@@ -16,10 +16,12 @@ use super::{CanvasPoint, ContentRect, GeometryError, ItemGeometry, rotate_x, rot
 /// not drawn.
 pub const NEAR_W: f32 = 1.0 / 256.0;
 
-/// How far from the canvas origin, in canvas pixels along either axis, a vertex of an
-/// accepted 3D item's drawn polygon may be ([`ItemGeometry::check_drawable`]). Far past
-/// any canvas, and far enough inside f32's range that the compositor's edge and
-/// push-out arithmetic on such a vertex stays finite.
+/// The bound on an accepted 3D item ([`ItemGeometry::check_drawable`]), in canvas
+/// pixels: its centre's coordinates, its size, `|depth_px|` and `perspective_px` may be
+/// at most this, and so may each coordinate of the polygon its whole box draws. Far past
+/// any canvas, and far enough inside f32's range that any content's polygon (each local
+/// coordinate under this, magnified at most 256 times by the near plane) and the
+/// compositor's edge and push-out arithmetic on it stay finite.
 pub const MAX_DRAWN_PX: f32 = 1e15;
 
 /// A polygon with less area than this, in square canvas pixels, draws nothing:
@@ -200,25 +202,39 @@ impl ItemGeometry {
 
     /// Whether the compositor can draw this geometry, so an edit may store it (ADR-0022:
     /// stored state never claims what isn't drawn). With neutral 3D that is
-    /// [`Self::project`]'s finite corners. Otherwise the polygon the whole box draws
-    /// ([`Self::drawn_polygon`], which bounds the polygon of any content, since content
-    /// is clipped to the box) must have finite vertices within [`MAX_DRAWN_PX`] of the
-    /// origin: a huge item whose near-plane clip magnifies it 256 times, or a centre near
-    /// f32's limit, would otherwise overflow while it is drawn. An item that draws
-    /// nothing (behind the viewer, edge-on) is drawable.
+    /// [`Self::project`]'s finite corners. Otherwise every input is bounded: the centre's
+    /// coordinates, the width and height, `|depth_px|` and `perspective_px` must be at
+    /// most [`MAX_DRAWN_PX`], and the polygon the whole box draws
+    /// ([`Self::drawn_polygon`]) must have finite vertices within it of the origin. The
+    /// input bound is what keeps a content's own polygon finite: in f32 the whole box's
+    /// polygon doesn't bound a thin content strip's, whose near-plane vertices can round
+    /// to [`NEAR_W`] while the box is huge (#629 round 2 B4). An item that draws nothing
+    /// (behind the viewer, edge-on) is drawable.
     ///
     /// # Errors
     /// The same as [`Self::validate`], [`GeometryError::NotFinite`] when a corner or a
-    /// vertex is not finite, or [`GeometryError::TooFar`] when a vertex is past
-    /// [`MAX_DRAWN_PX`].
+    /// vertex is not finite, or [`GeometryError::TooFar`] when an input or a vertex is
+    /// past [`MAX_DRAWN_PX`].
     pub fn check_drawable(self) -> Result<(), GeometryError> {
         self.validate()?;
         self.project()?;
         if self.is_neutral_3d() {
             return Ok(());
         }
+        let near = |value: f32| value.abs() <= MAX_DRAWN_PX;
         let width = self.size.width.get();
         let height = self.size.height.get();
+        let inputs = [
+            self.center.x.get(),
+            self.center.y.get(),
+            width,
+            height,
+            self.depth_px.get(),
+            self.perspective_px.map_or(0.0, |p| p.get()),
+        ];
+        if !inputs.into_iter().all(near) {
+            return Err(GeometryError::TooFar);
+        }
         let whole_box = ContentRect {
             left: -width * 0.5,
             top: -height * 0.5,
@@ -232,7 +248,6 @@ impl ItemGeometry {
         let Some(polygon) = self.drawn_polygon(&whole_box)? else {
             return Ok(());
         };
-        let near = |value: f32| value.abs() <= MAX_DRAWN_PX;
         if polygon
             .vertices()
             .iter()

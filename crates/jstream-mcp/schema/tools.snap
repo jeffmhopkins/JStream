@@ -869,7 +869,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it; one whose drawn\npolygon would not be finite or would reach past 10^15 canvas pixels (a huge item\nclipped at the near plane) is `invalid_argument` on `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -4693,7 +4693,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it; one whose drawn\npolygon would not be finite or would reach past 10^15 canvas pixels (a huge item\nclipped at the near plane) is `invalid_argument` on `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -6950,7 +6950,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it; one whose drawn\npolygon would not be finite or would reach past 10^15 canvas pixels (a huge item\nclipped at the near plane) is `invalid_argument` on `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",
@@ -8066,7 +8066,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it; one whose drawn\npolygon would not be finite or would reach past 10^15 canvas pixels (a huge item\nclipped at the near plane) is `invalid_argument` on `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero and a `perspective_px` that is not greater than zero are\n`invalid_argument`. Any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is\naccepted from 0.34 (ADR-0050) if the compositor can draw it: a non-neutral one\nwhose centre, size, depth or perspective is past 10^15 canvas pixels, or whose\ndrawn polygon would not be finite or would reach past that, is `invalid_argument`\non `geometry`. Earlier minors\nrejected a non-neutral one with `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
                 "properties": {
                   "geometry": {
                     "$ref": "#/$defs/ItemGeometry",

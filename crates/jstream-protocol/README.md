@@ -143,7 +143,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.34 because the
   engine accepts non-neutral 3D: `tilt_deg`, `turn_deg`, `depth_px` and
   `perspective_px`, which earlier minors rejected with `invalid_argument`, are stored
-  and drawn (ADR-0050) when the compositor can draw them (`check_drawable`). The wire form is unchanged, so a client that sends only neutral
+  and drawn (ADR-0050) when the compositor can draw them (`check_drawable`). The wire
+  form is unchanged, so a client that sends only neutral
   3D sees no difference. 0.30 to 0.33 are assigned to other changes in the protocol
   queue (0.33 is #317's), and 0.34 merges only after them. 0.29 added
   the master stage's and outputs' filter chains (the `master` and `output` filter
@@ -1132,12 +1133,15 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). From
   0.34 any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is accepted and
   drawn, provided the compositor can draw it: `ItemGeometry::check_drawable`, which the
-  engine and the mock share, also requires the polygon the whole box draws to have
-  finite vertices within `MAX_DRAWN_PX` (10^15 canvas pixels) of the origin. Otherwise
-  the edit is `invalid_argument` on `edits.N.geometry` (`NotFinite` or `TooFar`): a huge
-  item clipped at the near plane, magnified up to 256 times, or one centred near f32's
-  limit would overflow while it is drawn and fail its whole frame. An item wholly
-  behind the viewer or seen edge-on is valid and draws nothing.
+  engine and the mock share, also bounds a non-neutral one by `MAX_DRAWN_PX` (10^15
+  canvas pixels). Its centre's coordinates, its width and height, `|depth_px|` and
+  `perspective_px` must be at most that, and so must every vertex of the polygon its
+  whole box draws. Otherwise the edit is `invalid_argument` on `edits.N.geometry`
+  (`TooFar`, or `NotFinite` for a vertex that overflows). Bounding the inputs is what
+  keeps every content's polygon finite: in f32 the whole box's polygon doesn't bound a
+  thin source's, and a huge item on an 8192×1 source would otherwise overflow while it
+  is drawn and fail its whole frame. An item wholly behind the viewer or seen edge-on is
+  valid and draws nothing.
   Before 0.34 a non-neutral one was `invalid_argument` naming that field, with
   `is_neutral_3d` as the predicate. ADR-0022 said accepting them is not a breaking
   change.

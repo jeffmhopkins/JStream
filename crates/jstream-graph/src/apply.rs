@@ -808,7 +808,7 @@ fn apply_edit(
 
 /// Checks a geometry an edit stores (ADR-0022): a positive size, a positive perspective
 /// if any, and that the compositor can draw it ([`ItemGeometry::check_drawable`]: finite
-/// corners, and for 3D a drawn polygon within `MAX_DRAWN_PX` of the origin). Any such 3D
+/// corners, and for 3D every input and the drawn polygon within `MAX_DRAWN_PX`). Any such 3D
 /// is accepted (protocol 0.34, ADR-0050 decision 8), and an item wholly behind the
 /// viewer or seen edge-on draws nothing. Errors name `geometry` or `geometry.<field>`.
 fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolError> {
