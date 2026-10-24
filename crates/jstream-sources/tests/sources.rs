@@ -9,7 +9,8 @@
 use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, Reference, Settings};
 use jstream_sources::{
-    AssetRoots, AudioTarget, CaptureSpec, Context, Limits, Registry, SourceError, needs_restart,
+    AssetRoots, AudioTarget, CaptureSpec, Context, Limits, Registry, SourceError, decode_still,
+    needs_restart, webcam_device,
 };
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -252,8 +253,26 @@ fn display_window_and_webcam_sources_say_what_to_capture() {
         device("fake-webcam-0"),
         CaptureSpec::Device(Some("fake-webcam-0".into()))
     );
+    // A webcam's sound is its device's paired audio (#716); the engine records it.
     let webcam = registry.descriptor("webcam").expect("webcam");
-    assert!(webcam.video && !webcam.audio);
+    assert!(webcam.video && webcam.audio);
+    assert_eq!(
+        webcam_device("webcam", &complete("webcam", &[])),
+        Some(None),
+        "the first device's pair"
+    );
+    assert_eq!(
+        webcam_device(
+            "webcam",
+            &complete("webcam", &[("device", json!(" fake-webcam-0 "))])
+        ),
+        Some(Some("fake-webcam-0".into()))
+    );
+    assert_eq!(webcam_device("display", &complete("display", &[])), None);
+    for kind in ["display", "window"] {
+        let descriptor = registry.descriptor(kind).expect(kind);
+        assert!(descriptor.video && !descriptor.audio, "{kind}");
+    }
     assert!(needs_restart(
         webcam,
         &complete("webcam", &[]),
@@ -491,6 +510,23 @@ fn an_animated_gif_composites_its_frames_and_loops() {
     );
     assert_eq!(once.next_change(ms(0)), Some(ms(100)));
     assert_eq!(once.next_change(ms(300)), None);
+}
+
+/// A filter's image (a mask) is a file's first frame, even of an animation, and
+/// anything that isn't an image is the same error the `image` kind gives.
+#[test]
+fn a_still_image_is_the_first_frame() {
+    let dir = folder("still");
+    write_gif(&dir.join("anim.gif"), gif::Repeat::Infinite);
+    let bytes = std::fs::read(dir.join("anim.gif")).expect("gif");
+    let still = decode_still(&bytes, "anim.gif", &Limits::default()).expect("decodes");
+    let (red, clear) = ([255, 0, 0, 255], [0, 0, 0, 0]);
+    assert_eq!((still.width, still.height), (2, 2));
+    assert_eq!(still.rgba, [red, red, clear, clear].concat());
+    assert!(matches!(
+        decode_still(b"LUT_3D_SIZE 2", "grade.cube", &Limits::default()),
+        Err(SourceError::UnsupportedFormat { .. })
+    ));
 }
 
 #[test]

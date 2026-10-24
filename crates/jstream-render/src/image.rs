@@ -78,6 +78,10 @@ pub(crate) struct Maker<'a> {
 /// redraws the same images does not allocate one. An image only draws in the
 /// [`crate::Compositor`] that made it; another one refuses it with
 /// [`RenderError::Invalid`].
+///
+/// A clone shares the same texture, so a filter can read a layer the caller keeps (a
+/// scene that a `scene_mask` reads); the texture lives until its last clone is dropped.
+#[derive(Clone)]
 pub struct Image {
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
@@ -193,10 +197,6 @@ pub(crate) fn upload(
 /// Uploads `texels` (RGBA, row-major, `width * height` of them) as `Rgba16Float` exactly
 /// as given, each channel clamped to `0..=1`, and samples them as premultiplied. For data
 /// that is not colour, such as a colour lookup table (`filter::assets`).
-#[expect(
-    dead_code,
-    reason = "the chain runtime loads LUT assets in V0 part 2 (#607), which makes the LUT API public"
-)]
 pub(crate) fn upload_unit_f16(
     maker: &Maker<'_>,
     width: u32,

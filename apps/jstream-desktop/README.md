@@ -221,6 +221,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   Manager store is behind `jstream_crash::Redacting`) are replaced by `***` in the report and
   in its stderr line (R-SEC-001). Only their length and BLAKE3 digest are kept. The
   hook replaces the default one, whose stderr line would quote the message
-  unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Before each report the oldest beyond 10 are deleted; the log file and
+  unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Each report is user-only: mode `0600` on Unix, and on Windows a protected DACL for
+  SYSTEM and the user (`jstream_platform_windows::create_private_file`, passed to
+  `jstream_crash::install_creating`, #656). Before each report the oldest beyond 10 are deleted; the log file and
   the audit log in the same folder are left alone. A native crash writes nothing yet
   (the daemon's open question 4 holds here too).

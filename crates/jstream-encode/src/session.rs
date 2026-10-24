@@ -119,15 +119,25 @@ impl Counters {
             .store(u64::try_from(n).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
+    /// The counters now. Read in the reverse of the order an input passes them, each
+    /// later stage first and with `Acquire` against its `Release` increment, so a
+    /// snapshot never counts more inputs encoded or refused by the encoder than received,
+    /// nor more keyframes than packets: the push counts an input received before it
+    /// sends it to the encode thread.
     pub(crate) fn snapshot(&self) -> SessionStats {
+        let later = |c: &AtomicU64| c.load(Ordering::Acquire);
+        let keyframes = later(&self.keyframes);
+        let packets = later(&self.packets);
+        let encoded = later(&self.encoded);
+        let dropped_encoder_busy = later(&self.dropped_encoder_busy);
         let get = |c: &AtomicU64| c.load(Ordering::Relaxed);
         SessionStats {
             received: get(&self.received),
             dropped_queue_full: get(&self.dropped_queue_full),
-            dropped_encoder_busy: get(&self.dropped_encoder_busy),
-            encoded: get(&self.encoded),
-            packets: get(&self.packets),
-            keyframes: get(&self.keyframes),
+            dropped_encoder_busy,
+            encoded,
+            packets,
+            keyframes,
             keyframes_requested: get(&self.keyframes_requested),
             subscribers: get(&self.subscribers),
             subscriber_drops: get(&self.subscriber_drops),
@@ -252,19 +262,24 @@ impl<I> InputHandle<I> {
             return Err(PushError::Closed);
         }
         let after_drop = s.gap.swap(false, Ordering::AcqRel);
+        // Counted before it is sent: once sent, the encode thread may encode and publish
+        // it before this thread runs again, and a snapshot must never show an input
+        // encoded that it doesn't show received. Taken back if the send fails.
+        s.counters.received.fetch_add(1, Ordering::Relaxed);
         match self.tx.try_send(Msg::Item { input, after_drop }) {
-            Ok(()) => {
-                s.counters.received.fetch_add(1, Ordering::Relaxed);
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(TrySendError::Full(_)) => {
+                s.counters.received.fetch_sub(1, Ordering::Relaxed);
                 s.gap.store(true, Ordering::Release);
                 s.counters
                     .dropped_queue_full
                     .fetch_add(1, Ordering::Relaxed);
                 Err(PushError::Full)
             }
-            Err(TrySendError::Disconnected(_)) => Err(PushError::Closed),
+            Err(TrySendError::Disconnected(_)) => {
+                s.counters.received.fetch_sub(1, Ordering::Relaxed);
+                Err(PushError::Closed)
+            }
         }
     }
 }
@@ -499,7 +514,7 @@ fn run<D: Driver>(
                 shared
                     .counters
                     .dropped_encoder_busy
-                    .fetch_add(1, Ordering::Relaxed);
+                    .fetch_add(1, Ordering::Release);
             }
             step(driver, &mut out, joined, fan, shared)?;
         }
@@ -530,13 +545,15 @@ fn encode_one<D: Driver>(
     if let Some(codec) = driver.codec_changed() {
         let _ = shared.fallback.set(codec);
     }
+    // Release, so a snapshot that sees the input encoded (or refused) also sees it
+    // received (`Counters::snapshot`).
     match result {
         Ok(()) => {
-            c.encoded.fetch_add(1, Ordering::Relaxed);
+            c.encoded.fetch_add(1, Ordering::Release);
             Ok(())
         }
         Err(PlatformError::Busy { .. }) => {
-            c.dropped_encoder_busy.fetch_add(1, Ordering::Relaxed);
+            c.dropped_encoder_busy.fetch_add(1, Ordering::Release);
             Ok(())
         }
         Err(e) => Err(EncodeError::Encoder(e)),

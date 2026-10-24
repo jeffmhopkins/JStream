@@ -177,15 +177,36 @@ impl<S: OAuthTokenStore + ?Sized> OAuthTokenStore for Redacting<S> {
 /// `secrets`. It creates `dir` and its parents if they are missing (user-only on Unix,
 /// mode 0700) and prunes old reports there. It replaces the default hook, whose stderr
 /// line would quote the message unredacted, and hands `notify` a redacted line naming
-/// the report instead.
+/// the report instead. Each report is a new file, user-only on Unix (mode 0600); on
+/// Windows it gets its folder's ACL, so an app that can make a user-only file there
+/// uses [`install_creating`].
 pub fn install(dir: PathBuf, program: Program, secrets: Secrets, notify: Notify) {
+    install_creating(dir, program, secrets, notify, create_new);
+}
+
+/// [`install`], with the app's own `create` making each report file: on Windows the apps
+/// pass `jstream_platform_windows::create_private_file`, which gives the file a protected
+/// DACL for SYSTEM and the user (#656). This crate can't make that file itself: it has
+/// no `unsafe` and sits on the platform crate's layer.
+pub fn install_creating(
+    dir: PathBuf,
+    program: Program,
+    secrets: Secrets,
+    notify: Notify,
+    create: CreateFile,
+) {
     // Best effort: if the folder can't be made, each report's line says so.
     let _ = create_dir(&dir);
     prune(&dir, MAX_REPORTS);
     std::panic::set_hook(Box::new(move |info| {
-        on_panic(&dir, program, &secrets, notify, info);
+        on_panic(&dir, program, &secrets, (notify, create), info);
     }));
 }
+
+/// How the hook makes a report file: a new file at the path, failing with
+/// `AlreadyExists` if anything is there (the hook then tries the next name), open for
+/// writing. It runs inside the panic hook, so it must not panic.
+pub type CreateFile = fn(&Path) -> io::Result<File>;
 
 /// How the hook tells the user about a panic: the app's function, given the redacted
 /// line naming the report (or saying why none was written). The library never prints
@@ -197,7 +218,7 @@ fn on_panic(
     dir: &Path,
     program: Program,
     secrets: &Secrets,
-    notify: Notify,
+    (notify, create): (Notify, CreateFile),
     info: &PanicHookInfo<'_>,
 ) {
     let now = SystemTime::now();
@@ -234,7 +255,7 @@ fn on_panic(
             (report(&facts, withheld, &backtrace), withheld.to_owned())
         }
     };
-    let written = write_report(dir, now, &report);
+    let written = write_report(dir, now, &report, create);
     let summary = truncate(&summary, 512);
     let line = match &written {
         Ok(path) => format!(
@@ -355,9 +376,14 @@ fn redact(text: &str, secrets: &[Secret]) -> String {
 }
 
 /// Writes `report` to a new file in `dir`, after pruning the oldest reports so that
-/// [`MAX_REPORTS`] remain with it. The file is user-only on Unix (mode 0600), and gets
-/// its folder's ACL on Windows.
-fn write_report(dir: &Path, now: SystemTime, report: &str) -> io::Result<PathBuf> {
+/// [`MAX_REPORTS`] remain with it. `create` makes the file ([`create_new`] unless the
+/// app passed its own to [`install_creating`]).
+fn write_report(
+    dir: &Path,
+    now: SystemTime,
+    report: &str,
+    create: CreateFile,
+) -> io::Result<PathBuf> {
     prune(dir, MAX_REPORTS.saturating_sub(1));
     let stamp = Utc::from(now).compact();
     let pid = std::process::id();
@@ -366,7 +392,7 @@ fn write_report(dir: &Path, now: SystemTime, report: &str) -> io::Result<PathBuf
         let path = dir.join(format!(
             "{REPORT_PREFIX}{stamp}-{pid}-{sequence:03}{REPORT_SUFFIX}"
         ));
-        match create_new(&path) {
+        match create(&path) {
             Ok(mut file) => {
                 file.write_all(report.as_bytes())?;
                 file.sync_all()?;
@@ -391,8 +417,8 @@ fn create_dir(dir: &Path) -> io::Result<()> {
 }
 
 /// Opens a new file at `path` for writing, failing if anything is there; user-only on
-/// Unix.
-fn create_new(path: &Path) -> io::Result<File> {
+/// Unix (mode 0600), its folder's ACL on Windows. [`install`]'s [`CreateFile`].
+pub fn create_new(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]

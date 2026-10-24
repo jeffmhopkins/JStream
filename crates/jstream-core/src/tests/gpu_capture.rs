@@ -1,16 +1,17 @@
 //! The render thread's GPU capture path and its fallbacks (ARCH › GPU pipeline, step 6),
 //! on a software device: which path `open_capture` takes for each kind of platform, an
 //! output whose capture frames are textures composited with no CPU copy, a browser
-//! source whose page paints on the stage's device, and an output that leaves the GPU
-//! path mid-run when compositing keeps failing on it (#451), and one whose fallback
-//! hangs (#577).
+//! source whose page paints on the stage's device, an output that leaves the GPU path
+//! mid-run when compositing keeps failing on it (#451), one whose fallback hangs (#577),
+//! and an encoder that takes GPU frames getting the program converted into NV12 encode
+//! targets.
 //!
 //! A software adapter stands in for the platform's media adapter, and a fake capture
 //! backend delivers `GpuFrame`s on it. A machine with no adapter skips; CI, which
 //! installs one, fails instead.
 
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -25,8 +26,10 @@ use jstream_platform::fake::{
 };
 use jstream_platform::wgpu;
 use jstream_platform::{
-    AdapterId, Backends, Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
-    FrameSync, GpuContext, GpuFrame, GpuInterop, MediaClock, PlatformError, VideoSurface,
+    AdapterId, AudioEncoder, AudioEncoderConfig, Backends, Capture, CaptureStats, CaptureStream,
+    CaptureTarget, CaptureTargetInfo, CodecInfo, Codecs, FrameSync, GpuContext, GpuFrame,
+    GpuInterop, MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+    VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{Batch, Edit, OutputId, OutputState, Settings, SourceId, SourceKind};
 use jstream_render::{Compositor, OpenOptions};
@@ -38,7 +41,8 @@ use super::{
 };
 use crate::audio_sources::Wanted;
 use crate::runtime::{
-    DrawFn, OpenDraw, RenderHub, cpu_draw, gpu_draw, open_capture, parts_from, start_capture,
+    DrawError, DrawFn, DrawHook, OpenDraw, RenderHub, cpu_draw, gpu_draw, gpu_draw_with,
+    open_capture, parts_from, start_capture,
 };
 use crate::snapshot::CaptureImage;
 use crate::{Engine, InProcessControl, RecordingPublish};
@@ -686,9 +690,11 @@ fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
                 .frame(&CaptureSpec::Display(None))
                 .is_some_and(|frame| matches!(frame.image, CaptureImage::Gpu(_)));
             match breaks {
-                Breaks::GpuFrames if gpu_frame => return Err("unsupported format".to_owned()),
+                Breaks::GpuFrames if gpu_frame => {
+                    return Err(DrawError::Failed("unsupported format".to_owned()));
+                }
                 Breaks::Context | Breaks::Everywhere if on_context => {
-                    return Err("device removed".to_owned());
+                    return Err(DrawError::Failed("device removed".to_owned()));
                 }
                 _ => {}
             }
@@ -874,6 +880,176 @@ fn an_output_fails_when_the_gpu_fallback_fails() {
     );
 }
 
+/// [`gpu_draw`], destroying the device of each of the first `lose` compositors it opens
+/// once that one has drawn `after` frames: what a driver reset after a hang (Windows'
+/// TDR) does to it, as wgpu reports both through the device-lost callback (#349). Each
+/// open is recorded in `opens`.
+fn losing_draw(lose: usize, after: u32, opens: Arc<Mutex<Vec<bool>>>) -> OpenDraw {
+    Arc::new(move |context: Option<&GpuContext>| {
+        let opened = {
+            let mut opens = opens.lock().unwrap_or_else(PoisonError::into_inner);
+            opens.push(context.is_some());
+            opens.len()
+        };
+        let drawn = AtomicU64::new(0);
+        let hook: DrawHook = Arc::new(move |compositor: &Compositor| {
+            if opened <= lose && drawn.fetch_add(1, Ordering::Relaxed) + 1 == u64::from(after) {
+                compositor.device().destroy();
+            }
+        });
+        (gpu_draw_with(hook))(context)
+    })
+}
+
+/// An engine on [`losing_draw`], with GPU interop from `gpu`.
+fn losing_engine(
+    clock: &FakeClock,
+    gpu: Arc<dyn GpuInterop>,
+    mode: GpuMode,
+    draw: OpenDraw,
+) -> Engine {
+    Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends(clock, gpu, mode))
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(draw)
+        .with_publish(Box::new(RecordingPublish::new()))
+}
+
+/// When the render thread's own device is lost mid-run, the output keeps streaming: the
+/// compositor opens on a new device at once and draws on, and the loss is counted
+/// (#349).
+#[test]
+fn an_output_survives_losing_its_own_gpu_device() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let opens = Arc::new(Mutex::new(Vec::new()));
+    let engine = losing_engine(
+        &clock,
+        Arc::new(FakeGpuInterop),
+        GpuMode::None,
+        losing_draw(1, 5, Arc::clone(&opens)),
+    );
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let mut stats = None;
+    let lost = tick_until(&clock, || {
+        let now = engine.output_stats().expect("still running");
+        let done = now.gpu_device_losses == 1
+            && opens.lock().unwrap_or_else(PoisonError::into_inner).len() == 2;
+        stats = Some(now);
+        done
+    });
+    assert!(lost, "no loss, or no reopen: {stats:?}");
+    let stats = stats.expect("read");
+    let mut later = None;
+    let drew = tick_until(&clock, || {
+        let now = engine.output_stats().expect("still running");
+        let done = now.readbacks >= stats.readbacks + 3;
+        later = Some(now);
+        done
+    });
+    let later = later.expect("read");
+    assert!(drew, "the new device draws: {later:?}");
+    assert_eq!(
+        (later.gpu_device_losses, later.gpu_fallbacks),
+        (1, 0),
+        "one loss, and no context to leave"
+    );
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    assert_eq!(
+        *opens.lock().unwrap_or_else(PoisonError::into_inner),
+        vec![false, false],
+        "opened on its own device twice"
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
+}
+
+/// When the platform context's device is lost mid-run, the render thread leaves the GPU
+/// path at once, without waiting for [`GPU_FALLBACK_ERRORS`]: the compositor opens on a
+/// device of its own and the capture moves to the CPU path (#349, #451).
+#[test]
+fn an_output_leaves_a_lost_gpu_context_at_once() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let opens = Arc::new(Mutex::new(Vec::new()));
+    let engine = losing_engine(
+        &clock,
+        Arc::new(SoftwareGpu),
+        GpuMode::Deliver,
+        losing_draw(1, 5, Arc::clone(&opens)),
+    );
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let mut stats = None;
+    let left = tick_until(&clock, || {
+        let now = engine.output_stats().expect("still running");
+        let done = now.gpu_device_losses == 1 && now.gpu_fallbacks == 1;
+        stats = Some(now);
+        done
+    });
+    assert!(left, "the lost context was not left: {stats:?}");
+    let stats = stats.expect("read");
+    let mut later = None;
+    let drew = tick_until(&clock, || {
+        let now = engine.output_stats().expect("still running");
+        let done = now.readbacks >= stats.readbacks + 3;
+        later = Some(now);
+        done
+    });
+    let later = later.expect("read");
+    assert!(drew, "the CPU path draws: {later:?}");
+    assert_eq!(later.gpu_captures, stats.gpu_captures, "off the GPU path");
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    assert_eq!(
+        *opens.lock().unwrap_or_else(PoisonError::into_inner),
+        vec![true, false],
+        "opened on the context, then on its own device"
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
+}
+
+/// A GPU that keeps being lost is not reopened for ever: the third loss within a minute
+/// fails the output (#349).
+#[test]
+fn an_output_fails_at_its_third_gpu_loss_in_a_minute() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let opens = Arc::new(Mutex::new(Vec::new()));
+    let engine = losing_engine(
+        &clock,
+        Arc::new(FakeGpuInterop),
+        GpuMode::None,
+        losing_draw(usize::MAX, 3, Arc::clone(&opens)),
+    );
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let failed = tick_until(&clock, || {
+        output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none()
+    });
+    assert!(
+        failed,
+        "the output did not fail: {:?}",
+        engine.output_stats()
+    );
+    assert_eq!(
+        *opens.lock().unwrap_or_else(PoisonError::into_inner),
+        vec![false, false, false],
+        "reopened after the first two losses, not after the third"
+    );
+}
+
 /// Lets a [`hanging_fallback`]'s open return when dropped, so a failing test unwinds
 /// instead of waiting on the hung thread.
 struct Release(Arc<(Mutex<bool>, Condvar)>);
@@ -903,7 +1079,7 @@ fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
         let mut drawn = false;
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
             if drawn {
-                return Err("device removed".to_owned());
+                return Err(DrawError::Failed("device removed".to_owned()));
             }
             drawn = true;
             inner(shot, live, captures, frames, at)
@@ -968,4 +1144,442 @@ fn a_hung_gpu_fallback_fails_the_output_at_its_deadline() {
         started.elapsed() >= timeout.saturating_sub(Duration::from_millis(500)),
         "failed before the deadline"
     );
+}
+
+/// GPU interop on a software device with NV12 textures, whose encode targets are plain
+/// `NV12` textures counting their stages: the platform's encode path, minus the
+/// platform. `None` where the adapter has no `TEXTURE_FORMAT_NV12`.
+struct Nv12Gpu {
+    stages: Arc<AtomicU64>,
+}
+
+impl Nv12Gpu {
+    fn open_context() -> Result<GpuContext, PlatformError> {
+        let compositor = Compositor::open(OpenOptions::headless()).map_err(|err| {
+            PlatformError::Unsupported {
+                what: format!("a software adapter: {err}"),
+            }
+        })?;
+        let adapter = compositor.adapter().clone();
+        if !adapter
+            .features()
+            .contains(wgpu::Features::TEXTURE_FORMAT_NV12)
+        {
+            return Err(PlatformError::Unsupported {
+                what: "NV12 textures on the software adapter".into(),
+            });
+        }
+        let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("jstream-core-test-nv12"),
+            required_features: wgpu::Features::TEXTURE_FORMAT_NV12,
+            ..Default::default()
+        }))
+        .map_err(|err| PlatformError::Unsupported {
+            what: format!("an NV12 device: {err}"),
+        })?;
+        Ok(GpuContext::new(
+            adapter,
+            device,
+            queue,
+            AdapterId {
+                luid: None,
+                vendor: 0,
+            },
+            None,
+        ))
+    }
+}
+
+impl GpuInterop for Nv12Gpu {
+    fn open_device(&self) -> Result<GpuContext, PlatformError> {
+        Self::open_context()
+    }
+
+    fn encode_target(
+        &self,
+        context: &GpuContext,
+        size: FrameSize,
+    ) -> Result<GpuFrame, PlatformError> {
+        let texture = context.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-core-test-encode-target"),
+            size: wgpu::Extent3d {
+                width: size.width(),
+                height: size.height(),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::NV12,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let info = VideoFrameInfo {
+            size,
+            format: PixelFormat::Nv12,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::MICROS),
+        };
+        Ok(GpuFrame::new(
+            texture,
+            info,
+            Arc::new(CountSync(Arc::clone(&self.stages))),
+        ))
+    }
+}
+
+/// The fake codecs, whose encoders take GPU frames on any context. The fake encoder
+/// takes frames of its configured format only, so one opened in NV12 fails its session
+/// on a CPU RGBA frame.
+struct GpuCodecs;
+
+impl Codecs for GpuCodecs {
+    fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+        FakeCodecs.list()
+    }
+
+    fn video_encoder(
+        &self,
+        config: &VideoEncoderConfig,
+    ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+        FakeCodecs.video_encoder(config)
+    }
+
+    fn audio_encoder(
+        &self,
+        config: &AudioEncoderConfig,
+    ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+        FakeCodecs.audio_encoder(config)
+    }
+
+    fn video_decoder(
+        &self,
+        config: &VideoDecoderConfig,
+    ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+        FakeCodecs.video_decoder(config)
+    }
+
+    fn on_context(&self, _context: &GpuContext) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
+        Ok(Some(Arc::new(FakeCodecs)))
+    }
+}
+
+/// An output whose encoder takes GPU frames gets the program converted into the
+/// platform's encode targets: each conversion stages a target, the encoder encodes
+/// them, and nothing is read back to the CPU. (The conversion's values are checked in
+/// `jstream-render`; lavapipe draws NV12 plane views wrongly, so they aren't here.)
+#[test]
+fn a_gpu_encoder_gets_nv12_encode_targets_and_no_readback() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    if let Err(err) = Nv12Gpu::open_context() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the encode-target test: {err}"
+        );
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let stages = Arc::new(AtomicU64::new(0));
+    let gpu = Arc::new(Nv12Gpu {
+        stages: Arc::clone(&stages),
+    });
+    let mut backends = backends(&clock, gpu, GpuMode::Deliver);
+    backends.codecs = Arc::new(GpuCodecs);
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(gpu_draw())
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut encoded = false;
+    while Instant::now() < deadline {
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(20));
+        let stats = engine.output_stats().expect("running");
+        if stats.video.encoded >= 3 && stages.load(Ordering::Relaxed) >= 3 {
+            encoded = true;
+            break;
+        }
+    }
+    let stats = engine.output_stats().expect("running");
+    assert!(
+        encoded,
+        "no encode target was converted and encoded: {stats:?}"
+    );
+    assert_eq!(stats.readbacks, 0, "a GPU-only program reads nothing back");
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
+}
+
+/// [`gpu_draw`], failing draws `from` to `to` (counted from 1) with a composite error.
+fn flaky_draw(from: u64, to: u64, draws: Arc<AtomicU64>) -> OpenDraw {
+    Arc::new(move |context: Option<&GpuContext>| {
+        let mut inner = (gpu_draw())(context)?;
+        let draws = Arc::clone(&draws);
+        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
+            let n = draws.fetch_add(1, Ordering::Relaxed) + 1;
+            if (from..=to).contains(&n) {
+                return Err(DrawError::Failed("unsupported format".to_owned()));
+            }
+            inner(shot, live, captures, frames, at)
+        });
+        Ok(draw)
+    })
+}
+
+/// An output whose encoder takes the context's GPU frames can't follow a fallback, so
+/// it rides out composite errors as an output did before the fallback existed: 20 in a
+/// row (past the fallback's 10, short of the 31st that fails) leave it `active` on the
+/// context, with no fallback, and encoding goes on after them (review B1 on #695).
+#[test]
+fn a_gpu_encoder_rides_out_errors_past_the_fallback_count() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    if let Err(err) = Nv12Gpu::open_context() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the encode-target error test: {err}"
+        );
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let gpu = Arc::new(Nv12Gpu {
+        stages: Arc::new(AtomicU64::new(0)),
+    });
+    let mut backends = backends(&clock, gpu, GpuMode::Deliver);
+    backends.codecs = Arc::new(GpuCodecs);
+    let draws = Arc::new(AtomicU64::new(0));
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(flaky_draw(3, 22, Arc::clone(&draws)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    let mut errors_done = None;
+    let past = tick_until(&clock, || {
+        let now = engine.output_stats().expect("still running");
+        let done = draws.load(Ordering::Relaxed) > 22;
+        errors_done = Some(now);
+        done
+    });
+    let errors_done = errors_done.expect("read");
+    assert!(past, "the errors never ran out: {errors_done:?}");
+    let mut later = None;
+    let encoded = tick_until(&clock, || {
+        let now = engine.output_stats().expect("still running");
+        let done = now.video.encoded >= errors_done.video.encoded + 3;
+        later = Some(now);
+        done
+    });
+    let later = later.expect("read");
+    assert!(encoded, "encoding didn't go on: {later:?}");
+    assert_eq!(later.gpu_fallbacks, 0, "no fallback with a GPU encoder");
+    assert_eq!(later.readbacks, 0, "still on the GPU encode path");
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
+}
+
+/// An output whose encoder takes the context's GPU frames can't follow the program off
+/// the context, so a lost context device fails it at once instead of switching: the
+/// compositor is never reopened (review B2/N10 on #695).
+#[test]
+fn a_gpu_encoder_fails_at_once_on_a_lost_context() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    if let Err(err) = Nv12Gpu::open_context() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the lost-context encode-target test: {err}"
+        );
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let gpu = Arc::new(Nv12Gpu {
+        stages: Arc::new(AtomicU64::new(0)),
+    });
+    let mut backends = backends(&clock, gpu, GpuMode::Deliver);
+    backends.codecs = Arc::new(GpuCodecs);
+    let opens = Arc::new(Mutex::new(Vec::new()));
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(losing_draw(1, 5, Arc::clone(&opens)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let failed = tick_until(&clock, || {
+        output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none()
+    });
+    assert!(
+        failed,
+        "the output did not fail: {:?}",
+        engine.output_stats()
+    );
+    assert_eq!(
+        *opens.lock().unwrap_or_else(PoisonError::into_inner),
+        vec![true],
+        "opened on the context only: no switch off it"
+    );
+}
+
+/// The fake codecs, whose encoders take GPU frames on any context once `gpu` is set,
+/// and only CPU frames before: so an output started first runs on the CPU path, where a
+/// fallback can follow it.
+struct LateGpuCodecs {
+    gpu: Arc<AtomicBool>,
+}
+
+impl Codecs for LateGpuCodecs {
+    fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+        FakeCodecs.list()
+    }
+
+    fn video_encoder(
+        &self,
+        config: &VideoEncoderConfig,
+    ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+        FakeCodecs.video_encoder(config)
+    }
+
+    fn audio_encoder(
+        &self,
+        config: &AudioEncoderConfig,
+    ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+        FakeCodecs.audio_encoder(config)
+    }
+
+    fn video_decoder(
+        &self,
+        config: &VideoDecoderConfig,
+    ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+        FakeCodecs.video_decoder(config)
+    }
+
+    fn on_context(&self, _context: &GpuContext) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
+        Ok(self
+            .gpu
+            .load(Ordering::Acquire)
+            .then(|| Arc::new(FakeCodecs) as Arc<dyn Codecs>))
+    }
+}
+
+/// After the render thread has fallen back off the context, an output whose codecs
+/// could take the context's GPU frames opens its session on the CPU path instead: the
+/// render thread has no encode targets to give it, and a GPU session would fail every
+/// output on the stage, the running stream included (#699).
+#[test]
+fn an_output_started_after_a_gpu_fallback_reads_back_and_fails_nothing() {
+    use jstream_protocol::{
+        EncoderProfile, EncoderProfileId, OutputKind, RateControl, RecordContainer,
+    };
+
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let gpu_codecs = Arc::new(AtomicBool::new(false));
+    let mut backends = backends(&clock, Arc::new(SoftwareGpu), GpuMode::Deliver);
+    backends.codecs = Arc::new(LateGpuCodecs {
+        gpu: Arc::clone(&gpu_codecs),
+    });
+    let opens = Arc::new(Mutex::new(Opens::default()));
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(breaking_draw(Breaks::Context, Arc::clone(&opens)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    let dir = std::env::temp_dir().join(format!("jstream-core-699-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let path = dir.join("show.mp4");
+    // A recording on a profile of its own, so it opens a session rather than sharing
+    // `yt`'s.
+    let mut profile = EncoderProfile::DEFAULT;
+    profile.video.rate_control = RateControl::Cbr { kbps: 6000 };
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::OutputCreate {
+                    output_id: OutputId::new("rec"),
+                    kind: OutputKind::Record {
+                        path: path.to_str().expect("a UTF-8 temp path").into(),
+                        container: RecordContainer::Mp4,
+                    },
+                },
+                Edit::EncoderCreate {
+                    profile_id: EncoderProfileId::new("hq"),
+                    name: "Recording".into(),
+                    profile,
+                },
+                Edit::OutputSetEncoder {
+                    output_id: OutputId::new("rec"),
+                    profile_id: Some(EncoderProfileId::new("hq")),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("encoder edits");
+
+    block_on(control.call(output_call("yt", true))).expect("yt start");
+    let fell_back = tick_until(&clock, || {
+        engine
+            .output_stats()
+            .is_some_and(|stats| stats.gpu_fallbacks == 1)
+    });
+    assert!(fell_back, "no fallback: {:?}", engine.output_stats());
+
+    // From here a new session could take the context's GPU frames.
+    gpu_codecs.store(true, Ordering::Release);
+    block_on(control.call(output_call("rec", true))).expect("rec start");
+    let rec = OutputId::new("rec");
+    let before = engine.output_stats().expect("running").readbacks;
+    let mut later = None;
+    let encoded = tick_until(&clock, || {
+        let now = engine.output_stats_of(&rec);
+        let done = now
+            .as_ref()
+            .is_some_and(|stats| stats.video.encoded >= 3 && stats.readbacks >= before + 3);
+        later = now;
+        done
+    });
+    assert!(
+        encoded,
+        "the recording never encoded read-back frames: {later:?}"
+    );
+    assert_eq!(
+        output_state(&control, "yt"),
+        OutputState::Active,
+        "the stream"
+    );
+    assert_eq!(
+        output_state(&control, "rec"),
+        OutputState::Active,
+        "the recording"
+    );
+    assert_eq!(later.map(|stats| stats.gpu_fallbacks), Some(1));
+    block_on(control.call(output_call("rec", false))).expect("rec stop");
+    block_on(control.call(output_call("yt", false))).expect("yt stop");
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -247,6 +247,45 @@ fn video_packets_keep_order_and_pts_and_finish_drains() {
     assert_eq!(session.input().push(frame(20)), Err(PushError::Closed));
 }
 
+/// A snapshot of a video session taken while frames flow never counts a frame encoded,
+/// refused or published (one packet per frame) that it doesn't count received, nor more
+/// keyframes than packets. The push used to count a frame received only after sending it,
+/// so the encode thread could encode and publish it first (#709's `encoded: 1,
+/// received: 0`).
+#[test]
+fn stats_never_count_more_encoded_than_received() {
+    let session = VideoSession::open(&FakeCodecs, video_config(3), options(4)).unwrap();
+    let _sub = session.subscribe();
+    let input = session.input();
+    let done = std::sync::atomic::AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            for i in 0..20_000 {
+                // A full queue is fine: the test is about the counts, not delivery.
+                let _ = input.push(frame(i));
+            }
+            done.store(true, std::sync::atomic::Ordering::Release);
+        });
+        let mut snapshots = 0u64;
+        while !done.load(std::sync::atomic::Ordering::Acquire) {
+            let s = session.stats();
+            assert!(
+                s.encoded + s.dropped_encoder_busy <= s.received,
+                "more encoded than received: {s:?}"
+            );
+            assert!(s.packets <= s.received, "more packets than received: {s:?}");
+            assert!(
+                s.keyframes <= s.packets,
+                "more keyframes than packets: {s:?}"
+            );
+            snapshots += 1;
+        }
+        assert!(snapshots > 0);
+    });
+    let stats = session.finish().unwrap();
+    assert_eq!(stats.received + stats.dropped_queue_full, 20_000);
+}
+
 /// #443: a hardware encoder that falls back to software after it opened is reported as
 /// software from then on, while `info` keeps what was opened.
 #[test]

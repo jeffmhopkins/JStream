@@ -401,11 +401,59 @@ fn a_file_from_before_audio_keeps_the_master_sends() {
     assert_eq!(
         sends,
         [
+            ("aux".to_owned(), BusId::master(), 0.0),
+            ("cam".to_owned(), BusId::master(), 0.0),
+            ("cam_copy".to_owned(), BusId::master(), 0.0),
             ("desk".to_owned(), BusId::master(), 0.0),
             ("mic".to_owned(), BusId::master(), 0.0),
             ("mic_copy".to_owned(), BusId::master(), 0.0),
         ]
     );
+}
+
+/// #716: a file saved before webcams had audio gives a `webcam` no audio settings and
+/// no send. It loads with the master send a new webcam gets, and its audio off, so
+/// opening it never starts recording the webcam's microphone. A webcam the file gives
+/// audio settings (every current file does) loads as saved.
+#[test]
+fn a_webcam_from_before_webcam_audio_loads_with_its_audio_off() {
+    let older = edit_file(|file| {
+        if let Some(sends) = file["sends"].as_array_mut() {
+            sends.retain(|send| !matches!(send["source_id"].as_str(), Some("cam" | "aux")));
+        }
+        for source in file["sources"].as_array_mut().into_iter().flatten() {
+            if matches!(source["id"].as_str(), Some("cam" | "aux")) {
+                source.as_object_mut().map(|s| s.remove("audio"));
+            }
+        }
+    });
+    let Ok(graph) = load(&older) else {
+        panic!("the older file did not load");
+    };
+    let state = graph.state();
+    for id in ["cam", "aux"] {
+        let source = state.source(&SourceId::new(id));
+        assert_eq!(
+            source.and_then(|s| s.audio()).map(|a| a.enabled),
+            Some(false),
+            "{id}"
+        );
+        assert!(
+            state
+                .sends()
+                .any(|(source, bus, _)| source.as_str() == id && bus.is_master()),
+            "{id}"
+        );
+    }
+    // `cam_copy` kept its send in the file: as saved, its audio on.
+    let copy = state.source(&SourceId::new("cam_copy"));
+    assert_eq!(copy.and_then(|s| s.audio()).map(|a| a.enabled), Some(true));
+    // Saved again, the webcams' audio off is written down.
+    let saved = graph.to_collection_json();
+    let Ok(reloaded) = load(&saved) else {
+        panic!("the saved file did not load");
+    };
+    assert_eq!(reloaded.state(), graph.state());
 }
 
 /// A source whose master send was removed saves an empty `sends`, which tells the load
@@ -435,6 +483,49 @@ fn a_removed_master_send_round_trips() {
     assert_eq!(value["sends"], json!([]));
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// #716: a webcam's audio settings are written even at their defaults, so a current
+/// webcam whose master send was removed doesn't read back as one saved before webcams
+/// had audio: it keeps its audio on and gets no send back.
+#[test]
+fn a_webcam_with_its_master_send_removed_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::SourceCreate {
+                source_id: SourceId::new("cam"),
+                name: "cam".into(),
+                kind: SourceKind::Builtin {
+                    kind: "webcam".into(),
+                },
+                settings: jstream_protocol::Settings::default(),
+                duplicated_from: None,
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("cam"),
+                bus_id: BusId::master(),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(value["sends"], json!([]));
+    assert_eq!(value["sources"][0]["audio"]["enabled"], json!(true));
+    let loaded = load(&json);
+    assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(
+        loaded
+            .as_ref()
+            .ok()
+            .and_then(|g| g.state().source(&SourceId::new("cam")))
+            .and_then(|s| s.audio())
+            .map(|a| a.enabled),
+        Some(true)
+    );
     assert_eq!(loaded.as_ref(), Ok(&graph));
 }
 

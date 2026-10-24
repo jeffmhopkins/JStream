@@ -188,6 +188,14 @@ impl TapReader {
     }
 }
 
+/// Keeps `scopes`' bus and source scopes in line with what `state`'s sources draw. The
+/// live sources call it before they queue builds, and each sync calls it again before
+/// it hands the mixer thread what feeds each scope.
+pub(crate) fn retain_scopes(scopes: &AudioScopes, state: &State) {
+    scopes.retain(&drawn_buses(state));
+    scopes.retain_sources(&drawn_sources(state));
+}
+
 /// Every bus a source's settings refer to: the buses whose scopes are drawn.
 fn drawn_buses(state: &State) -> BTreeSet<BusId> {
     state
@@ -375,8 +383,7 @@ impl AudioRouting {
         }
         // The scopes of the buses sources draw, each fed from its mixer bus once the
         // mixer holds it, and of the sources they draw, each fed from its input.
-        attached.scopes.retain(&drawn_buses(state));
-        attached.scopes.retain_sources(&drawn_sources(state));
+        retain_scopes(&attached.scopes, state);
         let buses = attached
             .scopes
             .buses()

@@ -15,7 +15,7 @@ use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
-use crate::live::{Built, LiveHost, LiveSources};
+use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
@@ -2650,27 +2650,30 @@ impl State {
         let now = self.live.now();
         let running = match (run, from_scene) {
             (Some(run), Some(from_scene)) => {
-                let from =
-                    match self.studio.running() {
-                        Some(running) => {
-                            let Self {
-                                graph,
-                                frames,
-                                frame_versions,
-                                live,
-                                ..
-                            } = self;
-                            let visuals =
-                                snapshot::on_screen(graph, running, now, &mut |id| match frames
-                                    .get(id)
-                                {
-                                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
-                                    None => live.look(id, now, frame_versions),
-                                });
-                            transition::From::OnScreen(visuals.into())
-                        }
-                        None => transition::From::Scene(from_scene),
-                    };
+                let from = match self.studio.running() {
+                    Some(running) => {
+                        let Self {
+                            graph,
+                            frames,
+                            frame_versions,
+                            live,
+                            ..
+                        } = self;
+                        let assets = live.filter_assets();
+                        let visuals = snapshot::on_screen(
+                            graph,
+                            running,
+                            now,
+                            &mut |id| match frames.get(id) {
+                                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                                None => live.look(id, now, frame_versions),
+                            },
+                            &assets,
+                        );
+                        transition::From::OnScreen(visuals.into())
+                    }
+                    None => transition::From::Scene(from_scene),
+                };
                 Some(transition::Running {
                     from,
                     to: scene_id.clone(),
@@ -2736,6 +2739,7 @@ impl State {
         } = self;
         let now = live.now();
         live.begin_plan();
+        let assets = live.filter_assets();
         let planning = snapshot::plan_with(
             graph,
             studio.program(),
@@ -2744,6 +2748,7 @@ impl State {
                 Some(frame) => Some(Look::Frame(frame.clone(), None)),
                 None => live.look(id, now, frame_versions),
             },
+            &assets,
         );
         live.end_plan();
         if let Some(sound) = live.take_audio() {
@@ -2927,6 +2932,13 @@ impl LiveHost for Shared {
         if state.live.install(built) {
             // A source built with audio of its own is recorded from now on.
             state.audio.sync(state.graph.state(), state.live.audio());
+            state.publish_render();
+        }
+    }
+
+    fn install_asset(&self, loaded: LoadedAsset) {
+        let mut state = lock(&self.state);
+        if state.live.install_asset(loaded) {
             state.publish_render();
         }
     }

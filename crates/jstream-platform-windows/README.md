@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -92,13 +92,15 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Frames:** a free-threaded frame pool of two BGRA buffers. On each `FrameArrived`,
     on a WinRT thread-pool thread, the frame is copied into a staging texture, read back
     and converted to NV12 in BT.709 limited range, which is what the H.264 encoder's CPU
-    path takes. Chroma is left-sited, the H.264 default: each chroma sample filters the
+    path takes, by `jstream_platform::nv12`, the converter Linux's VA-API encoder uses
+    too. Chroma is left-sited, the H.264 default: each chroma sample filters the
     two rows of its block with a `[1 2 1]` tap centred on the block's left column. NV12
     needs even dimensions, so an odd width or height loses its last column or row. When
     the content size changes, the pool is recreated at the new size, and the frames
     after it have that size.
-  - **Mailbox:** frames go to a single-slot mailbox, one atomic pointer that both sides
-    swap, so `latest` never waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
+  - **Mailbox:** frames go to `jstream_platform::mailbox`, the single-slot mailbox every
+    platform's capture shares: one atomic cell that both sides swap, so `latest` never
+    waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
     replaced before `latest` took it counts in `frames_skipped`, and its planes are reused
     for the next frame of the same size. Otherwise each frame allocates its planes, on
     the capture thread, and the mailbox boxes every frame it is given.
@@ -158,7 +160,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     budget, as ARCH step 6 asks.
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
-  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): the **AAC encoder** and
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): the **AAC encoder** and
   the **video encoders** (H.264, HEVC and AV1), from CPU frames or from encode targets on
   the GPU. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
@@ -249,7 +251,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** video decoders, which report `Unsupported` until then.
 
 - **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
-  Foundation's source reader ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  Foundation's source reader ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)):
   - **Devices:** the video capture devices Media Foundation enumerates. A device's
     `DeviceId` is its symbolic link (its device interface path), which stays the same
     across reboots and replugging into the same port; its name is the friendly name.
@@ -283,7 +285,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     A panic on the capture thread (the decoder's included) ends it with `InvalidState`.
     Dropping the stream doesn't wait: the thread stops after its current read and then
     releases the device and drops the decoder.
-  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`: the first synchronous
+  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`, which
+    `MfCodecs::capture_decoder` makes for the engine: the first synchronous
     MJPEG decoder MFT Media Foundation ranks (Microsoft's, on Windows), created on the
     capture thread at the first frame and again if the size changes. It takes NV12
     output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
@@ -294,7 +297,7 @@ The code is ported from spikes S1 to S3. This first cut has:
 
 - **`MfMediaDecoders`** (`MediaDecoders`), local media files through the Media
   Foundation Source Reader (`decode/`,
-  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)):
   - **Opening:** `MFCreateSourceReaderFromURL` on the file's host path, with the
     `\\?\` prefix `canonicalize` adds removed, since the source resolver would read it
     as a URL scheme. Advanced video processing is on, so the reader converts the
@@ -434,8 +437,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
 - **`create_private_file`** and **`check_private_file`**, user-only files for a host's
-  secrets (#344: the daemon's token, devices and log files, as mode `0600` gives
-  them on Unix). `create_private_file` makes a new file (`CREATE_NEW`, never replacing
+  secrets (#344: the daemon's token, devices and log files; #656: both apps' crash
+  reports), as mode `0600` gives them on Unix. `create_private_file` makes a new file (`CREATE_NEW`, never replacing
   one) with a protected DACL for SYSTEM and the user (`jstream-vcam-proto`'s
   `sddl_user_only`, built like the vcam's `sddl_objects`) in the same `CreateFileW`
   call, so it never carries its folder's inherited entries. `check_private_file` reads
@@ -444,7 +447,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   than `READ_CONTROL`, `SYNCHRONIZE` or `FILE_READ_ATTRIBUTES`.
 
 - **`check_media_foundation`**, the Media Foundation check
-  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md#consequences)): Windows N and
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md#consequences)): Windows N and
   KN editions ship without Media Foundation until the user installs the Media Feature
   Pack, and Windows Server until it adds the Server Media Foundation feature. The check
   loads `mfplat.dll` from System32 only and looks for `MFStartup`. If that fails, it
@@ -529,8 +532,8 @@ decode through `MfMediaDecoders`), the virtual camera taking
 `VideoSurface::Gpu`, and a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
-packet flags, positions across a device move), the capture helpers (BGRA and RGBA to NV12 with
-known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
+packet flags, positions across a device move), the capture helpers (target IDs; the
+BGRA and RGBA to NV12 converter and the mailbox are `jstream-platform`'s, tested there), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the video
 encoder helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts`
 mapping), the first-frame fallback with fake encoders (`codec::fallback`: a refused

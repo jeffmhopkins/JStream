@@ -10,6 +10,10 @@
 //! Each compositor that draws shots keeps a [`Chains`]: one [`VideoFilter`] per filter,
 //! made when the filter first draws and kept while the shot keeps it, so a stateful kind
 //! (a video delay) sees every frame in order, and a settings change updates it in place.
+//! A kind that reads an asset is made again, with the new image, when a new load of
+//! that asset arrives, and a `scene_mask` when the layer of the scene it reads is
+//! remade. Each chain runs after the passes of the scenes it reads, in the order the
+//! shot schedules (`snapshot::schedule_chains`).
 //! Each filter draws into a layer of the compositor's [`ResourceCache`], under
 //! [`GpuKey::Chain`], with the last one under [`GpuKey::Filtered`], so a steady chain
 //! allocates no output texture. A filter that no shot keeps is retired into the cache
@@ -27,12 +31,14 @@
 //! Docs: crates/jstream-core/README.md#design, docs/adr/0026-source-filter-chains.md
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use jstream_graph::Source;
 use jstream_media::MediaTime;
-use jstream_protocol::{FilterChain, FilterId, Settings, SourceId};
-use jstream_render::{Compositor, FilterClock, RenderError, ResourceCache, VideoFilter};
+use jstream_protocol::{FilterChain, FilterId, Reference, SceneId, Settings, SourceId};
+use jstream_render::{Compositor, FilterClock, Image, RenderError, ResourceCache, VideoFilter};
 
+use crate::filter_assets::{self, FilterAsset, FilterAssets};
 use crate::snapshot::GpuKey;
 
 /// One filter of a [`Chain`], as the collection holds it.
@@ -41,6 +47,14 @@ pub(crate) struct ChainFilter {
     pub(crate) id: FilterId,
     pub(crate) kind: String,
     pub(crate) settings: Settings,
+    /// The asset it reads (`apply_lut`, `image_mask`), once loaded. `None` for a kind
+    /// that reads none, or while its asset isn't loaded: it then passes its input
+    /// through.
+    pub(crate) reference: Option<Arc<FilterAsset>>,
+    /// The layer of the scene it reads (`scene_mask`), [`GpuKey::reference`] of the
+    /// scene its setting names. `None` for a kind that reads none, or a `null` setting:
+    /// it then passes its input through.
+    pub(crate) scene: Option<GpuKey>,
 }
 
 /// A source's video chain as a shot draws it: the image it starts from and its enabled
@@ -54,8 +68,9 @@ pub(crate) struct Chain {
 impl Chain {
     /// `source`'s chain over `input`, or `None` when no filter of it runs: the chain is
     /// empty, every filter is disabled, or none is of a kind this engine draws (an
-    /// effect pack that isn't loaded). Such a filter is bypassed.
-    pub(crate) fn of(source: &Source, input: GpuKey) -> Option<Self> {
+    /// effect pack that isn't loaded). Such a filter is bypassed. A filter that reads an
+    /// asset gets it from `assets`.
+    pub(crate) fn of(source: &Source, input: GpuKey, assets: &FilterAssets) -> Option<Self> {
         let filters: Vec<ChainFilter> = source
             .filters()
             .chain(FilterChain::Video)
@@ -77,14 +92,28 @@ impl Chain {
                 id: filter.id().clone(),
                 kind: filter.kind().to_owned(),
                 settings: filter.settings().clone(),
+                reference: filter_assets::wanted(filter.kind(), filter.settings())
+                    .and_then(|key| assets.get(&key).cloned()),
+                scene: scene_read(filter.kind(), filter.settings())
+                    .map(|id| GpuKey::reference(&id)),
             })
             .collect();
         (!filters.is_empty()).then_some(Self { input, filters })
     }
 
+    /// The scenes its filters read, in filter order: what must be drawn before it runs.
+    pub(crate) fn scenes(&self) -> impl Iterator<Item = &SceneId> {
+        self.filters
+            .iter()
+            .filter_map(|filter| match &filter.scene {
+                Some(GpuKey::Layer(scene, _)) => Some(scene),
+                _ => None,
+            })
+    }
+
     /// The size the chain draws for an input of `width` by `height`: the source's
-    /// reported size once filtered (aspect ratio, padding and the bounds-growing kinds
-    /// change it).
+    /// reported size once filtered (only aspect ratio changes it; a drop shadow, an
+    /// outline or a glow draws within the frame, ADR-0065 §5).
     pub(crate) fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         self.filters
             .iter()
@@ -99,6 +128,11 @@ struct Running {
     kind: String,
     settings: Settings,
     filter: VideoFilter,
+    /// The version of the asset whose image `filter` reads, if any.
+    reference: Option<u64>,
+    /// The scene layer `filter` reads, if any: the same image the filter holds, kept to
+    /// tell when the layer is remade.
+    scene: Option<Arc<Image>>,
     /// The layer it draws into ([`output_key`]), made when the chain's shape changes so
     /// a steady frame builds no key.
     key: GpuKey,
@@ -125,20 +159,21 @@ pub(crate) struct Chains {
 }
 
 impl Chains {
-    /// Runs every chain in `chains` at `at`, between the caller's
-    /// [`ResourceCache::begin_frame`] and [`ResourceCache::end_frame`], after the
-    /// chains' inputs are in `cache`. A chain whose input is not cached (a failed or
-    /// skipped upload) draws nothing.
-    pub(crate) fn run(
+    /// Starts a frame of the chains in `chains`, between the caller's
+    /// [`ResourceCache::begin_frame`] and [`ResourceCache::end_frame`]: keeps a
+    /// [`VideoFilter`] for each of their filters, retiring the ones no chain runs any
+    /// more. Returns `false` when they already ran in the cache's current frame, so the
+    /// caller runs none of them again: every mix a tick draws shares one frame, and a
+    /// stateful filter sees each tick once. Each chain then runs with [`Self::run_one`].
+    pub(crate) fn begin(
         &mut self,
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
         chains: &BTreeMap<SourceId, Chain>,
-        at: MediaTime,
-    ) {
+    ) -> bool {
         let frame = cache.frame();
         if self.ran == Some(frame) {
-            return;
+            return false;
         }
         self.ran = Some(frame);
         #[cfg(test)]
@@ -160,85 +195,103 @@ impl Chains {
             }
             if let Some(running) = self.running.get_mut(source) {
                 sync(source, running, &chain.filters, &mut self.retired);
+                for (r, f) in running.iter_mut().zip(&chain.filters) {
+                    refer(compositor, source, r, f, &mut self.retired);
+                }
             }
         }
         for filter in self.retired.drain(..) {
             cache.retire_filter(filter);
         }
+        true
+    }
+
+    /// Runs `source`'s `chain` at `at`, after [`Self::begin`] started the frame, once its
+    /// input is in `cache` and the layer of every scene it reads has been drawn this
+    /// frame ([`GpuKey::reference`]). A chain whose input is not cached (a failed or
+    /// skipped upload), or whose scene layer hasn't been drawn yet (only a chain closing
+    /// a cycle, which the graph refuses), draws nothing. A failed scene pass fails the
+    /// frame before this runs.
+    pub(crate) fn run_one(
+        &mut self,
+        compositor: &mut Compositor,
+        cache: &mut ResourceCache<GpuKey>,
+        (source, chain): (&SourceId, &Chain),
+        at: MediaTime,
+    ) {
+        let Some(running) = self.running.get_mut(source) else {
+            return;
+        };
+        let Some(input) = cache.get(&chain.input) else {
+            self.failed.insert(source.clone());
+            return;
+        };
         // Every output layer first, so the draws below read and write the cache
         // without borrowing it mutably.
-        for (source, chain) in chains {
-            let Some(running) = self.running.get_mut(source) else {
-                continue;
-            };
-            let Some(input) = cache.get(&chain.input) else {
-                self.failed.insert(source.clone());
-                continue;
-            };
-            let mut size = (input.width(), input.height());
-            for filter in running.iter_mut() {
-                size = filter.filter.output_size(size.0, size.1);
-                if let Err(error) = cache.layer(compositor, &filter.key, size.0, size.1) {
-                    if !filter.warned {
-                        filter.warned = true;
-                        tracing::warn!(
-                            source = %source,
-                            filter = %filter.id,
-                            kind = %filter.kind,
-                            %error,
-                            "video filter output can't be made; the source draws nothing"
-                        );
-                    }
-                    self.failed.insert(source.clone());
-                    break;
+        let mut size = (input.width(), input.height());
+        for filter in running.iter_mut() {
+            size = filter.filter.output_size(size.0, size.1);
+            if let Err(error) = cache.layer(compositor, &filter.key, size.0, size.1) {
+                if !filter.warned {
+                    filter.warned = true;
+                    tracing::warn!(
+                        source = %source,
+                        filter = %filter.id,
+                        kind = %filter.kind,
+                        %error,
+                        "video filter output can't be made; the source draws nothing"
+                    );
                 }
+                self.failed.insert(source.clone());
+                return;
+            }
+        }
+        for (r, f) in running.iter_mut().zip(&chain.filters) {
+            let Some(scene) = &f.scene else {
+                continue;
+            };
+            if !see(cache, source, r, scene) {
+                self.failed.insert(source.clone());
+                return;
             }
         }
         let clock = FilterClock {
             seconds: at.as_secs_f64(),
         };
         let cache = &*cache;
-        for (source, chain) in chains {
-            if self.failed.contains(source) {
-                continue;
-            }
-            let Some(running) = self.running.get_mut(source) else {
-                continue;
+        let mut input = &chain.input;
+        for running in running.iter_mut() {
+            let Running {
+                id,
+                kind,
+                filter,
+                key,
+                warned,
+                ..
+            } = running;
+            let drawn = match (cache.get(input), cache.get(key)) {
+                (Some(from), Some(to)) => compositor.apply_filter_into(filter, from, to, clock),
+                _ => Err(RenderError::Invalid {
+                    what: "cache",
+                    detail: format!("no image for {input:?} or {key:?}"),
+                }),
             };
-            let mut input = &chain.input;
-            for running in running.iter_mut() {
-                let Running {
-                    id,
-                    kind,
-                    filter,
-                    key,
-                    warned,
-                    ..
-                } = running;
-                let drawn = match (cache.get(input), cache.get(key)) {
-                    (Some(from), Some(to)) => compositor.apply_filter_into(filter, from, to, clock),
-                    _ => Err(RenderError::Invalid {
-                        what: "cache",
-                        detail: format!("no image for {input:?} or {key:?}"),
-                    }),
-                };
-                if let Err(error) = drawn {
-                    if !*warned {
-                        *warned = true;
-                        tracing::warn!(
-                            source = %source,
-                            filter = %id,
-                            kind = %kind,
-                            %error,
-                            "video filter failed to draw; the source draws nothing"
-                        );
-                    }
-                    self.failed.insert(source.clone());
-                    break;
+            if let Err(error) = drawn {
+                if !*warned {
+                    *warned = true;
+                    tracing::warn!(
+                        source = %source,
+                        filter = %id,
+                        kind = %kind,
+                        %error,
+                        "video filter failed to draw; the source draws nothing"
+                    );
                 }
-                *warned = false;
-                input = key;
+                self.failed.insert(source.clone());
+                return;
             }
+            *warned = false;
+            input = key;
         }
     }
 
@@ -326,6 +379,8 @@ fn sync(
                     kind: f.kind.clone(),
                     settings: f.settings.clone(),
                     filter,
+                    reference: None,
+                    scene: None,
                     key: GpuKey::Filtered(source.clone()),
                     warned: false,
                 },
@@ -342,16 +397,110 @@ fn sync(
     retired.extend(old.into_iter().map(|r| r.filter));
 }
 
+/// Gives `running` the image of the asset `filter` reads, when that asset changed: the
+/// compositor makes the image once per load. A kind that reads a reference keeps no
+/// state between frames, so it is made again with the new image, and the old one, which
+/// holds the old image, is retired with the cache's images (R-RT-003). An image that
+/// can't be made is logged, and the filter passes its input through until the asset
+/// changes.
+fn refer(
+    compositor: &mut Compositor,
+    source: &SourceId,
+    running: &mut Running,
+    filter: &ChainFilter,
+    retired: &mut Vec<VideoFilter>,
+) {
+    let wanted = filter.reference.as_ref().map(|asset| asset.version);
+    if running.reference == wanted {
+        return;
+    }
+    running.reference = wanted;
+    let Some(mut fresh) = VideoFilter::new(&filter.kind, &filter.settings) else {
+        return;
+    };
+    if let Some(asset) = &filter.reference {
+        match filter_assets::reference_image(compositor, asset) {
+            Ok(image) => fresh.set_reference(Some(Arc::new(image))),
+            Err(error) => tracing::warn!(
+                source = %source,
+                filter = %filter.id,
+                kind = %filter.kind,
+                %error,
+                "video filter's asset can't be put on the GPU; the filter passes its input through"
+            ),
+        }
+    }
+    retired.push(std::mem::replace(&mut running.filter, fresh));
+}
+
+/// The scene a filter of `kind` with `settings` reads: `scene_mask`'s `scene`, or `None`
+/// for another kind or a `null` setting.
+fn scene_read(kind: &str, settings: &Settings) -> Option<SceneId> {
+    if kind != "scene_mask" {
+        return None;
+    }
+    match Reference::from_value(settings.0.get("scene")?)? {
+        Reference::Scene { scene_id } => Some(scene_id),
+        _ => None,
+    }
+}
+
+/// Hands `running`, a filter that reads the scene layer `key`, that layer as drawn this
+/// frame. A new layer (the first, or one remade at another size) makes the filter again
+/// with it and retires the old one, with the layer it held, into `cache`, so nothing
+/// the filter held is dropped on the render thread (R-RT-003). The scene mask keeps no
+/// state between frames, so nothing is lost. Returns `false`, logged once, when the
+/// layer isn't there.
+fn see(
+    cache: &mut ResourceCache<GpuKey>,
+    source: &SourceId,
+    running: &mut Running,
+    key: &GpuKey,
+) -> bool {
+    let Some(layer) = cache.get(key) else {
+        if !running.warned {
+            running.warned = true;
+            tracing::warn!(
+                source = %source,
+                filter = %running.id,
+                kind = %running.kind,
+                ?key,
+                "the scene a video filter reads wasn't drawn; the source draws nothing"
+            );
+        }
+        return false;
+    };
+    if running
+        .scene
+        .as_ref()
+        .is_some_and(|held| held.texture() == layer.texture())
+    {
+        return true;
+    }
+    let Some(mut fresh) = VideoFilter::new(&running.kind, &running.settings) else {
+        return true;
+    };
+    let held = Arc::new(layer.clone());
+    fresh.set_reference(Some(Arc::clone(&held)));
+    running.scene = Some(held);
+    cache.retire_filter(std::mem::replace(&mut running.filter, fresh));
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use jstream_graph::Graph;
     use jstream_media::{MediaTime, Timebase};
     use jstream_protocol::{
-        Edit, FilterChain, FilterId, FilterOwner, ItemId, SceneId, SourceId, SourceKind,
+        Edit, FilterChain, FilterId, FilterOwner, ItemId, SceneId, Settings, SourceId, SourceKind,
     };
-    use jstream_render::{Compositor, ResourceCache};
+    use std::sync::Arc;
+
+    use jstream_render::{Compositor, Lut, ResourceCache};
+    use jstream_sources::StillImage;
 
     use super::Chains;
+    use crate::filter_assets::{self, FilterAsset, FilterAssets, Loaded};
     use crate::snapshot::tests::gpu;
     use crate::snapshot::{self, Frame, GpuKey, LiveParams, Look, NoCaptures, Shot};
 
@@ -362,6 +511,19 @@ mod tests {
     /// with one `color_correction` filter multiplying by red for each `(source,
     /// enabled)` in `filters`.
     fn graph(filters: &[(&str, bool)]) -> Graph {
+        let red: Settings = [("multiply", serde_json::json!("#ff0000"))]
+            .into_iter()
+            .collect();
+        let filters: Vec<_> = filters
+            .iter()
+            .map(|&(source, enabled)| (source, "color_correction", red.clone(), enabled))
+            .collect();
+        graph_with(&filters)
+    }
+
+    /// [`graph`] with one filter of `kind` with `settings` for each `(source, kind,
+    /// settings, enabled)` in `filters`.
+    fn graph_with(filters: &[(&str, &str, Settings, bool)]) -> Graph {
         let mut edits = vec![Edit::SceneCreate {
             scene_id: SceneId::new("main"),
             name: "Main".into(),
@@ -387,17 +549,15 @@ mod tests {
                 blend: None,
             });
         }
-        for (at, (source, enabled)) in filters.iter().enumerate() {
+        for (at, (source, kind, settings, enabled)) in filters.iter().enumerate() {
             edits.push(Edit::FilterAdd {
                 owner: FilterOwner::Source {
                     source_id: SourceId::new(*source),
                 },
                 chain: FilterChain::Video,
                 filter_id: FilterId::new(format!("f{at}")),
-                kind: "color_correction".into(),
-                settings: [("multiply", serde_json::json!("#ff0000"))]
-                    .into_iter()
-                    .collect(),
+                kind: (*kind).into(),
+                settings: settings.clone(),
                 enabled: Some(*enabled),
                 index: None,
             });
@@ -409,11 +569,20 @@ mod tests {
 
     /// `graph`'s program shot, every source showing a white 16x9 frame.
     fn shot(graph: &Graph) -> Shot {
+        shot_with(graph, &FilterAssets::default())
+    }
+
+    /// [`shot`] with the video filters' `assets` loaded.
+    fn shot_with(graph: &Graph, assets: &FilterAssets) -> Shot {
         let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
         let frame = Frame::new(16, 9, &white, 1).expect("invariant: 16x9 RGBA8");
-        snapshot::plan_with(graph, Some(&SceneId::new("main")), None, &mut |_| {
-            Some(Look::Frame(frame.clone(), None))
-        })
+        snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |_| Some(Look::Frame(frame.clone(), None)),
+            assets,
+        )
         .shot
     }
 
@@ -454,7 +623,7 @@ mod tests {
                 },
                 &LiveParams::default(),
                 &NoCaptures,
-                canvas,
+                snapshot::DrawAt::read(canvas),
             )
             .expect("compose");
             pixel = output.pixels().expect("read back").pixel(1, 1);
@@ -519,6 +688,78 @@ mod tests {
         assert_eq!(chains.runs, 2, "claiming runs nothing");
     }
 
+    /// A 2-point `.cube` table that inverts every colour.
+    const INVERT: &str = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
+
+    /// A filter that reads an asset passes its input through until the plan hands the
+    /// asset over, then filters with it: a LUT inverts, and a mask cut out by alpha
+    /// shows the black under it. A new load of the asset gives the filter a new image.
+    #[test]
+    fn a_filter_reads_its_asset_once_it_is_loaded() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let asset =
+            |path: &str| serde_json::json!({"type": "asset", "root": "collection", "path": path});
+        let lut: Settings = [("lut", asset("invert.cube"))].into_iter().collect();
+        let mask: Settings = [("image", asset("clear.png"))].into_iter().collect();
+        let lut_key = filter_assets::wanted("apply_lut", &lut).expect("a LUT");
+        let mask_key = filter_assets::wanted("image_mask", &mask).expect("a mask");
+        let table = |version| {
+            Arc::new(FilterAsset {
+                version,
+                loaded: Loaded::Lut(Lut::parse_cube(INVERT).expect("cube")),
+            })
+        };
+        let clear = Arc::new(FilterAsset {
+            version: 3,
+            loaded: Loaded::Image(StillImage {
+                width: 1,
+                height: 1,
+                rgba: vec![0, 0, 0, 0],
+            }),
+        });
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let mut assets = FilterAssets::default();
+        // `cam` is drawn over `logo` at the top left, so the LUT on `cam` decides the
+        // pixel, and the mask has to cut both out for the black under them to show.
+        let graded = graph_with(&[("cam", "apply_lut", lut.clone(), true)]);
+        let cam_only = |assets: &FilterAssets| shot_with(&graded, assets);
+        let pixel = draw(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &cam_only(&assets),
+            1,
+        );
+        assert_eq!(pixel, WHITE, "no table yet: passed through");
+        assets.insert(lut_key.clone(), table(1));
+        let pixel = draw(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &cam_only(&assets),
+            1,
+        );
+        assert_eq!(pixel, [0, 0, 0, 255], "inverted");
+        assets.insert(lut_key, table(2));
+        let pixel = draw(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &cam_only(&assets),
+            1,
+        );
+        assert_eq!(pixel, [0, 0, 0, 255], "the new load inverts too");
+
+        let masked = shot_with(
+            &graph_with(&[
+                ("cam", "image_mask", mask.clone(), true),
+                ("logo", "image_mask", mask.clone(), true),
+            ]),
+            &FilterAssets::from([(mask_key, clear)]),
+        );
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &masked, 1);
+        assert_eq!(pixel, [0, 0, 0, 255], "cut out: the black under it");
+    }
+
     /// `graph(&[])` with one `aspect_ratio` filter on `cam`, padding to a custom
     /// `width:height`.
     fn padded(width: i64, height: i64) -> Graph {
@@ -571,5 +812,98 @@ mod tests {
         assert!(!chains.failed(&GpuKey::Filtered(cam.clone())));
         assert!(!warned(&chains), "a frame it draws clears the flag");
         assert_eq!(chains.len(), 1, "the settings changed in place");
+    }
+
+    /// Scene `main` with `logo` turned red under `cam`, whose `scene_mask` reads scene
+    /// `matte`: one source `spot` over the whole canvas, with a `color_correction` at
+    /// `spot_opacity` percent. `spot`'s chain sorts after `cam`'s, so `cam` only sees
+    /// `spot` if the chains run by what they read.
+    fn masked(spot_opacity: f64) -> Graph {
+        let red: Settings = [("multiply", serde_json::json!("#ff0000"))]
+            .into_iter()
+            .collect();
+        let mut graph = graph_with(&[("logo", "color_correction", red, true)]);
+        let filter = |source: &str, id: &str, kind: &str, settings: Settings| Edit::FilterAdd {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new(source),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(id),
+            kind: kind.into(),
+            settings,
+            enabled: Some(true),
+            index: None,
+        };
+        let canvas = jstream_protocol::ItemGeometry::covering_canvas(1920, 1080).expect("canvas");
+        let edits = [
+            Edit::SceneCreate {
+                scene_id: SceneId::new("matte"),
+                name: "Matte".into(),
+                role: None,
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("spot"),
+                name: "spot".into(),
+                kind: SourceKind::Builtin {
+                    kind: "display".into(),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
+            },
+            Edit::ItemAdd {
+                scene_id: SceneId::new("matte"),
+                item_id: ItemId::new("spot"),
+                source_id: SourceId::new("spot"),
+                transform: None,
+                geometry: Some(canvas),
+                opacity: None,
+                blend: None,
+            },
+            filter(
+                "spot",
+                "fade",
+                "color_correction",
+                [("opacity", serde_json::json!(spot_opacity))]
+                    .into_iter()
+                    .collect(),
+            ),
+            filter(
+                "cam",
+                "mask",
+                "scene_mask",
+                [(
+                    "scene",
+                    serde_json::json!({"type": "scene", "scene_id": "matte"}),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+        ];
+        graph.apply(&edits, None).expect("edits");
+        graph
+    }
+
+    /// A `scene_mask` reads its scene as drawn this frame: the scene's pass runs after
+    /// the chains of what it places and before the chain that reads it, so the first
+    /// frame already shows `cam` through an opaque `spot`, and a transparent one cuts
+    /// `cam` out to show the red `logo` beneath. Each frame runs the chains once.
+    #[test]
+    fn a_scene_mask_reads_its_scene_drawn_first() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let opaque = shot(&masked(100.0));
+        assert_eq!(opaque.chain_count(), 3, "cam, logo and spot");
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &opaque, 2);
+        assert_eq!(pixel, WHITE, "cam shows where spot is opaque");
+        assert_eq!(chains.runs, 1);
+
+        let clear = shot(&masked(0.0));
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &clear, 1);
+        assert_eq!(pixel, RED, "cut out where spot is clear: logo shows");
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &opaque, 1);
+        assert_eq!(pixel, WHITE, "the same filter reads the scene again");
+        assert_eq!(chains.runs, 3);
     }
 }

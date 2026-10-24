@@ -12,11 +12,11 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
-kind lives here ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): its
+kind lives here ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): its
 descriptor, which the engine reports through `kind.list` and `kind.describe` and
 validates settings against
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)), and the code that
@@ -90,6 +90,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   full-resolution YCbCr) while it decodes, bounded only by the side
   limit. `Context` also carries the `AudioScopes` the `waveform` and `spectrum`
   sources find their audio in; with none they draw silence.
+- `decode_still(bytes, path, limits)`: an image file's first frame as a `StillImage`
+  (straight sRGB RGBA8), decoded as the `image` kind decodes, within the same `Limits`,
+  with the same errors. `jstream-core` reads the images video filters use with it (an
+  `image_mask`'s mask, an `apply_lut` table stored as tiles), which never animate.
 - `AudioScope`: the latest audio of one mix, as mono (the mean of left and right), in
   a lock-free ring of 16384 samples (341 ms at 48 kHz) stored as atomics. One thread
   pushes interleaved stereo blocks; any number read the latest window of up to 2048
@@ -99,16 +103,21 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   a read retries when a claim reached a slot it copied, so it never returns a window
   mixed from two passes of the ring. The analysis (the FFT included) runs in the
   source's `Painter`, on the thread that paints, never on the mixer thread
-  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)'s audio → render
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)'s audio → render
   path).
 - `AudioScopes`: where those sources find their scope, by their `audio_source` and
   `audio` settings: the program mix's (`program()`, which always exists), a bus's
-  (`bus(id)`, made the first time it is asked for), or another source's (`source(id)`,
-  the same). `retain(drawn)` keeps a scope for each bus in `drawn` and drops the
-  others, and `retain_sources(drawn)` does the same for sources; `buses()` and
-  `sources()` list them. The engine keeps one and feeds every scope in it from its
-  mixer thread. Its locks are taken only to find, make or drop a scope, never by the
-  thread that pushes. `drawn_source(kind, settings)` names the source a `waveform` or
+  (`bus(id)`), or another source's (`source(id)`). `retain(drawn)` keeps a scope for
+  each bus in `drawn`, making the missing ones, and drops the others, and
+  `retain_sources(drawn)` does the same for sources; `buses()` and `sources()` list
+  them. Before the first `retain`, `bus(id)` makes a bus's scope the first time it is
+  asked for; after one, only the buses the last `retain` kept have scopes, and for any
+  other it returns a scope of its own that nothing feeds and `buses()` doesn't list, so
+  a source built from settings an edit has since changed can't bring back a scope the
+  edit dropped (#701). `source(id)` does the same with `retain_sources`. The engine
+  keeps one, calls both before it builds the sources an edit changed, and feeds every
+  scope in it from its mixer thread. Its locks are taken only to find, make or drop a
+  scope, never by the thread that pushes. `drawn_source(kind, settings)` names the source a `waveform` or
   `spectrum` draws, for the engine to feed.
 
 **Kinds.**
@@ -164,7 +173,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `capture.targets` query lists the IDs a `target` can take.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
-  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), so it plays the
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), so it plays the
   containers and codecs the OS does. `create` opens the file through
   `AssetRoots::open` and decodes its first frame, so a file the platform can't play,
   one with neither video nor audio, or one without a media backend
@@ -313,7 +322,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `device` captures the first device listed. Like `display` and `window`, it only says
   what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
   device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
-  before it had a setting, its sources couldn't start.
+  before it had a setting, its sources couldn't start. It has audio too (#716): the
+  input the platform pairs with the device, a webcam's microphone or a capture card's
+  HDMI audio, which the engine records as an audio input's
+  (`webcam_device(kind, settings)` says whose pair: `Some(Some(id))` for the `device`
+  named, `Some(None)` for the first device listed, and `None` for any other kind). So a new webcam gets audio settings that follow `when_shown` and a
+  master send, as ADR-0028 gives a source with video and audio.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
@@ -371,7 +385,7 @@ spectrum's FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemu
 `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default features off.
 `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
-([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
+([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
 distance transform, reading an audio target from settings and taking a YouTube video
@@ -399,7 +413,8 @@ settings are live, and the `audio` setting (#362): both kinds describe it as a b
 reference defaulting to the program mix
 (`the_audio_setting_names_a_bus_and_defaults_to_the_program_mix`), a source draws the
 mix it names and not the other (`a_scope_source_draws_the_mix_its_audio_setting_names`),
-and the lookup keeps one scope per drawn bus (`the_lookup_keeps_one_scope_per_drawn_bus`);
+and the lookup keeps one scope per drawn bus, and once a bus isn't drawn, asking for
+its scope lists nothing until it is drawn again (`the_lookup_keeps_one_scope_per_drawn_bus`);
 and the `audio_source` setting (#459): both kinds describe it as an audio source
 reference defaulting to `null` with their version unchanged
 (`the_audio_source_setting_names_an_audio_source_and_defaults_to_none`), a source
