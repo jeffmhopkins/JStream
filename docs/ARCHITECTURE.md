@@ -865,8 +865,9 @@ transform through `legacy_quad` (crop, scale against the current source size,
 top-left at `position`, clockwise rotation about that corner). A geometry with
 non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn polygon,
 clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
-analytic edge coverage. Mips and anisotropic sampling for 3D items are not built yet,
-and the engine still refuses non-neutral 3D. Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+analytic edge coverage, sampled from a mip chain of its source (rebuilt on the GPU at
+most once per call) with 16× anisotropic filtering. The engine still refuses non-neutral
+3D. Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
@@ -905,7 +906,7 @@ descriptors whose passes `apply_filter` draws from any image (an upload, a layer
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
 runtime that runs a source's video chain before placement is not built yet. Still
-outside this crate: P010, mips and anisotropic sampling for 3D items (ADR-0050 decision 5), loading effect packs (`jstream-effects`; this crate draws
+outside this crate: P010, loading effect packs (`jstream-effects`; this crate draws
 them through the filter harness), and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a

@@ -10,6 +10,7 @@ use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
+use crate::mips::{MipPipelines, Mips};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
 
@@ -24,6 +25,8 @@ struct Draw {
     index: usize,
     first_vertex: u32,
     vertex_count: u32,
+    /// A 3D item: it samples its image's mip chain (ADR-0050 decision 5).
+    mips: bool,
 }
 
 struct Targets {
@@ -58,6 +61,9 @@ pub struct Compositor {
     /// submit hands back to the platform (`PRESENT`) after its last use.
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     filters: filter::Runtime,
+    mip_pipelines: MipPipelines,
+    /// Counts `render` and `render_into` calls, so a chain is built once per call.
+    calls: u64,
 }
 
 impl Compositor {
@@ -183,6 +189,7 @@ impl Compositor {
             .targets
             .as_ref()
             .expect("invariant: ensure_targets just set them");
+        self.record_mips(&mut encoder, scene);
         self.record_composite(&mut encoder, &targets.working_view, scene);
         self.record_resolve(&mut encoder, targets);
         if let Some(buffer) = &readback_buffer {
@@ -301,6 +308,7 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-layer"),
             });
+        self.record_mips(&mut encoder, scene);
         self.record_composite(&mut encoder, view, scene);
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
@@ -456,6 +464,7 @@ impl Compositor {
         );
         let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
         let filters = filter::Runtime::new(&gpu.device);
+        let mip_pipelines = MipPipelines::new(&gpu.device, &image_layout);
         let vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-vertices"),
             size: VERTEX_STRIDE * u64::from(MAX_VERTICES_PER_ITEM),
@@ -476,6 +485,8 @@ impl Compositor {
             draws: Vec::new(),
             staged: Vec::new(),
             filters,
+            mip_pipelines,
+            calls: 0,
         }
     }
 
@@ -516,18 +527,26 @@ impl Compositor {
                 .ok()
                 .filter(|first| first.checked_add(MAX_VERTICES_PER_ITEM).is_some())
                 .ok_or_else(too_many)?;
+            let mips = shape.is_3d();
+            // A chain holds premultiplied linear whatever the source held.
+            let alpha = if mips {
+                Alpha::Premultiplied
+            } else {
+                item.image.alpha()
+            };
             let vertex_count = push_shape(
                 &mut self.vertices,
                 &shape,
                 canvas_w,
                 canvas_h,
                 item.opacity,
-                item.image.alpha(),
+                alpha,
             );
             self.draws.push(Draw {
                 index,
                 first_vertex,
                 vertex_count,
+                mips,
             });
         }
         let limit = self.gpu.max_texture_dimension_2d;
@@ -656,6 +675,7 @@ impl Compositor {
     /// stages the frame holds after this and every other step that can fail, so an
     /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
+        self.calls = self.calls.wrapping_add(1);
         color::validate(scene.background)?;
         self.prepare(scene)?;
         self.ensure_vertex_buffer()?;
@@ -665,6 +685,31 @@ impl Compositor {
                 .write_buffer(&self.vertex_buffer, 0, &self.vertices);
         }
         Ok(())
+    }
+
+    /// `image`'s mip chain, made the first time it is placed in 3D.
+    fn mips_of<'a>(&self, image: &'a Image) -> &'a Mips {
+        image.mips(|| {
+            Mips::new(
+                &self.gpu.device,
+                &self.image_layout,
+                &self.mip_pipelines,
+                image.width(),
+                image.height(),
+            )
+        })
+    }
+
+    /// Rebuilds the mip chain of each image a 3D item draws, once per image and call,
+    /// and an upload only when it was rewritten since (ADR-0050 decision 5).
+    fn record_mips(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene<'_>) {
+        for draw in self.draws.iter().filter(|draw| draw.mips) {
+            let image = scene.items[draw.index].image;
+            let mips = self.mips_of(image);
+            if mips.claim(image, self.calls) {
+                mips.record(encoder, &self.mip_pipelines, image);
+            }
+        }
     }
 
     /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw
@@ -696,7 +741,13 @@ impl Compositor {
             pass.set_pipeline(&self.composite);
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             for draw in &self.draws {
-                pass.set_bind_group(0, scene.items[draw.index].image.bind_group(), &[]);
+                let image = scene.items[draw.index].image;
+                let bind_group = if draw.mips {
+                    &self.mips_of(image).bind_group
+                } else {
+                    image.bind_group()
+                };
+                pass.set_bind_group(0, bind_group, &[]);
                 pass.draw(
                     draw.first_vertex..draw.first_vertex + draw.vertex_count,
                     0..1,
