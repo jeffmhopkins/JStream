@@ -184,29 +184,30 @@ It has:
   and ADR-0060 §4 leaves them to PipeWire. alsa-lib prints its own error lines to stderr
   (such as for an unknown PCM); silencing them needs a variadic C callback, which stable
   Rust can't define.
-- **`V4l2Devices`** (`VideoDevices`): webcams and capture cards through V4L2, the
-  "plain V4L2 backend" ADR-0060 §9 keeps in scope. There is no library: the nodes are
-  driven with `ioctl`s declared by hand from `<linux/videodev2.h>` (`v4l2/abi.rs`, the
-  64-bit layouts, checked against the kernel headers; the backend isn't built for 32-bit
+- **`V4l2Devices`** (`VideoDevices`): webcams and capture cards through V4L2, the "plain
+  V4L2 backend" ADR-0060 §9 keeps in scope. There is no library: the nodes are driven
+  with `ioctl`s declared by hand from `<linux/videodev2.h>` (`v4l2/abi.rs`, the 64-bit
+  layouts, checked against the kernel headers; the backend isn't built for 32-bit
   targets). `devices` lists each `/dev/videoN` that captures video with streaming I/O
   through the single-planar API or, failing that, the multi-planar one (SoC cameras and
   HDMI capture bridges; a UVC webcam's metadata node captures neither), named by its
   card name, with udev's `/dev/v4l/by-id/` link as the ID where there is one (it
-  survives replugging and renumbering), else the node's path. Only such paths are ever opened, since an ID can
-  come from a saved collection. Nodes the user can't open are left out, and no
-  microphone is paired yet. `formats` lists every enumerated size and frame interval of
-  the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12), NV12 and I420 as
-  they are (also the multi-planar `NV12M` and `YUV420M`, each image plane in its own
-  buffer plane, mapped on its own and copied with `jstream_platform::yuv::copy_planes`
-  at that plane's stride, refused as `Unsupported` if the driver settles on another
-  plane count), and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. Where two
-  FourCCs deliver the same encoding, `open` asks for one whose own sizes list the
-  format. A stepwise size range offers its largest size and the common sizes its steps reach, a stepwise interval its
-  shortest, and a driver that enumerates no sizes or no intervals its current ones. `open` sets the
-  format (refused as `Unsupported` if the driver settles on another) and frame interval,
-  maps four driver buffers, and starts a capture thread that waits on the node and an
-  `eventfd`, converts each filled buffer with `jstream_platform::yuv` or hands it to the
-  decoder, queues it back, and fills the single-slot mailbox. A frame's time is its
+  survives replugging and renumbering), else the node's path. Only such paths are ever
+  opened, since an ID can come from a saved collection. Nodes the user can't open are
+  left out, and no microphone is paired yet. `formats` lists every enumerated size and
+  frame interval of the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12),
+  NV12 and I420 as they are (also the multi-planar `NV12M` and `YUV420M`, each image
+  plane in its own buffer plane, mapped on its own and copied with
+  `jstream_platform::yuv::copy_planes` at that plane's stride, refused as `Unsupported`
+  if the driver settles on another plane count), and MJPEG (`MJPG` or `JPEG`) for the
+  engine's decoder. Where two FourCCs deliver the same encoding, `open` asks for one
+  whose own sizes list the format. A stepwise size range offers its largest size and the
+  common sizes its steps reach, a stepwise interval its shortest, and a driver that
+  enumerates no sizes or no intervals its current ones. `open` sets the format (refused
+  as `Unsupported` if the driver settles on another) and frame interval, maps four
+  driver buffers, and starts a capture thread that waits on the node and an `eventfd`,
+  converts each filled buffer with `jstream_platform::yuv` or hands it to the decoder,
+  queues it back, and fills the single-slot mailbox. A frame's time is its
   `CLOCK_MONOTONIC` buffer timestamp when it is recent, else the clock's `now`. Buffers
   the driver marks as corrupt and short raw frames are dropped, rejected JPEGs counted.
   Raw colour is what the driver reports, else the colour space's default, else BT.601
