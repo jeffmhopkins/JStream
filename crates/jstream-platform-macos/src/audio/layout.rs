@@ -23,6 +23,25 @@ const FLAG_IS_BIG_ENDIAN: u32 = 1 << 1;
 /// Hundred-nanosecond ticks per second, the crate's [`timebase`](crate::timebase).
 const HNS_PER_SEC: u128 = 10_000_000;
 
+/// The UID prefix of the private aggregate devices the backend makes to record its process
+/// taps. They are the backend's own plumbing, so it never lists them or opens them by UID.
+pub(crate) const TAP_UID_PREFIX: &str = "io.github.jeffmhopkins.jstream.tap.";
+
+/// Whether `uid` is one of the backend's own tap devices ([`TAP_UID_PREFIX`]).
+pub(crate) fn is_own_tap(uid: &str) -> bool {
+    uid.starts_with(TAP_UID_PREFIX)
+}
+
+/// The stereo pair to record from a tap's aggregate device, whose input `buffers` have
+/// these channel counts: its last two channels. The tap's stereo mixdown comes after any
+/// input channels of the aggregate's main sub-device (the output device it is clocked
+/// by), so those are left out. `None` for fewer than three channels, which
+/// [`plan_stream`] records as they are.
+pub(crate) fn tap_pair(buffers: &[u32]) -> Option<[u32; 2]> {
+    let total: u32 = buffers.iter().sum();
+    (total > 2).then(|| [total - 1, total])
+}
+
 /// Whether a stream's virtual format (`AudioStreamBasicDescription`'s format ID, flags
 /// and bits per channel) is the native-endian 32-bit float PCM the IOProc can hand on
 /// without converting. Core Audio's virtual formats are that on every Mac; anything else
@@ -274,6 +293,35 @@ mod tests {
     /// The buffer lookup `gather` takes, over a list of slices.
     fn at<'a>(buffers: &'a [&'a [f32]]) -> impl Fn(usize) -> Option<&'a [f32]> {
         move |i| buffers.get(i).copied()
+    }
+
+    #[test]
+    fn own_tap_devices_are_recognised() {
+        assert!(is_own_tap("io.github.jeffmhopkins.jstream.tap.0F3A"));
+        assert!(!is_own_tap("BuiltInSpeakerDevice"));
+        assert!(!is_own_tap("io.github.jeffmhopkins.jstream.daemon"));
+    }
+
+    #[test]
+    fn a_tap_records_the_last_two_channels() {
+        // A tap alone: its stereo pair as it is.
+        assert_eq!(tap_pair(&[2]), None);
+        // After a main sub-device with a mono input: the tap is channels 2 and 3.
+        assert_eq!(tap_pair(&[1, 2]), Some([2, 3]));
+        let plan = plan_stream(48_000, &[1, 2], tap_pair(&[1, 2])).expect("plan");
+        assert_eq!(
+            plan.map.sources,
+            vec![
+                Source {
+                    buffer: 1,
+                    channel: 0
+                },
+                Source {
+                    buffer: 1,
+                    channel: 1
+                },
+            ]
+        );
     }
 
     #[test]

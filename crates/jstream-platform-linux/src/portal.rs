@@ -139,7 +139,7 @@ mod backend {
 
     use jstream_platform::{
         Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
-        DeviceId, PlatformError, VideoSurface,
+        DeviceId, GpuContext, PlatformError, VideoSurface,
     };
 
     use super::PortalPick;
@@ -149,7 +149,7 @@ mod backend {
     use crate::dbus::bus::{BUS, Bus};
     use crate::dbus::{add_match, match_rule};
     use crate::pipewire::stream::{Shared, VideoStream};
-    use crate::{PipeWire, Session, SessionKind};
+    use crate::{PipeWire, Session, SessionKind, gpu};
 
     /// The portal's restore tokens, one per grant: in memory, and in files in a folder
     /// when one is given, so a grant survives restarts (ADR-0060 §3).
@@ -340,11 +340,18 @@ mod backend {
     ///
     /// `start` blocks while the desktop's picker is open, up to five minutes; with a
     /// restore token from an earlier grant the portal skips the picker. Frames are CPU
-    /// copies of PipeWire's shared-memory buffers, BGRA or RGBA.
+    /// copies of PipeWire's shared-memory buffers, BGRA or RGBA. On a context
+    /// [`LinuxGpu`](crate::LinuxGpu) opened with DMA-BUF import
+    /// ([`on_context`](Capture::on_context)), they are textures on its device instead,
+    /// RGBA, copied from PipeWire's DMA-BUFs; a stream whose DMA-BUFs don't import falls
+    /// back to CPU frames.
     #[derive(Debug)]
     pub struct PortalCapture {
         session: Session,
-        tokens: RestoreTokens,
+        /// Shared with the backend on a GPU context, so both keep the same grants.
+        tokens: Arc<RestoreTokens>,
+        /// The context whose device the captures import into, on the GPU path.
+        gpu: Option<Arc<gpu::Shared>>,
     }
 
     impl PortalCapture {
@@ -354,7 +361,8 @@ mod backend {
         pub fn new(session: Session) -> Self {
             Self {
                 session,
-                tokens: RestoreTokens::default(),
+                tokens: Arc::default(),
+                gpu: None,
             }
         }
 
@@ -364,10 +372,11 @@ mod backend {
         pub fn with_token_dir(session: Session, dir: PathBuf) -> Self {
             Self {
                 session,
-                tokens: RestoreTokens {
+                tokens: Arc::new(RestoreTokens {
                     dir: Some(dir),
                     ..RestoreTokens::default()
-                },
+                }),
+                gpu: None,
             }
         }
 
@@ -467,7 +476,13 @@ mod backend {
             }
             let shared = Arc::new(Shared::new());
             let node = granted.streams[0].node_id;
-            let video = match VideoStream::connect(pw.library(), fd, node, Arc::clone(&shared)) {
+            let video = match VideoStream::connect(
+                pw.library(),
+                fd,
+                node,
+                Arc::clone(&shared),
+                self.gpu.clone(),
+            ) {
                 Ok(v) => v,
                 Err(e) => {
                     close(&mut bus, Some(&granted.session));
@@ -569,6 +584,23 @@ mod backend {
 
         fn forget_source(&self, source: &str) {
             self.tokens.forget(source);
+        }
+
+        /// This backend on `context`'s device, when [`LinuxGpu`](crate::LinuxGpu)
+        /// opened it with DMA-BUF import; `Ok(None)` when the device imports none.
+        fn on_context(
+            &self,
+            context: &GpuContext,
+        ) -> Result<Option<Arc<dyn Capture>>, PlatformError> {
+            let shared = gpu::Shared::of(context, "PortalCapture::on_context")?;
+            if !shared.imports_dma_bufs() {
+                return Ok(None);
+            }
+            Ok(Some(Arc::new(Self {
+                session: self.session.clone(),
+                tokens: Arc::clone(&self.tokens),
+                gpu: Some(shared),
+            })))
         }
     }
 
@@ -673,7 +705,42 @@ mod backend {
     mod tests {
         use std::os::unix::fs::PermissionsExt;
 
+        use jstream_platform::{AdapterId, Capture, GpuContext, GpuInterop, PlatformError};
+
         use super::{Grant, MAX_FILED_SOURCE, PortalPick, RestoreTokens, plausible};
+        use crate::gpu::LinuxGpu;
+        use crate::{PortalCapture, Session};
+
+        /// A context another platform opened is refused; one of ours without DMA-BUF
+        /// import (a software adapter, here) leaves the capture on CPU frames.
+        #[test]
+        fn the_gpu_path_needs_our_context_with_dma_buf_import() {
+            let capture = PortalCapture::new(Session::from_env());
+            let ours = match LinuxGpu::with_software().open_device() {
+                Ok(context) => context,
+                Err(PlatformError::Unsupported { .. }) => return,
+                Err(e) => panic!("{e}"),
+            };
+            let on_gpu = capture.on_context(&ours).expect("our context");
+            let imports = crate::gpu::Shared::of(&ours, "test")
+                .expect("ours")
+                .imports_dma_bufs();
+            assert_eq!(on_gpu.is_some(), imports);
+            let foreign = GpuContext::new(
+                ours.adapter().clone(),
+                ours.device().clone(),
+                ours.queue().clone(),
+                AdapterId {
+                    luid: None,
+                    vendor: 0,
+                },
+                None,
+            );
+            assert!(matches!(
+                capture.on_context(&foreign),
+                Err(PlatformError::InvalidState { .. })
+            ));
+        }
 
         #[test]
         fn restore_tokens_persist_per_pick() {
@@ -873,9 +940,42 @@ mod backend {
 mod hw_tests {
     use std::time::{Duration, Instant};
 
-    use jstream_platform::{Capture, CaptureTarget, DeviceId, MediaClock, VideoSurface};
+    use jstream_platform::{
+        Capture, CaptureTarget, DeviceId, GpuInterop, MediaClock, VideoSurface, media::PixelFormat,
+    };
 
-    use crate::{MonotonicClock, PortalCapture, Session};
+    use crate::{LinuxGpu, MonotonicClock, PortalCapture, Session};
+
+    /// On a GPU with DMA-BUF import: the capture on the context delivers textures on
+    /// its device, recent and of the picked screen's size.
+    #[test]
+    #[ignore = "needs a desktop session with the ScreenCast portal, PipeWire and a Vulkan GPU with DMA-BUF import"]
+    fn portal_capture_on_the_gpu_delivers_textures() {
+        let context = LinuxGpu::new().open_device().expect("a Vulkan GPU");
+        let capture = PortalCapture::new(Session::from_env())
+            .on_context(&context)
+            .expect("our context")
+            .expect("the GPU imports DMA-BUFs");
+        let clock = MonotonicClock::new().expect("clock");
+        let target = CaptureTarget::Display(DeviceId::new("portal:display"));
+        let mut stream = capture.start(&target).expect("pick a screen in the dialog");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let frame = loop {
+            if let Some(f) = stream.latest().expect("capturing") {
+                break f;
+            }
+            assert!(Instant::now() < deadline, "no frame within 10 s");
+            std::thread::sleep(Duration::from_millis(16));
+        };
+        let VideoSurface::Gpu(frame) = frame else {
+            panic!("expected a GPU frame: the DMA-BUF path fell back to shared memory");
+        };
+        assert_eq!(frame.info().format, PixelFormat::Rgba8);
+        assert_eq!(frame.texture().width(), frame.info().size.width());
+        frame.stage(context.queue()).expect("the context's queue");
+        let age = clock.now().ticks() - frame.info().pts.ticks();
+        assert!((0..10_000_000).contains(&age), "pts {age} ticks old");
+    }
 
     #[test]
     #[ignore = "needs a desktop session with the ScreenCast portal and PipeWire"]

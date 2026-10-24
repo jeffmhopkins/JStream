@@ -15,7 +15,7 @@
 //! Docs: apps/jstream-daemon/README.md#design
 
 use crate::logs::{self, Utc};
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 use jstream_platform::{OAuthTokenStore, PlatformError, Secret as StoredSecret, StreamKeyStore};
 use jstream_protocol::PROTOCOL_VERSION;
 use std::backtrace::Backtrace;
@@ -68,10 +68,10 @@ pub fn register_secret(value: &str) {
 /// reads it, before anything could format it. It wraps YouTube's token store too, so
 /// [`OAuthTokenStore`] registers a refresh token as YouTube stores or loads it. Only
 /// digests are kept.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 pub struct Redacting<S: ?Sized>(pub std::sync::Arc<S>);
 
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 impl<S: StreamKeyStore + ?Sized> StreamKeyStore for Redacting<S> {
     fn set(&self, output_id: &str, key: &StoredSecret) -> Result<(), PlatformError> {
         register_secret(key.expose());
@@ -95,7 +95,7 @@ impl<S: StreamKeyStore + ?Sized> StreamKeyStore for Redacting<S> {
     }
 }
 
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 impl<S: OAuthTokenStore + ?Sized> OAuthTokenStore for Redacting<S> {
     fn set(&self, account: &str, token: &StoredSecret) -> Result<(), PlatformError> {
         register_secret(token.expose());

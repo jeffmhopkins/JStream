@@ -306,11 +306,12 @@ state machine. Contents:
   source's activity gain following scene switches, shown and hidden items and undo
   (`activity.rs` checks reachability itself), and a drawn bus's scope pointed at the
   mixer bus its sends feed, none for the program mix, a missing bus refused and the
-  scope dropped with the bus's references
+  scope dropped with the bus's references, still gone once every source is built
   (`a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus`), and a drawn source's scope fed
   from its mixer input, silence while it is muted or has none, a source with no audio
   of its own (a waveform, a `scene` source) or a missing one refused, and its delete
-  refused until its `delete.plan` clears the reference and drops the scope
+  refused until its `delete.plan` clears the reference and drops the scope, which
+  stays dropped once every source is built (#701)
   (`a_drawn_source_gets_a_scope_fed_from_its_mixer_input`); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The live
@@ -988,7 +989,10 @@ brings the mixer in line with the collection under the collection lock:
   that moves program sync too, after program is reconciled;
 - the bus scopes (#362): every bus a source's settings refer to (a `waveform` or
   `spectrum` drawing it) keeps a scope in the engine's `AudioScopes`, and the others
-  are dropped (`AudioScopes::retain`). The list of mixer buses that feed them (the
+  are dropped (`AudioScopes::retain`). The live sources do this before they queue the
+  edit's builds, and the sync again: a source drawing a new bus then finds its scope,
+  and one still being built from settings from before the edit can't make a dropped
+  scope again (#701). The list of mixer buses that feed them (the
   master's `BusControl` for `master`, else the bus's own; a bus the mixer doesn't hold
   yet is left out) goes to the mixer thread as an immutable `ScopeTaps` list through
   `arc-swap`, stored only when it changed. The mixer thread loads it without a lock
