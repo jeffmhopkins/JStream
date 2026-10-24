@@ -495,7 +495,9 @@ fn merged_from(subject: &str) -> Option<Merged> {
 
 /// The merged PRs in `git log --format=%B%x00` output: each commit's subject, and for a
 /// wave's landing squash (`chore(wave): land …`), the `* <subject> (#N)` lines of its
-/// body, which are the PRs the wave carried (docs/runbooks/waves.md#landing).
+/// body. That body is GitHub's list of every commit on the wave branch, so its lines
+/// also name PRs earlier waves landed and issues builder commits end with; see
+/// `merge::Commit::new` for the filtering a merged-PR list needs (#775 N4).
 pub(crate) fn merged_in(log: &str) -> Vec<Merged> {
     let mut out = Vec::new();
     for message in log.split('\0') {

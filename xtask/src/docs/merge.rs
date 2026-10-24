@@ -79,9 +79,11 @@ impl Commit {
     ///
     /// A landing squash's body is GitHub's list of every commit on the wave branch, and
     /// the bodies nested in them (#775 B1). So it also names PRs earlier waves landed,
-    /// which the branch's base already has (`landed`), and issues that commit subjects
-    /// cite as `(#A)` before their own `(#B)`. Neither counts; the subject's own `(#N)`
-    /// always does.
+    /// which the branch's base already has (`landed`), issues that commit subjects cite
+    /// as `(#A)` before their own `(#B)`, and issues the body closes (`Closes #N`). None
+    /// of those counts; the subject's own `(#N)` always does. A builder commit whose
+    /// subject ends with the issue it works on still looks like a PR, since local history
+    /// can't tell the two apart (#775 B3, docs/DOCS.md#notes).
     pub(crate) fn new(line: &str, message: &str, landed: &BTreeSet<u32>) -> Self {
         let numbers = |text: &str| -> Vec<u32> {
             super::progress::merged_in(text)
@@ -95,7 +97,8 @@ impl Commit {
             .next()
             .unwrap_or("");
         let own = numbers(subject);
-        let cited = issue_refs(message);
+        let mut cited = issue_refs(message);
+        cited.extend(closed_refs(message));
         let mut prs: Vec<u32> = numbers(message)
             .into_iter()
             .filter(|n| own.contains(n) || (!landed.contains(n) && !cited.contains(n)))
@@ -122,6 +125,24 @@ fn issue_refs(message: &str) -> BTreeSet<u32> {
         .filter_map(|l| l.strip_prefix("* "))
         .filter_map(|l| trailing(trailing(l)?.1.as_str()))
         .map(|(n, _)| n)
+        .collect()
+}
+
+/// The `N` of each `Closes #N`, `Fixes #N` or `Resolves #N` (in any of GitHub's forms
+/// and cases) in `message`: issues a commit closes, which are not PRs (#775 B3).
+fn closed_refs(message: &str) -> BTreeSet<u32> {
+    const KEYWORDS: [&str; 9] = [
+        "close", "closes", "closed", "fix", "fixes", "fixed", "resolve", "resolves", "resolved",
+    ];
+    let words: Vec<&str> = message.split_whitespace().collect();
+    words
+        .windows(2)
+        .filter(|w| KEYWORDS.contains(&w[0].trim_end_matches(':').to_lowercase().as_str()))
+        .filter_map(|w| {
+            let n = w[1].strip_prefix('#')?;
+            let end = n.find(|c: char| !c.is_ascii_digit()).unwrap_or(n.len());
+            n[..end].parse().ok()
+        })
         .collect()
 }
 
@@ -1021,7 +1042,8 @@ mod tests {
     /// #775 B1: a real landing squash's body (the shape of #754's) is GitHub's list of
     /// every commit on the wave branch, with the bodies nested in them. Only the PRs the
     /// branch didn't already have count: not earlier waves' PRs, not builder commits that
-    /// name one, and not issues a subject cites before its own `(#N)`.
+    /// name one, not issues a subject cites before its own `(#N)`, and not issues the body
+    /// closes. A builder commit ending in the issue it works on still counts (#775 B3).
     #[test]
     fn landing_bodies_count_only_new_prs() {
         let body = "chore(wave): land wave/m1-3 (#754)
@@ -1059,6 +1081,12 @@ Since #213 the virtual_cam output runs in jstream-core.
 
 * docs(adr): accept ADR-0066, superseding ADR-0020 (#242)
 
+* feat(vcam): opt-in registration from a Program Files copy (#561)
+
+Closes #561.
+
+* docs(progress): G3c gains #565 and waits on its Windows run (#563)
+
 ---------
 
 Co-authored-by: Claude <noreply@anthropic.com>
@@ -1070,7 +1098,8 @@ Co-authored-by: Claude <noreply@anthropic.com>
         // Earlier waves landed #219, #251 and #310.
         let landed = BTreeSet::from([219, 251, 310]);
         let c = Commit::new("b2383cad chore(wave): land wave/m1-3 (#754)", body, &landed);
-        assert_eq!(c.prs, vec![260, 320, 556, 754]);
+        // #563 is an issue too, but nothing in the body says so: it counts.
+        assert_eq!(c.prs, vec![260, 320, 556, 563, 754]);
         // The subject's own number counts even when it is in `landed`.
         let c = Commit::new("161718 fix: c (#251)", "fix: c (#251)\n", &landed);
         assert_eq!(c.prs, vec![251]);

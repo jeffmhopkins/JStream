@@ -494,7 +494,10 @@ holds**. The note says what was checked and why it still holds, e.g.:
   brought in through it. Its body is GitHub's list of every commit on the wave branch,
   with their bodies, so of its `* <subject> (#N)` lines only those naming a PR the
   branch's base doesn't already have count, and not an issue a subject cites as `(#A)`
-  before its own `(#B)`. Each counts whether or not that PR touched the input. `--merge` and
+  before its own `(#B)` or the body closes (`Closes #N`). Each counts whether or not that
+  PR touched the input. The list can still hold an issue number that a wave-branch
+  commit's subject ends with, since the history can't tell it from a PR's: don't credit
+  a number that isn't a PR. `--merge` and
   `--renote` print the PRs behind the entries they rewrite (an entry kept as the merged
   side wrote it is left out) and name any the text leaves out: credit each PR whose change
   the note covers, by number. The text is
@@ -655,7 +658,7 @@ It also generates one block from data rather than from docs:
   an item updates its entry, so the README changes with the work.
   `cargo xtask docs progress` compares the file with the merged history (the `(#N)` of
   each squash commit, the `(#N)` of each `* …` line in a wave's landing squash, which
-  lists the PRs the wave carried, and item IDs that PR titles name in parentheses) and
+  lists the wave's PRs among every commit on the wave branch, and item IDs that PR titles name in parentheses) and
   prints, as Markdown, the entries it contradicts, the `planned` and `review` items with
   no `needs` and the `done` items still listing it; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.
