@@ -57,7 +57,11 @@ order, at group 0, binding 4, as `p`), then the effect's file. `bool` and `enum`
 `vec4<f32>` of linear-light RGB with straight alpha. The effect defines
 `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>` and may add functions, constants
 and `var<private>` globals. It may not add bindings, immediates, overrides (the host has
-no value for them) or entry points.
+no value for them) or entry points. Its memory is capped at `MAX_VALUE_BYTES` (16 KiB) in
+three ways: any one value it names, declares or constructs (`array<f32, N>()` included),
+all its `var<private>` globals together, and each function's local variables together. A
+huge array is a cheap way to make a driver spill to scratch memory or stall while
+compiling (#349).
 `Pack::load` validates the whole text with naga (all validation flags, no optional
 capabilities, so a pack runs on every adapter) and checks that contract. The prelude is
 validated on its own first, so a host mistake is named as one. Errors carry the
@@ -66,7 +70,9 @@ settings map, reading a missing or invalid value as its default. A test checks t
 layout against the offsets naga computes.
 
 **Drawing.** `Effect` implements render's `ExternalFilter` (label: the kind ID), and
-`Effect::video_filter(settings)` makes the `VideoFilter` the chain runtime keeps. The
+`Effect::video_filter(settings)` makes the `VideoFilter` a source's video chain would
+keep; `jstream-core`'s chain runtime bypasses pack kinds until it runs them (a V0
+follow-up). The
 host's prelude is `jstream_render::FILTER_PRELUDE`. A filter made from a reloaded effect
 draws the new WGSL, because the render side rebuilds a label's pipeline when its source
 changes. A test draws an effect on the test adapter, changes its settings in place, and

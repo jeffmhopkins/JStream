@@ -27,7 +27,8 @@
             "rotation_deg": 0.0,
             "tilt_deg": 0.0,
             "turn_deg": 0.0,
-            "depth_px": 0.0
+            "depth_px": 0.0,
+            "flip_h": true
           },
           "crop": {
             "left": 0,
@@ -139,6 +140,9 @@
         "kind": "webcam"
       },
       "kind_version": 1,
+      "settings": {
+        "device": ""
+      },
       "duplicated_from": "gone"
     },
     {
@@ -162,7 +166,10 @@
         "type": "builtin",
         "kind": "webcam"
       },
-      "kind_version": 1
+      "kind_version": 1,
+      "settings": {
+        "device": ""
+      }
     },
     {
       "id": "cam_copy",
@@ -172,6 +179,9 @@
         "kind": "webcam"
       },
       "kind_version": 1,
+      "settings": {
+        "device": ""
+      },
       "duplicated_from": "cam"
     },
     {

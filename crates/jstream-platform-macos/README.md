@@ -67,9 +67,12 @@ It has:
   own thread and hands it over a channel that `poll` drains without blocking; at most
   four frames are in flight, after which `can_accept` says no. The session's maximum
   frame delay is three, so the encoder can't hold all four while it waits for input that
-  `can_accept` keeps out; VideoToolbox's default is no limit, and an encoder without the
-  property keeps its own. While three are held, `encode` may wait for the oldest to be
-  emitted. It also lists and opens
+  `can_accept` keeps out; VideoToolbox's default is no limit. An encoder without the
+  property (Apple's software H.264 encoder) keeps its own and may hold all four, so there
+  `encode`, once four are queued, completes frames up to the oldest one's `pts`
+  (`VTCompressionSessionCompleteFrames`), and its `CodecInfo` name says so (`software,
+  oldest frame completed when full`). Either way,
+  `encode` may wait for the oldest to be emitted. It also lists and opens
   the **AudioToolbox AAC-LC encoder** for a configuration `aac_settings` accepts: an
   `AudioConverter` from interleaved `f32` PCM (planar input is interleaved first) at
   constant bit rate, at the rate it offers nearest the configured one

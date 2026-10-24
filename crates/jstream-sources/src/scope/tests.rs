@@ -455,10 +455,18 @@ fn the_lookup_keeps_one_scope_per_drawn_bus() {
     assert!(Arc::ptr_eq(&kept, &scopes.bus(&vod)), "kept, not remade");
     scopes.retain(&BTreeSet::new());
     assert!(ids(&scopes).is_empty());
-    assert!(
-        !Arc::ptr_eq(&kept, &scopes.bus(&vod)),
-        "dropped, then made again"
-    );
+    // #701: asked for once it isn't drawn (a source built from settings an edit has
+    // since changed), it gets a scope of its own, which brings back no listed scope.
+    let stale = scopes.bus(&vod);
+    assert!(!Arc::ptr_eq(&kept, &stale), "dropped");
+    assert!(!Arc::ptr_eq(&stale, &scopes.bus(&vod)), "not kept either");
+    assert!(ids(&scopes).is_empty(), "a stale ask lists nothing");
+    // Drawn again, it is made again, once.
+    scopes.retain(&[vod.clone()].into_iter().collect());
+    let again = scopes.bus(&vod);
+    assert!(!Arc::ptr_eq(&kept, &again), "made again");
+    assert!(Arc::ptr_eq(&again, &scopes.bus(&vod)));
+    assert_eq!(ids(&scopes), ["vod"]);
 }
 
 /// #459: both kinds describe an `audio_source` audio source reference, `null` by
@@ -564,6 +572,10 @@ fn the_lookup_keeps_one_scope_per_drawn_source() {
     scopes.retain_sources(&BTreeSet::new());
     assert!(scopes.sources().is_empty());
     assert!(!Arc::ptr_eq(&kept, &scopes.source(&mic)), "dropped");
+    assert!(
+        scopes.sources().is_empty(),
+        "a stale ask lists nothing (#701)"
+    );
 
     let settings: Settings = [
         ("audio", Value::Null),

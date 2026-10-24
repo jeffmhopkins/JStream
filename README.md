@@ -51,16 +51,16 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `██████████` 100% | 18 | 0 | 0 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `██████████` 100% | 35 | 0 | 0 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 95% | 35 | 2 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `█████████░` 87% | 20 | 1 | 2 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 5 | 1 | 7 |
+| [M2: UI](ROADMAP.md#m2) | `████████░░` 80% | 20 | 4 | 1 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 5 | 2 | 6 |
 
-105 of 116 items are merged; 10 of those still wait on a run on Windows hardware.
+105 of 120 items are merged; 11 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 21 items, by next step: 🔨 build 11, 🧪 Windows run 9, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 26 items, by next step: 🔨 build 12, 🌊 its wave lands 1, 🧪 Windows run 10, 👤 maintainer 1, ❔ not set 2</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -69,18 +69,23 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A3 | Daemon goes live on Windows | M1a | 🧪 Windows run | Windows 11 Pro N run (#333) | #226 |
 | A4 | Go-live runbook and smoke | M1a | 🧪 Windows run | smoke script run | #234 |
 | A6b | Daemon YouTube wiring | M1a | 👤 maintainer, then 🧪 Windows run | #312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
+| C4c | Webcam source (CPU path, MJPEG on Windows; paired audio to follow) | M1b | 🔨 build, then 🌊 its wave lands, then 🧪 Windows run |  | #654, #658 |
 | C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
 | C3 | Display and window capture sources | M1b | 🧪 Windows run | #365 landed with wave/m1-2 (#545); Windows run #378 | #365 |
 | C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298, #326 |
+| V0 | Video filter chain runtime | M1b | 🔨 build | part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #717 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
+| G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
 | T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
-| T1u | Studio-mode UI | M2 | 🔨 build | draft #304, on T1 |  |
+| T1u | Studio-mode UI | M2 | 🔨 build |  | #304 |
+| E2b | Privacy screen and encoder sharing key | M2 | ❔ not set |  | #317 |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
+| B11 | Folders and labels | M2 | ❔ not set |  | #323 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 in review into wave/m1-3 | #319 |
 | F6 | HEVC and AV1 encode | M3 | 🧪 Windows run | #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | M3 | 🔨 build | effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build | #359, #368 |
-| Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
+| Y4 | YouTube chat, metadata, health and audience stats | M3 | 🌊 its wave lands, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, in wave/m1-3); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058) | #363, #375, #594, #696 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | M3 | 🔨 build, then 🌊 its wave lands | WASM host #486 landed with wave/m3-2 (#663); the wire half #642 is in review into wave/m3-3; the engine side to build | #486, #642 |
 | MAC1 | macOS platform crate | M3 | 🔨 build | ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663) | #511, #513, #533, #543, #554, #566, #570, #583, #586 |
@@ -136,7 +141,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M1b</b> Scenes and mixing: 35 of 35 merged</summary>
+<summary><b>M1b</b> Scenes and mixing: 35 of 37 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -155,6 +160,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C6 | Nested scene rendering | ✅ merged | #147 |
 | C4a | Video device trait | ✅ merged | #158 |
 | C4b | Media Foundation webcam backend | ✅ merged | #177, #225, #227 |
+| C4c | Webcam source (CPU path, MJPEG on Windows; paired audio to follow) | 🔍 in review | #654, #658 |
 | C1a | Sources crate: color, image | ✅ merged | #179, #217 |
 | C1b | Sources render live | ✅ merged | #222 |
 | C2 | Text source | ✅ merged | #221 |
@@ -167,6 +173,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | D2 | Buses and send matrix | ✅ merged | #192 |
 | D4 | No-allocation test | ✅ merged | #191 |
 | D7b | Filter chains in the mixer | ✅ merged | #231 |
+| V0 | Video filter chain runtime | 🔍 in review: part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene; then effect-pack kinds and scratch pooling. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #717 |
 | D5 | Audio in the protocol | ✅ merged | #240 |
 | D6 | when_shown activity gain | ✅ merged | #299 |
 | E1 | Render snapshots, GPU lifetime | ✅ merged | #172, #215 |
@@ -187,7 +194,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | G2 | vcam media source DLL | 🧪 merged, Windows run pending: pacing rerun | #174, #195, #200, #229 |
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
 | G3b | VirtualCam output kind | ✅ merged | #213, #297 |
-| G3c | --register-vcam | ✅ merged | #235 |
+| G3c | --register-vcam | 🧪 merged, Windows run pending: Windows run (#563) | #235, #565 |
 | G3d | Virtual camera in the UI and the desktop app | 🧪 merged, Windows run pending: Windows run (#390) | #316 |
 | P1 | Portable Windows zip | ✅ merged | #271 |
 
@@ -211,7 +218,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M2</b> UI: 20 of 23 merged</summary>
+<summary><b>M2</b> UI: 20 of 25 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -230,12 +237,14 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | Q4 | Performance benchmarks | ✅ merged | #361 |
 | Q5 | Threat model | ✅ merged | #358 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
-| T1u | Studio-mode UI | ⏳ planned: draft #304, on T1 |  |
+| T1u | Studio-mode UI | 🔍 in review | #304 |
 | E2 | Video mixes | ✅ merged | #259 |
+| E2b | Privacy screen and encoder sharing key | 🔍 in review | #317 |
 | D8 | Master and output audio chains | ✅ merged | #249 |
 | D8p | Audio chain protocol fields | ✅ merged | #303 |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
+| B11 | Folders and labels | 🔍 in review | #323 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned: hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 in review into wave/m1-3 | #319 |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 
@@ -252,7 +261,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F6 | HEVC and AV1 encode | 🧪 merged, Windows run pending: #364 landed with wave/m1-2 (#545); Windows run #366; choosing HEVC or AV1 from a client is F6b | #364 |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 landed with wave/m1-2 (#545); full 3D transforms to build | #359, #368 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
-| Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned: chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); signed-in features need the OAuth client (ADR-0058); the engine's stats polling, youtube.stats event and query, and quota accounting are still to come | #363, #375, #594 |
+| Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, in wave/m1-3); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058) | #363, #375, #594, #696 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407 |
 | WA1 | WASM automation plugins | 🔍 in review: WASM host #486 landed with wave/m3-2 (#663); the wire half #642 is in review into wave/m3-3; the engine side to build | #486, #642 |
 | MAC1 | macOS platform crate | ⏳ planned: ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663) | #511, #513, #533, #543, #554, #566, #570, #583, #586 |
