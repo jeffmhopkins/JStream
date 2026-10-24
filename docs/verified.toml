@@ -4887,7 +4887,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:3d3001bba844d9a7", by = "agent:threat-model-covers", note = "#346 fixed on wave/m1-2 (#370, #482, ADR-0059): RTMP rejection text redacted, cut to 512 chars, control chars replaced (publisher.rs remote_text); server instructions mark remote_* fields and the action_failed reason as data; tools carry readOnly/destructive/openWorld hints. Gap removed, per-tool limit moved to Accepted. Added ADR-0059 dep." }
 
 ["THREAT-MODEL#pairing"."body"]
-stamp = { hash = "b3:a9772e40b9cc3b06", by = "agent:claude", note = "#548 review N1: the devices-file gap now names #548 as the fix in flight for #344; it matches jstream-server's devices.rs, which creates the file user-only and refuses a loose one on Windows" }
+stamp = { hash = "b3:933767e326fe4ee3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#769: devices-file gap no longer says it only inherits its folder's ACL; checked devices.rs create_private (tmp file then rename) and read_file's check_private_file on Windows; what remains is the Windows hardware run (#546, #344 open)" }
 
 ["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
 stamp = { hash = "b3:5670e6a5758601b2" }
@@ -4929,7 +4929,7 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:b0affb28b2574a90", by = "agent:claude", note = "WS liveness: Limits now list 45 s for a WebSocket client to be heard after pings every 15 s, so a dead connection frees its slot and session; the rest of the section holds against config.rs, lib.rs and session.rs" }
+stamp = { hash = "b3:8541823f2869fec0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after #772 r2 and the wave/m1-4 merge (#574 landed). The bullet scopes create_private_file to the daemon's token, devices and log files plus both apps' crash reports (#656); the desktop log (File::create, apps/jstream-desktop/src/logs.rs:35) is #780. The gap now follows #546's 10-18 hardware pass: token file and daemon logs reported user-only; the devices file after a real pairing and the crash reports' DACL (not on Windows CI either) are still to run, so #344 stays open. The audit-log sentence is gone, since #574 made audit.rs and collection.rs use private_file." }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
