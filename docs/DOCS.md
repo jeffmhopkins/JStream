@@ -572,7 +572,7 @@ replaced_by = "R-RT-009"                           # retired rules only, with a 
 | Entry | Meaning | Checked how |
 |---|---|---|
 | `ci:<check>` | A required CI check | Must be in [the check list](RULES.md#R-GIT-003). Once that check's milestone has passed, the workflow must contain it. |
-| `lint:<lint>` | A rustc or clippy lint | Must be set to a level other than `allow` in the root `Cargo.toml`'s `[workspace.lints]`. A `clippy::<name>` entry is looked up as `<name>` under `[workspace.lints.clippy]`, and any other name under `[workspace.lints.rust]`. |
+| `lint:<lint>` | A rustc, clippy or other tool's lint | Must be set to a level other than `allow` in the root `Cargo.toml`'s `[workspace.lints]`. A `<tool>::<name>` entry (`clippy::`, `rustdoc::`) is looked up as `<name>` under that tool's own `[workspace.lints.<tool>]` table, and a name without a prefix under `[workspace.lints.rust]`. |
 | `deny:<section>` | A cargo-deny policy | `deny.toml` has a top-level `[<section>]` table |
 | `test:<path>` | A named test, or a module of tests | `<path>` is a crate (`-` written `_`) or an integration test target, then the test's path as `cargo test -- --list` lists it in one of that crate's targets, or in that target. The tool reads the path from the source without building, so tests a macro generates aren't seen. A module is accepted only as a prefix that ends at a `::` boundary with at least one test under it. A crate on the [crate map](ARCHITECTURE.md#crate-map) that doesn't exist yet makes the entry *pending*. |
 | `review` | Judged by the reviewer agent ([REVIEW.md](../REVIEW.md)) | — |

@@ -2111,7 +2111,7 @@ mod tests {
             )
         };
         let rules = format!(
-            "<!-- @doc\nid = \"R\"\nkind = \"normative\"\nstatus = \"active\"\n-->\n{}{}{}{}{}{}{}",
+            "<!-- @doc\nid = \"R\"\nkind = \"normative\"\nstatus = \"active\"\n-->\n{}{}{}{}{}{}{}{}{}",
             rule("R-X-001", "lint:missing_docs"),
             rule("R-X-002", "lint:clippy::unwrap_used"),
             rule("R-X-003", "lint:clippy::print_stdout"),
@@ -2119,8 +2119,11 @@ mod tests {
             rule("R-X-005", "lint:unwrap_used"),
             rule("R-X-006", "deny:bans"),
             rule("R-X-007", "deny:nope"),
+            // A tool other than clippy has its own table (#742 review B1).
+            rule("R-X-008", "lint:rustdoc::broken_intra_doc_links"),
+            rule("R-X-009", "lint:broken_intra_doc_links"),
         );
-        let cargo = "[workspace]\nmembers = []\n\n[workspace.lints.rust]\nmissing_docs = \"warn\"\n\n[workspace.lints.clippy]\nunwrap_used = { level = \"deny\", priority = 1 }\nprint_stdout = \"allow\"\n";
+        let cargo = "[workspace]\nmembers = []\n\n[workspace.lints.rust]\nmissing_docs = \"warn\"\n\n[workspace.lints.clippy]\nunwrap_used = { level = \"deny\", priority = 1 }\nprint_stdout = \"allow\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"warn\"\n";
         let deny = "[advisories]\nversion = 2\n\n[bans]\nmultiple-versions = \"warn\"\n";
         let mut files = REGISTRIES.to_vec();
         files.extend([
@@ -2132,7 +2135,11 @@ mod tests {
         let bad = f.diags("`enforced_by` entry `");
         let ids: Vec<&str> = bad.iter().filter_map(|d| d.split('`').nth(1)).collect();
         // `print_stdout` is `allow`; `unwrap_used` is a clippy lint, not a rustc one.
-        assert_eq!(ids, ["R-X-003", "R-X-004", "R-X-005", "R-X-007"], "{bad:?}");
+        assert_eq!(
+            ids,
+            ["R-X-003", "R-X-004", "R-X-005", "R-X-007", "R-X-009"],
+            "{bad:?}"
+        );
     }
 
     /// R-DOC-008: crate roots list exactly the sections covering the crate; whole-doc

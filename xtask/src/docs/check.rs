@@ -446,8 +446,8 @@ struct RuleRefs<'a> {
     /// Crates on the crate map that don't exist yet, by crate name (`-` written `_`).
     planned: &'a BTreeSet<String>,
     tests: &'a TestList,
-    /// Lints the root `[workspace.lints]` sets above `allow`: rustc's by name, clippy's
-    /// as `clippy::<name>`.
+    /// Lints the root `[workspace.lints]` sets above `allow`: rustc's by name, any other
+    /// tool's (`clippy`, `rustdoc`) as `<tool>::<name>`.
     lints: &'a BTreeSet<String>,
     /// `deny.toml`'s top-level tables.
     deny_sections: &'a BTreeSet<String>,
