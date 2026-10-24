@@ -54,7 +54,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
-| [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
+| [Theme and shared controls](#theme) | 8 | 3 | 2 | 2 | 0 | 1 |
 | [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 9 | 4 | 1 | 4 | 0 |
@@ -62,15 +62,15 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Dialogs and windows](#dialogs) | 8 | 0 | 2 | 3 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 1 | 3 | 4 | 2 | 0 |
 | [Scene objects panel](#objects) | 9 | 1 | 3 | 4 | 1 | 0 |
-| [Inspector](#inspector) | 10 | 0 | 0 | 6 | 4 | 0 |
-| [Transform panel](#transform) | 4 | 0 | 0 | 4 | 0 | 0 |
+| [Inspector](#inspector) | 10 | 5 | 2 | 0 | 3 | 0 |
+| [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 0 | 0 | 5 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 0 | 3 | 2 | 2 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **29** | **25** | **42** | **33** | **1** |
+| **Total** | **130** | **39** | **28** | **30** | **32** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -78,7 +78,7 @@ must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
 <a id="theme"></a>
 ## Theme and shared controls
 <!-- @section
-covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/index.html"]
+covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/index.html", "crates/jstream-ui/src/panels/number.rs"]
 -->
 
 Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts-and-global-styling),
@@ -90,8 +90,8 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
 | WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | Today: text glyphs (▲ ▼ ✕ ● ○ ↺), except the canvas tools' two stroke icons. |
-| WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ⬜ | Used by the Inspector, filters, mixer and dialogs. |
-| WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ⬜ | |
+| WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ✅ | `NumberField` (`panels/number.rs`), used by the Inspector; the filters, mixer and dialogs take it as they are rebuilt. A drag shows its value as it goes and is sent once on release, so it is one undo step, where the prototype writes every step. |
+| WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | 🟡 | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", the transitions hint); fold state isn't remembered per title yet, and the Inspector's other users take it as they are built |
 | WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ⬜ | Rows already show tools on hover; the prototype's look and "stays on" rule are missing. |
 | WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss, in the prototype's toast colours. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
 
@@ -122,9 +122,9 @@ covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crat
 -->
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
-The dock is built (`dock.rs`, `workspace.rs`) with the six panels the UI has: Scenes,
-Scene objects, Inspector (with the pairing panel under the properties), Audio mixer,
-Outputs and Transitions (studio mode and the presets). The other prototype panels join
+The dock is built (`dock.rs`, `workspace.rs`) with the seven panels the UI has: Scenes,
+Scene objects, Inspector (with the pairing panel under the properties), Transform, Audio
+mixer, Outputs and Transitions (studio mode and the presets). The other prototype panels join
 the dock, its View menu and its layouts as their rows are built.
 
 | ID | Feature | Requirement | Status | Notes |
@@ -136,7 +136,7 @@ the dock, its View menu and its layouts as their rows are built.
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. |
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has; Filters, Transform, chat, stats and agent join them as they are built. |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Transform under the Inspector, where it shares a group with Filters once that is built; Filters, chat, stats and agent join them as they are built. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
 
@@ -252,41 +252,42 @@ Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-obj
 <a id="inspector"></a>
 ## Inspector
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/properties.rs"]
+covers = ["crates/jstream-ui/src/panels/inspector.rs", "crates/jstream-ui/src/panels/properties.rs"]
 -->
 
 Spec: [panels › inspector](../design/ui-prototype/spec-panels.md#inspector). Today the
-right column's Properties tab is a settings form; the Inspector edits the placement and
-the source's settings move to the Properties dialog (DL-02).
+Inspector shows the item's placement, then the source's settings form in a Properties
+section, which moves to the Properties dialog (DL-02) when that is built.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | ⬜ | Labels and favourite: `source.set_meta` (SC-08). |
-| IN-02 | Parameters | X, Y, W, H in px, and Rotation, as number fields bound to the canvas. | ⬜ | `item.set_geometry`. |
+| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | 🟡 | Name (italic when the source is placed in another scene too), kind, "+N" and the favourite star (`source.set_meta`, `scene.set_meta`) are built. Type icons and labels wait on SC-08's icons and label manager. |
+| IN-02 | Parameters | X, Y, W, H in px, and Rotation, as number fields bound to the canvas. | ✅ | Each change is one `item.set_geometry`. X and Y are the unrotated box's top-left corner. The fields show committed values, so a canvas drag shows in them once dropped. |
 | IN-03 | Size in % | W % and H % of the source's own size. | 🔒 | Source sizes as runtime state (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md)) aren't in the protocol. |
-| IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ⬜ | |
+| IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ✅ | On by default, kept while the panel is shown. |
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | 🔒 | The engine refuses non-neutral 3D until X1 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
-| IN-06 | Crop | Left, Right, Top, Bottom in px. | ⬜ | `item.set_crop`. |
-| IN-07 | Blending | Mode (9 modes) and Opacity %. | ⬜ | `item.set_opacity` exists. The engine accepts only the `normal` blend mode, so the mode select offers that until it accepts more. |
-| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ⬜ | Hotkey is 🔒 with K1. |
-| IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | 🔒 | T1. |
+| IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas doesn't draw crop yet (CV-08). |
+| IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes; the engine accepts only `normal`, so the others are disabled until it draws them. |
+| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | 🟡 | Objects and "Used as a source in" are built. The hotkey row waits on K1. |
+| IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets are read with `state.get` when the collection changes. |
 | IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | 🔒 | T1 (`item.set_transition`). |
 
 <a id="transform"></a>
 ## Transform panel
 <!-- @section
+covers = ["crates/jstream-ui/src/panels/transform.rs"]
 -->
 
 Spec: [panels › transform](../design/ui-prototype/spec-panels.md#transform-arrange-panel),
 [workspace › transform actions](../design/ui-prototype/spec-workspace.md#sources-duplicates-and-groups) (9.11).
-All of it is client-side geometry sent as `item.set_geometry` edits.
+All of it is client-side geometry, sent as `item.set_geometry` edits (`item.set_crop` for Clear crop).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| TF-01 | Align to | Selection or Canvas. | ⬜ | |
-| TF-02 | Align | Left, centres, right, top, middles, bottom. | ⬜ | |
-| TF-03 | Distribute | Horizontally and vertically, 3 or more selected. | ⬜ | |
-| TF-04 | Arrange | Center on canvas, Fit, Stretch, Match width/height, Rotate 90° left/right, Reset rotation, Clear crop. | ⬜ | |
+| TF-01 | Align to | Selection or Canvas. | ✅ | Selection is off with fewer than two selected, which align to the canvas. |
+| TF-02 | Align | Left, centres, right, top, middles, bottom. | ✅ | On the unrotated boxes, as the prototype does. |
+| TF-03 | Distribute | Horizontally and vertically, 3 or more selected. | ✅ | Equal gaps between edges in centre order; the first and last stay. |
+| TF-04 | Arrange | Center on canvas, Fit, Stretch, Match width/height, Rotate 90° left/right, Reset rotation, Clear crop. | ✅ | Each press is one batch, so one undo step, and sends only the items it changes. Match takes the primary item's size. Clear crop resets `item.set_crop`; crop is in source pixels, so the box stays as it is. |
 
 <a id="filters"></a>
 ## Filters
@@ -443,8 +444,9 @@ starts when the one before it has passed review.
    (CV-01, CV-02, CV-04 to CV-07, CV-09 to CV-13, CV-18, KB-01, KB-02). The context
    menu (CV-14) comes with the other menus in batch 5, and crop (CV-08) once the
    protocol reports source sizes.
-4. **Inspector and Transform:** placement number fields, W/H link, crop, opacity, scene
-   section, align and distribute (IN-01, IN-02, IN-04, IN-06 to IN-08, TF-01 to TF-04).
+4. **Inspector and Transform:** the shared number field, placement fields, W/H link,
+   crop, blending, scene section and transitions (WS-05, IN-01, IN-02, IN-04, IN-06 to
+   IN-09), then align, distribute and arrange (TF-01 to TF-04).
 5. **Menus and dialogs:** context menus, Properties dialog, Add source dialog,
    reference ↔ clone, groups, edit keys, copy and paste (CM-01 to CM-06, DL-01, DL-02,
    DL-06, OB-03, OB-04, KB-04, KB-05).

@@ -129,8 +129,11 @@ state machine. Contents:
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
   turned off; one for each running source with audio of its own whose audio is on, a
-  `browser` page's; and one for each live source with sound of its own whose audio is
-  on, a `media` file's, fed while the program shows it. Each runs the source's enabled
+  `browser` page's; one for each `webcam` source with audio settings whose audio is on
+  and that has at least one send, recording its device's paired audio input (#716); and
+  one for each live source with
+  sound of its own whose audio is on, a `media` file's, fed while the program shows it.
+  Each runs the source's enabled
   audio filters and is listed for the audio routing, which sets its fader, mute and
   sends. While there is no audio-only source, the default microphone and desktop audio
   are recorded too, sent to master at unity (see *Audio sources* in
@@ -207,7 +210,9 @@ state machine. Contents:
   `starting` to `active` at once. The pipeline path emits `starting`, then `active`
   or `failed`. Stop emits `stopping` then `stopped`. A stop during `starting` cancels
   that start and settles `stopped` only after its threads are gone. A lost RTMP
-  connection moves `active` to `reconnecting`, and back once it is re-established. A
+  connection moves `active` to `reconnecting`, and back once it is re-established, or
+  once the new session has been up for 30 s when the previous one dropped again soon
+  after reconnecting. A
   publish, encoder, render or mixer failure after `active`, or giving up
   reconnecting, settles `failed`.
 - **Drop counts** (`drops.rs`): the sources a `stats.tick` sums. `output.start`
@@ -293,7 +298,12 @@ state machine. Contents:
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
   process ID, a settings change reopening its input, a `browser` page recorded beside
-  the defaults and its presets opening once the backend arrives, a media file's sound reaching
+  the defaults and its presets opening once the backend arrives, a `webcam` recording
+  its device's paired input beside the defaults (the first device, or by ID), a device
+  with no paired input and one not connected unavailable with their reasons, the
+  output staying active, and its input closed while its audio is off, closed when its
+  last send is removed and opened again by a send, and closed when it is deleted
+  (`a_webcam_records_its_paired_audio_input`), a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, quieted
   by a `gain` filter on its source and loud again once it is removed, closed while its
   audio is off and removed with the source, the program mix reaching the
@@ -696,6 +706,11 @@ CPU stand-in draws covered frames black. `video.snapshot` and the preview stream
 the editing view and are never covered. Only the default blur exists: the look setting, the slate and muting
 sources come later.
 
+The privacy screen covers video only; audio keeps playing. What a microphone records is
+decided by the collection: a webcam's paired microphone opens only while its audio is
+on and the source has at least one send (see *Audio sources* below), so a webcam no bus
+hears never records.
+
 ### Snapshots
 
 `video.snapshot` returns the program mix as a PNG
@@ -946,6 +961,26 @@ source is built. Its input is added in the format the source reports and fed by
 identity) and closed when it is deleted or its audio is turned off. Like an audio
 source's, it opens muted and is listed for the routing. A failed stream is reopened
 like a device's. Such audio doesn't count as an audio source for the defaults below.
+
+A `webcam` source with audio settings is wanted as `Recorded::Paired`, naming its
+`device` (`jstream_sources::webcam_device`; empty is the first device listed). The
+thread resolves it when it opens the input, not under the collection lock: it lists
+the backends' `VideoDevices` once per pass, and only while such an input isn't
+recording or its stream failed, finds the device, and records its paired input
+(`VideoDeviceInfo::audio`) as `AudioInputTarget::Input`, opened, routed and reopened as
+an `audio_input`'s. A device that isn't connected, or that the platform pairs with no
+input (a capture card without audio, a camera built into the computer), is unavailable
+with that reason and tried again on the next pass. A webcam source with no audio
+settings records nothing. Like a page's audio, a webcam's doesn't count as an audio
+source for the defaults below.
+
+A webcam's paired input opens only while the source has at least one send, whatever
+its visibility or `follow` (#716). A webcam can have its audio on and no send, for
+example once its last send is removed; without the rule its microphone would record
+whenever the program stage runs, heard by no bus. (A webcam saved before webcams had
+audio loads with its audio off; see `jstream-graph`'s persistence.) A new webcam gets its master send and records at once; removing
+its last send closes the input, and a send opens it again. The trade-off: a webcam
+with no send records nothing, so its channel meter reads silence.
 
 While the collection has no audio source, the
 program records the default microphone and desktop audio, as it did before audio
@@ -1402,9 +1437,9 @@ stops. The file is opened in `launch`, after the devices and encoders and before
 threads, so a path that can't be recorded to (one not absolute on this machine, an existing
 file or `.part`, a missing directory) fails the start with `action_failed` and `opening the recording: <reason>`.
 Until the start has succeeded, the recording is provisional: a start that fails
-after opening the file removes the `.part` file, so it doesn't block the next start,
-and so does one whose init segment can't be written (`DiskFull` or `Write` from
-`Recorder::create`).
+after opening the file removes the `.part` file, so it doesn't block the next start.
+The init segment is written with the first video keyframe, whose parameter sets give
+its `avcC` the encoder's own decoder configuration.
 Once `active`, the `.part` file is kept whatever happens: a write error (a full disk
 among them) settles `failed` and leaves it readable up to its last fragment, and a
 failed rename at stop is logged with the `.part` path. A packet the muxer rejects is
@@ -1414,9 +1449,15 @@ holding up a stream on the same session.
 
 **Video codecs.** The encoder profile's video codec picks the encoder and the FLV
 track (`video_codec` in `runtime/pipeline.rs`, `runtime/sink.rs`). H.264 goes in legacy
-FLV tags with the decoder configuration the start gives the muxer. HEVC and AV1 go in
-enhanced RTMP tags, named by FourCC, with the decoder configuration taken from the
-first keyframe, which their encoders send in-band. The protocol's `VideoCodec` names
+FLV tags and HEVC and AV1 in enhanced RTMP tags, named by FourCC. For every codec the
+muxers take the decoder configuration (the AVC sequence header and MP4 `avcC`, the
+enhanced `SequenceStart`) from the first keyframe, which every real encoder sends with
+its parameter sets in-band. A configuration made up ahead of it would not match the
+stream: a stand-in Baseline 3.0 SPS with no frame size made Windows refuse the
+recordings and YouTube drop the publish. Only the fake encoder sends a bare first
+H.264 keyframe; until the muxer has a decoder configuration, such a keyframe gets
+stand-in parameter sets in front (`with_parameter_sets`). A later one goes out as it
+is, since a stand-in SPS would replace the encoder's own, which shares its id. The protocol's `VideoCodec` names
 only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
 only: another codec fails the start with `recording … is not supported yet`.
 
@@ -1478,9 +1519,12 @@ changes: `Active` to `Reconnecting`, and back. The watcher settles and emits
 `reconnecting`, then `active`, only while the output is still its pipeline's and in
 the state the change starts from, so a stop that has already taken the pipeline wins.
 A change reported before the start settles is emitted right after `active`. While
-reconnecting, the pipeline keeps running and the output thread keeps sending: the
+the link is down, the pipeline keeps running and the output thread keeps sending: the
 target drops each tag and counts it (`LivePublish::dropped`, in `output_packets`)
-instead of waiting, and the attempt runs on a thread of its own. Giving up
+instead of waiting, and the attempt runs on a thread of its own. After a session drops
+again soon after reconnecting, the next one stays `reconnecting` for its first 30 s
+while its tags are sent, so a server that keeps accepting and dropping the stream
+doesn't read as live. Giving up
 (`RtmpError::ReconnectGaveUp`) fails the next `send_tag` or `poll`, which settles
 `failed` from `reconnecting` as from `active`. `output.stop` while reconnecting
 emits `stopping` and `stopped` as from `active`.
@@ -1824,7 +1868,7 @@ capture whose mailbox is empty repeats its last frame.
 
 **Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
 platform's context when there is one and the render thread hasn't left it (`VideoSession::open_on`,
-`Program::session_context`): it takes GPU frames when
+`Program::encoders`, through `GpuGate`): it takes GPU frames when
 the codecs can encode the context's encode targets (`Codecs::on_context`), and CPU
 frames otherwise, which is logged. The render thread learns which with the session's
 input. For each mix with a session on the GPU path it allocates a ring of
@@ -1899,7 +1943,17 @@ context's device is lost, the outputs fail at once, since nothing can draw into 
 targets. Once the render thread has left the context (a fallback, or a lost context
 device), it says so to the program stage, which from then on opens each new video
 session without the context: on the CPU path, taking the readback like any other, so a
-recording started after a fallback encodes and fails nothing (#699).
+recording started after a fallback encodes and fails nothing (#699). A session that
+opens on the GPU path claims the context first, and holds the claim until the render
+thread has its tap. A fallback for composite errors that falls due meanwhile waits for
+the tap, which then rules it out as above: the session no longer arrives with no encode
+targets, and the errors run on to the 31st, as with any session on the GPU path. The
+two sides meet at one gate (`GpuGate`): the fallback shuts it and then looks for
+claims, and a session claims it and then looks whether it is shut, so one always sees
+the other (#733). A lost context device shuts it whatever the claims, so a claimed
+session whose tap arrives after the loss fails the stage, as one already attached does.
+The claim is taken before the encoder opens, so it also holds a fallback off while an
+encoder that ends up on the CPU path is opening.
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as
@@ -1922,7 +1976,8 @@ platform's codecs make a decoder (`Codecs::capture_decoder`, Media Foundation's 
 Windows): one decoder per stream, passed to `VideoDevices::open`. At the same size and
 rate an uncompressed format wins. Without a decoder (the default, and Linux and macOS
 for now), only uncompressed formats are chosen, so a device that offers only MJPEG
-doesn't start. Nothing opens its paired microphone. A
+doesn't start. Its paired audio input is recorded by the audio sources' thread (see
+*Audio sources* in Design), not here. A
 capture that doesn't start, or whose stream reports `DeviceLost` (a
 closed window, an unplugged display or webcam), keeps its last frame and is started again 2 s
 later on the media clock. The skips of every stream the pipeline ran are added up into
