@@ -84,9 +84,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
   and shows the size readout, a click on empty canvas clears both, and selecting another
-  scene in the list switches the canvas to it; a Ctrl drag sends nothing until the drop
-  and shows the top-left readout meanwhile, then one edit that Ctrl+Z and Ctrl+Shift+Z
-  reverse; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
+  scene in the list switches the canvas to it; a Ctrl drag sends live values that change
+  no revision and shows the top-left readout meanwhile, then one edit ending the gesture
+  that Ctrl+Z and Ctrl+Shift+Z reverse; Escape during a drag sends `live.cancel` and
+  puts the box back; Shift drags at half speed; the Snapping tool toggles; arrow keys nudge
   (Shift by 10) and Ctrl+Z undoes; a second client sees a move; a marquee started on
   the margin selects the box it touches and Escape clears it; with a second item placed
   (the Intro scene, nested), Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the

@@ -12,6 +12,7 @@
 //! Docs: crates/jstream-ui/README.md#canvas
 
 pub mod group;
+pub mod live;
 pub mod model;
 pub mod preview;
 pub mod screen;
@@ -27,7 +28,7 @@ use crate::store::Studio;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
-use jstream_control::protocol::{HistoryOp, ItemGeometry, ItemId, Placed, Rev};
+use jstream_control::protocol::{GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev};
 use leptos::ev;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -142,6 +143,9 @@ pub fn Canvas() -> impl IntoView {
     let snapping = RwSignal::new(true);
     let viewport = RwSignal::new(None::<Viewport>);
     let drag = StoredValue::new(None::<Drag>);
+    // The drag's gesture, which shows it live on output, and how many drags opened one.
+    let live = StoredValue::new_local(None::<live::Live>);
+    let gestures = StoredValue::new(0_u32);
     // What the drag in progress does, for the readout.
     let active = RwSignal::new(None::<Active>);
     let marquee = RwSignal::new(None::<(Point, Point)>);
@@ -238,7 +242,8 @@ pub fn Canvas() -> impl IntoView {
 
     // Sends the items' new geometries as one batch, and shows them until the
     // collection has them.
-    let commit = move |placed: Vec<(ItemId, ItemGeometry)>| {
+    // A drag's commit ends its gesture, if its live values opened one.
+    let commit = move |placed: Vec<(ItemId, ItemGeometry)>, gesture: Option<GestureId>| {
         let (Some(open), Some((scene_id, _))) = (
             session.and_then(|s| s.get()),
             layout.with_untracked(|l| l.as_ref().and_then(|l| l.scene.clone())),
@@ -251,7 +256,7 @@ pub fn Canvas() -> impl IntoView {
         show(placed.clone());
         awaiting.update_value(|a| a.in_flight += 1);
         spawn_local(async move {
-            let result = model::commit(&*open.control, scene_id, placed.clone()).await;
+            let result = model::commit(&*open.control, scene_id, placed.clone(), gesture).await;
             drop(open);
             awaiting.update_value(|a| a.in_flight = a.in_flight.saturating_sub(1));
             match result {
@@ -340,6 +345,16 @@ pub fn Canvas() -> impl IntoView {
             Action::Group(gesture) => Some(Active::Group(gesture.kind)),
             Action::Marquee { .. } => None,
         });
+        // A box drag opens a gesture, so the output follows it before the drop.
+        let gesture = match (&action, session, current.scene.as_ref()) {
+            (Action::One { .. } | Action::Group(_), Some(session), Some((scene_id, _))) => {
+                gestures.update_value(|n| *n += 1);
+                let id = GestureId::new(format!("drag-{}", gestures.get_value()));
+                Some(live::Live::new(id, scene_id.clone(), session, problem))
+            }
+            _ => None,
+        };
+        live.set_value(gesture);
         drag.set_value(Some(Drag {
             action,
             pointer: Pointer::new(point),
@@ -503,13 +518,16 @@ pub fn Canvas() -> impl IntoView {
             Action::One { item_id, gesture } => {
                 let at = current.pointer.follow(point, event.shift_key());
                 if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
-                    show(vec![(item_id.clone(), update.geometry)]);
+                    let placed = vec![(item_id.clone(), update.geometry)];
+                    live.with_value(|l| l.iter().for_each(|l| l.show(placed.clone())));
+                    show(placed);
                     guides.set(update.guides);
                 }
             }
             Action::Group(gesture) => {
                 let at = current.pointer.follow(point, event.shift_key());
                 if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
+                    live.with_value(|l| l.iter().for_each(|l| l.show(update.geometries.clone())));
                     show(update.geometries);
                     guides.set(update.guides);
                 }
@@ -546,9 +564,18 @@ pub fn Canvas() -> impl IntoView {
                 .cloned()
                 .collect()
         });
+        let gesture = live.with_value(Clone::clone);
+        live.set_value(None);
         if keep && !moved.is_empty() {
-            commit(moved);
+            match gesture {
+                // The commit waits for the live values sent before it.
+                Some(gesture) => gesture.commit(move |ending| commit(moved, ending)),
+                None => commit(moved, None),
+            }
         } else {
+            if let Some(gesture) = gesture {
+                gesture.cancel();
+            }
             // Back to where the gesture started, which is any commit's pending geometry.
             show(starts);
             drop_preview_if_caught_up();
@@ -592,7 +619,7 @@ pub fn Canvas() -> impl IntoView {
                 if moved.is_empty() {
                     return;
                 }
-                commit(moved);
+                commit(moved, None);
             }
             _ => return,
         }

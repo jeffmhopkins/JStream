@@ -1,13 +1,14 @@
 //! What the canvas edits and the calls that change it: the selected scene's items'
-//! boxes, taken from the shared [`Collection`], `item.set_geometry` as one batch per
-//! finished gesture, and `history.undo` and `history.redo` (ADR-0032).
+//! boxes, taken from the shared [`Collection`], the live values a drag shows as it
+//! goes (`live.set` and `live.cancel`), `item.set_geometry` as one batch per finished
+//! gesture, and `history.undo` and `history.redo` (ADR-0032).
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0032-live-edits-and-undo.md
 
 use crate::store::Collection;
 use jstream_control::protocol::{
-    Batch, Call, CallResult, Canvas, Edit, HistoryCall, HistoryOp, ItemGeometry, ItemId,
-    PlacementForm, Rev, SceneId,
+    Action, Batch, Call, CallResult, Canvas, Edit, GestureId, HistoryCall, HistoryOp, ItemGeometry,
+    ItemId, PlacementForm, Rev, SceneId,
 };
 use jstream_control::{Control, ControlError};
 use std::fmt;
@@ -128,22 +129,32 @@ impl Layout {
     }
 }
 
+/// An `item.set_geometry` for each item in `scene_id`.
+fn geometry_edits(scene_id: &SceneId, placed: Vec<(ItemId, ItemGeometry)>) -> Vec<Edit> {
+    placed
+        .into_iter()
+        .map(|(item_id, geometry)| Edit::ItemSetGeometry {
+            item_id,
+            scene_id: Some(scene_id.clone()),
+            geometry,
+        })
+        .collect()
+}
+
 /// The batch that places each item in `scene_id` at its new geometry: one batch, so one
-/// undo step however many items a gesture moved. It carries no `expected_rev`: a drag's
-/// commit is last writer wins per field (ADR-0032).
-pub fn set_geometry(scene_id: SceneId, placed: Vec<(ItemId, ItemGeometry)>) -> Call {
+/// undo step however many items a gesture moved, ending the drag's gesture if its live
+/// values reached the engine. It carries no `expected_rev`: a drag's commit is last
+/// writer wins per field (ADR-0032).
+pub fn set_geometry(
+    scene_id: SceneId,
+    placed: Vec<(ItemId, ItemGeometry)>,
+    gesture: Option<GestureId>,
+) -> Call {
     Call::Batch(Batch {
-        edits: placed
-            .into_iter()
-            .map(|(item_id, geometry)| Edit::ItemSetGeometry {
-                item_id,
-                scene_id: Some(scene_id.clone()),
-                geometry,
-            })
-            .collect(),
+        edits: geometry_edits(&scene_id, placed),
         expected_rev: None,
         idempotency_key: None,
-        ends_gesture: None,
+        ends_gesture: gesture,
     })
 }
 
@@ -152,13 +163,43 @@ pub async fn commit(
     control: &dyn Control,
     scene_id: SceneId,
     placed: Vec<(ItemId, ItemGeometry)>,
+    gesture: Option<GestureId>,
 ) -> Result<Rev, CanvasError> {
-    match control.call(set_geometry(scene_id, placed)).await?.result {
+    match control
+        .call(set_geometry(scene_id, placed, gesture))
+        .await?
+        .result
+    {
         CallResult::Batch { rev, .. } => Ok(rev),
         _ => Err(CanvasError::UnexpectedAnswer {
             call: "item.set_geometry",
         }),
     }
+}
+
+/// Shows the items at these geometries on output while a drag goes on, opening the
+/// gesture if it is new (`live.set`): the collection and its revision don't change.
+pub async fn live_set(
+    control: &dyn Control,
+    gesture: GestureId,
+    scene_id: SceneId,
+    placed: Vec<(ItemId, ItemGeometry)>,
+) -> Result<(), CanvasError> {
+    let action = Action::LiveSet {
+        gesture_id: gesture,
+        values: geometry_edits(&scene_id, placed),
+    };
+    control.call(Call::Action { action }).await?;
+    Ok(())
+}
+
+/// Ends a gesture with no commit (`live.cancel`): the items show their stored geometry.
+pub async fn live_cancel(control: &dyn Control, gesture: GestureId) -> Result<(), CanvasError> {
+    let action = Action::LiveCancel {
+        gesture_id: gesture,
+    };
+    control.call(Call::Action { action }).await?;
+    Ok(())
 }
 
 /// How many steps the client can undo and redo, as the engine reports them after each
@@ -210,8 +251,8 @@ mod tests {
     use super::*;
     use jstream_control::MockEngine;
     use jstream_control::protocol::{
-        Action, Hello, ItemTransform, PROTOCOL_VERSION, Query, Settings, Size, SourceId,
-        SourceKind, Vec2,
+        Action, Hello, ItemTransform, PROTOCOL_VERSION, Query, QueryResult, Settings, Size,
+        SourceId, SourceKind, Vec2,
     };
     use std::pin::pin;
     use std::task::{Context, Poll, Waker};
@@ -323,12 +364,91 @@ mod tests {
         assert_eq!(layout.items[1].name, "Camera");
     }
 
+    /// The gestures `live.list` reports open.
+    fn open_gestures(control: &dyn Control) -> usize {
+        let answer = now(control.call(Call::Query {
+            query: Query::LiveList,
+        }))
+        .expect("live.list");
+        match answer.result {
+            CallResult::Query {
+                result: QueryResult::LiveList { gestures },
+            } => gestures.len(),
+            _ => panic!("live.list answers a live.list result"),
+        }
+    }
+
+    #[test]
+    fn live_values_change_no_revision_and_the_commit_ends_the_gesture() {
+        let control = engine();
+        let before = load(&control, "s2");
+        let gesture = GestureId::new("drag-1");
+        let moving = geometry(200.0, 200.0, 320.0, 180.0);
+        now(live_set(
+            &control,
+            gesture.clone(),
+            "s2".into(),
+            vec![("box".into(), moving)],
+        ))
+        .expect("live.set");
+        assert_eq!(open_gestures(&control), 1);
+        assert_eq!(
+            load(&control, "s2").rev,
+            before.rev,
+            "live values change no rev"
+        );
+
+        let dropped = geometry(220.0, 210.0, 320.0, 180.0);
+        let rev = now(commit(
+            &control,
+            "s2".into(),
+            vec![("box".into(), dropped)],
+            Some(gesture),
+        ))
+        .expect("commit");
+        assert_eq!(rev.0, before.rev.0 + 1);
+        assert_eq!(open_gestures(&control), 0);
+        assert_eq!(
+            load(&control, "s2").geometry_of(&"box".into()),
+            Some(dropped)
+        );
+    }
+
+    #[test]
+    fn a_cancel_ends_the_gesture_with_no_edit() {
+        let control = engine();
+        let before = load(&control, "s2");
+        let gesture = GestureId::new("drag-1");
+        let moving = geometry(200.0, 200.0, 320.0, 180.0);
+        now(live_set(
+            &control,
+            gesture.clone(),
+            "s2".into(),
+            vec![("box".into(), moving)],
+        ))
+        .expect("live.set");
+        now(live_cancel(&control, gesture)).expect("live.cancel");
+        assert_eq!(open_gestures(&control), 0);
+        let after = load(&control, "s2");
+        assert_eq!(after.rev, before.rev);
+        assert_eq!(
+            after.geometry_of(&"box".into()),
+            before.geometry_of(&"box".into())
+        );
+    }
+
     #[test]
     fn a_commit_is_one_undoable_step() {
         let control = engine();
         let before = load(&control, "s2");
         let moved = geometry(100.0, 100.0, 320.0, 180.0);
-        let rev = now(commit(&control, "s2".into(), vec![("box".into(), moved)])).expect("commit");
+        let rev = now(commit(
+            &control,
+            "s2".into(),
+            vec![("box".into(), moved)],
+            None,
+        ))
+        .expect("commit");
         assert_eq!(rev.0, before.rev.0 + 1);
         let after = load(&control, "s2");
         assert_eq!(after.geometry_of(&"box".into()), Some(moved));

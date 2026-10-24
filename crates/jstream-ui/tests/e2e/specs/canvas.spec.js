@@ -70,7 +70,30 @@ test('the canvas, the scene list and the sources list share one selection', asyn
   await expect(outline(page)).toHaveCount(0);
 });
 
+/** Records the JSON messages the page sends on its WebSockets, from now on. */
+function sentMessages(page) {
+  const sent = [];
+  page.on('websocket', (ws) =>
+    ws.on('framesent', ({ payload }) => {
+      if (typeof payload === 'string') sent.push(JSON.parse(payload));
+    }),
+  );
+  return sent;
+}
+
+/** The `live.*` actions and gesture-ending batches among `sent`, as short labels. */
+function gestureTraffic(sent) {
+  return sent.flatMap((m) => {
+    const text = JSON.stringify(m);
+    if (text.includes('"live.set"')) return ['live.set'];
+    if (text.includes('"live.cancel"')) return ['live.cancel'];
+    if (text.includes('"ends_gesture"')) return ['commit'];
+    return [];
+  });
+}
+
 test('a drag is one undoable edit', async ({ page, daemon }) => {
+  const sent = sentMessages(page);
   await connect(page, daemon);
   await expect(outline(page)).toBeVisible();
   const before = await corners(page);
@@ -85,12 +108,14 @@ test('a drag is one undoable edit', async ({ page, daemon }) => {
   await page.mouse.down();
   await page.mouse.move(from.x + by.x / 2, from.y + by.y / 2, { steps: 4 });
   await page.mouse.move(from.x + by.x, from.y + by.y, { steps: 4 });
-  // The readout shows where the box's top-left is, and nothing reaches the engine
-  // until the drop.
+  // The readout shows where the box's top-left is. The output follows through live
+  // values, which change no revision; the drop commits them and ends the gesture.
   await expect(readout(page)).toHaveText(/^X \d+ {2}Y \d+$/);
+  await expect.poll(() => gestureTraffic(sent).includes('live.set')).toBe(true);
   expect(await rev(page)).toBe(startRev);
   await page.mouse.up();
   await page.keyboard.up('Control');
+  await expect.poll(() => gestureTraffic(sent).at(-1)).toBe('commit');
 
   // The page measures its stage in whole pixels, so allow half a screen pixel.
   const halfPixel = 0.5 / from.scale;
@@ -105,6 +130,24 @@ test('a drag is one undoable edit', async ({ page, daemon }) => {
   await page.keyboard.press('Control+Shift+z');
   await expectCorners(page, moved);
   expect(await rev(page)).toBe(startRev + 3);
+});
+
+test('Escape during a drag cancels its live values', async ({ page, daemon }) => {
+  const sent = sentMessages(page);
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  const before = await corners(page);
+  const startRev = await rev(page);
+  const from = await onScreen(page, 960, 540);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 100, from.y + 60, { steps: 5 });
+  await expect.poll(() => gestureTraffic(sent).includes('live.set')).toBe(true);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect.poll(() => gestureTraffic(sent).at(-1)).toBe('live.cancel');
+  await expectCorners(page, before);
+  expect(await rev(page)).toBe(startRev);
 });
 
 test('Shift drags at half speed', async ({ page, daemon }) => {

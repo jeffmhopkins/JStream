@@ -410,8 +410,8 @@ browser, and `mod.rs` is the component.
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
-  behind the `web_sys_unstable_apis` build flag. Without live values (below), the
-  preview shows a drag once it is committed.
+  behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
+  the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
   drags it, or, on a box already selected, drags every selected box. Shift-click adds
   a box to the selection (and drags them all) or takes a selected one out. A press on
@@ -452,18 +452,21 @@ browser, and `mod.rs` is the component.
   turns it off. So does the canvas's right-click menu: on the frame it offers Select
   all, the snapping toggle and Add source, on the margin around the frame the scene's
   menu, and on an item the selected items' menu ([Design](#design)).
-- **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
-  draws the gesture locally, and on release one batch with an `item.set_geometry` per
-  item it changed commits it, so each gesture (and each nudge) is one undo step. The
+- **Undoable edits.** A drag changes no stored state until it ends: the overlay draws
+  the gesture locally, and on release one batch with an `item.set_geometry` per item it
+  changed commits it, so each gesture (and each nudge) is one undo step. Meanwhile the
+  drag opens a gesture (`live.rs`) whose `live.set` carries the same edits as live
+  values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so the output and
+  the preview follow the drag without changing `rev`. The calls go one at a time, the
+  values that arrive while one is in flight collapsing into the newest; the committing
+  batch follows them with `ends_gesture` (or none, if no `live.set` got through), and
+  Escape sends `live.cancel` instead. The
   local geometries stay drawn until no commit is in flight and the collection has
   caught up with the last one's revision; a later drag replaces only its own items',
   so a nudge still in flight isn't lost. A commit that fails shows its error and stops
   drawing its geometries, unless a later gesture has replaced them. It carries no
   `expected_rev`: a drag is last writer wins per field
-  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
-  (`live.set` with `ends_gesture` on the committing batch), which would show the drag
-  on the output while it happens, are in the protocol but the canvas doesn't send them
-  yet. Undo and redo (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y while the canvas has focus, and
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Undo and redo (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y while the canvas has focus, and
   the Edit menu) are `history.undo` and `history.redo`; nothing left to undo is
   silent, and an `undo_conflict` is explained in the problem bar.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
