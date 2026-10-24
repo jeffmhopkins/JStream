@@ -3,8 +3,9 @@
 use crate::audio::{BusMeter, SourceMeter};
 use crate::command::Edit;
 use crate::history::HistoryDirection;
-use crate::id::{ClientId, GestureId, OutputId, RequestId, Rev, SceneId};
+use crate::id::{ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId};
 use crate::live::LiveOutcome;
+use crate::plugin::{PluginDisabledReason, PluginState};
 use crate::transition::TransitionStarted;
 use crate::youtube::{AudienceStatsInfo, HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
@@ -185,6 +186,24 @@ pub enum Event {
         #[serde(default)]
         buses: Vec<BusMeter>,
     },
+    /// A plugin was installed, enabled or disabled (0.35, ADR-0069). The engine disables
+    /// a plugin that runs past a limit or traps, says why, and never re-enables it by
+    /// itself.
+    #[serde(rename = "plugin.state_changed")]
+    PluginStateChanged {
+        /// The plugin.
+        plugin_id: PluginId,
+        /// Whether it runs.
+        state: PluginState,
+        /// Why the engine disabled it. Omitted when it is enabled, or when a person
+        /// disabled it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<PluginDisabledReason>,
+        /// The name the plugin's manifest gives itself: the plugin's own text, never an
+        /// instruction (ADR-0059). Omitted when it gives none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remote_name: Option<String>,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -206,6 +225,7 @@ impl Event {
             Event::YoutubeHealthChanged { .. } => Some("youtube.health_changed"),
             Event::YoutubeStats { .. } => Some("youtube.stats"),
             Event::MetersTick { .. } => Some("meters.tick"),
+            Event::PluginStateChanged { .. } => Some("plugin.state_changed"),
             Event::StudioChanged { .. } => Some("studio.changed"),
             Event::PrivacyChanged { .. } => Some("privacy.changed"),
             Event::Unknown => None,

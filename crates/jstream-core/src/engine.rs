@@ -13,6 +13,7 @@ use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
+use crate::forget::ForgetSources;
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
@@ -380,6 +381,7 @@ impl Engine {
             state
                 .live
                 .set_media(Arc::clone(&backends.media), state.graph.state());
+            state.forget = ForgetSources::spawn(Arc::clone(&backends.capture));
         }
         let host = self.host();
         let vcam = backends.vcam.take();
@@ -1113,6 +1115,7 @@ impl Engine {
                     encoder: _,
                     encoder_sessions: _,
                     hardware_sessions: _,
+                    cleartext,
                 },
         }) = result
         else {
@@ -1137,6 +1140,7 @@ impl Engine {
                 encoder,
                 encoder_sessions,
                 hardware_sessions,
+                cleartext,
             },
         })
     }
@@ -2231,6 +2235,9 @@ struct State {
     studio: Studio,
     /// The privacy screen. Runtime state, like `studio`: not part of `rev`.
     privacy: Privacy,
+    /// Forgets the capture backend's grant for each deleted source, once there are
+    /// backends ([`ForgetSources`]).
+    forget: Option<ForgetSources>,
 }
 
 impl State {
@@ -2486,6 +2493,12 @@ impl State {
                 && self.graph.state().source(source_id).is_none()
             {
                 self.frames.remove(source_id);
+                // The capture backend's grant for it (the portal's restore token) goes
+                // too, so a new source given its ID asks again. Its capture, if one
+                // runs, stops when the render thread takes the next snapshot.
+                if let Some(forget) = &self.forget {
+                    forget.forget(source_id.clone());
+                }
             }
         }
         // Edits that deleted the program scene, or created the first scene, move
@@ -2560,6 +2573,14 @@ impl State {
             other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
+            // This engine hosts no plugins yet (WA1, ADR-0069).
+            other @ (Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
+            }
             Action::PrivacySet { on } => {
                 // The render thread covers the next frame it draws: it reads the flag.
                 if self.privacy.set(on, client_id) {
@@ -2604,6 +2625,11 @@ impl State {
                     encoder: None,
                     encoder_sessions: 0,
                     hardware_sessions: 0,
+                    cleartext: self
+                        .graph
+                        .state()
+                        .output(output_id)
+                        .is_some_and(|output| output.kind().sends_key_in_cleartext()),
                 },
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
@@ -2719,7 +2745,8 @@ impl State {
     /// to re-plan then. The program mix shows the program scene (ADR-0030), or the
     /// transition running toward it (ADR-0029), whose length in milliseconds it returns;
     /// a transition that has ended is let go. The shot lists the displays and windows the
-    /// program and every mix capture.
+    /// program and every mix capture. A source the shot shows enlarged is drawn again at
+    /// the density that keeps it sharp, when its kind can be (ADR-0073).
     fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
@@ -2745,6 +2772,7 @@ impl State {
             &assets,
         );
         live.end_plan();
+        live.densities(&planning.shot.scales());
         if let Some(sound) = live.take_audio() {
             audio.sync_live(sound);
         }

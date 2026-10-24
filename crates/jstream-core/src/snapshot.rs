@@ -91,6 +91,9 @@ pub enum SourceFrameError {
 pub(crate) struct Frame {
     width: u32,
     height: u32,
+    /// The size it is placed at: its own, unless its source draws it at a density
+    /// (ADR-0073), when it has more pixels than that.
+    extent: [u32; 2],
     pixels: Pixels,
     /// Which `set_source_frame` stored it or which new frame a live source produced,
     /// counted per engine. Two frames with the same version are the same bytes, so a
@@ -116,7 +119,10 @@ enum Pixels {
 
 impl PartialEq for Frame {
     fn eq(&self, other: &Self) -> bool {
-        self.version == other.version && self.width == other.width && self.height == other.height
+        self.version == other.version
+            && self.width == other.width
+            && self.height == other.height
+            && self.extent == other.extent
     }
 }
 
@@ -139,6 +145,7 @@ impl Frame {
         Ok(Self {
             width,
             height,
+            extent: [width, height],
             pixels: Pixels::Copied(Arc::from(rgba)),
             version,
         })
@@ -168,9 +175,19 @@ impl Frame {
         Some(Self {
             width,
             height,
+            extent: [width, height],
             pixels,
             version,
         })
+    }
+
+    /// The same frame placed as if it were `extent`: a frame its source drew at a
+    /// density ([`jstream_sources::Source::set_density`]).
+    pub(crate) fn placed_at(self, extent: FrameSize) -> Self {
+        Self {
+            extent: [extent.width(), extent.height()],
+            ..self
+        }
     }
 
     /// A live source's texture on `context`, the program stage's GPU context: sRGB code
@@ -180,6 +197,7 @@ impl Frame {
         Self {
             width: size.width(),
             height: size.height(),
+            extent: [size.width(), size.height()],
             pixels: Pixels::Gpu { frame, context },
             version,
         }
@@ -202,6 +220,12 @@ impl Frame {
                 .unwrap_or_default(),
             Pixels::Gpu { .. } => &[],
         }
+    }
+
+    /// Its size in pixels and the size it is placed at, for tests.
+    #[cfg(test)]
+    pub(crate) fn sizes(&self) -> ([u32; 2], [u32; 2]) {
+        ([self.width, self.height], self.extent)
     }
 
     /// The first pixel, for tests that check what a source shows.
@@ -230,9 +254,11 @@ pub(crate) enum SourceRef {
     /// Another scene, composited first and then placed.
     Scene(SceneId),
     /// A `display` or `window` source with no stored frame: what the output pipeline
-    /// captures for it, on the render thread. Sources that capture the same thing share
-    /// it. `video.snapshot` has no capture, so it draws nothing there.
-    Capture(CaptureSpec),
+    /// captures for it, on the render thread. Each source has a capture of its own, so a
+    /// backend that keeps a grant per source (the ScreenCast portal's restore token)
+    /// keeps each source's apart. `video.snapshot` has no capture, so it draws nothing
+    /// there.
+    Capture(CaptureKey),
     /// A source's frame or capture after its video chain, kept in [`Shot::chains`].
     Filtered(SourceId),
 }
@@ -278,7 +304,7 @@ pub(crate) struct Shot {
     /// What the output pipeline captures for this shot: what the program's passes (or a
     /// running transition's tracks) and each mix's place, or the primary display, which
     /// fills the output, when there is no program scene.
-    captures: BTreeSet<CaptureSpec>,
+    captures: BTreeSet<CaptureKey>,
     /// The transition running on program, which replaces the program pass: `passes`
     /// then holds only the nested scenes its tracks show.
     transition: Option<Transitioning>,
@@ -351,7 +377,7 @@ impl Shot {
     }
 
     /// What the output pipeline captures for this shot, in order.
-    pub(crate) fn captures(&self) -> &BTreeSet<CaptureSpec> {
+    pub(crate) fn captures(&self) -> &BTreeSet<CaptureKey> {
         &self.captures
     }
 
@@ -627,9 +653,9 @@ fn schedule_tracks(shot: &Shot) -> Vec<Pass> {
 
 /// What the passes place from the pipeline's capture, or the primary display, which
 /// fills the output, without a program scene.
-fn captures(passes: &[Pass]) -> BTreeSet<CaptureSpec> {
+fn captures(passes: &[Pass]) -> BTreeSet<CaptureKey> {
     if passes.is_empty() {
-        return BTreeSet::from([CaptureSpec::Display(None)]);
+        return BTreeSet::from([CaptureKey::primary()]);
     }
     placed_captures(passes.iter()).collect()
 }
@@ -637,7 +663,7 @@ fn captures(passes: &[Pass]) -> BTreeSet<CaptureSpec> {
 /// What `passes` place from the pipeline's capture.
 fn placed_captures<'a>(
     passes: impl Iterator<Item = &'a Pass> + 'a,
-) -> impl Iterator<Item = CaptureSpec> + 'a {
+) -> impl Iterator<Item = CaptureKey> + 'a {
     passes
         .flat_map(|pass| &pass.layers)
         .filter_map(|layer| match &layer.image {
@@ -651,7 +677,7 @@ pub(crate) enum Look {
     /// Its frame now, and when that frame is next replaced.
     Frame(Frame, Option<MediaTime>),
     /// What the output pipeline captures for it.
-    Capture(CaptureSpec),
+    Capture(CaptureKey),
 }
 
 /// What [`plan_with`] asks for each source it reaches; `None` shows nothing.
@@ -758,14 +784,15 @@ impl Planner<'_, '_> {
                     }
                     _ => match self.shown(source, out) {
                         Some(SourceRef::Frame(id)) => {
-                            let size = out.frames.get(&id).map(|frame| [frame.width, frame.height]);
+                            let size = out.frames.get(&id).map(|frame| frame.extent);
                             (SourceRef::Frame(id), size)
                         }
                         // A filtered frame is the size the chain draws for it.
                         Some(SourceRef::Filtered(id)) => {
                             let size = out.frames.get(&id).zip(out.chains.get(&id)).map(
                                 |(frame, chain)| {
-                                    let (w, h) = chain.output_size(frame.width, frame.height);
+                                    let [width, height] = frame.extent;
+                                    let (w, h) = chain.output_size(width, height);
                                     [w, h]
                                 },
                             );
@@ -878,7 +905,7 @@ pub(crate) enum GpuKey {
     /// The upload of a source's stored frame.
     Frame(SourceId),
     /// The upload or import of what the pipeline captures.
-    Capture(CaptureSpec),
+    Capture(CaptureKey),
     /// The layer a nested scene is composited into, at its depth.
     Layer(SceneId, usize),
     /// The program scene at the canvas size, when the output is another size.
@@ -952,6 +979,67 @@ struct Layer {
     placement: Placement,
     crop: Crop,
     opacity: f32,
+}
+
+impl Shot {
+    /// How much each source whose frame a layer draws is enlarged where it is shown
+    /// most, in canvas pixels per pixel of the frame's extent: what its source should
+    /// draw at to stay sharp (ADR-0073). It is measured on every pass, the program's and
+    /// the video mixes', from the placements the shot holds, not a gesture's live
+    /// values, so a drag is measured once it commits. A source a video chain runs over
+    /// counts as 1, since its filters' settings are in the frame's pixels. A source the
+    /// shot draws only in a transition's tracks, or not at all, isn't listed.
+    pub(crate) fn scales(&self) -> BTreeMap<SourceId, f32> {
+        let mut scales: BTreeMap<SourceId, f32> = BTreeMap::new();
+        for layer in self
+            .passes
+            .iter()
+            .chain(self.mix_passes.values().flatten())
+            .flat_map(|pass| &pass.layers)
+        {
+            let GpuKey::Frame(id) = &layer.image else {
+                continue;
+            };
+            let Some(frame) = self.frames.get(id) else {
+                continue;
+            };
+            let scale = magnification(layer.placement, layer.crop, frame.extent);
+            let most = scales.entry(id.clone()).or_insert(0.0);
+            *most = most.max(scale);
+        }
+        for (id, chain) in &self.chains {
+            if chain.input == GpuKey::Frame(id.clone()) {
+                scales.insert(id.clone(), 1.0);
+            }
+        }
+        scales
+    }
+}
+
+/// How many canvas pixels each way one pixel of an image of `extent`, cropped by
+/// `crop`, covers where `placement` puts it, along the axis it is enlarged most. 0 when
+/// it draws nothing.
+fn magnification(placement: Placement, crop: Crop, extent: [u32; 2]) -> f32 {
+    let scale = match placement {
+        Placement::Legacy(transform) => transform.scale[0].abs().max(transform.scale[1].abs()),
+        Placement::Geometry(geometry) => {
+            let cut = ProtocolCrop {
+                left: crop.left,
+                top: crop.top,
+                right: crop.right,
+                bottom: crop.bottom,
+            };
+            let width = extent[0].saturating_sub(crop.left.saturating_add(crop.right));
+            let height = extent[1].saturating_sub(crop.top.saturating_add(crop.bottom));
+            match geometry.content(extent[0], extent[1], cut) {
+                Ok(Some(content)) if width > 0 && height > 0 => {
+                    (content.width / width as f32).max(content.height / height as f32)
+                }
+                _ => 0.0,
+            }
+        }
+    };
+    if scale.is_finite() { scale } else { 0.0 }
 }
 
 /// The composites a frame makes for the scene `program`, in order: every nested scene
@@ -1563,18 +1651,62 @@ pub(crate) enum CaptureImage<'a> {
     Gpu(&'a GpuFrame),
 }
 
+/// One capture the output pipeline runs: what it captures, for which source, and
+/// whether the pointer shows in it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct CaptureKey {
+    /// What is captured.
+    pub(crate) spec: CaptureSpec,
+    /// The source it is captured for: `None` for the primary display that fills an
+    /// output without a program scene, which no source owns.
+    pub(crate) source: Option<SourceId>,
+    /// The source's `show_cursor` setting. Off, the capture asks for the pointer to be
+    /// left out.
+    pub(crate) show_cursor: bool,
+}
+
+impl CaptureKey {
+    /// The capture of `spec` for the source `source`, showing the pointer. A video
+    /// device opens once, so every source showing it shares one capture: its key names
+    /// no source.
+    pub(crate) fn for_source(spec: CaptureSpec, source: SourceId) -> Self {
+        let source = (!matches!(spec, CaptureSpec::Device(_))).then_some(source);
+        Self {
+            spec,
+            source,
+            show_cursor: true,
+        }
+    }
+
+    /// This capture, with the pointer shown or not.
+    #[must_use]
+    pub(crate) fn with_cursor(mut self, show_cursor: bool) -> Self {
+        self.show_cursor = show_cursor;
+        self
+    }
+
+    /// The primary display, for no source, showing the pointer.
+    pub(crate) fn primary() -> Self {
+        Self {
+            spec: CaptureSpec::Display(None),
+            source: None,
+            show_cursor: true,
+        }
+    }
+}
+
 /// The latest frame of each capture a shot places ([`Shot::captures`]).
 pub(crate) trait Captures {
     /// The latest frame of `spec`'s capture; `None` before its first frame, or when it
     /// isn't running.
-    fn frame(&self, spec: &CaptureSpec) -> Option<CaptureFrame<'_>>;
+    fn frame(&self, spec: &CaptureKey) -> Option<CaptureFrame<'_>>;
 }
 
 /// No captures, for `video.snapshot` and tests.
 pub(crate) struct NoCaptures;
 
 impl Captures for NoCaptures {
-    fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+    fn frame(&self, _: &CaptureKey) -> Option<CaptureFrame<'_>> {
         None
     }
 }
@@ -1656,6 +1788,10 @@ pub(crate) fn compose(
                     frame.height,
                     frame.rgba(),
                 )?;
+                // Every time: a kept upload may have been placed at another extent.
+                if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                    cache.set_extent(key, extent);
+                }
             }
         }
     }
@@ -2176,10 +2312,10 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        CaptureFrame, CaptureImage, Captures, Chains, FIRST_RETRY, Frame, GpuKey, LiveParams,
-        MAX_NESTING, MAX_RETRY, OpenBackoff, Placed, Shot, SourceFrameError, SourceRef, View,
-        base64, captures, claim_layers, compose, decode_base64, decode_png, draw, encode_png, fit,
-        is_no_adapter, schedule,
+        CaptureFrame, CaptureImage, Captures, Chain, Chains, FIRST_RETRY, Frame, GpuKey,
+        LiveParams, MAX_NESTING, MAX_RETRY, OpenBackoff, Placed, Shot, SourceFrameError, SourceRef,
+        View, base64, captures, claim_layers, compose, decode_base64, decode_png, draw, encode_png,
+        fit, is_no_adapter, schedule,
     };
     use jstream_media::{FrameSize, MediaTime, Timebase};
     use jstream_protocol::{
@@ -2191,6 +2327,8 @@ pub(crate) mod tests {
     use jstream_sources::CaptureSpec;
     use std::collections::BTreeMap;
     use std::collections::BTreeSet;
+
+    use super::CaptureKey;
     use std::io::Write;
     use std::time::{Duration, Instant};
 
@@ -2258,14 +2396,14 @@ pub(crate) mod tests {
 
     /// What the primary display shows in these tests.
     fn primary() -> SourceRef {
-        SourceRef::Capture(CaptureSpec::Display(None))
+        SourceRef::Capture(CaptureKey::primary())
     }
 
     /// Every capture shows `frame`.
     struct Every<'a>(Option<CaptureFrame<'a>>);
 
     impl Captures for Every<'_> {
-        fn frame(&self, _: &CaptureSpec) -> Option<CaptureFrame<'_>> {
+        fn frame(&self, _: &CaptureKey) -> Option<CaptureFrame<'_>> {
             self.0
         }
     }
@@ -2465,17 +2603,23 @@ pub(crate) mod tests {
             Some(&SceneId::new("main")),
             None,
             &mut |id| {
-                Some(super::Look::Capture(match id.as_str() {
+                let spec = match id.as_str() {
                     "second" => second.clone(),
                     _ => CaptureSpec::Display(None),
-                }))
+                };
+                Some(super::Look::Capture(CaptureKey::for_source(
+                    spec,
+                    id.clone(),
+                )))
             },
             &crate::filter_assets::FilterAssets::default(),
         )
         .shot;
-        assert_eq!(
-            shot.captures(),
-            &BTreeSet::from([CaptureSpec::Display(None), second])
+        let specs: BTreeSet<_> = shot.captures().iter().map(|k| k.spec.clone()).collect();
+        assert_eq!(specs, BTreeSet::from([CaptureSpec::Display(None), second]));
+        assert!(
+            shot.captures().iter().all(|k| k.source.is_some()),
+            "each capture is for its source"
         );
     }
 
@@ -2824,10 +2968,7 @@ pub(crate) mod tests {
             "program",
             vec![fill("red"), placed(primary(), half)],
         )]);
-        assert_eq!(
-            display.captures,
-            BTreeSet::from([CaptureSpec::Display(None)])
-        );
+        assert_eq!(display.captures, BTreeSet::from([CaptureKey::primary()]));
         let out = frame_at(&mut compositor, &mut cache, &display, Some(&capture), size);
         assert_eq!(
             out.pixel(4, 9),
@@ -2835,6 +2976,72 @@ pub(crate) mod tests {
             "the capture on the left"
         );
         assert_eq!(out.pixel(28, 9), Some(RED), "red on the right");
+    }
+
+    /// A 32x18 red frame its source drew at a density of 2, so it stands for 16x9.
+    fn dense_red() -> Frame {
+        let bytes: Vec<u8> = std::iter::repeat_n(RED, 32 * 18).flatten().collect();
+        Frame::new(32, 18, &bytes, 7)
+            .expect("invariant: 32x18 RGBA8")
+            .placed_at(FrameSize::new(16, 9).expect("invariant: non-zero"))
+    }
+
+    /// A frame drawn at a density is placed at its extent, not its pixels (ADR-0073).
+    #[test]
+    fn a_dense_frame_is_placed_at_its_extent() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let size = FrameSize::new(32, 18).expect("invariant: non-zero");
+        // Scaled by 60, 16x9 is the canvas's top left quarter; its 32x18 pixels would be
+        // all of it.
+        let quarter = Placement::Legacy(LegacyTransform {
+            scale: [60.0, 60.0],
+            ..LegacyTransform::IDENTITY
+        });
+        let mut dense = shot(vec![(
+            "program",
+            vec![placed(SourceRef::Frame(SourceId::new("red")), quarter)],
+        )]);
+        dense.frames.insert(SourceId::new("red"), dense_red());
+        let out = frame_at(&mut compositor, &mut cache, &dense, None, size);
+        assert_eq!(out.pixel(4, 4), Some(RED), "inside the quarter");
+        assert_ne!(out.pixel(28, 15), Some(RED), "outside it");
+    }
+
+    /// A shot measures how much each frame it draws is enlarged, against the frame's
+    /// extent, the most of any of its items, and a chained source as 1 (ADR-0073).
+    #[test]
+    fn a_shot_measures_how_enlarged_its_frames_are() {
+        use jstream_protocol::{ItemGeometry, Size};
+        let boxed = Placement::Geometry(ItemGeometry {
+            size: Size::try_new(64.0, 36.0).expect("positive"),
+            ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+        });
+        let half = Placement::Legacy(LegacyTransform {
+            scale: [-0.5, 0.25],
+            ..LegacyTransform::IDENTITY
+        });
+        let green = |placement| placed(SourceRef::Frame(SourceId::new("green")), placement);
+        let mut planned = shot(vec![(
+            "program",
+            vec![fill("red"), green(boxed), green(half)],
+        )]);
+        let scales = |shot: &Shot| shot.scales().into_iter().collect::<Vec<_>>();
+        assert_eq!(
+            scales(&planned),
+            [(SourceId::new("green"), 4.0), (SourceId::new("red"), 120.0)]
+        );
+        planned.frames.insert(SourceId::new("red"), dense_red());
+        assert_eq!(scales(&planned)[1], (SourceId::new("red"), 120.0));
+        planned.chains.insert(
+            SourceId::new("red"),
+            Chain {
+                input: GpuKey::Frame(SourceId::new("red")),
+                filters: Vec::new(),
+            },
+        );
+        assert_eq!(scales(&planned)[1], (SourceId::new("red"), 1.0));
     }
 
     /// A mix whose aspect ratio differs from the canvas shows the canvas fitted inside

@@ -11,6 +11,10 @@ use crate::finite::Finite32;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+mod drawn;
+
+pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, MAX_DRAWN_PX, NEAR_W};
+
 /// How the cropped source fills the item's box.
 ///
 /// The three values are the complete set. A new one is a string-enum addition.
@@ -69,11 +73,11 @@ impl Size {
 ///
 /// `center`, `size` and `rotation_deg` alone define the box, so selection handles need
 /// no source size. The 3D fields default to neutral (no tilt, turn or depth, and no
-/// perspective). The formula below still evaluates a non-neutral value; drawing it is
-/// the compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]
-/// is that check. A negative `size` is rejected, not read as a flip: [`Self::flip_h`]
-/// and [`Self::flip_v`] mirror the content instead, the additive booleans ADR-0022
-/// reserved.
+/// perspective). From protocol 0.34 the engine accepts and draws any 3D it can draw
+/// ([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors
+/// rejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative
+/// `size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror
+/// the content instead, the additive booleans ADR-0022 reserved.
 ///
 /// Every number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the
 /// defaults below, omitted `perspective_px` means orthographic, and omitted flips mean
@@ -173,6 +177,10 @@ pub enum GeometryError {
     /// An input or a computed canvas coordinate is NaN or infinite.
     #[error("a placement coordinate is not finite")]
     NotFinite,
+    /// A 3D item's centre, size, depth or perspective, or a vertex of its drawn polygon,
+    /// is past [`MAX_DRAWN_PX`](drawn::MAX_DRAWN_PX) ([`ItemGeometry::check_drawable`]).
+    #[error("the item draws too far from the canvas")]
+    TooFar,
 }
 
 /// A point in canvas pixels, x right and y down.
@@ -301,8 +309,8 @@ impl ItemGeometry {
 
     /// Whether tilt, turn, depth and perspective are all at their neutral defaults.
     ///
-    /// The engine rejects a geometry for which this is false until the compositor
-    /// draws 3D. The placement functions still evaluate those fields.
+    /// Earlier minors rejected a geometry for which this is false; from protocol 0.34
+    /// [`Self::check_drawable`] decides whether an edit may store it.
     pub fn is_neutral_3d(self) -> bool {
         self.tilt_deg.get() == 0.0
             && self.turn_deg.get() == 0.0
@@ -599,17 +607,25 @@ fn scaled_crop(
 
 /// Fitted content size. `inside` is fit; otherwise fill.
 ///
-/// The aspect comparison is a cross-multiply, so equal aspects take the width-limited
-/// branch and still produce the box exactly.
+/// Every step divides before it multiplies, so a box near `f32::MAX` does not
+/// overflow an intermediate product (#765). The aspects are compared as ratios:
+/// each is a correctly rounded quotient, so equal aspects compare equal and take the
+/// box exactly. A ratio may still overflow to infinity or round to zero for an
+/// extreme box, and the comparison still orders it correctly.
 fn fitted(cropped_w: u32, cropped_h: u32, box_w: f32, box_h: f32, inside: bool) -> (f32, f32) {
     let cropped_w = cropped_w as f32;
     let cropped_h = cropped_h as f32;
-    let source_wider = cropped_w * box_h >= cropped_h * box_w;
+    let source_aspect = cropped_w / cropped_h;
+    let box_aspect = box_w / box_h;
+    if source_aspect == box_aspect {
+        return (box_w, box_h);
+    }
+    let source_wider = source_aspect > box_aspect;
     let limit_by_width = if inside { source_wider } else { !source_wider };
     if limit_by_width {
-        (box_w, box_w * cropped_h / cropped_w)
+        (box_w, box_w * (cropped_h / cropped_w))
     } else {
-        (box_h * cropped_w / cropped_h, box_h)
+        (box_h * (cropped_w / cropped_h), box_h)
     }
 }
 
@@ -883,6 +899,41 @@ mod tests {
             .expect("content")
             .expect("drawn");
         assert_eq!(rotated, rect);
+    }
+
+    #[test]
+    fn a_huge_box_fits_and_fills_without_overflow() {
+        // #765: 8.9e35 × 1080 is past f32::MAX, so multiplying first overflowed.
+        let side = 8.9e35;
+        let mut geometry = box_at(0.0, 0.0, side, side);
+        for (mode, expected) in [
+            (FitMode::Fit, (side, side * (1080.0 / 1920.0))),
+            (FitMode::Fill, (side * (1920.0 / 1080.0), side)),
+        ] {
+            geometry.fit_mode = mode;
+            let rect = geometry
+                .content(1920, 1080, Crop::NONE)
+                .expect("content")
+                .expect("drawn");
+            assert_eq!((rect.width, rect.height), expected, "{mode:?}");
+            assert!(
+                rect.width.is_finite() && rect.height.is_finite(),
+                "{mode:?}"
+            );
+        }
+
+        // The aspect comparison used to cross-multiply too: 3e38 × 1080 overflows.
+        let wide = box_at(0.0, 0.0, 3.0e38, 1.0e38);
+        let mut geometry = wide;
+        geometry.fit_mode = FitMode::Fit;
+        let rect = geometry
+            .content(1920, 1080, Crop::NONE)
+            .expect("content")
+            .expect("drawn");
+        assert_eq!(
+            (rect.width, rect.height),
+            (1.0e38 * (1920.0 / 1080.0), 1.0e38)
+        );
     }
 
     #[test]

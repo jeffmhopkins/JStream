@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -46,9 +46,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   returns it from `audio` as a `SourceAudio`: its format, and `open(handler)`, which
   feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
   its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
-  `capture()` is `Some` for a `display` or `window` source: what the platform captures
-  for it (a `CaptureSpec`). Its frames come from the platform's capture backend on the
-  engine's render thread, so its `frame` is `SourceError::Captured`.
+  `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
+  captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
+  (`true`, the default, for a webcam and every other source). Its frames come from the
+  platform's capture or video-device backend on the engine's render thread, so its
+  `frame` is `SourceError::Captured`.
+  `set_density(d)` asks a source to draw its frames `d` times as many pixels each way
+  as its own size, so an item that shows it enlarged stays sharp, and returns that own
+  size, which its frames are placed at; the default is `None`, a kind whose frames are
+  their own size whatever is asked. Only `text` draws at a density (see *Kinds*).
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
@@ -163,14 +169,25 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   and background are blended on sRGB values, not in linear light. The frame must fit
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
-  naming `text`.
+  naming `text`. It is the one kind that draws at a density
+  ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)):
+  `set_density(d)` draws the same layout with every length (the em size, the glyphs'
+  positions, the outline, the padding) multiplied by `d`, so the frame has `d` times the
+  pixels each way and stands for the same size, which `set_density` returns and the
+  engine places it at. Densities run from 1 to `MAX_DENSITY` (8); one whose frame would
+  be over the limits is halved until it fits, down to 1. An update draws at the density
+  set last.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
   `hwnd:0x` and the window handle). An empty `display` target is the primary display,
   which is what a `display` source showed before it had settings, so the kind keeps
   version 1 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). An
   empty `window` target captures nothing. A new target needs a new source. The engine's
-  `capture.targets` query lists the IDs a `target` can take.
+  `capture.targets` query lists the IDs a `target` can take. `show_cursor` (on by
+  default, which is what the kinds did before it, so they keep version 1) says whether
+  the pointer shows; `Source::show_cursor` reports it, and the engine asks the capture
+  backend to draw the pointer in when it is on and to leave it out when it is off.
+  Changing it needs a new source, so the capture starts again.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), so it plays the
@@ -397,13 +414,18 @@ it; a symbolic link is skipped, with a note, where the test may not create one).
 `tests/kinds.rs` snapshots every built-in kind's descriptor (`schema/kinds.snap`, an
 `insta` snapshot): adding or changing a kind changes no protocol schema, so this diff is
 where a kind's settings are reviewed like an API diff (ADR-0025). `INSTA_UPDATE=always
-cargo test -p jstream-sources --test kinds` rewrites it. `tests/sources.rs` checks
+cargo test -p jstream-sources --test kinds` rewrites it. `jstream-core` snapshots the
+same source kinds again, with the audio and video filter kinds (its `schema/kinds.snap`), so a
+changed source kind needs `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
+too. `tests/sources.rs` checks
 the registry and runs the colour and image kinds through the public API on files in a
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
 the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
-alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
-`tests/data/text` (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
+alignment, padding, outline, live updates, font assets and limits, drawing at a
+density (twice the pixels for the same extent, kept across an update, clamped to
+`MAX_DENSITY`, halved to fit the limits), plus golden PNGs in `tests/data/text`, one of
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
 waveform column's range, the dB scale, a tone lighting its own spectrum bar, every

@@ -1,8 +1,8 @@
 // The Transform panel: the summary and Align to switch following the selection, an
 // arrange button sending one edit Ctrl+Z undoes, and the buttons that need two or three
-// items. The seed's Backdrop is 640 × 360; an item placed from the sources panel covers
-// the canvas.
-import { test, expect, connect, rev } from '../fixtures.js';
+// items. The seed's Backdrop is 640 × 360; the Intro scene nested in it covers the
+// canvas.
+import { test, expect, connect, nestScene, rev, showPanel } from '../fixtures.js';
 
 function panel(page) {
   return page.locator('.panel-transform');
@@ -19,6 +19,8 @@ function rows(page) {
 
 test('with one item, buttons work against the canvas and undo as one edit', async ({ page, daemon }) => {
   await connect(page, daemon);
+  // Filters is the shown tab of the Transform panel's group.
+  await showPanel(page, 'Transform');
   await expect(panel(page).locator('.summary'))
     .toHaveText('Nothing selected. Click or Shift-click items on the canvas.');
   await expect(panel(page).getByRole('button', { name: 'Stretch to canvas' })).toBeDisabled();
@@ -52,8 +54,9 @@ test('with one item, buttons work against the canvas and undo as one edit', asyn
 
 test('two items can align to their bounds and match sizes', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
-  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  // Filters is the shown tab of the Transform panel's group.
+  await showPanel(page, 'Transform');
+  await nestScene(page, 'Intro');
   await expect(rows(page)).toHaveCount(2);
 
   await rows(page).nth(0).click();

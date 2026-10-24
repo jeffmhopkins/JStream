@@ -34,7 +34,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use jstream_graph::Source;
-use jstream_media::MediaTime;
+use jstream_media::{FrameSize, MediaTime};
 use jstream_protocol::{FilterChain, FilterId, Reference, SceneId, Settings, SourceId};
 use jstream_render::{Compositor, FilterClock, Image, RenderError, ResourceCache, VideoFilter};
 
@@ -227,11 +227,20 @@ impl Chains {
             return;
         };
         // Every output layer first, so the draws below read and write the cache
-        // without borrowing it mutably.
+        // without borrowing it mutably. Each is placed at what its input is placed at,
+        // carried through the filters' sizes (ADR-0073), as the input's own size is.
         let mut size = (input.width(), input.height());
+        let mut placed = input.extent();
         for filter in running.iter_mut() {
             size = filter.filter.output_size(size.0, size.1);
-            if let Err(error) = cache.layer(compositor, &filter.key, size.0, size.1) {
+            placed = filter.filter.output_size(placed.0, placed.1);
+            let made = cache
+                .layer(compositor, &filter.key, size.0, size.1)
+                .map(|_| ());
+            if let Ok(extent) = FrameSize::new(placed.0, placed.1) {
+                cache.set_extent(&filter.key, extent);
+            }
+            if let Err(error) = made {
                 if !filter.warned {
                     filter.warned = true;
                     tracing::warn!(

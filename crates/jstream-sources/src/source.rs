@@ -2,7 +2,7 @@
 
 use crate::{AudioScopes, CaptureSpec, MediaAudio, SourceError};
 use jstream_browser::BrowserBackend;
-use jstream_media::{AudioFormat, MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_media::{AudioFormat, FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame, MediaDecoders};
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
 use std::fs::File;
@@ -62,12 +62,31 @@ pub trait Source: Send {
     /// [`SourceError::Setting`] when a value doesn't have its descriptor's type.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
 
+    /// Asks the source to draw its frames `density` times as many pixels each way as its
+    /// own size, so an item that shows it enlarged stays sharp (ADR-0073,
+    /// docs/adr/0073-sources-drawn-at-their-shown-size.md). Returns that own size, the
+    /// size its frames are placed at whatever their pixels, for a kind that draws at a
+    /// density; `None`, the default, for a kind whose frames are their own size whatever
+    /// is asked. Drawing again can take as long as an update. The `text` kind draws at
+    /// densities from 1 to [`MAX_DENSITY`](crate::MAX_DENSITY), lower when
+    /// the frame would be over its limits.
+    fn set_density(&mut self, density: f32) -> Option<FrameSize> {
+        let _ = density;
+        None
+    }
+
     /// What the platform captures for this source, for a `display` or `window` source;
     /// `None`, the default, for a source that makes its own frames. A capture source's
     /// frames come from the platform's capture backend on the engine's render thread,
     /// so its [`frame`](Self::frame) is [`SourceError::Captured`].
     fn capture(&self) -> Option<&CaptureSpec> {
         None
+    }
+
+    /// Whether the pointer shows in this source's [`capture`](Self::capture): its
+    /// `show_cursor` setting. `true`, the default, for every other source.
+    fn show_cursor(&self) -> bool {
+        true
     }
 
     /// What draws this source's frames ahead of [`frame`](Self::frame), for a source

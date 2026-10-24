@@ -38,6 +38,7 @@ use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
+use crate::{PluginClass, PluginDisabledReason, PluginGrant, PluginId, PluginState};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -840,6 +841,25 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
         },
+        Action::PluginInstall {
+            plugin_id: PluginId::new("plg_1"),
+            path: "/home/me/plugins/chat-scenes".into(),
+            grant: PluginGrant {
+                classes: BTreeSet::from([PluginClass::Read, PluginClass::Edit, PluginClass::Live]),
+                hosts: vec!["https://api.example.com:443".into()],
+                folders: vec!["/home/me/clips".into()],
+            },
+        },
+        Action::PluginGrant {
+            plugin_id: PluginId::new("plg_1"),
+            grant: PluginGrant {
+                classes: BTreeSet::from([PluginClass::Outputs]),
+                ..PluginGrant::default()
+            },
+        },
+        Action::PluginEnable {
+            plugin_id: PluginId::new("plg_1"),
+        },
         Action::PrivacySet { on: true },
     ]
 }
@@ -1295,6 +1315,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
+            cleartext: false,
         },
         QueryResult::OutputStatus {
             output_id: OutputId::new("out_rec"),
@@ -1308,6 +1329,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
+            cleartext: false,
         },
         QueryResult::SourceList {
             rev: Rev(12),
@@ -1623,6 +1645,25 @@ pub(crate) fn events() -> Vec<Event> {
         request_id: Some(RequestId::new("r3")),
     });
     events.push(Event::EventsDropped { count: 1500 });
+    events.push(Event::PluginStateChanged {
+        plugin_id: PluginId::new("plg_1"),
+        state: PluginState::Enabled,
+        reason: None,
+        remote_name: Some("Chat scenes".into()),
+    });
+    for reason in [
+        PluginDisabledReason::CpuLimit,
+        PluginDisabledReason::MemoryLimit,
+        PluginDisabledReason::Trap,
+        PluginDisabledReason::NeedsGrant,
+    ] {
+        events.push(Event::PluginStateChanged {
+            plugin_id: PluginId::new("plg_1"),
+            state: PluginState::Disabled,
+            reason: Some(reason),
+            remote_name: None,
+        });
+    }
     events.push(Event::StatsTick {
         seq: 4,
         drops: DropCounts {
@@ -1782,6 +1823,10 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         ProtocolError::Unsupported {
             call: "pairing.start".into(),
         },
+        ProtocolError::Forbidden {
+            call: "output.start".into(),
+            reason: "the plugin is not granted `outputs`".into(),
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },
@@ -1797,6 +1842,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Bus,
         EntityKind::Device,
         EntityKind::Hotkey,
+        EntityKind::Plugin,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -2055,6 +2101,33 @@ pub(crate) fn check_names_are_valid() {
         let value = serde_json::to_value(&event).expect("serializes");
         assert_eq!(value["type"].as_str(), event.name());
     }
+}
+
+/// ADR-0069: every command a client can send (each edit, action, query and history op in
+/// the schema) has a place in [`crate::PLUGIN_SCOPES`], and the table names nothing
+/// else. A new command fails this until a PR places it in a class or under "never".
+pub(crate) fn check_every_command_has_a_plugin_scope() {
+    let schema = json_schema();
+    let mut commands: BTreeSet<String> = ["Edit", "Action", "Query"]
+        .into_iter()
+        .flat_map(|def| schema_tags(&schema, def, "type"))
+        .collect();
+    commands.extend(
+        [HistoryOp::Undo, HistoryOp::Redo]
+            .into_iter()
+            .map(|op| op.name().to_owned()),
+    );
+    let placed: BTreeSet<String> = crate::PLUGIN_SCOPES
+        .iter()
+        .map(|(name, _)| (*name).to_owned())
+        .collect();
+    let unplaced: Vec<&String> = commands.difference(&placed).collect();
+    assert!(unplaced.is_empty(), "no plugin scope for {unplaced:?}");
+    let unknown: Vec<&String> = placed.difference(&commands).collect();
+    assert!(
+        unknown.is_empty(),
+        "plugin scopes for unknown commands {unknown:?}"
+    );
 }
 
 pub(crate) fn check_every_command_is_classified() {

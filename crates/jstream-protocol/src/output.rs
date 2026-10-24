@@ -84,6 +84,46 @@ impl OutputKind {
             _ => None,
         }
     }
+
+    /// Whether publishing to this output sends its stream key across the network
+    /// unencrypted: a generic RTMP target whose server URL is plain `rtmp://` to a host
+    /// other than the engine's machine. `localhost` and loopback addresses
+    /// (`127.0.0.0/8`, `::1`, and IPv4 loopback mapped into IPv6) don't count, so a local
+    /// relay raises no warning. A YouTube target publishes over `rtmps://`, and a
+    /// recording or the virtual camera sends no key (#353). `output.status` reports it as
+    /// `cleartext`.
+    #[must_use]
+    pub fn sends_key_in_cleartext(&self) -> bool {
+        match self {
+            Self::Rtmp {
+                target: RtmpTarget::Generic { url },
+            } => rtmp_url_sends_key_in_cleartext(url),
+            _ => false,
+        }
+    }
+}
+
+/// [`OutputKind::sends_key_in_cleartext`] for a generic RTMP(S) server URL. The engine's
+/// publish path logs its warning by this rule, so the log and `output.status` agree.
+#[must_use]
+pub fn rtmp_url_sends_key_in_cleartext(url: &str) -> bool {
+    let server = rtmp_server(url);
+    let Some(authority) = server.strip_prefix("rtmp://") else {
+        return false;
+    };
+    // `rtmp_server` always appends `:port` to a URL it could split.
+    let host = authority
+        .rsplit_once(':')
+        .map_or(authority, |(host, _)| host);
+    let host = host
+        .strip_prefix('[')
+        .and_then(|host| host.strip_suffix(']'))
+        .unwrap_or(host);
+    let loopback = host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.to_canonical().is_loopback());
+    !loopback
 }
 
 /// `scheme://host:port` of an RTMP(S) URL, lowercased with the default port filled in.
@@ -313,7 +353,9 @@ impl<'de> Visitor<'de> for SecretVisitor {
 
 #[cfg(test)]
 mod tests {
-    use super::{OutputKind, RecordContainer, RtmpTarget, SecretString};
+    use super::{
+        OutputKind, RecordContainer, RtmpTarget, SecretString, rtmp_url_sends_key_in_cleartext,
+    };
     use crate::{ClientMessage, ProtocolError};
     use serde_json::json;
 
@@ -349,6 +391,39 @@ mod tests {
         };
         assert_eq!(yt.key_server().as_deref(), Some("youtube"));
         assert_eq!(OutputKind::VirtualCam.key_server(), None);
+    }
+
+    /// Plain `rtmp://` to a remote host sends the key in the clear; `rtmps://`, loopback,
+    /// YouTube and the other kinds don't (#353).
+    #[test]
+    fn only_plain_rtmp_to_a_remote_host_sends_the_key_in_cleartext() {
+        let clear = rtmp_url_sends_key_in_cleartext;
+        assert!(clear("rtmp://a.rtmp.youtube.com/live2"));
+        assert!(clear("RTMP://192.168.1.20:1935/live"));
+        assert!(clear("rtmp://[2001:db8::1]/live"));
+        assert!(clear("rtmp://[2001:db8::1]:1936/live"));
+        assert!(clear("rtmp://localhost.example.com/live"));
+        assert!(!clear("rtmps://a.rtmps.youtube.com/live2"));
+        assert!(!clear("RTMPS://a.rtmps.youtube.com/live2"));
+        assert!(!clear("rtmp://localhost/live"));
+        assert!(!clear("rtmp://LOCALHOST:1936/live"));
+        assert!(!clear("rtmp://127.0.0.1/live"));
+        assert!(!clear("rtmp://127.8.9.10/live"));
+        assert!(!clear("rtmp://[::1]/live"));
+        assert!(!clear("rtmp://[::1]:1936/live"));
+        assert!(!clear("rtmp://[::ffff:127.0.0.1]/live"));
+        let generic = |url: &str| OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url: url.into() },
+        };
+        assert!(generic("rtmp://a.rtmp.youtube.com/live2").sends_key_in_cleartext());
+        assert!(!generic("rtmps://a.rtmps.youtube.com/live2").sends_key_in_cleartext());
+        let youtube = OutputKind::Rtmp {
+            target: RtmpTarget::YouTube {
+                broadcast_id: "a".into(),
+            },
+        };
+        assert!(!youtube.sends_key_in_cleartext());
+        assert!(!OutputKind::VirtualCam.sends_key_in_cleartext());
     }
 
     #[test]
