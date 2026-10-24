@@ -1,6 +1,6 @@
-//! `outline`: a stroke of `width` px around the input's alpha shape, outside it (the
-//! frame grows by the width on every side, [`super::bounds`]) or inside it (the frame
-//! keeps its size).
+//! `outline`: a stroke of `width` px around the input's alpha shape, outside it or
+//! inside it. Either way it draws within the input's frame, so an outside stroke past
+//! the frame's edge is cut (ADR-0065 §5).
 //!
 //! Method: a jump flood. A seed pass marks the shape's pixels (alpha at least 0.5;
 //! inside: the pixels below it), then steps of `S, S/2, ..., 1` and one more step of 1
@@ -12,7 +12,6 @@
 
 use jstream_protocol::{KindDescriptor, Settings};
 
-use super::bounds::Insets;
 use super::{copy, premultiplied};
 use crate::error::RenderError;
 use crate::filter::params::{Read, Uniforms, choice, color, filter, float};
@@ -89,16 +88,6 @@ fn read(settings: &Settings) -> Stroke {
     }
 }
 
-impl Stroke {
-    fn insets(&self) -> Insets {
-        if self.inside {
-            Insets::default()
-        } else {
-            Insets::even(self.width)
-        }
-    }
-}
-
 /// The jump flood's step sizes for a stroke of `width` px, largest first.
 fn steps(width: f32) -> impl Iterator<Item = u32> {
     let reach = width.max(0.0).ceil() as u32 + 1;
@@ -111,10 +100,6 @@ impl Pass for Outline {
         self.0 = read(settings);
     }
 
-    fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
-        self.0.insets().grow(width, height)
-    }
-
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
@@ -125,7 +110,7 @@ impl Pass for Outline {
         if stroke.width <= 0.0 {
             return copy(ctx, input, output);
         }
-        let (ix, iy) = stroke.insets().origin();
+        let (ix, iy) = (0, 0);
         let inside = u32::from(stroke.inside);
         let (w, h) = (output.width(), output.height());
         let mut from = ctx.scratch(w, h)?;
@@ -193,14 +178,13 @@ mod tests {
         }
     }
 
+    /// ADR-0065 §5: outside or inside, the frame keeps its size.
     #[test]
-    fn sizes_grow_outside_and_not_inside() {
-        assert_eq!(
-            filter("outline", json!({"width": 2.5})).output_size(8, 4),
-            (14, 10)
-        );
-        let inside = filter("outline", json!({"width": 2.5, "position": "inside"}));
-        assert_eq!(inside.output_size(8, 4), (8, 4));
+    fn the_frame_keeps_its_size() {
+        for position in ["outside", "inside"] {
+            let outline = filter("outline", json!({"width": 2.5, "position": position}));
+            assert_eq!(outline.output_size(8, 4), (8, 4), "{position}");
+        }
         assert_eq!(
             filter("outline", json!({"width": 0.0})).output_size(8, 4),
             (8, 4)
@@ -227,18 +211,34 @@ mod tests {
         let input = image(&opened, 12, &pixels);
         let mut outline = filter("outline", json!({"width": 2.0}));
         let out = run(&mut opened, &mut outline, &input, 0.0);
-        assert_eq!((out.width(), out.height()), (16, 16));
-        // The square sits at (6..10, 6..10) in the grown frame.
-        near(&out, 7, 7, RED, 0);
-        near(&out, 5, 7, WHITE, 0);
-        near(&out, 4, 8, WHITE, 0);
-        near(&out, 3, 8, CLEAR, 0);
-        near(&out, 11, 6, WHITE, 0);
-        near(&out, 12, 6, CLEAR, 0);
-        // Corners round off: (4, 4) is 2.8 px from the square's corner pixel.
-        assert!(out.pixel(4, 4).expect("inside")[3] < 64);
-        near(&out, 5, 5, WHITE, 0);
+        assert_eq!((out.width(), out.height()), (12, 12));
+        // The square stays at (4..8, 4..8), and the stroke rings it 2 px wide.
+        near(&out, 5, 5, RED, 0);
+        near(&out, 3, 5, WHITE, 0);
+        near(&out, 2, 6, WHITE, 0);
+        near(&out, 1, 6, CLEAR, 0);
+        near(&out, 9, 4, WHITE, 0);
+        near(&out, 10, 4, CLEAR, 0);
+        // Corners round off: (2, 2) is 2.8 px from the square's corner pixel.
+        assert!(out.pixel(2, 2).expect("inside")[3] < 64);
+        near(&out, 3, 3, WHITE, 0);
         near(&out, 0, 0, CLEAR, 0);
+    }
+
+    /// ADR-0065 §5: an outside stroke past the frame's edge is cut, so an opaque frame
+    /// shows no stroke at all.
+    #[test]
+    fn an_outside_stroke_past_the_frame_is_cut() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        let input = solid(&opened.compositor, 8, 8, RED);
+        let mut outline = filter("outline", json!({"width": 3.0}));
+        let out = run(&mut opened, &mut outline, &input, 0.0);
+        assert_eq!((out.width(), out.height()), (8, 8));
+        for (x, y) in [(0, 0), (7, 0), (0, 7), (7, 7), (4, 4)] {
+            near(&out, x, y, RED, 0);
+        }
     }
 
     #[test]

@@ -1,6 +1,8 @@
 //! CEF's callbacks: the app (command-line switches), and per page a client with its
 //! render, audio, life-span, load and request handlers, each forwarding to the page's
-//! [`PageShared`]. Plus a task that runs a closure on CEF's UI thread.
+//! [`PageShared`], and a permission handler that refuses everything but local network
+//! access its request policy allows ([`crate::permission`]). Plus a task that runs a
+//! closure on CEF's UI thread.
 
 use std::os::raw::c_int;
 use std::sync::Arc;
@@ -66,6 +68,7 @@ wrap_client! {
         life_span: LifeSpanHandler,
         load: LoadHandler,
         request: RequestHandler,
+        permission: PermissionHandler,
     }
 
     impl Client {
@@ -88,6 +91,10 @@ wrap_client! {
         fn request_handler(&self) -> Option<RequestHandler> {
             Some(self.request.clone())
         }
+
+        fn permission_handler(&self) -> Option<PermissionHandler> {
+            Some(self.permission.clone())
+        }
     }
 }
 
@@ -99,7 +106,8 @@ pub(crate) fn client(page: &Arc<PageShared>) -> Client {
         PageAudioHandler::new(page.clone()),
         PageLifeSpan::new(page.clone()),
         PageLoad::new(page.clone()),
-        PageRequests::new(PageResources::new(page)),
+        PageRequests::new(PageResources::new(page.clone())),
+        PagePermissions::new(page),
     )
 }
 
@@ -340,6 +348,94 @@ wrap_resource_request_handler! {
                     ReturnValue::CANCEL
                 }
             }
+        }
+
+        fn on_resource_redirect(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _request: Option<&mut Request>,
+            _response: Option<&mut Response>,
+            new_url: Option<&mut CefString>,
+        ) {
+            // A redirect's target passes the same policy (#347): a public URL that
+            // answers 302 to `http://127.0.0.1/` must not reach it. CEF can't cancel
+            // here, so a refused target is replaced by a URL no request may follow
+            // (Chromium refuses a redirect to a non-web scheme, and the policy refuses
+            // `about:` pages other than blank and srcdoc if it sees the URL again).
+            // `try_set` writes into the string CEF passed in; assigning a new `CefString`
+            // would only replace this wrapper, and CEF would follow the old target.
+            let Some(new_url) = new_url else {
+                return;
+            };
+            let page = &self.page.0;
+            if let crate::Verdict::Deny(_) = page.policy.check(&new_url.to_string())
+                && new_url.try_set(REFUSED_REDIRECT)
+            {
+                // Counted only once the target is really replaced: `try_set` fails only
+                // when CEF passed no string to write into, and then nothing here can
+                // stop the redirect.
+                page.denied();
+            }
+        }
+    }
+}
+
+/// What a refused redirect is pointed at instead: a URL that loads nothing.
+const REFUSED_REDIRECT: &str = "about:jstream-refused";
+
+// `permission.rs` names CEF's local-network prompt bits without depending on CEF.
+const _: () = assert!(
+    crate::permission::LOCAL_NETWORK_BITS
+        == sys::cef_permission_request_types_t::CEF_PERMISSION_TYPE_LOCAL_NETWORK_ACCESS_DEPRECATED
+            as u32
+            | sys::cef_permission_request_types_t::CEF_PERMISSION_TYPE_LOCAL_NETWORK as u32
+            | sys::cef_permission_request_types_t::CEF_PERMISSION_TYPE_LOOPBACK_NETWORK as u32
+);
+
+wrap_permission_handler! {
+    pub(crate) struct PagePermissions {
+        page: Page,
+    }
+
+    impl PermissionHandler {
+        fn on_request_media_access_permission(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _requesting_origin: Option<&CefString>,
+            requested_permissions: u32,
+            callback: Option<&mut MediaAccessCallback>,
+        ) -> c_int {
+            match crate::permission::answer_media(requested_permissions) {
+                crate::permission::MediaAnswer::Deny => {
+                    if let Some(callback) = callback {
+                        callback.cancel();
+                    }
+                }
+            }
+            // Handled here, never by CEF's default. A request left unanswered (no
+            // callback) is never granted either.
+            1
+        }
+
+        fn on_show_permission_prompt(
+            &self,
+            _browser: Option<&mut Browser>,
+            _prompt_id: u64,
+            _requesting_origin: Option<&CefString>,
+            requested_permissions: u32,
+            callback: Option<&mut PermissionPromptCallback>,
+        ) -> c_int {
+            let local_allowed = self.page.0.policy.local_allowed();
+            let result = match crate::permission::answer_prompt(requested_permissions, local_allowed) {
+                crate::permission::Answer::Accept => PermissionRequestResult::ACCEPT,
+                crate::permission::Answer::Deny => PermissionRequestResult::DENY,
+            };
+            if let Some(callback) = callback {
+                callback.cont(result);
+            }
+            1
         }
     }
 }

@@ -13,9 +13,9 @@ on a real Windows 11 machine, the path the virtual-camera ADRs fix: a **Rust COM
 source** that the Windows camera **Frame Server** loads, fed **cross-process** through a
 shared NT-handle texture and a shared fence.
 
-It also answers the registration question from
-[ADR-0020](../../docs/adr/0020-portable-windows-distribution.md) (portable Windows
-distribution):
+It also answers the registration question from ADR-0020 (portable Windows
+distribution, since superseded by
+[ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)):
 does Frame Server accept a media source registered **per user** (`HKCU`, no admin), or
 does it need a **machine-wide** registration (`HKLM`, one elevation)? The results PR must
 record the answer in [ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging),

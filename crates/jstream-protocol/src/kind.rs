@@ -22,6 +22,13 @@ pub enum KindCategory {
     VideoFilter,
     /// An audio filter kind.
     AudioFilter,
+    /// A transition kind, which a transition preset names (ADR-0037).
+    Transition,
+    /// A category this version of the protocol doesn't know. Never sent; produced only
+    /// when parsing a `kind.list` from a newer server.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// One kind in a `kind.list` result.
@@ -535,7 +542,9 @@ fn check_extension(path: &str, accept: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{EnumOption, KindCategory, KindDescriptor, ParamDescriptor, ParamType};
+    use super::{
+        EnumOption, KindCategory, KindDescriptor, KindSummary, ParamDescriptor, ParamType,
+    };
     use crate::settings::AssetRoot;
     use serde_json::{Value, json};
 
@@ -585,6 +594,15 @@ mod tests {
         .expect("parses");
         assert_eq!(parsed.ty, ParamType::Unknown);
         assert_eq!(parsed.id, "m");
+    }
+
+    #[test]
+    fn unknown_kind_categories_from_a_newer_server_parse() {
+        let parsed = serde_json::from_value::<KindSummary>(json!({
+            "kind_id": "x", "category": "midi_filter", "name": "X", "version": 1
+        }))
+        .expect("parses");
+        assert_eq!(parsed.category, KindCategory::Unknown);
     }
 
     #[test]
