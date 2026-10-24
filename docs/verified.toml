@@ -4056,7 +4056,7 @@ stamp = { hash = "b3:eb40f355f38a018c", by = "agent:ui-parity", note = "Scenes a
 stamp = { hash = "b3:dba0326ab8718d0e", by = "agent:ui-parity", note = "Filters slice: new Filters bullet (chains per source kind, filter.set_enabled/remove/reorder rows, descriptor summaries, in place for three settings or fewer else the dialog, dialog applies at once and Cancel batches the restore, Defaults keeps a scene input, Add filter from kind.list with the prototype's groups, Edit filters in the item menus); Properties dialog bullet now points at those rows; workspace bullet counts eight panels with Filters; style.css adds the filter rows, switch and both dialogs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:a08171e9a1259e59", by = "agent:ui-parity", note = "Filters slice: new Filters bullet (chains per source kind, filter.set_enabled/remove/reorder rows, descriptor summaries, in place for three settings or fewer else the dialog, dialog applies at once and Cancel batches the restore, Defaults keeps a scene input, Add filter from kind.list with the prototype's groups, Edit filters in the item menus); Properties dialog bullet now points at those rows; workspace bullet counts eight panels with Filters; style.css adds the filter rows, switch and both dialogs." }
+stamp = { hash = "b3:2c77388e4c88fa1f", by = "agent:ui-parity", note = "Filters slice: new Filters bullet (chains per source kind, filter.set_enabled/remove/reorder rows, descriptor summaries, in place for three settings or fewer else the dialog, dialog applies at once and Cancel batches the restore, Defaults keeps a scene input, Add filter from kind.list with the prototype's groups, Edit filters in the item menus); Properties dialog bullet now points at those rows; workspace bullet counts eight panels with Filters; style.css adds the filter rows, switch and both dialogs; lib.rs back to the base's Docs line." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -4176,7 +4176,7 @@ stamp = { hash = "b3:eb40f355f38a018c", by = "agent:ui-parity", note = "Panels e
 stamp = { hash = "b3:dba0326ab8718d0e", by = "agent:ui-parity", note = "Filters slice: Contents now lists filters.rs (Filters, Chains shared with the Properties dialog, AddFilter, FilterSettings, FilterDialogs, natively tested catalogue, summaries and in-place choice); app.rs provides FilterDialogs and draws both dialogs, dock.rs gains PanelId::Filters, item_menu.rs's Edit filters shows the panel; the rest of the list still matches the crate." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:a08171e9a1259e59", by = "agent:ui-parity", note = "Filters slice: Contents now lists filters.rs (Filters, Chains shared with the Properties dialog, AddFilter, FilterSettings, FilterDialogs, natively tested catalogue, summaries and in-place choice); app.rs provides FilterDialogs and draws both dialogs, dock.rs gains PanelId::Filters, item_menu.rs's Edit filters shows the panel; the rest of the list still matches the crate." }
+stamp = { hash = "b3:2c77388e4c88fa1f", by = "agent:ui-parity", note = "Filters slice: Contents now lists filters.rs (Filters, Chains shared with the Properties dialog, AddFilter, FilterSettings, FilterDialogs, natively tested catalogue, summaries and in-place choice); app.rs provides FilterDialogs and draws both dialogs, dock.rs gains PanelId::Filters, item_menu.rs's Edit filters shows the panel; lib.rs's Docs line is unchanged from the base, as UI-FEATURES#filters stays without covers (adding them is a governance change); the rest of the list still matches the crate." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -5071,12 +5071,6 @@ stamp = { hash = "b3:6118959149d505d7", by = "agent:ui-parity", note = "Filters 
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/workspace.rs"]
 stamp = { hash = "b3:c503b4e98bdce7d0", by = "agent:ui-parity", note = "Filters slice: PanelId::Filters (key filters, home right, View order after Transform); Editing puts Filters and Transform in one group under the Inspector with Filters shown, as the spec's layout; the intro and DK-08 say so; app.rs and workspace.rs only wire the panel and its dialogs." }
-
-["UI-FEATURES#filters"."body"]
-stamp = { hash = "b3:383213af1eaae4f6", by = "agent:ui-parity", note = "Filters slice: section now covers filters.rs; FL-01 to FL-05 built and described against spec-panels 5 (target, chains, rows, summaries, in place or dialog, Add, descriptor forms, with the scene select's gap named); FL-06 to FL-08 stay locked; the intro names ADR-0027's master and output chains for FL-07." }
-
-["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:2a5b6ab9cd031047", by = "agent:ui-parity", note = "Filters slice: section now covers filters.rs; FL-01 to FL-05 built and described against spec-panels 5 (target, chains, rows, summaries, in place or dialog, Add, descriptor forms, with the scene select's gap named); FL-06 to FL-08 stay locked; the intro names ADR-0027's master and output chains for FL-07." }
 
 ["UI-FEATURES#header"."body"]
 stamp = { hash = "b3:5c07c815aef95554", by = "agent:ui-parity", note = "Filters slice: app.rs only provides FilterDialogs and draws the Add filter and Filter settings dialogs; HD-02 now counts the eight panels the View menu lists (it said six, while Transform had already made seven)." }

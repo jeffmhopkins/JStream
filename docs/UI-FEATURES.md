@@ -296,7 +296,6 @@ All of it is client-side geometry, sent as `item.set_geometry` edits (`item.set_
 <a id="filters"></a>
 ## Filters
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/filters.rs"]
 -->
 
 Spec: [panels › filters](../design/ui-prototype/spec-panels.md#filters-panel). The protocol
