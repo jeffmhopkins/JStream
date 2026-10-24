@@ -4917,7 +4917,7 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:0b27d2001ef6540e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#769: token-file bullet and gap now describe the Windows protected DACLs on the base (create_private_file in token.rs, logs.rs, devices.rs, daemon and desktop crash reports via install_creating/#656; check_private_file on existing token and devices files only, log files and reports are create-new); gap is now the pending Windows hardware run (#546) plus the audit log (#547/#574) pointer" }
+stamp = { hash = "b3:c7d9a67cd243b09c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after #772 r1. The bullet now scopes create_private_file to the daemon's token, devices and log files plus both apps' crash reports (#656); the desktop log (File::create, apps/jstream-desktop/src/logs.rs:35) is not covered and is listed as #780. The gap now splits the token/devices/log DACLs (windows-latest only, hardware in #546) from the crash reports' DACL, which hasn't run on Windows CI or hardware and is now on #546's checklist." }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
