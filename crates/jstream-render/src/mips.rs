@@ -5,11 +5,16 @@
 //! with trilinear filtering and 16× anisotropy, clamped to what the adapter offers. The
 //! chain lives on the [`Image`] and goes with it, so a source never placed in 3D has none.
 //!
-//! It is rebuilt on the GPU only when its image changed since the last build, so once
-//! per source and frame however many mixes or nested scenes draw it: an upload when it
-//! was rewritten, a layer when `render_into` drew into it, and an import when it was
-//! handed a new frame ([`Image::mark_changed`], which `ResourceCache::import` calls
-//! once per frame).
+//! A chain is built from the item's crop, not the whole source ([`Region`]): level 0 is
+//! the cropped texels, so no coarser level averages a texel past the crop into the
+//! item's edge, and clamping to the chain's edge keeps the anisotropic footprint inside
+//! it too (#641). An image keeps one chain per crop it is drawn with.
+//!
+//! A chain is rebuilt on the GPU only when its image changed since its last build, so
+//! once per source and frame however many mixes or nested scenes draw it: an upload
+//! when it was rewritten, a layer when `render_into` drew into it, and an import when
+//! it was handed a new frame ([`Image::mark_changed`], which `ResourceCache::import`
+//! calls for each new frame, not for the same frame shown again).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -18,12 +23,48 @@ use crate::image::{Alpha, Image};
 /// Never built.
 const NEVER: u64 = u64::MAX;
 
-/// What builds every chain: one pipeline per way a level-0 sample is read, and the
-/// samplers.
+/// The source texels a chain is built from: an item's crop, in source pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Region {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Region {
+    /// The whole of a `source_width` × `source_height` source.
+    pub(crate) fn whole(source_width: u32, source_height: u32) -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: source_width.max(1),
+            height: source_height.max(1),
+        }
+    }
+
+    /// The region's `[u, v, width, height]` in the source's texture coordinates.
+    fn uv(self, source_width: u32, source_height: u32) -> [f32; 4] {
+        let (w, h) = (source_width as f32, source_height as f32);
+        [
+            self.x as f32 / w,
+            self.y as f32 / h,
+            self.width as f32 / w,
+            self.height as f32 / h,
+        ]
+    }
+}
+
+/// What builds every chain: for level 0, one pipeline per way a source sample is read,
+/// each reading the chain's region; for the levels below, one that halves the level
+/// above; and the samplers.
 pub(crate) struct MipPipelines {
     premultiplied: wgpu::RenderPipeline,
     straight: wgpu::RenderPipeline,
     srgb: wgpu::RenderPipeline,
+    next: wgpu::RenderPipeline,
+    /// The layout of a chain's region, level 0's second group.
+    region_layout: wgpu::BindGroupLayout,
     /// Linear, one level: what a level reads the one above with.
     linear: wgpu::Sampler,
     /// Trilinear with 16× anisotropy: what the composite pass reads a chain with.
@@ -36,18 +77,36 @@ impl MipPipelines {
             label: Some("jstream-render-mip"),
             source: wgpu::ShaderSource::Wgsl(include_str!("mip.wgsl").into()),
         });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let region_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("jstream-render-mip-region"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: wgpu::BufferSize::new(REGION_BYTES),
+                },
+                count: None,
+            }],
+        });
+        let first_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("jstream-render-mip-first"),
+            bind_group_layouts: &[Some(layout), Some(&region_layout)],
+            immediate_size: 0,
+        });
+        let next_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("jstream-render-mip"),
             bind_group_layouts: &[Some(layout)],
             immediate_size: 0,
         });
-        let pipeline = |entry: &str| {
+        let pipeline = |pipeline_layout: &wgpu::PipelineLayout, vs: &str, entry: &str| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("jstream-render-mip"),
-                layout: Some(&pipeline_layout),
+                layout: Some(pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some("vs"),
+                    entry_point: Some(vs),
                     compilation_options: Default::default(),
                     buffers: &[],
                 },
@@ -74,9 +133,11 @@ impl MipPipelines {
         };
         let clamp = wgpu::AddressMode::ClampToEdge;
         Self {
-            premultiplied: pipeline("fs_premultiplied"),
-            straight: pipeline("fs_straight"),
-            srgb: pipeline("fs_srgb"),
+            premultiplied: pipeline(&first_layout, "vs_region", "fs_premultiplied"),
+            straight: pipeline(&first_layout, "vs_region", "fs_straight"),
+            srgb: pipeline(&first_layout, "vs_region", "fs_srgb"),
+            next: pipeline(&next_layout, "vs", "fs_premultiplied"),
+            region_layout,
             linear: device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("jstream-render-mip-linear"),
                 address_mode_u: clamp,
@@ -107,17 +168,24 @@ impl MipPipelines {
 /// The format of a chain: premultiplied linear, as uploads and layers.
 const MIP_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
-/// One source's chain.
+/// A region's uniform: `vec4<f32>`, its `[u, v, width, height]` in the source.
+const REGION_BYTES: u64 = 16;
+
+/// One source's chain, for one region of it.
 pub(crate) struct Mips {
     /// What the composite pass binds: the whole chain and the anisotropic sampler.
     pub(crate) bind_group: wgpu::BindGroup,
+    /// The source texels level 0 holds.
+    region: Region,
+    /// Level 0's second group: the region, in the source's texture coordinates.
+    region_group: wgpu::BindGroup,
     /// Each level's render-target view, level 0 first.
     targets: Vec<wgpu::TextureView>,
     /// Level `i`'s input for level `i + 1`: its view and the linear sampler.
     inputs: Vec<wgpu::BindGroup>,
     /// The image's generation at the last build, or [`NEVER`].
-    built_generation: AtomicU64,
-    /// How many builds were claimed, for the tests.
+    built: AtomicU64,
+    /// How many times the chain was recorded, for tests.
     #[cfg(test)]
     builds: AtomicU64,
 }
@@ -128,14 +196,38 @@ pub(crate) fn level_count(width: u32, height: u32) -> u32 {
 }
 
 impl Mips {
+    /// A chain of `region` of `image`, not built yet.
     pub(crate) fn new(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         layout: &wgpu::BindGroupLayout,
         pipelines: &MipPipelines,
-        width: u32,
-        height: u32,
+        image: &Image,
+        region: Region,
     ) -> Self {
+        let (width, height) = (region.width, region.height);
         let levels = level_count(width, height);
+        let uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("jstream-render-mip-region"),
+            size: REGION_BYTES,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bytes: Vec<u8> = region
+            .uv(image.width(), image.height())
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect();
+        // Ordered before the submit that first builds the chain.
+        queue.write_buffer(&uniform, 0, &bytes);
+        let region_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("jstream-render-mip-region"),
+            layout: &pipelines.region_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            }],
+        });
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("jstream-render-mips"),
             size: wgpu::Extent3d {
@@ -182,29 +274,32 @@ impl Mips {
         let whole = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Self {
             bind_group: bind(&whole, &pipelines.anisotropic),
+            region,
+            region_group,
             targets,
             inputs,
-            built_generation: AtomicU64::new(NEVER),
+            built: AtomicU64::new(NEVER),
             #[cfg(test)]
             builds: AtomicU64::new(0),
         }
     }
 
-    /// Whether `image` changed since its chain was last built, and if so marks it built.
-    pub(crate) fn claim(&self, image: &Image) -> bool {
-        let generation = image.generation();
-        let changed = self.built_generation.swap(generation, Ordering::Relaxed) != generation;
-        #[cfg(test)]
-        if changed {
-            self.builds.fetch_add(1, Ordering::Relaxed);
-        }
-        changed
+    /// The source texels the chain holds.
+    pub(crate) fn region(&self) -> Region {
+        self.region
     }
 
-    /// How many builds were claimed.
+    /// How many times the chain was recorded.
     #[cfg(test)]
     pub(crate) fn builds(&self) -> u64 {
         self.builds.load(Ordering::Relaxed)
+    }
+
+    /// Whether the chain needs building from `image`, which changed since the last
+    /// build or was never built, and if so marks it built.
+    pub(crate) fn claim(&self, image: &Image) -> bool {
+        let generation = image.generation();
+        self.built.swap(generation, Ordering::Relaxed) != generation
     }
 
     /// Records the passes that rebuild the chain from `image`.
@@ -214,6 +309,8 @@ impl Mips {
         pipelines: &MipPipelines,
         image: &Image,
     ) {
+        #[cfg(test)]
+        self.builds.fetch_add(1, Ordering::Relaxed);
         let first = match image.alpha() {
             Alpha::Premultiplied => &pipelines.premultiplied,
             Alpha::Straight => &pipelines.straight,
@@ -240,9 +337,10 @@ impl Mips {
                 None => {
                     pass.set_pipeline(first);
                     pass.set_bind_group(0, image.bind_group(), &[]);
+                    pass.set_bind_group(1, &self.region_group, &[]);
                 }
                 Some(above) => {
-                    pass.set_pipeline(&pipelines.premultiplied);
+                    pass.set_pipeline(&pipelines.next);
                     pass.set_bind_group(0, &self.inputs[above], &[]);
                 }
             }

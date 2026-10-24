@@ -871,8 +871,8 @@ id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "review"
-prs = [486, 623, 722]
-note = "the WASM host #486 (merged into wave/m3-2), its wall-time deadlines #623 and the cap of 50 commands a second #722; the wire half and the engine side to build"
+prs = [486, 623, 722, 725]
+note = "the WASM host #486 (merged into wave/m3-2), its wall-time deadlines #623, the cap of 50 commands a second #722 and the 1,000-event queue #725; the wire half and the engine side to build"
 needs = ["wave"]
 
 [[item]]
