@@ -1359,7 +1359,7 @@ impl Nv12Passes {
                 }
             }
         };
-        converter.submit(compositor.queue(), &self.passes[at].2, frame)
+        converter.submit(compositor, &self.passes[at].2, frame)
     }
 }
 

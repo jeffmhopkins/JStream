@@ -127,7 +127,9 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
   (`OpenSharedHandle`), checked to be a single-mip BGRA8 texture of the size the helper
   said, imported into wgpu, and each paint copied from it into the next of three
   textures the page owns, waiting for the copy before the slot goes back to the helper.
-  Nothing is read back to the CPU. The frame is `Bgra8`, premultiplied, BT.709 full
+  The copy is submitted under the context's `SubmitLock`, so it can't take a fence wait
+  or signal that render staged for its own submit on the same queue. The lock is let go
+  before the wait. Nothing is read back to the CPU. The frame is `Bgra8`, premultiplied, BT.709 full
   range, stamped on arrival. A paint that can't be copied keeps the last frame and is
   logged once until one succeeds. `use_device` also tells the helper the device's adapter
   LUID; without a device, or one without a LUID, pages deliver no frames.
