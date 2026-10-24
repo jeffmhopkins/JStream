@@ -165,6 +165,7 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
     'Remove from scene',
     'Add source…',
     'New group',
+    'Delete source everywhere…',
   ]);
   await expect(menu(page).getByRole('menuitem', { name: 'Clear crop' })).toBeDisabled();
 
@@ -221,7 +222,7 @@ test('the Scenes panel menus add and rename scenes', async ({ page, daemon }) =>
   const field = page.locator('.scenes-panel input.rename');
   await field.fill('Opening');
   await field.press('Enter');
-  await expect(page.locator('.scenes-panel li.row .row-main')).toHaveText(['Opening', 'Main']);
+  await expect(page.locator('.scenes-panel li.row .tree-label')).toHaveText(['Opening', 'Main']);
 
   // Under the rows, the panel's own menu: New scene adds one with its name open.
   const panel = page.locator('.scenes-panel');

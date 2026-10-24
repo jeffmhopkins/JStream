@@ -62,7 +62,9 @@ Contents ([Design](#design) explains the choices):
   layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
-  (`sources.rs`), the Inspector (`inspector.rs`: the selected item's box, crop,
+  (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
+  filter, the star and drag reordering, with the matching and the drop's index tested
+  natively), the Inspector (`inspector.rs`: the selected item's box, crop,
   blending and settings, or the selected scene's objects, uses and transitions), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
@@ -141,10 +143,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   item that left the scene is dropped, the next selected one becoming primary. The
   canvas edits the same scene and selects the same items, so a click on a box selects
   its row and opens its properties, and every selected item's row is highlighted.
-- **Scenes and sources.** The scene list shows scenes in display order and leaves out
-  groups (ADR-0024), marks the program scene, and puts a scene on program with
-  `scene.switch`. The sources list shows the selected scene's items with the top of the
-  stack first. New scenes, sources and items get IDs from `fresh_id`, which includes
+- **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
+  trees (spec-panels.md 1 and 2), without folders and groups yet. The scene list shows
+  scenes in display order and leaves out groups (ADR-0024), marks the program scene
+  "program", and puts a scene on program with `scene.switch` from a hover button. The
+  sources list shows the selected scene's items with the top of the stack first, each
+  with its source's type icon, in italics when the source is placed in another scene
+  too, and an eye that shows or hides it. Each panel has a search box and a filter for
+  favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page;
+  rows drag before or after each other (`scene.reorder`, `item.reorder`, counted in the
+  whole list so a hidden row doesn't shift the index) with pointer events, but not
+  while a filter is on. F2 renames a row in place and Del deletes a scene (through its
+  plan) or removes an item; a double click on an item opens its Properties dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
   the session's client ID so two UIs on one engine don't pick the same one. Sources
   are added through the Add source dialog (below). Deleting a scene, or a source
   everywhere, reads `delete.plan` first,
@@ -157,15 +167,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the menu keeps itself on screen, opens submenus on hover or the right arrow, moves
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
-  sources lists their panels' menus, and a scene row its scene's (Rename, New scene and
-  Delete scene work; the rest waits on folders, keyframes, transitions and the scene
-  Properties dialog). A right-click on an item, on the canvas or its row, selects it
+  sources lists their panels' menus, and a scene row its scene's (Show in preview,
+  Rename, New scene and Delete scene work; the rest waits on folders, keyframes,
+  transitions and the scene Properties dialog). A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
   canvas and Reset rotation (`item.set_geometry`), Clear crop, Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
-  or as clone (`source.duplicate` first), and Remove from scene, each one batch. A
+  or as clone (`source.duplicate` first), and Remove from scene, each one batch; in
+  the sources list, one item's menu ends with deleting its source everywhere. A
   nested scene and an audio-only source get the prototype's shorter menus; the first
   can be opened. The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
@@ -400,6 +411,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
+  the trees' search and drop index,
   the Add source dialog's types and edits, the menu's placement and keys, the item
   menu's layer moves and arrangements, the Properties dialog's draft patch, the form's
   sections, parsing and checks); only the components
