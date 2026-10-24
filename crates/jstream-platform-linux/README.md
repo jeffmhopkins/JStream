@@ -302,13 +302,12 @@ It has:
   feature out of the defaults. Without it, `jstream-aac` leaves the build, the list has
   no AAC encoder, and opening one reports `Unsupported`.
 
+The engine starts each display and window source's capture with `start_with` and
+`CaptureOptions::for_source`, asks for `Drawn` when the source's `show_cursor` setting
+(protocol 0.36) is on and `Hidden` when it's off, and never draws the pointer itself.
+It calls `forget_source` when the source is deleted.
+
 Not here yet, in roughly the order they follow:
-- display and window sources' `show_cursor` setting (protocol 0.36), after the main
-  sync (#521): the engine asks for `Drawn` when it's on and `Hidden` when it's off, and
-  never draws the pointer itself (the cursor is drawn into the frames until then);
-- the engine starting each portal source's capture with `start_with` and
-  `CaptureOptions::for_source`, and calling `forget_source` when the source is deleted,
-  once captures follow sources on this wave (it captures the primary display for now);
 - choosing between PipeWire and ALSA (ADR-0060 §8): ALSA when no PipeWire daemon runs,
   and which one where both are present;
 - pairing a V4L2 webcam with its microphone, and DMA-BUF export from V4L2;
