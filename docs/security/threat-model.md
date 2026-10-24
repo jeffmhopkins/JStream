@@ -136,11 +136,10 @@ ambient credential until it is closed. Failed tokens are not delayed or locked o
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
-**Gaps:** the token, devices and log files' Windows DACLs are tested only on CI's
-`windows-latest` runner, not yet on Windows hardware (#546), so #344 stays open until
-that run. The crash reports' DACL (#656) has not yet run on Windows CI or hardware; it
-is on #546's checklist. The engine's audit
-log still inherits its folder's ACL on Windows (see [Files](#files)).
+**Gaps:** #546's Windows hardware pass reported the token file and the daemon's logs
+user-only with no inheritance. Still to run on hardware: the devices file after a real
+pairing, and the crash reports' DACL (#656), which hasn't run on Windows CI either. So
+#344 stays open until those are checked (#546).
 
 <a id="pairing"></a>
 ## Pairing and remote browsers
@@ -263,8 +262,10 @@ write recordings anywhere the user can. That follows from ADR-0006's full access
 Windows send the user's NTLM hash to a remote host (#345); a file created between the
 recording's last check and its rename is replaced (#355). The Media Foundation file
 reader (in flight, #245) will parse untrusted media in native code inside the engine.
-On Windows the collection file and the audit log only inherit their folder's ACL, and an
-existing audit log isn't checked (#547, fix in flight in #574).
+On Windows the collection file and the audit log are now created user-only and an
+existing audit log is refused if loosened (#574, through `private_file`); #546's pass
+reported them user-only on #574's branch, but audit-log rotation past 8 MiB hasn't run on
+Windows hardware yet (#547).
 
 <a id="plugins"></a>
 ## Plugins
@@ -425,8 +426,8 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 
 | Issue | Area | Gap | Severity |
 |---|---|---|---|
-| #344 | Server, pairing | Windows user-only token, devices and log files not yet checked on Windows hardware (#546) | Low |
-| #547 | Files | Windows audit log and collection file only inherit their folder's ACL (fix in #574) | Medium |
+| #344 | Server, pairing | Windows devices file and crash reports not yet checked user-only on hardware; token and daemon logs reported user-only (#546) | Low |
+| #547 | Files | Windows audit log's user-only DACL not yet checked across a rotation on hardware (#574 landed in the wave) | Low |
 | #780 | Server | The desktop app's log file only inherits its folder's ACL on Windows and gets the umask's mode on Unix | Low |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
