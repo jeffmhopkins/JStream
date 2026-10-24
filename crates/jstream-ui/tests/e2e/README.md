@@ -62,10 +62,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   cookies. A URL the page's policy refuses shows a reason and re-enables Connect,
   although Chromium sends that socket an `error` event and no `close` (#305).
 - **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
-  program scene marked and selected, and its item listed; putting a scene on program,
-  which a second client follows; adding a scene, which is selected, and renaming it in
-  place; hiding and showing an item, placing an existing source again through the Add source
-  dialog and removing that item; selecting an item opens its properties. The mock engine lists no kinds and makes
+  program scene's "program" badge, selected, and its item listed under the scene's
+  caption; putting a scene on program, which a second client follows; F2 renaming a
+  scene in place (Del inside the field deletes a character, not the scene) and a drag reordering the scenes, which a second client follows and
+  which doesn't select the dragged row; the search boxes and the favourites filter
+  with its count, Favorites only and Clear; hiding and showing an item with its eye,
+  placing an existing source again through the Add source dialog, a drag restacking the
+  two items, F2 renaming one of the two placements of a source (Del there edits the
+  name, not the scene) and Del removing one; selecting an item opens its properties. The mock engine lists no kinds and makes
   no delete plans, so new-kind sources, the properties form's fields and deletes are
   tested natively.
 - **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start
@@ -102,7 +106,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   panel's menu opens the Add source dialog, which places the seed's Backdrop again as
   a reference 40 px down and right, selected (the mock lists no kinds, so its Color
   type can't create); a scene nests once and isn't offered again, and the backdrop
-  cancels the dialog. An item row's menu lists the item menu's lines, Send to back
+  cancels the dialog. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
   restacks in one edit and Stretch to canvas fills the canvas; on the canvas the menu
   ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
   items get a counted head with the duplicates disabled, and Remove from scene removes
