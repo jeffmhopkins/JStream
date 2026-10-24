@@ -184,19 +184,17 @@ impl<K: Ord + Clone> ResourceCache<K> {
     ) -> Result<&Image, RenderError> {
         let frame_no = self.frame;
         let texture = frame.texture();
-        let sync = Some(Arc::clone(frame.sync()));
         let reuse = self
             .live
             .get(key)
             .is_some_and(|entry| entry.image.is_import_as(alpha));
         if !reuse {
-            let image = compositor.import_as(texture.clone(), sync, alpha)?;
+            let mut image = compositor.import_as(texture.clone(), None, alpha)?;
+            image.set_frame(frame);
             return Ok(self.replace(key, image, 0));
         }
         let entry = self.live.get_mut(key).ok_or_else(|| missing("an import"))?;
-        let mut fresh = entry.used != frame_no;
         if entry.image.texture() != texture {
-            fresh = true;
             let kept = entry
                 .kept
                 .iter()
@@ -206,7 +204,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
                 None => compositor.import_as(texture.clone(), None, alpha)?,
             };
             let mut old = std::mem::replace(&mut entry.image, image);
-            old.set_sync(None);
+            old.clear_sync();
             entry.kept.push((old, entry.used));
             let size = (texture.width(), texture.height());
             let mut index = 0;
@@ -226,11 +224,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
                 self.retired.push(Retired { image, after });
             }
         }
-        entry.image.set_sync(sync);
-        if fresh {
-            // A new frame, at most once per cache frame however many mixes draw it.
-            entry.image.mark_changed();
-        }
+        entry.image.set_frame(frame);
         entry.used = frame_no;
         Ok(&entry.image)
     }
@@ -290,7 +284,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
     pub fn end_frame(&mut self, compositor: &Compositor) -> Option<Reclaimed> {
         let frame = self.frame;
         for entry in self.live.values_mut() {
-            entry.image.set_sync(None);
+            entry.image.clear_sync();
         }
         let stale = self.live.iter().any(|(_, entry)| entry.used < frame);
         if stale {
@@ -376,7 +370,7 @@ fn retire(retired: &mut Vec<Retired>, entry: Entry) {
         kept,
         ..
     } = entry;
-    image.set_sync(None);
+    image.clear_sync();
     retired.push(Retired { image, after: used });
     retired.extend(
         kept.into_iter()

@@ -95,16 +95,20 @@ impl Texels {
         }
     }
 
-    /// Bilinear, clamped to the edge, with texel centres at `(i + 0.5) / size`, as the
-    /// compositor's sampler.
-    fn bilinear(&self, u: f32, v: f32) -> [f32; 3] {
+    /// Bilinear, clamped to the edge of the crop, with texel centres at
+    /// `(i + 0.5) / size`, as the compositor samples a 3D item's chain, which holds only
+    /// the cropped texels: nothing past the crop is read, even at its edge.
+    fn bilinear(&self, u: f32, v: f32, crop: Crop) -> [f32; 3] {
         let size = self.size as f32;
-        let x = (u * size - 0.5).clamp(0.0, size - 1.0);
-        let y = (v * size - 0.5).clamp(0.0, size - 1.0);
+        let (left, top) = (crop.left as f32, crop.top as f32);
+        let right = (self.size - crop.right) as f32 - 1.0;
+        let bottom = (self.size - crop.bottom) as f32 - 1.0;
+        let x = (u * size - 0.5).clamp(left, right);
+        let y = (v * size - 0.5).clamp(top, bottom);
         let (x0, y0) = (x.floor(), y.floor());
         let (fx, fy) = (x - x0, y - y0);
         let at = |x: f32, y: f32| {
-            let (x, y) = (x.min(size - 1.0) as usize, y.min(size - 1.0) as usize);
+            let (x, y) = (x.min(right) as usize, y.min(bottom) as usize);
             self.linear[y * self.size as usize + x]
         };
         let (a, b) = (at(x0, y0), at(x0 + 1.0, y0));
@@ -136,6 +140,7 @@ fn sample(
     content: &ContentRect,
     at: CanvasPoint,
     texels: &Texels,
+    crop: Crop,
 ) -> Option<[f32; 3]> {
     let local = geometry.unplace(at).expect("valid")?;
     let (half_w, half_h) = (
@@ -152,7 +157,7 @@ fn sample(
     }
     let vertex = geometry.drawn_vertex(content, local).expect("valid")?;
     debug_assert!(vertex.w >= NEAR_W);
-    Some(texels.bilinear(vertex.uv[0], vertex.uv[1]))
+    Some(texels.bilinear(vertex.uv[0], vertex.uv[1], crop))
 }
 
 fn reference(items: &[ItemGeometry], texels: &Texels, n: u32, crop: Crop) -> Reference {
@@ -179,7 +184,7 @@ fn reference(items: &[ItemGeometry], texels: &Texels, n: u32, crop: Crop) -> Ref
                     let mut hit = false;
                     // Stacking order: the last item that shows a sample is the one seen.
                     for (geometry, content) in items.iter().zip(&contents) {
-                        if let Some(c) = sample(*geometry, content, at, texels) {
+                        if let Some(c) = sample(*geometry, content, at, texels, crop) {
                             color = c;
                             hit = true;
                         }
@@ -366,9 +371,11 @@ fn golden_3d_d_edges_are_antialiased() {
 }
 
 /// D cropped: a smaller item showing only part of its source, cropped just past a texel
-/// ring. Its pushed-out fringe samples are clamped to the crop, so the cropped-away ring
-/// doesn't show at its edges. On lavapipe the edge mean is about 6.6 with the clamp and
-/// 8.2 without it. Minification of the one-texel rings accounts for the rest.
+/// ring. Its pushed-out fringe samples are clamped to the crop, and its chain holds only
+/// the cropped texels, so the cropped-away ring doesn't show at its edges; the reference
+/// clamps its bilinear samples to the crop the same way. On lavapipe the edge mean is
+/// about 2.8; with the chain built from the whole source it was about 6.6, and 8.2
+/// without the clamp either.
 #[test]
 fn golden_3d_d_a_cropped_item_shows_nothing_past_its_crop() {
     let Some(mut opened) = open() else {
@@ -392,7 +399,7 @@ fn golden_3d_d_a_cropped_item_shows_nothing_past_its_crop() {
     };
     let got = gpu(&mut opened.compositor, &items, &rgba, SOURCE, crop);
     let want = reference(&items, &Texels::new(&rgba, SOURCE), 16, crop);
-    check("D cropped edge", error(&got, &want, edge), 8.0, 40.0);
+    check("D cropped edge", error(&got, &want, edge), 5.0, 40.0);
 }
 
 /// C: a floor tilted 75°, minified about twice across and eight times along its depth.
@@ -502,7 +509,7 @@ fn a_layer_rebuilds_its_mips_only_after_it_is_drawn_into() {
 }
 
 /// An import drawn in 3D by several calls in one cache frame, as several mixes draw a
-/// capture, is rebuilt once per frame (ADR-0050 decision 5).
+/// capture, is rebuilt once per new frame (ADR-0050 decision 5).
 #[test]
 fn an_import_rebuilds_its_mips_once_per_frame() {
     let Some(mut opened) = open() else {
@@ -521,6 +528,12 @@ fn an_import_rebuilds_its_mips_once_per_frame() {
         Some(250.0),
     )];
     for expected in 1..=2 {
+        // The platform's next frame in the same texture, under a hold of its own.
+        let frame = jstream_platform::GpuFrame::new(
+            frame.texture().clone(),
+            *frame.info(),
+            std::sync::Arc::new(super::CountSync(std::sync::Arc::default())),
+        );
         cache.begin_frame();
         for _mix in 0..2 {
             let image = cache
@@ -567,4 +580,243 @@ fn golden_3d_e_items_through_each_other_draw_in_stacking_order() {
     let got = gpu(&mut opened.compositor, &items, &rgba, SOURCE, Crop::NONE);
     let want = reference(&items, &Texels::new(&rgba, SOURCE), 8, Crop::NONE);
     check("E all", error(&got, &want, all), 2.0, 40.0);
+}
+
+/// A source that is green inside `crop` and red outside it.
+fn green_inside(size: u32, crop: Crop) -> Vec<u8> {
+    let mut rgba = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size {
+        for x in 0..size {
+            let inside =
+                x >= crop.left && x < size - crop.right && y >= crop.top && y < size - crop.bottom;
+            rgba.extend(if inside {
+                [0, 200, 0, 255]
+            } else {
+                [255, 0, 0, 255]
+            });
+        }
+    }
+    rgba
+}
+
+/// A cropped item minified until it samples its chain's coarse levels shows nothing
+/// from past its crop (#641): the chain is built from the cropped region, so no level
+/// averages a texel outside it into the item. Built from the whole source, the coarse
+/// levels and the anisotropic footprint pull the red border into the item's edges.
+#[test]
+fn golden_3d_a_cropped_item_minified_shows_nothing_past_its_crop() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    // A crop that doesn't fall on a power-of-two boundary, so every coarse texel at its
+    // edge would mix both sides.
+    let crop = Crop {
+        left: 101,
+        top: 93,
+        right: 117,
+        bottom: 109,
+    };
+    let rgba = green_inside(LARGE_SOURCE, crop);
+    // A small floor tilted away: minified many times over, most along its depth.
+    let items = [geometry(
+        (120.0, 75.0),
+        (60.0, 60.0),
+        10.0,
+        70.0,
+        0.0,
+        0.0,
+        Some(250.0),
+    )];
+    let got = gpu(&mut opened.compositor, &items, &rgba, LARGE_SOURCE, crop);
+    let want = reference(&items, &Texels::new(&rgba, LARGE_SOURCE), 4, crop);
+    let mut covered = 0;
+    let mut worst = 0u8;
+    for (i, coverage) in want.coverage.iter().enumerate() {
+        if *coverage == 0.0 {
+            continue;
+        }
+        covered += 1;
+        let (x, y) = (i as u32 % WIDTH, i as u32 / WIDTH);
+        worst = worst.max(got.pixel(x, y).expect("inside")[0]);
+    }
+    assert!(covered > 50, "the item covers {covered} px");
+    // Only the dark grey background (20) may show red, where an edge pixel blends with it.
+    assert!(
+        worst <= BACKGROUND[0] + 2,
+        "red from past the crop reaches the item: red {worst} over {covered} px"
+    );
+}
+
+/// A floor that samples coarse levels, for the rebuild tests.
+fn floor() -> ItemGeometry {
+    geometry(
+        (120.0, 75.0),
+        (225.0, 225.0),
+        0.0,
+        75.0,
+        0.0,
+        0.0,
+        Some(250.0),
+    )
+}
+
+/// A layer's chain is rebuilt once per change to the layer, not once per call that
+/// draws it (#641): two items and two calls drawing an unchanged layer build it once,
+/// and drawing into the layer again rebuilds it before its next 3D draw.
+#[test]
+fn a_layer_rebuilds_its_mips_once_per_change() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let red = super::solid(compositor, 64, 64, [255, 0, 0, 255]);
+    let green = super::solid(compositor, 64, 64, [0, 255, 0, 255]);
+    let layer = compositor.layer(64, 64).expect("layer");
+    let fill = |compositor: &mut crate::Compositor, image: &Image| {
+        let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
+        let scene = Scene {
+            canvas: FrameSize::new(64, 64).expect("non-zero"),
+            background: Color::TRANSPARENT,
+            items: &items,
+        };
+        compositor
+            .render_into(&scene, &layer)
+            .expect("render into the layer");
+    };
+    let centre = |snapshot: &Snapshot| snapshot.pixel(120, 75).expect("inside")[..3].to_vec();
+    fill(compositor, &red);
+    let first = draw(compositor, &[floor(), floor()], &layer, Crop::NONE);
+    let second = draw(compositor, &[floor()], &layer, Crop::NONE);
+    assert_eq!(centre(&first), [255, 0, 0]);
+    assert_eq!(centre(&second), [255, 0, 0]);
+    assert_eq!(
+        layer.chain_builds(),
+        (1, 1),
+        "built once for two items and two calls"
+    );
+
+    fill(compositor, &green);
+    let third = draw(compositor, &[floor()], &layer, Crop::NONE);
+    assert_eq!(centre(&third), [0, 255, 0], "the changed layer shows");
+    assert_eq!(layer.chain_builds(), (1, 2), "rebuilt once for the change");
+}
+
+/// An import's chain is rebuilt when the cache gives it a new frame, not when the same
+/// frame is shown again (#641).
+#[test]
+fn an_import_rebuilds_its_mips_only_for_a_new_frame() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache = crate::ResourceCache::<&'static str>::new();
+    let (frame, _) = super::counted_frame(compositor, 64, 64, [255, 0, 0, 255]);
+    let mut show = |compositor: &mut crate::Compositor, frame: &jstream_platform::GpuFrame| {
+        cache.begin_frame();
+        let image = cache.import(compositor, &"capture", frame).expect("import");
+        let _ = draw(compositor, &[floor()], image, Crop::NONE);
+        let builds = image.chain_builds();
+        let _ = cache.end_frame(compositor);
+        builds
+    };
+    assert_eq!(show(compositor, &frame), (1, 1));
+    assert_eq!(
+        show(compositor, &frame.clone()),
+        (1, 1),
+        "the same frame again"
+    );
+    // A new frame in the same texture: the platform wrote it again.
+    let again = jstream_platform::GpuFrame::new(
+        frame.texture().clone(),
+        *frame.info(),
+        std::sync::Arc::new(super::CountSync(std::sync::Arc::default())),
+    );
+    assert_eq!(show(compositor, &again), (1, 2), "a new frame rebuilds");
+    // A new frame in the same texture under the same hold, as the Windows capture ring
+    // hands out one hold per slot (#687 round 1 B2): only its time tells it apart.
+    let mut info = *again.info();
+    info.pts = jstream_media::MediaTime::new(info.pts.ticks() + 1, info.pts.timebase());
+    let same_hold = jstream_platform::GpuFrame::new(
+        again.texture().clone(),
+        info,
+        std::sync::Arc::clone(again.sync()),
+    );
+    assert_eq!(
+        show(compositor, &same_hold),
+        (1, 3),
+        "a new frame under the same hold rebuilds"
+    );
+    assert_eq!(
+        show(compositor, &same_hold.clone()),
+        (1, 3),
+        "and that frame again does not"
+    );
+}
+
+/// Two items of one source with different crops each get a chain of their crop.
+#[test]
+fn each_crop_gets_its_own_chain() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let left = Crop {
+        left: 0,
+        top: 0,
+        right: 32,
+        bottom: 0,
+    };
+    let right = Crop {
+        left: 32,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    let mut rgba = Vec::new();
+    for _ in 0..64 {
+        for x in 0..64 {
+            rgba.extend(if x < 32 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 0, 255, 255]
+            });
+        }
+    }
+    let image = compositor.upload_rgba8(64, 64, &rgba).expect("uploads");
+    let items = [
+        item(&image, Placement::Geometry(floor()), left, 1.0),
+        item(
+            &image,
+            Placement::Geometry(geometry(
+                (60.0, 40.0),
+                (60.0, 60.0),
+                0.0,
+                60.0,
+                0.0,
+                0.0,
+                Some(250.0),
+            )),
+            right,
+            1.0,
+        ),
+    ];
+    let [r, g, b] = BACKGROUND.map(|c| f32::from(c) / 255.0);
+    let scene = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::rgb(r, g, b),
+        items: &items,
+    };
+    let snapshot = compositor
+        .render(&scene, true)
+        .expect("renders")
+        .pixels()
+        .expect("readback")
+        .clone();
+    assert_eq!(snapshot.pixel(120, 100).expect("inside")[..3], [255, 0, 0]);
+    assert_eq!(snapshot.pixel(60, 40).expect("inside")[..3], [0, 0, 255]);
+    assert_eq!(
+        image.chain_builds(),
+        (2, 2),
+        "one chain per crop, each built once"
+    );
 }
