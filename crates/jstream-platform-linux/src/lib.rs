@@ -2,8 +2,9 @@
 //! as ADR-0060 lays them out. It has the `CLOCK_MONOTONIC` media clock
 //! (`MonotonicClock`), session and support-tier detection (`Session`), display and window
 //! capture through the ScreenCast portal and a PipeWire video stream (`PortalCapture`, on
-//! the crate's own minimal D-Bus client), the GPU interop on Vulkan that imports the
-//! stream's DMA-BUF frames into the engine's device (`LinuxGpu`), run-time loading of
+//! the crate's own minimal D-Bus client), webcams and capture cards through V4L2
+//! (`V4l2Devices`), the GPU interop on Vulkan that imports the stream's DMA-BUF frames
+//! into the engine's device (`LinuxGpu`), run-time loading of
 //! libpipewire (`PipeWire`) with audio input, output and loopback through it
 //! (`PipeWireAudio`), and libva, VA-API H.264 encoding from CPU frames behind
 //! `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder, downloaded only
@@ -40,6 +41,7 @@ mod portal;
 mod session;
 #[cfg(any(target_os = "linux", test))]
 mod spa;
+mod v4l2;
 mod vaapi;
 
 #[cfg(feature = "aac-encoder")]
@@ -67,6 +69,8 @@ pub use pipewire::{PipeWire, PipeWireAudio};
 pub use portal::PortalCapture;
 pub use portal::{CursorModes, PersistMode, PortalPick, SourceTypes, handle_token, request_path};
 pub use session::{Session, SessionKind, SupportTier};
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+pub use v4l2::V4l2Devices;
 #[cfg(target_os = "linux")]
 pub use vaapi::probe_encoders;
 pub use vaapi::{H264Profile, VaEncoder, VaEntrypoint};

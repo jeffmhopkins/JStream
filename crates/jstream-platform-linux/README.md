@@ -19,7 +19,7 @@ The Linux implementations of the [`jstream-platform`](../jstream-platform/README
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
 ADR is **accepted**; this crate has its first three parts (the platform basics, screen
 capture, then VA-API H.264 encoding), the software H.264 and AAC encoders, PipeWire and
-ALSA audio input and output, and the capture's DMA-BUF import into Vulkan, and the rest
+ALSA audio input and output, V4L2 webcams and capture cards, and the capture's DMA-BUF import into Vulkan, and the rest
 follows in later PRs. Layer 2, and one
 of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
@@ -184,6 +184,30 @@ It has:
   and ADR-0060 §4 leaves them to PipeWire. alsa-lib prints its own error lines to stderr
   (such as for an unknown PCM); silencing them needs a variadic C callback, which stable
   Rust can't define.
+- **`V4l2Devices`** (`VideoDevices`): webcams and capture cards through V4L2, the
+  "plain V4L2 backend" ADR-0060 §9 keeps in scope. There is no library: the nodes are
+  driven with `ioctl`s declared by hand from `<linux/videodev2.h>` (`v4l2/abi.rs`, the
+  64-bit layouts, checked against the kernel headers; the backend isn't built for 32-bit
+  targets). `devices` lists each `/dev/videoN` that captures single-planar video with
+  streaming I/O (a UVC webcam's metadata node doesn't), named by its card name, with
+  udev's `/dev/v4l/by-id/` link as the ID where there is one (it survives replugging and
+  renumbering), else the node's path. Only such paths are ever opened, since an ID can
+  come from a saved collection. Nodes the user can't open are left out, and no
+  microphone is paired yet. `formats` lists every enumerated size and frame interval of
+  the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12), NV12 and I420 as
+  they are, and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. A stepwise size range
+  offers its largest size and the common sizes its steps reach, a stepwise interval its
+  shortest, and a driver that enumerates no sizes or no intervals its current ones. `open` sets the
+  format (refused as `Unsupported` if the driver settles on another) and frame interval,
+  maps four driver buffers, and starts a capture thread that waits on the node and an
+  `eventfd`, converts each filled buffer with `jstream_platform::yuv` or hands it to the
+  decoder, queues it back, and fills the single-slot mailbox. A frame's time is its
+  `CLOCK_MONOTONIC` buffer timestamp when it is recent, else the clock's `now`. Buffers
+  the driver marks as corrupt and short raw frames are dropped, rejected JPEGs counted.
+  Raw colour is what the driver reports, else the colour space's default, else BT.601
+  below 720 lines and BT.709 from there, in limited range. An unplug is `DeviceLost`, a
+  device another application streams from `Busy`. Dropping the stream wakes and joins
+  the thread, which turns the stream off, unmaps the buffers and closes the node.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
@@ -269,15 +293,16 @@ Not here yet, in roughly the order they follow:
   once captures follow sources on this wave (it captures the primary display for now);
 - choosing between PipeWire and ALSA (ADR-0060 §8): ALSA when no PipeWire daemon runs,
   and which one where both are present;
-- V4L2 webcams;
+- multi-planar V4L2 capture (some capture cards and SoC cameras), and pairing a webcam
+  with its microphone;
 - the stream-key store.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
 pods (the DMA-BUF offer was checked byte for byte against libspa's builder), the frame
-copy, and the H.264 parameters, parameter sets, GOP and upload are
-platform-independent. The GPU interop's tests open a device on a software Vulkan
+copy, the H.264 parameters, parameter sets, GOP and upload, and V4L2's ABI layouts,
+formats list, colour, buffer times and device IDs are platform-independent. The GPU interop's tests open a device on a software Vulkan
 adapter where there is no GPU, and skip without one: the frame copy (crop, opaque
 padding, slots reused only once free) and the context checks. The VA-API surface
 attributes and DRM PRIME descriptor are checked against libva's layout at compile time
@@ -287,7 +312,8 @@ on the GPU and the GPU encode of the context's encode targets. The Linux ones (t
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
 stopping on drop, a capture stream running again after an overrun, loopback refused, an
-unknown PCM and the listing) pass with or without those libraries installed and need no
+unknown PCM and the listing; V4L2's refusal of IDs that aren't video nodes and of a
+node that isn't V4L2, and its handling of filled buffers) pass with or without those libraries installed and need no
 GPU, session or daemon; a missing PipeWire daemon is tried on a socket name nothing
 listens on. The registry reading and stream planning (`pipewire/graph.rs`), the audio
 format pods, the `process` gate's hand-off between threads (`pipewire/audio.rs`), and
@@ -304,4 +330,5 @@ from CPU frames and from the context's encode targets (which needs the Vulkan an
 VA-API drivers on one render node), `PipeWireAudio` recording (on the data loop),
 playing and looping back on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes
 are enough, no sound card), and a second of ALSA's default input on a sound card (`null`
-isn't paced, so only a real device shows real-time recording).
+isn't paced, so only a real device shows real-time recording), and V4L2 capture from a webcam or capture card (the `vivid` test
+driver will do).
