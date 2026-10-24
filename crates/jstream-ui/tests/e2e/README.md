@@ -159,7 +159,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true
   peak "safe", then the warning over 0 dBTP; and the Buses section folded under its
-  count, the master first, adding a bus.
+  count, the master first, adding a bus. The title bar's flip button turning the meters
+  vertical: the master strip and its channels folded beside it by short name, the
+  Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
+  docked in the Right sidebar the strips start vertical, 64px wide, and the button
+  flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
+  master strip's loudness and true-peak warning.
 - **Transform** (`transform.spec.js`, on the Transform tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

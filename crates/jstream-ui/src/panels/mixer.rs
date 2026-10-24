@@ -1,7 +1,8 @@
 //! The audio mixer (ADR-0028), after the prototype's (spec-panels.md 8): the master card
 //! with its loudness and true peak, the channels folded under it, a row per audio source
 //! with its meter, fader, dB field, mute and routing, and, folded under Buses, a strip
-//! per bus with its meter, fader and mute. Levels come from `meters.tick`.
+//! per bus with its meter, fader and mute. Levels come from `meters.tick`. Docked in a
+//! side column, or flipped from its title bar, the channels are vertical strips instead.
 //!
 //! A fader shows the value under the pointer while it is dragged and sends one edit when
 //! it is let go (or on each key press), so a drag is one undo step. Hearing the fader
@@ -13,10 +14,12 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0028-audio-model-v2.md
 
 use crate::app::SessionContext;
+use crate::dock::PanelId;
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::Fold;
 use crate::panels::number::NumberField;
 use crate::store::plan_summary;
+use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
     Action, AudioFollow, Batch, BusId, BusInfo, BusMeter, Call, CallResult, DeleteTarget, Edit,
@@ -475,6 +478,89 @@ pub fn channel_count(n: usize) -> String {
     }
 }
 
+/// The part of a channel's name before " · ", for a narrow vertical strip.
+pub fn short_name(name: &str) -> &str {
+    name.split(" · ").next().unwrap_or(name)
+}
+
+/// How the mixer draws its meters, set from its title bar (spec-panels.md M2): `None`
+/// until then, following the dock.
+#[derive(Clone, Copy)]
+pub struct MixerOrientation(pub RwSignal<Option<bool>>);
+
+impl MixerOrientation {
+    /// Following the dock until the title bar sets it.
+    pub fn new() -> Self {
+        MixerOrientation(RwSignal::new(None))
+    }
+}
+
+impl Default for MixerOrientation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Whether the meters are vertical: as the title bar set them, or else when the mixer
+/// is docked in a side column.
+pub fn meters_vertical(set: Option<bool>, in_column: bool) -> bool {
+    set.unwrap_or(in_column)
+}
+
+/// [`meters_vertical`] for the mixer as it is docked now.
+fn vertical_now() -> Signal<bool> {
+    let set = use_context::<MixerOrientation>();
+    let dock = use_context::<DockState>();
+    Signal::derive(move || {
+        let in_column = dock.is_some_and(|dock| {
+            dock.0.with(|d| {
+                d.group_of(PanelId::Mixer)
+                    .and_then(|g| d.place_of(g.id))
+                    .is_some_and(|place| place.zone.vertical())
+            })
+        });
+        meters_vertical(set.and_then(|s| s.0.get()), in_column)
+    })
+}
+
+/// The mixer's title-bar button that flips its meters between horizontal and vertical
+/// (spec-panels.md M2), drawn with the prototype's bars or lines.
+#[component]
+pub fn MixerFlip() -> impl IntoView {
+    let Some(orientation) = use_context::<MixerOrientation>() else {
+        return ().into_any();
+    };
+    let vertical = vertical_now();
+    let title = move || {
+        if vertical.get() {
+            "Meters: vertical · click for horizontal"
+        } else {
+            "Meters: horizontal · click for vertical"
+        }
+    };
+    let icon = move || {
+        if vertical.get() {
+            "M7 20V9 M12 20V4 M17 20V13"
+        } else {
+            "M4 7h11 M4 12h16 M4 17h7"
+        }
+    };
+    view! {
+        <button
+            class="strip-tool"
+            aria-label=title
+            title=title
+            on:pointerdown=move |event| event.stop_propagation()
+            on:click=move |_| orientation.0.set(Some(!vertical.get_untracked()))
+        >
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24" width="14" height="14">
+                <path d=icon />
+            </svg>
+        </button>
+    }
+    .into_any()
+}
+
 /// How long without a `meters.tick` before the meters go blank.
 const METERS_STALE: Duration = Duration::from_millis(500);
 
@@ -524,6 +610,57 @@ impl Panel {
             let outcome = done.await;
             self.problem.try_set(outcome.err());
         });
+    }
+
+    /// Turns a source's audio on or off, changes when it is heard, or mutes it.
+    fn set_audio(
+        self,
+        source_id: SourceId,
+        enabled: Option<bool>,
+        follow: Option<AudioFollow>,
+        muted: Option<bool>,
+    ) {
+        let patched = source_id.clone();
+        self.apply(
+            Edit::SourceSetAudio {
+                source_id,
+                enabled,
+                follow,
+                gain_db: None,
+                muted,
+            },
+            move |s| {
+                s.patch_channel(&patched, |a| {
+                    a.enabled = enabled.unwrap_or(a.enabled);
+                    a.follow = follow.unwrap_or(a.follow);
+                    a.muted = muted.unwrap_or(a.muted);
+                });
+            },
+        );
+    }
+
+    /// Sets a source's gain, if it is in range.
+    fn commit_gain(
+        self,
+        source_id: SourceId,
+        db: f32,
+    ) -> impl Future<Output = Result<(), String>> + 'static {
+        let gain = checked_gain(db);
+        async move {
+            let gain_db = gain?;
+            let patched = source_id.clone();
+            self.commit(
+                Edit::SourceSetAudio {
+                    source_id,
+                    enabled: None,
+                    follow: None,
+                    gain_db: Some(gain_db),
+                    muted: None,
+                },
+                move |s| s.patch_channel(&patched, |a| a.gain_db = gain_db),
+            )
+            .await
+        }
     }
 
     /// Sends one action, showing its error if it fails.
@@ -644,6 +781,8 @@ pub fn Mixer() -> impl IntoView {
     };
     // The channels fold under the master, folded at first (spec-panels.md M1).
     let open = RwSignal::new(false);
+    // Strips side by side in a side column, or as the title bar sets (M2, M5).
+    let vertical = vertical_now();
     let bus_count = Signal::derive(move || {
         let n = panel
             .snapshot
@@ -656,7 +795,7 @@ pub fn Mixer() -> impl IntoView {
     });
 
     view! {
-        <section class="mixer-panel">
+        <section class="mixer-panel" class:vertical=vertical>
             {move || {
                 panel
                     .problem
@@ -673,17 +812,42 @@ pub fn Mixer() -> impl IntoView {
                         }
                     })
             }}
-            <MasterCard panel=panel open=open />
-            <div class="mix-channels" id="mix-channels" hidden=move || !open.get()>
-                <Show when=no_channels>
-                    <p class="placeholder">"No audio sources. Add an audio input, desktop audio or application audio source."</p>
-                </Show>
-                <ul class="mix-rows" aria-label="Channels">
-                    <For each=channel_ids key=|id| id.clone() let:source_id>
-                        <ChannelStrip panel=panel source_id=source_id />
-                    </For>
-                </ul>
-            </div>
+            {move || {
+                if vertical.get() {
+                    view! {
+                        <div class="mix-strips">
+                            <MasterStrip panel=panel open=open />
+                            <div class="mix-columns" id="mix-columns" hidden=move || !open.get()>
+                                <div class="mix-divider" aria-hidden="true"></div>
+                                <Show when=no_channels>
+                                    <p class="placeholder">"No audio sources."</p>
+                                </Show>
+                                <ul class="mix-column-list" aria-label="Channels">
+                                    <For each=channel_ids key=|id| id.clone() let:source_id>
+                                        <ChannelColumn panel=panel source_id=source_id />
+                                    </For>
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <MasterCard panel=panel open=open />
+                        <div class="mix-channels" id="mix-channels" hidden=move || !open.get()>
+                            <Show when=no_channels>
+                                <p class="placeholder">"No audio sources. Add an audio input, desktop audio or application audio source."</p>
+                            </Show>
+                            <ul class="mix-rows" aria-label="Channels">
+                                <For each=channel_ids key=|id| id.clone() let:source_id>
+                                    <ChannelStrip panel=panel source_id=source_id />
+                                </For>
+                            </ul>
+                        </div>
+                    }
+                    .into_any()
+                }
+            }}
             <Fold title="Buses" open=false hint=bus_count>
                 <ul class="strips">
                     <For each=bus_ids key=|id| id.clone() let:bus_id>
@@ -785,36 +949,122 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
     .into_any()
 }
 
-/// A stereo meter: RMS bars, peak bars and peak holds, left over right.
-fn meter(reading: impl Fn() -> Option<Reading> + Copy + Send + Sync + 'static) -> AnyView {
+/// The master strip of the vertical mixer (spec-panels.md M5): the fold button with the
+/// channel count, the short-term loudness filling up to the target line, the loudness
+/// and true peak, and the FX and monitor buttons the engine can't serve yet.
+#[component]
+fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
+    let count = move || {
+        channel_count(
+            panel
+                .snapshot
+                .with(|s| s.as_ref().map_or(0, |s| s.channels.len())),
+        )
+    };
+    let master = move || panel.meters.with(|m| m.master);
+    let short = move || master().loudness.and_then(|l| l.short_term);
+    let fill = move || {
+        format!(
+            "{:.1}%",
+            short().map_or(0.0, |l| loudness_fraction(l.get())) * 100.0
+        )
+    };
+    let target = format!("{:.1}%", loudness_fraction(LOUDNESS_TARGET_LUFS) * 100.0);
+    let dbtp = move || true_peak_dbtp(master().true_peak);
+    view! {
+        <div class="master-strip" role="group" aria-label="Master">
+            <button
+                class="master-fold"
+                aria-expanded=move || open.get().to_string()
+                aria-controls="mix-columns"
+                title="Show or hide the channels feeding the master"
+                on:click=move |_| open.update(|o| *o = !*o)
+            >
+                <span class="caret" aria-hidden="true">{move || if open.get() { "▾" } else { "▸" }}</span>
+                "Master"
+            </button>
+            <span class="master-count">{count}</span>
+            <div class="level-column" title="Loudness · white line = target" aria-hidden="true">
+                <div class="level-fill" style:height=fill></div>
+                <div class="level-target" style:bottom=target></div>
+            </div>
+            <span class="master-value mono" role="status">{move || format_lufs(short())}</span>
+            <span class="master-unit">"LUFS"</span>
+            <span
+                class="master-value mono"
+                class:over=move || true_peak_note(dbtp()).1
+                title=move || format!("True peak: {}", true_peak_note(dbtp()).0)
+            >
+                {move || format_true_peak(master().true_peak).replace(" dBTP", "")}
+            </span>
+            <span class="master-unit">"dBTP"</span>
+            <button
+                class="fx-button"
+                disabled
+                title="Filters on the program output: the master chain isn't built yet (FL-07)"
+            >
+                "FX 0"
+            </button>
+            <button
+                class="ghost-button"
+                disabled
+                title="What your headphones hear: the engine has no monitor output yet (decision D22)"
+            >
+                "Hear post"
+            </button>
+        </div>
+    }
+    .into_any()
+}
+
+/// A stereo meter: RMS bars, peak bars and peak holds, left over right, or side by side
+/// and filling upwards when `vertical`.
+fn meter(
+    reading: impl Fn() -> Option<Reading> + Copy + Send + Sync + 'static,
+    vertical: bool,
+) -> AnyView {
     let percent = |fraction: f32| format!("{:.1}%", fraction * 100.0);
     let title = move || match reading().and_then(|r| level_to_dbfs(r.peak[0].max(r.peak[1]))) {
         Some(dbfs) => format!("Peak {dbfs:.1} dBFS"),
         None => "No signal".into(),
     };
+    // How far a bar reaches, along the meter's axis only.
+    let along = move |level: fn(&Reading, usize) -> f32, ch: usize, axis: bool| {
+        move || {
+            if axis == vertical {
+                percent(reading().map_or(0.0, |r| meter_fraction(level(&r, ch))))
+            } else {
+                String::new()
+            }
+        }
+    };
+    let peak = |r: &Reading, ch: usize| r.peak[ch];
+    let rms = |r: &Reading, ch: usize| r.rms[ch];
+    let hold = |r: &Reading, ch: usize| r.hold[ch].level;
     let channel = move |ch: usize| {
         view! {
             <div class="meter-bar">
                 <div
                     class="meter-peak"
-                    style:width=move || percent(reading().map_or(0.0, |r| meter_fraction(r.peak[ch])))
+                    style:width=along(peak, ch, false)
+                    style:height=along(peak, ch, true)
                 ></div>
                 <div
                     class="meter-rms"
-                    style:width=move || percent(reading().map_or(0.0, |r| meter_fraction(r.rms[ch])))
+                    style:width=along(rms, ch, false)
+                    style:height=along(rms, ch, true)
                 ></div>
                 <div
                     class="meter-hold"
                     class:clip=move || reading().is_some_and(|r| r.hold[ch].level >= 1.0)
-                    style:left=move || {
-                        percent(reading().map_or(0.0, |r| meter_fraction(r.hold[ch].level)))
-                    }
+                    style:left=along(hold, ch, false)
+                    style:bottom=along(hold, ch, true)
                 ></div>
             </div>
         }
     };
     view! {
-        <div class="meter" title=title aria-hidden="true">
+        <div class="meter" class:vertical=vertical title=title aria-hidden="true">
             {channel(0)}
             {channel(1)}
         </div>
@@ -822,16 +1072,17 @@ fn meter(reading: impl Fn() -> Option<Reading> + Copy + Send + Sync + 'static) -
     .into_any()
 }
 
-/// A fader with its readout. It shows the dragged value while the pointer holds it, and
-/// calls `commit` with the gain when it is let go and on each key press. Clicking the
-/// readout sets 0 dB. (A double click on the fader would first move it to the pointer,
-/// a second edit.)
-fn fader<Fut>(
-    label: impl Fn() -> String + Copy + Send + Sync + 'static,
+/// A gain the user is changing: the value to show, the dragged one while a drag holds
+/// it, and the sender that commits one through `commit`, showing its error if it fails.
+fn held_gain<Fut>(
     gain: impl Fn() -> f32 + Copy + Send + Sync + 'static,
     problem: RwSignal<Option<String>>,
-    commit: impl Fn(f32) -> Fut + Copy + 'static,
-) -> AnyView
+    commit: impl Fn(f32) -> Fut + Copy + Send + Sync + 'static,
+) -> (
+    RwSignal<Option<f32>>,
+    impl Fn() -> f32 + Copy + Send + Sync + 'static,
+    impl Fn(f32) + Copy + Send + Sync + 'static,
+)
 where
     Fut: Future<Output = Result<(), String>> + 'static,
 {
@@ -846,6 +1097,23 @@ where
             problem.try_set(outcome.err());
         });
     };
+    (dragging, shown, send)
+}
+
+/// A fader with its readout. It shows the dragged value while the pointer holds it, and
+/// calls `commit` with the gain when it is let go and on each key press. Clicking the
+/// readout sets 0 dB. (A double click on the fader would first move it to the pointer,
+/// a second edit.)
+fn fader<Fut>(
+    label: impl Fn() -> String + Copy + Send + Sync + 'static,
+    gain: impl Fn() -> f32 + Copy + Send + Sync + 'static,
+    problem: RwSignal<Option<String>>,
+    commit: impl Fn(f32) -> Fut + Copy + Send + Sync + 'static,
+) -> AnyView
+where
+    Fut: Future<Output = Result<(), String>> + 'static,
+{
+    let (dragging, shown, send) = held_gain(gain, problem, commit);
     let position = |event: &leptos::ev::Event| {
         position_to_db(event_target_value(event).parse::<u16>().unwrap_or(0))
     };
@@ -886,17 +1154,7 @@ fn channel_gain<Fut>(
 where
     Fut: Future<Output = Result<(), String>> + 'static,
 {
-    let dragging = RwSignal::new(None::<f32>);
-    let shown = move || dragging.get().unwrap_or_else(gain);
-    let send = move |db: f32| {
-        dragging.set(Some(db));
-        let done = commit(db);
-        spawn_local(async move {
-            let outcome = done.await;
-            dragging.try_set(None);
-            problem.try_set(outcome.err());
-        });
-    };
+    let (dragging, shown, send) = held_gain(gain, problem, commit);
     let position = |event: &leptos::ev::Event| {
         position_to_db(event_target_value(event).parse::<u16>().unwrap_or(0))
     };
@@ -973,45 +1231,9 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
 
     let set_audio =
         move |enabled: Option<bool>, follow: Option<AudioFollow>, muted: Option<bool>| {
-            let source_id = id.get_value();
-            let patched = source_id.clone();
-            panel.apply(
-                Edit::SourceSetAudio {
-                    source_id,
-                    enabled,
-                    follow,
-                    gain_db: None,
-                    muted,
-                },
-                move |s| {
-                    s.patch_channel(&patched, |a| {
-                        a.enabled = enabled.unwrap_or(a.enabled);
-                        a.follow = follow.unwrap_or(a.follow);
-                        a.muted = muted.unwrap_or(a.muted);
-                    });
-                },
-            );
+            panel.set_audio(id.get_value(), enabled, follow, muted);
         };
-    let commit_gain = move |db: f32| {
-        let source_id = id.get_value();
-        let gain = checked_gain(db);
-        async move {
-            let gain_db = gain?;
-            let patched = source_id.clone();
-            panel
-                .commit(
-                    Edit::SourceSetAudio {
-                        source_id,
-                        enabled: None,
-                        follow: None,
-                        gain_db: Some(gain_db),
-                        muted: None,
-                    },
-                    move |s| s.patch_channel(&patched, |a| a.gain_db = gain_db),
-                )
-                .await
-        }
-    };
+    let commit_gain = move |db: f32| panel.commit_gain(id.get_value(), db);
     let choose_follow = move |event: leptos::ev::Event| {
         let follow = match event_target_value(&event).as_str() {
             "always" => AudioFollow::Always,
@@ -1035,7 +1257,7 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
                 when=move || !is_scene()
                 fallback=|| view! { <span class="hint">"Nested scene: follows its own sources"</span> }
             >
-                {meter(reading)}
+                {meter(reading, false)}
                 {channel_gain(
                     name,
                     move || audio().map_or(0.0, |a| a.gain_db.get()),
@@ -1074,6 +1296,67 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
                     </ul>
                 </Show>
             </details>
+        </li>
+    }
+    .into_any()
+}
+
+/// One audio source's strip in the vertical mixer (spec-panels.md M5): its short name, a
+/// meter filling upwards, its gain stacked + over − and scrubbed up and down, and mute.
+/// Its routing is in the horizontal mixer.
+#[component]
+fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
+    let channel = {
+        let source_id = source_id.clone();
+        Memo::new(move |_| {
+            panel
+                .snapshot
+                .with(|s| s.as_ref().and_then(|s| s.channel(&source_id).cloned()))
+        })
+    };
+    let id = StoredValue::new(source_id);
+    let name = move || channel.with(|c| c.as_ref().map(|c| c.name.clone()).unwrap_or_default());
+    let audio = move || channel.with(|c| c.as_ref().map(|c| c.audio));
+    let is_scene = move || channel.with(|c| c.as_ref().is_some_and(|c| c.is_scene));
+    let enabled = move || audio().is_some_and(|a| a.enabled);
+    let muted = move || audio().is_some_and(|a| a.muted);
+    let reading = move || id.with_value(|id| panel.meters.with(|m| m.sources.get(id).copied()));
+    let (_, shown, send) = held_gain(
+        move || audio().map_or(0.0, |a| a.gain_db.get()),
+        panel.problem,
+        move |db: f32| panel.commit_gain(id.get_value(), db),
+    );
+    let value = Signal::derive(move || Some(f64::from(shown())));
+    let named = Signal::derive(move || format!("{} gain", name()));
+
+    view! {
+        <li class="mix-column" class:off=move || !enabled()>
+            <span class="column-name" title=name>{move || short_name(&name()).to_owned()}</span>
+            <Show
+                when=move || !is_scene()
+                fallback=|| view! { <span class="hint" title="Nested scene: follows its own sources">"Nested"</span> }
+            >
+                {meter(reading, true)}
+                <NumberField
+                    named=named
+                    vertical=true
+                    unit="dB"
+                    value=value
+                    step=0.5
+                    decimals=1
+                    fixed=true
+                    min=f64::from(MIN_GAIN_DB)
+                    max=f64::from(MAX_GAIN_DB)
+                    send=move |db: f64| {
+                        // The field keeps to the gain range at one decimal place.
+                        send(db as f32);
+                        true
+                    }
+                />
+                {mute_button(muted, move || {
+                    panel.set_audio(id.get_value(), None, None, Some(!muted()));
+                })}
+            </Show>
         </li>
     }
     .into_any()
@@ -1279,7 +1562,7 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
                     <button type="button" on:click=move |_| renaming.set(false)>"Cancel"</button>
                 </form>
             </Show>
-            {meter(reading)}
+            {meter(reading, false)}
             {fader(
                 name,
                 move || bus.with(|b| b.as_ref().map_or(0.0, |b| b.gain_db.get())),
@@ -1356,8 +1639,8 @@ mod tests {
     use super::{
         FADER_STEPS, HOLD_TICKS, Hold, LOUDNESS_TARGET_LUFS, MeterBank, apply_plan, channel_count,
         checked_gain, db_to_position, edit, format_gain, format_lufs, format_true_peak, load,
-        loudness_fraction, meter_fraction, next_bus_id, plan_bus_delete, position_to_db,
-        true_peak_dbtp, true_peak_note,
+        loudness_fraction, meter_fraction, meters_vertical, next_bus_id, plan_bus_delete,
+        position_to_db, short_name, true_peak_dbtp, true_peak_note,
     };
     use jstream_control::protocol::{
         AudioFollow, Batch, BusId, BusMeter, Call, CallResult, DeleteTarget, Edit, Finite32, Hello,
@@ -1740,6 +2023,16 @@ mod tests {
         assert_eq!(channel_count(1), "1 channel");
         assert_eq!(channel_count(0), "0 channels");
         assert_eq!(channel_count(3), "3 channels");
+    }
+
+    #[test]
+    fn vertical_strips_follow_the_dock_until_flipped() {
+        assert!(meters_vertical(None, true));
+        assert!(!meters_vertical(None, false));
+        assert!(!meters_vertical(Some(false), true));
+        assert!(meters_vertical(Some(true), false));
+        assert_eq!(short_name("Mic · ES-9 Line"), "Mic");
+        assert_eq!(short_name("Desktop audio"), "Desktop audio");
     }
 
     #[test]
