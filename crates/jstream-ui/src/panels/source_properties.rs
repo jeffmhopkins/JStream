@@ -1,8 +1,8 @@
 //! The Properties dialog (spec-workspace.md 6.2): a source's name and settings on the
 //! left, its filters on the right. The settings form is the Inspector's (`properties.rs`),
-//! here editing a draft: OK sends the name and the changed settings as one batch,
-//! Cancel, Escape and the backdrop drop it, and Defaults sets every field back to its
-//! default. Filter changes apply at once, as in the prototype.
+//! here editing a draft: OK sends what the user changed since it opened as one batch,
+//! Cancel, Escape and the backdrop drop it, and Defaults empties it, so OK resets each
+//! value the dialog opened with. Filter changes apply at once, as in the prototype.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
