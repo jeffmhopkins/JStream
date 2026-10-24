@@ -115,10 +115,15 @@ a stolen token, local denial of service.
 - Limits: 4 MiB messages and MCP bodies, 128 open TCP connections of any kind
   (authenticated or not), 32 WebSocket connections, 64 calls in flight per connection,
   16 MCP sessions, 10 s to send headers and finish the handshake, a bounded event
-  outbox.
+  outbox, and 45 s for a WebSocket client to answer the server's pings (sent every
+  15 s), so a connection that died without a close doesn't keep its slot and session.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
+  **In flight** (#548, the fix for #344): on Windows the token, devices and log files are created
+  with a protected DACL for SYSTEM and the user, and an existing token or devices file
+  is refused unless its owner is the user, SYSTEM or Administrators and its DACL lets
+  no one else in.
 
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
 It doesn't expire or rotate; deleting the file and restarting makes a new one. A browser
@@ -127,7 +132,7 @@ ambient credential until it is closed. Failed tokens are not delayed or locked o
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
-**Gaps:** the Windows token file only inherits its folder's ACL (#344).
+**Gaps:** the Windows token file only inherits its folder's ACL (#344, fix in flight in #548).
 
 <a id="pairing"></a>
 ## Pairing and remote browsers
@@ -164,7 +169,8 @@ its device token, and the cookie is never compared with the control token.
 
 **Accepted:** a device token has the control token's full power ("no tiers").
 
-**Gaps:** the devices file has the same Windows ACL gap as the token file (#344).
+**Gaps:** the devices file has the same Windows ACL gap as the token file (#344, fix
+in flight in #548).
 
 <a id="browser"></a>
 ## Browser source
@@ -194,19 +200,27 @@ own folder or below it, compared by name and again after resolving links; popups
 shown. The control server refuses a page's WebSocket upgrade, since its `Origin` is
 foreign or `null`.
 
-**Controls (in flight, #549):** a page from a public origin is also refused loopback,
-private, link-local and local-name targets, redirects to them included, unless its
-source sets `local_network`.
+**Controls (#549, #721):** a page from a public origin is also refused loopback,
+private, link-local and local-name targets, redirects to them included, unless it is
+the source's own origin and the source sets `local_network`. It is decided per request
+by the origin that makes it, so the opt-in never covers a third-party frame, and a
+file or blank page whose main frame navigates to the web loses its own access.
 
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
-camera, microphone and screen request and denies every permission prompt
-(`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
+camera, microphone and screen request and denies every permission prompt except
+Chromium's local network access one, which it grants only to a requesting origin its
+request policy already lets make local requests (`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
 a focused page's clipboard writes, never reaches that handler; the helper never focuses a
 page or sends it input (#347).
 The local-network refusal reads only the URL's host: a public name that resolves to a
-local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes until Chromium's
-Private Network Access checks are on, and so does any request the helper's request
-handler doesn't see, such as a service worker's (#347). ADR-0021's per-source
+local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes it, and so does any
+request the helper's request handler doesn't see, such as a service worker's. CEF
+names opaque origins alike, so a sandboxed or `data:` frame that a third-party frame
+inside a local file page creates counts as the file page's (#721). Chromium's
+Local Network Access checks see both at the network layer and ask that permission
+handler first, so for an origin the policy refuses they are refused there; that Chromium
+enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run
+(#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
 <a id="files"></a>
@@ -330,10 +344,14 @@ intercepted connection.
   its crash reports.
 
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
-the URL, as the target documentation warns.
+the URL, as the target documentation warns. Plain `rtmp://` to another machine sends
+the key across the network in the clear, since some ingest servers offer nothing else.
+The engine logs a warning naming the host on each start, and the web UI's output card
+shows one (`RtmpUrl::sends_key_in_cleartext`; `localhost` and loopback are exempt).
+`output.status` carries no flag for it yet, so other clients must apply the rule
+themselves.
 
-**Gaps:** `rtmp://` sends the key in cleartext with no warning (#353). The daemon's and
-the desktop app's crash reports redact the control token and the keys and refresh
+**Gaps:** the daemon's and the desktop app's crash reports redact the control token and the keys and refresh
 tokens that pass through their credential stores, but not a YouTube-bound output's key
 or the OAuth access token, which pass through neither (#353).
 
@@ -358,33 +376,35 @@ user-writable file loaded into Frame Server.
 session's `Local\` namespace with a protected DACL (SYSTEM, Administrators, LOCAL
 SERVICE for Frame Server, and the user). The DLL inside Frame Server checks that a
 session block's owner is that session's user, SYSTEM or Administrators before using
-it, and checks every texture's format.
+it, and checks every texture's format. Registering the camera is optional, and only
+the explicit step registers it
+([ADR-0066](../adr/0066-portable-windows-distribution-v2.md)). The registered DLL is
+an administrators-only copy, never the one in the app's folder (#242). In its one UAC
+prompt, the step creates `%ProgramFiles%\JStream\vcam\` and gives it and the copy a
+protected DACL: SYSTEM and Administrators full control, LOCAL SERVICE and Users read
+and execute, nothing inherited. It then points `InprocServer32` at the copy. So, for a
+camera registered by this step, a program running as the user can't change the code
+Frame Server loads from the copy. The host
+compares the copy with the DLL it ships by content and reports an outdated copy;
+registering again is a new opt-in. Unregistering removes the keys and the copy.
+The producer refuses a control mapping that already existed unless its owner is the
+user, SYSTEM or Administrators and its DACL lets no one but them and LOCAL SERVICE in;
+the DLL checks the owner of a session block's textures and fence as it does the
+block's (#540, #356).
 
 **Accepted:** every app that opens the virtual camera sees its frames; LOCAL SERVICE
 needs full access; `Global\` blocks, which only an administrator or service can create,
 are trusted.
 
-**Controls (in flight, #540):** the producer refuses a control mapping that already
-existed unless its owner is the user, SYSTEM or Administrators and its DACL lets no one
-but them and LOCAL SERVICE in; the DLL checks the owner of a session block's textures and fence as it does the
-block's.
+**Accepted, registration:** the copy is as trustworthy as the portable folder was when the user
+approved the prompt: the elevated step copies whatever DLL is there then. An update
+whose DLL changed leaves Frame Server loading the old copy until the user registers
+again. A camera registered before ADR-0066, from the app's own folder, stays
+registered there until the user runs the step again; the host reports it as outdated.
+A DLL registered by hand with `regsvr32` is registered where it is.
 
-**Accepted, not yet on main (#242):** today the registered media source DLL is the one in
-the app's own folder, which the user can usually write to. Any program running as that
-user can replace it without an administrator prompt, and its code then runs in Frame
-Server's `svchost` (LOCAL SERVICE, session 0) the next time the camera loads. A hash
-check can't fix this, because Windows loads the DLL, not JStream, and a stub loader in
-the same folder could be replaced the same way. The maintainer chose the fix: "If you
-have to register it, name it optional, and then yeah, I think the program files makes
-sense". [ADR-0066](../adr/0066-portable-windows-distribution-v2.md) (accepted) makes
-registering optional. In the same UAC prompt, it copies the DLL to `%ProgramFiles%`
-with a DACL only administrators can write through, and registers that copy. The code
-is #561. Once it lands, the copy is as trustworthy as the portable folder was when the
-user approved the prompt.
-
-**Gaps:** a user-writable registered DLL runs in Frame Server until #561 lands (#242); a
-control mapping created before the producer's keeps its own DACL (#356, fix in flight in
-#540).
+**Gaps:** the copy's DACL and Frame Server loading it are not yet checked on Windows
+hardware (#563).
 
 <a id="gaps"></a>
 ## Known gaps
@@ -401,10 +421,9 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #348 | WASM | CPU, memory and API-scope limits decided ([ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) but not built (WA1) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
-| #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
+| #353 | Secrets | Crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
-| #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium; fix accepted ([ADR-0066](../adr/0066-portable-windows-distribution-v2.md)), code in #561 |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |
 
 <a id="upkeep"></a>

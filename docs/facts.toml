@@ -22,3 +22,34 @@ value = "25H2, 26H2"
 check = "manual"
 source = { ext = "win11-lifecycle" }
 note = "Home/Pro editions currently in servicing; changes yearly"
+
+[[fact]]
+id = "ubuntu-lts-supported"
+value = "24.04, 26.04"
+check = "manual"
+source = { ext = "ubuntu-release-cycle" }
+note = "Ubuntu LTS releases in standard support that ship PipeWire 1.0 or later (22.04 ships PulseAudio); changes every two years"
+
+[[fact]]
+id = "fedora-maintained"
+value = "43, 44"
+check = "manual"
+source = { ext = "fedora-eol" }
+note = "Fedora releases not yet end of life; changes every six months"
+
+[[fact]]
+id = "macos-security-updated"
+value = "15, 26, 27"
+check = "manual"
+source = { ext = "apple-security-releases" }
+note = "macOS releases Apple still ships security updates for; changes yearly when a new release ships"
+
+[[fact]]
+id = "macos-app-id"
+value = "io.github.jeffmhopkins.jstream"
+note = "The macOS bundle identifier prefix for JStream's apps, the maintainer's choice (#583); each binary's identifier is under it"
+
+[[fact]]
+id = "macos-daemon-bundle-id"
+value = "io.github.jeffmhopkins.jstream.daemon"
+note = "CFBundleIdentifier in apps/jstream-daemon/Info.plist, which tests/info_plist.rs checks against this fact"

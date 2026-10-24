@@ -73,9 +73,9 @@ Contents ([Design](#design) explains the choices):
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
-  over a placeholder background, edits their geometry with the pointer and the
-  keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
-  hooked up yet.
+  over the live program preview while that scene is on program (a placeholder
+  otherwise), edits their geometry with the pointer and the keyboard, and undoes and
+  redoes ([Canvas](#canvas)).
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)).
@@ -224,7 +224,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   card shows none of them; neither "Go live" nor "End stream" touches it. The card says
   what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
   read in `host.rs`): there an unregistered camera, or one turned off with `--no-vcam`,
-  can't be started, and the card gives the `jstream-daemon --register-vcam` hint. In a
+  can't be started, and the card gives the `jstream-daemon --register-vcam` hint, which
+  names the step as optional; an `outdated` one (registered, but not for a current copy
+  of this version's DLL) can still be started, and its hint offers registering again,
+  also optional. In a
   browser the page can't tell, so it lets the engine decide and explains its refusal:
   an unregistered camera ("is not registered") gets the full registration command, and
   an engine with no camera at all ("no virtual camera": not running on Windows, or the
@@ -279,6 +282,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
   sets or clears a key, since no event reports that. Another client's key change shows
   on the next re-read.
+- **Plain `rtmp://` gets a warning.** A stream output whose server URL is `rtmp://` to
+  a host other than `localhost` or a loopback address shows, under its target, that
+  the key is sent unencrypted and to use `rtmps://` if the service offers it
+  (`cleartext_warning`, #353). The panel works it out from the URL `state.get`
+  reports. `output.status` carries no such flag, so a client of its own does the same.
 - **Mixer** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)). The panel reads
   the audio sources (those `state.get` reports with `audio`), the buses and the sends
   into a copy of its own, not `Studio`'s, and re-reads them on `state.changed` and
@@ -319,11 +327,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   what "Add" sends, the form's sections, parsing and checks); only the components
   themselves need a browser.
 - **Debug bundle size.** A leptos view's type spells out every element and closure
-  inside it, and a debug build names each function with those types: most of its
-  `_bg.wasm` is that name section. The server refuses a file over its size limit
-  ([jstream-server › Design](../jstream-server/README.md#design)), so the mixer's strips, rows, meters, faders and mute buttons return `AnyView` rather than
-  `impl IntoView`, which keeps a nested view's type out of its parents' names. A
-  component that grows as large does the same.
+  inside it, and an unstripped build names each function with those types in the
+  `_bg.wasm`'s name section. The server refuses a file over its size limit
+  ([jstream-server › Design](../jstream-server/README.md#design)), so the debug build
+  uses the workspace's `ui-dev` Cargo profile (`data-cargo-profile-dev` in
+  `index.html`), which strips the symbols and leaves no name section
+  ([Build](#build)). The mixer's strips, rows, meters, faders and mute buttons also
+  return `AnyView` rather than `impl IntoView`, which keeps a nested view's type out of
+  its parents' types, and so out of their names in an unstripped build.
 
 <a id="canvas"></a>
 ## Canvas
@@ -336,8 +347,10 @@ The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
 handles, and turns a drag into a new geometry; `group.rs` does the same for several
 selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scene and
-sends the edits. These are pure and tested natively, `model.rs` against `MockEngine`;
-`mod.rs` is the component.
+sends the edits; `preview.rs` chooses the preview stream and decides what to do with
+each H.264 frame and when each JPEG decodes. These are pure and tested natively,
+`model.rs` against `MockEngine`. `screen.rs` decodes and draws the preview in the
+browser, and `mod.rs` is the component.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
   `Layout::of` from the shared collection, so it follows every state change the app
@@ -348,6 +361,23 @@ sends the edits. These are pure and tested natively, `model.rs` against `MockEng
   on the source's runtime size, which the protocol doesn't report yet (ADR-0022's
   `source.sizes`), and a note top left counts such items. Hidden items are drawn
   dashed, and the box under the pointer gets a light outline.
+- **The preview.** Under the boxes is the program mix, live, while the selected
+  scene is the one on program; on another scene the background says the preview
+  shows the program scene. The canvas opens the
+  session's binary channel (`Control::binary`; a session has one, so the canvas is
+  its only reader) and one `preview.subscribe` stream on channel 1, at 30 fps and as
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
+  It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
+  H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
+  (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
+  decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap` one at a
+  time, and while one decodes only the newest that arrives waits, so the last picture
+  is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
+  canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
+  again for JPEG only. If the engine refuses or ends the stream, the background says
+  why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  behind the `web_sys_unstable_apis` build flag. Without live values (below), the
+  preview shows a drag once it is committed.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
   drags it, or, on a box already selected, drags every selected box. Shift-click adds
   a box to the selection (and drags them all) or takes a selected one out. A press on
@@ -418,7 +448,7 @@ The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
 
 ```sh
 cd crates/jstream-ui
-trunk build            # debug, into dist/
+trunk build            # debug (the `ui-dev` profile), into dist/
 trunk build --release  # what the daemon and the desktop app ship
 trunk serve            # rebuilds on change and serves dist/ locally
 ```
@@ -430,6 +460,15 @@ and the stylesheet, with content hashes in their names. It is not committed. tru
 inline loader script carries a `{{__TRUNK NONCE__}}` placeholder (`create_nonce` in
 `Trunk.toml`), which the serving engine replaces with each response's
 Content-Security-Policy nonce.
+
+A debug build uses the workspace's `ui-dev` Cargo profile, which `index.html` picks with
+`data-cargo-profile-dev`: `dev` without debug info and with the symbols stripped. With
+`dev` itself, wasm-bindgen's `_bg.wasm` is many times larger, nearly all of it the name
+section, and over the server's size limit for a UI file
+([jstream-server › Design](../jstream-server/README.md#design)), so every load would
+get a 500. A release build keeps its own profile. The UI installs no panic hook, so a
+panic shows in the browser console only as `RuntimeError: unreachable`, with no message
+or location; in a debug build its stack frames are unnamed (`wasm-function[N]`) too.
 
 CI's `wasm` job builds the UI this way on every PR, with trunk and the `wasm-bindgen`
 CLI downloaded at pinned versions and checked against pinned SHA-256 sums, and runs

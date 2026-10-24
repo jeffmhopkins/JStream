@@ -11,11 +11,6 @@ fn load_edge(q: vec2<i32>, edge: u32) -> vec4<f32> {
     return texel(q);
 }
 
-// The input drawn 1:1 with its top-left at `inset` output pixels, transparent around it.
-fn placed(px: vec2<i32>, inset: vec2<i32>) -> vec4<f32> {
-    return load_edge(px - inset, 1u);
-}
-
 // The output pixel this fragment covers.
 fn out_px(pos: vec4<f32>) -> vec2<i32> {
     return vec2<i32>(floor(pos.xy));
