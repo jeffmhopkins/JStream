@@ -342,3 +342,165 @@ fn time_the_engine_spends_answering_is_not_the_plugins() {
         .expect("the engine's time isn't charged");
     assert_eq!(fake.calls().len(), 2);
 }
+
+/// A plugin whose `run` sends `call` as many times as the input's first byte, and traps
+/// unless the last status is the input's second byte.
+fn repeating_plugin(call: &str) -> String {
+    format!(
+        r#"(module
+            (import "jstream" "call" (func $call (param i32 i32) (result i32)))
+            (import "jstream" "input_read" (func $input_read (param i32)))
+            (memory (export "memory") 1)
+            (data (i32.const 1024) "{data}")
+            (func (export "run")
+                (local $n i32)
+                (local $status i32)
+                (call $input_read (i32.const 0))
+                (block $done
+                    (loop $again
+                        (br_if $done (i32.ge_u (local.get $n) (i32.load8_u (i32.const 0))))
+                        (local.set $status (call $call (i32.const 1024) (i32.const {len})))
+                        (local.set $n (i32.add (local.get $n) (i32.const 1)))
+                        (br $again)))
+                (if (i32.ne (local.get $status) (i32.load8_u (i32.const 1)))
+                    (then unreachable))))"#,
+        data = call.replace('"', "\\\""),
+        len = call.len(),
+    )
+}
+
+const STOP: &str = r#"{"kind":"action","action":{"type":"output.stop","output_id":"main"}}"#;
+
+fn stop_granted(limits: Limits) -> PluginConfig {
+    PluginConfig {
+        capabilities: Capabilities::from_names(["output.stop"]),
+        limits,
+    }
+}
+
+#[test]
+fn calls_past_the_cap_a_second_never_reach_control() {
+    // ADR-0069: 50 commands a second by default. Sixty in one invocation, well inside a
+    // second: the first fifty reach `Control`, the last ten are limited, and the plugin
+    // isn't stopped.
+    assert_eq!(Limits::DEFAULT_COMMANDS_PER_SECOND, 50);
+    let (plugin, fake) = load(&repeating_plugin(STOP), stop_granted(Limits::default()));
+    let mut plugin = plugin.expect("the plugin loads");
+    let limited = u8::try_from(abi::STATUS_LIMITED).expect("fits");
+    plugin
+        .invoke("run", &[60, limited])
+        .expect("a limited call doesn't stop the plugin");
+    assert_eq!(fake.calls().len(), 50);
+}
+
+#[test]
+fn a_lowered_cap_holds_across_invocations_and_frees_after_a_second() {
+    let limits = Limits::default().with_commands_per_second(3);
+    let (plugin, fake) = load(&repeating_plugin(STOP), stop_granted(limits));
+    let mut plugin = plugin.expect("the plugin loads");
+    let ok = u8::try_from(abi::STATUS_OK).expect("fits");
+    let limited = u8::try_from(abi::STATUS_LIMITED).expect("fits");
+    plugin.invoke("run", &[3, ok]).expect("three calls fit");
+    plugin
+        .invoke("run", &[1, limited])
+        .expect("a fourth within the second is limited");
+    assert_eq!(fake.calls().len(), 3);
+    std::thread::sleep(Duration::from_millis(1_050));
+    plugin
+        .invoke("run", &[1, ok])
+        .expect("a second later the cap has room again");
+    assert_eq!(fake.calls().len(), 4);
+}
+
+#[test]
+fn a_denied_call_does_not_use_the_cap() {
+    // Denied calls never reach `Control`, so they don't count: with a cap of three, three
+    // denied calls leave room for three granted ones.
+    let start = r#"{"kind":"action","action":{"type":"output.start","output_id":"main"}}"#;
+    let limits = Limits::default().with_commands_per_second(3);
+    let both = format!(
+        r#"(module
+            (import "jstream" "call" (func $call (param i32 i32) (result i32)))
+            (memory (export "memory") 1)
+            (data (i32.const 1024) "{start}")
+            (data (i32.const 2048) "{stop}")
+            (func $expect (param $status i32) (param $want i32)
+                (if (i32.ne (local.get $status) (local.get $want)) (then unreachable)))
+            (func (export "run")
+                (call $expect (call $call (i32.const 1024) (i32.const {start_len})) (i32.const {denied}))
+                (call $expect (call $call (i32.const 1024) (i32.const {start_len})) (i32.const {denied}))
+                (call $expect (call $call (i32.const 1024) (i32.const {start_len})) (i32.const {denied}))
+                (call $expect (call $call (i32.const 2048) (i32.const {stop_len})) (i32.const {ok}))
+                (call $expect (call $call (i32.const 2048) (i32.const {stop_len})) (i32.const {ok}))
+                (call $expect (call $call (i32.const 2048) (i32.const {stop_len})) (i32.const {ok}))
+                (call $expect (call $call (i32.const 2048) (i32.const {stop_len})) (i32.const {limited}))))"#,
+        start = start.replace('"', "\\\""),
+        start_len = start.len(),
+        stop = STOP.replace('"', "\\\""),
+        stop_len = STOP.len(),
+        denied = abi::STATUS_DENIED,
+        ok = abi::STATUS_OK,
+        limited = abi::STATUS_LIMITED,
+    );
+    let (plugin, fake) = load(&both, stop_granted(limits));
+    let mut plugin = plugin.expect("the plugin loads");
+    plugin
+        .invoke("run", &[])
+        .expect("denials leave the cap for granted calls");
+    assert_eq!(fake.calls().len(), 3);
+}
+
+/// A batch of `n` `scene.create` edits.
+fn batch(n: usize) -> String {
+    let edits: Vec<String> = (0..n)
+        .map(|i| format!(r#"{{"type":"scene.create","scene_id":"scn_{i}","name":"S"}}"#))
+        .collect();
+    format!(r#"{{"kind":"batch","edits":[{}]}}"#, edits.join(","))
+}
+
+fn create_granted(limits: Limits) -> PluginConfig {
+    PluginConfig {
+        capabilities: Capabilities::from_names(["scene.create"]),
+        limits,
+    }
+}
+
+#[test]
+fn every_edit_of_a_batch_counts_against_the_cap() {
+    // ADR-0069 caps commands, and each edit of a batch is one (ADR-0013). With a cap of
+    // five, one batch of three reaches `Control` and a second doesn't fit.
+    let limits = Limits::default().with_commands_per_second(5);
+    let (plugin, fake) = load(&repeating_plugin(&batch(3)), create_granted(limits));
+    let mut plugin = plugin.expect("the plugin loads");
+    let limited = u8::try_from(abi::STATUS_LIMITED).expect("fits");
+    plugin
+        .invoke("run", &[2, limited])
+        .expect("the second batch of three is limited");
+    assert_eq!(fake.calls().len(), 1);
+}
+
+#[test]
+fn a_batch_of_more_commands_than_the_cap_never_reaches_control() {
+    // Fifty-one edits against the default 50: limited even with the window empty.
+    let (plugin, fake) = load(
+        &repeating_plugin(&batch(51)),
+        create_granted(Limits::default()),
+    );
+    let mut plugin = plugin.expect("the plugin loads");
+    let limited = u8::try_from(abi::STATUS_LIMITED).expect("fits");
+    plugin
+        .invoke("run", &[1, limited])
+        .expect("an oversized batch is limited, not fatal");
+    assert!(fake.calls().is_empty());
+
+    let (plugin, fake) = load(
+        &repeating_plugin(&batch(50)),
+        create_granted(Limits::default()),
+    );
+    let mut plugin = plugin.expect("the plugin loads");
+    let ok = u8::try_from(abi::STATUS_OK).expect("fits");
+    plugin
+        .invoke("run", &[1, ok])
+        .expect("a batch of exactly the cap fits");
+    assert_eq!(fake.calls().len(), 1);
+}
