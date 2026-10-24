@@ -1,5 +1,5 @@
-//! What the trust rule ([`crate::trust`]) needs to know about a session: whether it is
-//! active, and its logged-on user's SID.
+//! What the trust rule ([`crate::trust`]) needs to know about sessions: which are active,
+//! and a session's logged-on user's SID.
 //!
 //! Frame Server hosts the DLL as LOCAL SERVICE, which lacks `SeTcbPrivilege`, so
 //! `WTSQueryUserToken` is out of reach. Instead the session's user and domain names come
@@ -10,8 +10,9 @@
 
 use windows::Win32::Security::{LookupAccountNameW, PSID, SID_NAME_USE, SidTypeUser};
 use windows::Win32::System::RemoteDesktop::{
-    WTS_CONNECTSTATE_CLASS, WTS_CURRENT_SERVER_HANDLE, WTS_INFO_CLASS, WTSActive, WTSConnectState,
-    WTSDomainName, WTSFreeMemory, WTSQuerySessionInformationW, WTSUserName,
+    WTS_CONNECTSTATE_CLASS, WTS_CURRENT_SERVER_HANDLE, WTS_INFO_CLASS, WTS_SESSION_INFOW,
+    WTSActive, WTSConnectState, WTSDomainName, WTSEnumerateSessionsW, WTSFreeMemory,
+    WTSQuerySessionInformationW, WTSUserName,
 };
 use windows_core::{HSTRING, PWSTR};
 
@@ -68,6 +69,32 @@ pub(crate) fn is_active(session: u32) -> bool {
     // buffer the system allocated suitably aligned; read once before drop.
     let state = unsafe { buf.ptr.0.cast::<WTS_CONNECTSTATE_CLASS>().read() };
     state == WTSActive
+}
+
+/// The IDs of every active session (at the console, or an active remote connection), or
+/// `None` if they couldn't be listed. `WTSEnumerateSessionsW` on the local server needs
+/// no privilege LOCAL SERVICE lacks.
+pub(crate) fn active_sessions() -> Option<Vec<u32>> {
+    let mut info: *mut WTS_SESSION_INFOW = std::ptr::null_mut();
+    let mut count = 0u32;
+    // SAFETY: valid out-pointers; on success `info` points at `count` entries that are
+    // ours to free with WTSFreeMemory.
+    unsafe { WTSEnumerateSessionsW(Some(WTS_CURRENT_SERVER_HANDLE), 0, 1, &mut info, &mut count) }
+        .ok()?;
+    if info.is_null() {
+        return None;
+    }
+    // SAFETY: the system wrote `count` initialised entries at `info`, valid until freed.
+    let sessions = unsafe { std::slice::from_raw_parts(info, count as usize) };
+    let active = sessions
+        .iter()
+        .filter(|s| s.State == WTSActive)
+        .map(|s| s.SessionId)
+        .collect();
+    // SAFETY: the buffer came from WTSEnumerateSessionsW and is freed once, after the
+    // last read of `sessions`.
+    unsafe { WTSFreeMemory(info.cast()) };
+    Some(active)
 }
 
 /// The SID of the user logged on to `session`, as a string, if there is one.

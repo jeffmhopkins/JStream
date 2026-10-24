@@ -246,7 +246,7 @@ impl Host {
             paint_warned: AtomicBool::new(false),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
-            policy: RequestPolicy::for_location(&spec.location),
+            policy: RequestPolicy::for_page(spec),
         });
         let window_info = ::cef::WindowInfo {
             windowless_rendering_enabled: 1,

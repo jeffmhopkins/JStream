@@ -9,7 +9,7 @@
 //!
 //! Docs: apps/jstream-daemon/README.md#design
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
@@ -44,14 +44,19 @@ pub fn create_dir(dir: &Path) -> io::Result<()> {
     builder.create(dir)
 }
 
-/// Opens a new file at `path` for writing, failing if anything is there; user-only on
-/// Unix (mode 0600), and with its directory's ACL on Windows.
+/// Opens a new file at `path` for writing, failing if anything is there; user-only:
+/// mode 0600 on Unix, a protected DACL for SYSTEM and the user on Windows (#344).
 pub fn create_new(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(path)
+    #[cfg(windows)]
+    return jstream_platform_windows::create_private_file(path);
+    #[cfg(not(windows))]
+    {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        options.open(path)
+    }
 }
 
 /// Deletes the oldest files in `dir` whose names start with `prefix` and end with
@@ -79,7 +84,7 @@ pub fn prune(dir: &Path, prefix: &str, suffix: &str, keep: usize, except: Option
     }
 }
 
-/// A UTC date and time, to the second, for file names and reports.
+/// A UTC date and time, to the second, for log file names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Utc {
     year: i64,
@@ -129,19 +134,6 @@ impl Utc {
             second,
         } = self;
         format!("{year:04}{month:02}{day:02}T{hour:02}{minute:02}{second:02}Z")
-    }
-
-    /// `2026-10-14T10:15:00Z` (RFC 3339).
-    pub fn rfc3339(&self) -> String {
-        let Utc {
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second,
-        } = self;
-        format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
     }
 }
 
@@ -273,10 +265,10 @@ mod tests {
     #[test]
     fn utc_times_are_civil_dates() {
         let at = |seconds| Utc::from(UNIX_EPOCH + Duration::from_secs(seconds));
-        assert_eq!(at(0).rfc3339(), "1970-01-01T00:00:00Z");
-        assert_eq!(at(951_782_400).rfc3339(), "2000-02-29T00:00:00Z");
+        assert_eq!(at(0).compact(), "19700101T000000Z");
+        assert_eq!(at(951_782_400).compact(), "20000229T000000Z");
         assert_eq!(at(1_791_972_900).compact(), "20261014T101500Z");
-        assert_eq!(at(4_102_444_799).rfc3339(), "2099-12-31T23:59:59Z");
+        assert_eq!(at(4_102_444_799).compact(), "20991231T235959Z");
     }
 
     /// Lines go to one file until it would pass the limit, then to a new one, and only

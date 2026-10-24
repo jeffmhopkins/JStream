@@ -234,7 +234,10 @@ fn chord() -> BoxedStrategy<Chord> {
 /// An action to bind, sometimes one that can't be bound.
 fn action() -> BoxedStrategy<Action> {
     prop_oneof![
-        3 => scene_id().prop_map(|scene_id| Action::SceneSwitch { scene_id }),
+        3 => scene_id().prop_map(|scene_id| Action::SceneSwitch {
+            scene_id,
+            preset_id: None,
+        }),
         2 => output_id().prop_map(|output_id| Action::OutputStart { output_id }),
         1 => output_id().prop_map(|output_id| Action::OutputStop { output_id }),
         1 => output_id().prop_map(|output_id| Action::OutputSetKey {
@@ -281,8 +284,8 @@ fn transform() -> BoxedStrategy<ItemTransform> {
         .boxed()
 }
 
-/// Mostly a valid flat geometry; sometimes a zero or negative size, a tilt or a
-/// perspective, which placement edits may refuse.
+/// Mostly a valid flat geometry, flipped or not; sometimes a zero or negative size, a
+/// tilt or a perspective, which placement edits may refuse.
 fn geometry() -> BoxedStrategy<ItemGeometry> {
     let fit = proptest::sample::select(&[FitMode::Fit, FitMode::Fill, FitMode::Stretch][..]);
     let side = prop_oneof![
@@ -297,6 +300,7 @@ fn geometry() -> BoxedStrategy<ItemGeometry> {
         finite(),
         (flat.clone(), flat),
         proptest::option::weighted(0.15, finite()),
+        (any::<bool>(), any::<bool>()),
     )
         .prop_map(
             |(
@@ -306,6 +310,7 @@ fn geometry() -> BoxedStrategy<ItemGeometry> {
                 rotation_deg,
                 (tilt_deg, turn_deg),
                 perspective_px,
+                (flip_h, flip_v),
             )| {
                 ItemGeometry {
                     center,
@@ -315,6 +320,8 @@ fn geometry() -> BoxedStrategy<ItemGeometry> {
                     tilt_deg,
                     turn_deg,
                     perspective_px,
+                    flip_h,
+                    flip_v,
                     ..ItemGeometry::covering_canvas(1, 1).expect("a 1×1 canvas is valid")
                 }
             },

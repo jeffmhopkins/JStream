@@ -3,9 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor,
-    OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole,
-    SourceId, SourceKind, parity,
+    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FolderId, KindCategory,
+    KindDescriptor, LabelId, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev,
+    SceneId, SceneMeta, SceneRole, SourceId, SourceKind, SourceMeta, parity,
 };
 use serde_json::{Value, json};
 
@@ -142,6 +142,25 @@ fn the_v1_fixture_loads_exactly() {
     assert_eq!(loaded.map(|g| g.kinds), Ok(expected.kinds));
 }
 
+/// A file saved while `webcam` had no settings loads with the `device` default, so it
+/// matches the fixture saved since.
+#[test]
+fn a_webcam_saved_without_settings_loads_with_its_default() {
+    let older = edit_file(|file| {
+        for source in file["sources"].as_array_mut().into_iter().flatten() {
+            if source["kind"]["kind"] == "webcam" {
+                source.as_object_mut().map(|s| s.remove("settings"));
+            }
+        }
+    });
+    assert!(!older.contains("\"device\""));
+    let loaded = load(&older);
+    assert_eq!(
+        loaded.as_ref().map(Graph::state),
+        Ok(fixture_graph().state())
+    );
+}
+
 #[test]
 fn an_empty_collection_round_trips() {
     let graph = Graph::new().with_kinds(kinds());
@@ -235,6 +254,7 @@ fn hotkeys_round_trip() {
                 chord: Chord::new("F1"),
                 action: Action::SceneSwitch {
                     scene_id: SceneId::new("a"),
+                    preset_id: None,
                 },
             },
         ],
@@ -381,11 +401,59 @@ fn a_file_from_before_audio_keeps_the_master_sends() {
     assert_eq!(
         sends,
         [
+            ("aux".to_owned(), BusId::master(), 0.0),
+            ("cam".to_owned(), BusId::master(), 0.0),
+            ("cam_copy".to_owned(), BusId::master(), 0.0),
             ("desk".to_owned(), BusId::master(), 0.0),
             ("mic".to_owned(), BusId::master(), 0.0),
             ("mic_copy".to_owned(), BusId::master(), 0.0),
         ]
     );
+}
+
+/// #716: a file saved before webcams had audio gives a `webcam` no audio settings and
+/// no send. It loads with the master send a new webcam gets, and its audio off, so
+/// opening it never starts recording the webcam's microphone. A webcam the file gives
+/// audio settings (every current file does) loads as saved.
+#[test]
+fn a_webcam_from_before_webcam_audio_loads_with_its_audio_off() {
+    let older = edit_file(|file| {
+        if let Some(sends) = file["sends"].as_array_mut() {
+            sends.retain(|send| !matches!(send["source_id"].as_str(), Some("cam" | "aux")));
+        }
+        for source in file["sources"].as_array_mut().into_iter().flatten() {
+            if matches!(source["id"].as_str(), Some("cam" | "aux")) {
+                source.as_object_mut().map(|s| s.remove("audio"));
+            }
+        }
+    });
+    let Ok(graph) = load(&older) else {
+        panic!("the older file did not load");
+    };
+    let state = graph.state();
+    for id in ["cam", "aux"] {
+        let source = state.source(&SourceId::new(id));
+        assert_eq!(
+            source.and_then(|s| s.audio()).map(|a| a.enabled),
+            Some(false),
+            "{id}"
+        );
+        assert!(
+            state
+                .sends()
+                .any(|(source, bus, _)| source.as_str() == id && bus.is_master()),
+            "{id}"
+        );
+    }
+    // `cam_copy` kept its send in the file: as saved, its audio on.
+    let copy = state.source(&SourceId::new("cam_copy"));
+    assert_eq!(copy.and_then(|s| s.audio()).map(|a| a.enabled), Some(true));
+    // Saved again, the webcams' audio off is written down.
+    let saved = graph.to_collection_json();
+    let Ok(reloaded) = load(&saved) else {
+        panic!("the saved file did not load");
+    };
+    assert_eq!(reloaded.state(), graph.state());
 }
 
 /// A source whose master send was removed saves an empty `sends`, which tells the load
@@ -415,6 +483,49 @@ fn a_removed_master_send_round_trips() {
     assert_eq!(value["sends"], json!([]));
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// #716: a webcam's audio settings are written even at their defaults, so a current
+/// webcam whose master send was removed doesn't read back as one saved before webcams
+/// had audio: it keeps its audio on and gets no send back.
+#[test]
+fn a_webcam_with_its_master_send_removed_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::SourceCreate {
+                source_id: SourceId::new("cam"),
+                name: "cam".into(),
+                kind: SourceKind::Builtin {
+                    kind: "webcam".into(),
+                },
+                settings: jstream_protocol::Settings::default(),
+                duplicated_from: None,
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("cam"),
+                bus_id: BusId::master(),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(value["sends"], json!([]));
+    assert_eq!(value["sources"][0]["audio"]["enabled"], json!(true));
+    let loaded = load(&json);
+    assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(
+        loaded
+            .as_ref()
+            .ok()
+            .and_then(|g| g.state().source(&SourceId::new("cam")))
+            .and_then(|s| s.audio())
+            .map(|a| a.enabled),
+        Some(true)
+    );
     assert_eq!(loaded.as_ref(), Ok(&graph));
 }
 
@@ -685,6 +796,38 @@ fn placements_and_the_canvas_are_checked() {
     );
 }
 
+/// `i4`'s stored geometry in a loaded collection.
+fn i4_geometry(graph: &Graph) -> jstream_protocol::ItemGeometry {
+    match graph
+        .state()
+        .scenes
+        .first()
+        .and_then(|scene| scene.items.first())
+        .map(|item| item.placement)
+    {
+        Some(crate::Placement::Geometry(geometry)) => geometry,
+        other => panic!("`i4` has a geometry, not {other:?}"),
+    }
+}
+
+/// A geometry's flips are stored only when set, and a file without them loads unflipped.
+#[test]
+fn a_geometry_flip_round_trips_and_defaults_to_false() {
+    let graph = load(V1).expect("the fixture loads");
+    let geometry = i4_geometry(&graph);
+    assert!(geometry.flip_h && !geometry.flip_v);
+
+    let unflipped = edit_file(|v| {
+        v["scenes"][0]["items"][0]["geometry"]
+            .as_object_mut()
+            .map(|o| o.remove("flip_h"));
+    });
+    let graph = load(&unflipped).expect("loads without the flip");
+    let geometry = i4_geometry(&graph);
+    assert!(!geometry.flip_h && !geometry.flip_v);
+    assert!(!graph.to_collection_json().contains("flip_"));
+}
+
 /// An item's opacity and blend load through `item.add`'s checks, and its reserved
 /// `effects` loads only empty (ADR-0023 §1).
 #[test]
@@ -738,4 +881,208 @@ fn parse_errors_quote_nothing_from_the_file() {
         load(&missing),
         Err(LoadError::Parse("missing field `canvas`".into()))
     );
+}
+
+/// Presets, the default, scene overrides and item settings survive a save and load,
+/// including a collection that deleted the initial `cut` preset.
+#[test]
+fn transitions_round_trip() {
+    use jstream_protocol::{Easing, Glide, ItemId, ItemTransition, TransitionPresetId};
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("smooth"),
+                name: "Smooth move".into(),
+                kind: "move".into(),
+                duration_ms: 600,
+                easing: Easing::EaseInOut,
+                settings: [("unmatched", json!("slide"))].into_iter().collect(),
+            },
+            Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("smooth"),
+            },
+            Edit::TransitionDelete {
+                preset_id: TransitionPresetId::new("cut"),
+            },
+            Edit::SceneSetTransitions {
+                scene_id: SceneId::new("a"),
+                transition_in: None,
+                transition_out: Some(TransitionPresetId::new("smooth")),
+            },
+            Edit::ItemSetTransition {
+                item_id: ItemId::new("i1"),
+                transition: ItemTransition {
+                    delay_ms: 40,
+                    glide: Glide::Never,
+                    ..ItemTransition::default()
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        value["transitions"],
+        json!({
+            "presets": [{
+                "id": "smooth",
+                "name": "Smooth move",
+                "kind": "move",
+                "kind_version": 1,
+                "duration_ms": 600,
+                "easing": "ease_in_out",
+                "settings": {"stagger_ms": 0, "unmatched": "slide"},
+            }],
+            "default": "smooth",
+        })
+    );
+    assert_eq!(load(&json), Ok(graph.clone()));
+
+    // The initial preset kept, but changed, loads changed.
+    let applied = graph.apply(
+        &[
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("cut"),
+                name: "Quick fade".into(),
+                kind: "fade".into(),
+                duration_ms: 250,
+                easing: Easing::Linear,
+                settings: Default::default(),
+            },
+            Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new("cut"),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    assert_eq!(load(&graph.to_collection_json()), Ok(graph));
+}
+
+#[test]
+fn a_preset_saved_by_another_kind_version_is_refused() {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[Edit::TransitionCreate {
+            preset_id: jstream_protocol::TransitionPresetId::new("f"),
+            name: "F".into(),
+            kind: "fade".into(),
+            duration_ms: 300,
+            easing: jstream_protocol::Easing::EaseOut,
+            settings: Default::default(),
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let mut value: Value = serde_json::from_str(&graph.to_collection_json()).unwrap_or_default();
+    value["transitions"]["presets"][1]["kind_version"] = json!(7);
+    assert_eq!(
+        load(&value.to_string()).err(),
+        Some(LoadError::KindVersion {
+            object: "transition `f`".into(),
+            kind: "fade".into(),
+            saved: 7,
+            current: 1,
+        })
+    );
+}
+
+/// Folders, labels and organisation metadata survive a save and load (ADR-0024 §3 and
+/// §4), also with a folder ahead of its parent in folder order, and a collection without
+/// them saves none of their fields.
+#[test]
+fn folders_labels_and_metadata_round_trip() {
+    let mut graph = fixture_graph();
+    let plain = graph.to_collection_json();
+    for field in [
+        "folders",
+        "labels",
+        "folder",
+        "favourite",
+        "show_in_multiview",
+    ] {
+        assert!(
+            !plain.contains(&format!("\"{field}\"")),
+            "{field} in {plain}"
+        );
+    }
+    let applied = graph.apply(
+        &[
+            Edit::FolderCreate {
+                folder_id: FolderId::new("shows"),
+                name: "Shows".into(),
+                parent: None,
+            },
+            Edit::FolderCreate {
+                folder_id: FolderId::new("intros"),
+                name: "Intros".into(),
+                parent: Some(FolderId::new("shows")),
+            },
+            Edit::FolderReorder {
+                folder_id: FolderId::new("intros"),
+                index: 0,
+            },
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("a"),
+                folder_id: Some(FolderId::new("intros")),
+            },
+            Edit::SceneSetMeta {
+                scene_id: SceneId::new("a"),
+                meta: SceneMeta {
+                    icon: Some("star".into()),
+                    color: Some("#1e1e2e".into()),
+                    favourite: true,
+                    show_in_multiview: false,
+                },
+            },
+            Edit::LabelCreate {
+                label_id: LabelId::new("sponsor"),
+                name: "Sponsor".into(),
+                color: "#ff8800".into(),
+                icon: Some("megaphone".into()),
+            },
+            Edit::SourceSetMeta {
+                source_id: SourceId::new("cam"),
+                meta: SourceMeta {
+                    labels: vec![LabelId::new("sponsor")],
+                    favourite: true,
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        saved["folders"],
+        json!([
+            {"id": "intros", "name": "Intros", "parent": "shows"},
+            {"id": "shows", "name": "Shows"}
+        ])
+    );
+    assert_eq!(
+        saved["labels"],
+        json!([{"id": "sponsor", "name": "Sponsor", "color": "#ff8800", "icon": "megaphone"}])
+    );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A scene filed in a folder the file doesn't have is refused, naming the scene.
+#[test]
+fn a_scene_in_a_missing_folder_is_refused() {
+    let json = edit_file(|file| file["scenes"][0]["folder"] = json!("nope"));
+    match load(&json) {
+        Err(LoadError::Invalid { object, error }) => {
+            assert!(object.starts_with("scene `"), "{object}");
+            assert!(
+                matches!(*error, ProtocolError::NotFound { .. }),
+                "{error:?}"
+            );
+        }
+        other => panic!("expected a refusal, got {other:?}"),
+    }
 }

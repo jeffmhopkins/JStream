@@ -20,7 +20,9 @@ pub(crate) use captures::Backends as CaptureBackends;
 pub(crate) use captures::{RETRY_MS, start as start_capture};
 pub use pipeline::OutputStats;
 #[cfg(test)]
-pub(crate) use pipeline::{DrawFn, STOP_DRAIN, gpu_draw, open_capture};
+pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture};
+#[cfg(test)]
+pub(crate) use pipeline::{DrawHook, gpu_draw_with};
 pub(crate) use pipeline::{
     EncodeKey, Encoders, FRAME_DEN, FRAME_NUM, Gate, MediaHost, MixKey, OpenDraw, OutputEncode,
     Pending, PipelineEvent, Release, Running, cpu_draw, launch, launch_program, launch_vcam,
