@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-media", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-media", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md"]
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,
@@ -39,7 +39,7 @@ Contents:
 - **Audio:** `AudioFormat` (non-zero sample rate, `ChannelLayout`, `f32` interleaved or
   planar `SampleFormat`) and `AudioBuffer`, whose sample count is always whole frames.
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
-  shared payload). `Codec` covers the [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)
+  shared payload). `Codec` covers the [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)
   baseline, H.264 and AAC, plus HEVC and AV1, the video codecs enhanced RTMP carries
   ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). Payload framing is a
   convention this crate doesn't check: H.264 and HEVC payloads are Annex B (start codes,

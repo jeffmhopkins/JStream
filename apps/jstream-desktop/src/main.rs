@@ -29,7 +29,13 @@ fn main() -> ExitCode {
     // The hook, the token and the key store share one redaction list.
     let secrets = jstream_crash::Secrets::new();
     if let Some(data) = data.as_deref() {
-        jstream_crash::install(
+        // On Windows each report gets a protected DACL for SYSTEM and the user, as the
+        // reports are user-only on Unix (#656).
+        #[cfg(windows)]
+        let create: jstream_crash::CreateFile = jstream_platform_windows::create_private_file;
+        #[cfg(not(windows))]
+        let create: jstream_crash::CreateFile = jstream_crash::create_new;
+        jstream_crash::install_creating(
             data.join("logs"),
             jstream_crash::Program {
                 name: env!("CARGO_PKG_NAME"),
@@ -37,6 +43,7 @@ fn main() -> ExitCode {
             },
             secrets.clone(),
             crash_line,
+            create,
         );
     }
     let log = app::init_logging(data.as_deref());

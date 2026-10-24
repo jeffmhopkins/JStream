@@ -85,6 +85,8 @@ fn create(scene: &str) -> Edit {
     }
 }
 
+/// A `webcam` source with complete settings: the mock engine stores settings as sent,
+/// while the engine fills in defaults, so a parity script sends them all.
 fn webcam() -> Edit {
     Edit::SourceCreate {
         source_id: SourceId::new("webcam"),
@@ -92,7 +94,9 @@ fn webcam() -> Edit {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
-        settings: Default::default(),
+        settings: [("device".to_owned(), serde_json::Value::from(""))]
+            .into_iter()
+            .collect(),
         duplicated_from: None,
     }
 }
@@ -1261,7 +1265,10 @@ fn organise_script() -> Vec<Call> {
                 kind: SourceKind::Builtin {
                     kind: "webcam".into(),
                 },
-                settings: Default::default(),
+                // Complete settings, as `webcam()` sends: the mock stores them as sent.
+                settings: [("device".to_owned(), serde_json::Value::from(""))]
+                    .into_iter()
+                    .collect(),
                 duplicated_from: None,
             },
             add("z", "iz2", "tagged"),
@@ -1669,8 +1676,14 @@ fn output_start_publishes_fake_audio_and_video() {
     }
     assert!(saw_media, "expected script, a video NAL and raw AAC");
     let stats = engine.output_stats().expect("stats");
-    assert!(stats.video.received >= 1, "video frames accepted");
-    assert!(stats.audio.received >= 1, "audio blocks accepted");
+    assert!(
+        stats.video.received >= 1,
+        "video frames accepted: {stats:?}"
+    );
+    assert!(
+        stats.audio.received >= 1,
+        "audio blocks accepted: {stats:?}"
+    );
     assert!(stats.readbacks >= 1, "the CPU path read a frame back");
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
@@ -2077,6 +2090,20 @@ fn output_start_returns_after_a_panicking_teardown() {
         thread::sleep(Duration::from_millis(20));
     }
     assert!(failed, "publish failure left the output running");
+    // `failed` settles before the watcher drops the pipeline, and a start that comes
+    // while the program stage is still alive shares it instead of waiting, so the
+    // restart would never see the panicking teardown (the first macOS run, #520).
+    // Wait for the stream's drop to fire; the start below then races the unwinding
+    // teardown's `draining`, which is what this test is about.
+    let mut dropped = false;
+    for _ in 0..500 {
+        if !armed.load(Ordering::Acquire) {
+            dropped = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(dropped, "the first pipeline never dropped its audio stream");
 
     let engine = engine.with_publish(Box::new(RecordingPublish::new()));
     let restart = connected(&engine);
@@ -2091,10 +2118,6 @@ fn output_start_returns_after_a_panicking_teardown() {
     let restarted = restart_thread.join().expect("restart thread");
     restarted.expect("second output.start");
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
-    assert!(
-        !armed.load(Ordering::Acquire),
-        "the first pipeline never dropped its audio stream"
-    );
 }
 
 /// Dropping the last engine handle stops a running pipeline. The publish watcher
@@ -4402,8 +4425,8 @@ mod cpu_pipeline {
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
 
-    /// A publish target whose send, once `stalled`, blocks until `release` fires (or
-    /// 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
+    /// A publish target whose next send, once `stalled`, blocks until `release` fires
+    /// (or 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
     /// send has blocked (`blocked`) and when the output thread has finished it
     /// (`finished`), so the test waits on those instead of on the clock.
     struct StuckPeer {
@@ -4416,7 +4439,10 @@ mod cpu_pipeline {
 
     impl LivePublish for StuckPeer {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
-            if self.stalled.load(Ordering::Acquire) {
+            // One send stalls; once released, the rest go through. A packet can make
+            // more than one tag (the first H.264 keyframe brings its sequence header),
+            // and a second stall would outlast the test's wait for the thread to end.
+            if self.stalled.swap(false, Ordering::AcqRel) {
                 self.blocked.store(true, Ordering::Release);
                 let _ = self.release.recv_timeout(Duration::from_secs(30));
             }

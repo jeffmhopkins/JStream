@@ -1,4 +1,4 @@
-//! Media files (ADR-0031): the [`MediaDecoders`](jstream_platform::MediaDecoders)
+//! Media files (ADR-0061): the [`MediaDecoders`](jstream_platform::MediaDecoders)
 //! backend on the Media Foundation Source Reader (`reader`), which demuxes and decodes a
 //! local file with the OS's own containers and codecs. Video comes out on the CPU as
 //! packed RGBA or BGRA, converted from the reader's RGB32 (`convert`); frames on the GPU

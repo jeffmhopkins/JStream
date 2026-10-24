@@ -30,7 +30,7 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   its server and the UI bundle. Anything that fails becomes the page the window shows.
 - **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
   is, plus the virtual camera) and its server on a free port, with a token made fresh
-  at each start; `vcam_status`, whether the camera is registered.
+  at each start; `vcam_status`, whether the camera is registered and current.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
@@ -52,7 +52,7 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
 
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
-virtual camera's registration mode (`jstream.exe --register-vcam`, which
+virtual camera's optional registration and unregistration modes (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
 dumps (only a panic writes a report, as in the daemon), MCP and the token for outside clients, and browser sources in a default build
 (the `cef` feature is off). `cargo xtask dist` builds the portable folder
@@ -154,15 +154,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   its subprotocol, as in a browser ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
   The strings are written as escaped JavaScript literals. The global also carries
   `vcam`, the virtual camera's status as the app read it at start: `registered`,
-  `not_registered`, `moved`, `off` (`--no-vcam`) or `unavailable` (not Windows). The UI
+  `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable` (not Windows). The UI
   uses it only to say whether the camera can start (its outputs panel); the engine
   still decides.
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no
-  elevation (`vcam_registration`, for the `jstream_vcam_windows.dll` beside the exe)
-  and logs a registration that names another folder. Registering stays the daemon's
-  `--register-vcam` for now, and so does the hardware check. The build script also
+  elevation (`vcam_registration`, which compares the registered administrators-only
+  copy with the `jstream_vcam_windows.dll` beside the exe by content) and logs a
+  warning when it is outdated; it never registers or prompts
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). Registering,
+  which is optional, stays the daemon's `--register-vcam` for now, and so does the
+  hardware check. The build script also
   delay-loads `mfsensorgroup.dll`, which `WindowsVcam` imports `MFCreateVirtualCamera`
   from, as the daemon's does, so a Windows without it still starts the app; on a
   Windows without that export (Windows 10), `WindowsVcam::start` probes for it first,
@@ -197,7 +200,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   clock the mixer runs on. Its pages paint onto a device of the media adapter the app
   opens for them (`WindowsGpu::open_device`) until a program stage runs; the engine then
   lends the backend the stage's own context in its place, so the mix draws the pages,
-  and takes it back when the stage stops. The backend is added after the OS backends, so sources open on the media
+  and takes it back when the stage stops or leaves the GPU path mid-run, after which
+  the pages deliver no frames for the rest of that stage. The backend is added after the OS backends, so sources open on the media
   clock. CEF runs only in the sandboxed browser helper, which the backend starts on the
   first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
   doesn't link CEF, so a missing helper or missing CEF files fail that source, not the
@@ -217,6 +221,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   Manager store is behind `jstream_crash::Redacting`) are replaced by `***` in the report and
   in its stderr line (R-SEC-001). Only their length and BLAKE3 digest are kept. The
   hook replaces the default one, whose stderr line would quote the message
-  unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Before each report the oldest beyond 10 are deleted; the log file and
+  unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Each report is user-only: mode `0600` on Unix, and on Windows a protected DACL for
+  SYSTEM and the user (`jstream_platform_windows::create_private_file`, passed to
+  `jstream_crash::install_creating`, #656). Before each report the oldest beyond 10 are deleted; the log file and
   the audit log in the same folder are left alone. A native crash writes nothing yet
   (the daemon's open question 4 holds here too).

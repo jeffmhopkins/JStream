@@ -223,16 +223,18 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   its send), a renamed and faded bus, a duplicated microphone with a send removed, and
   a disabled nested scene. The rejected batches also cover an audio filter on the
   virtual camera, a reference in a master filter's settings (refused before its
-  index), the bus limit, the master bus, fader ranges, and sources with no audio or no
-  fader of their own.
+  index), the bus limit, the master bus, fader ranges, and sources with no audio (a
+  display capture, `screen`, never placed) or no fader of their own.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
-  the kinds an implementation must describe for the batch to apply (`webcam`, with
-  video and no audio, and `desktop_audio` and `mic`, with audio and no video, none with
-  parameters, so every implementation reports the same empty settings and audio
-  defaults, and the audio filter kind `gain`, whose one parameter the batch always
-  sets). It changes no
+  the kinds an implementation must describe for the batch to apply: `webcam`, with
+  video and audio (its paired input, #716), and `display`, with video and no audio,
+  each described as the engine's built-in kind is, whose one parameter (`device`,
+  `target`) the batch always sends; `desktop_audio` and `mic`, with audio and no video
+  and no parameters; and the audio filter kind `gain`, whose one parameter the batch
+  always sets. So every implementation reports the same settings and audio defaults.
+  It changes no
   message, so it never changes `PROTOCOL_VERSION`.
 
 <a id="design"></a>

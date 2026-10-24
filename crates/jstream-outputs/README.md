@@ -12,12 +12,12 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md"]
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
-as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
+as [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md) requires and needed for the
 generic RTMP/RTMPS output of [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md). The
 second is the **recording file sink** in the `record` module (below). The `Output` trait
 comes later. The virtual-camera output is not here: it runs in `jstream-core`'s runtime
@@ -60,7 +60,10 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   (rounded to nearest, as the muxer's tag timestamps are), then rejects negative times
   and wraps at 2^32.
 - **Transport** (`transport`): `connect` opens TCP (Nagle off) for `rtmp://` and TLS
-  over TCP for `rtmps://`, returning a `Transport` (TCP or TLS inside) that implements
+  over TCP for `rtmps://`, so over `rtmp://` the stream key in `publish` travels in
+  the clear. `RtmpUrl::sends_key_in_cleartext` says when that crosses the network:
+  plain `rtmp://` to a host other than `localhost` or a loopback address. The engine
+  logs a warning for it (#353). `connect` returns a `Transport` (TCP or TLS inside) that implements
   `Read + Write`. TLS is rustls on the `ring` provider, TLS 1.3 and 1.2, no client
   certificate. The server name (SNI) is the URL's host, and the certificate must match
   it and chain to a root in the operating system's trust store, which
@@ -120,7 +123,11 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   sequence header just before the next audio packet, each at that packet's
   timestamp. An audio-only stream resumes at once. Timestamps continue from the lost
   session. `state()` is `Active`, `Reconnecting` or `Failed`, which a host maps onto
-  its output states; only giving up is an error (`RtmpError::ReconnectGaveUp`). The
+  its output states. Once a session has dropped again within 30 s of reconnecting,
+  the next one stays `Reconnecting` until it has been up for 30 s: a server that keeps
+  accepting and then dropping the stream (an ingest that can't decode it) is not
+  live, though packets reach it meanwhile. The reconnect log's `outage` is the gap
+  just ended, and `unstable_for` the time since the outage began; only giving up is an error (`RtmpError::ReconnectGaveUp`). The
   backoff reads time through an injectable `Clock`. `connect_publisher` reads with
   the connect timeout until publishing has started and only then shortens the read
   timeout for polling, so the publish replies aren't cut off by the polling timeout.
@@ -213,7 +220,8 @@ attempt, the drop counts, the re-sent headers and the resume at the keyframe on 
 second connection, and the state sequence; a write that fails over an in-memory pipe
 (the failed packet counted, audio-only resuming at once); giving up after
 `max_attempts` and at the outage limit; a session that drops again at once
-continuing its outage, and one that stayed up starting a new one; an HEVC and an AV1
+continuing its outage, and one that stayed up starting a new one; a session that
+dropped soon after reconnecting reporting `Reconnecting` until it has been up for 30 s; an HEVC and an AV1
 stream of enhanced RTMP tags, and an AVC stream, re-sending their sequence header and
 resuming at the keyframe after a drop, with an end of sequence dropped rather than
 kept as the header or taken as the keyframe.
