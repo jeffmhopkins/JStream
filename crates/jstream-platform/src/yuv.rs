@@ -7,6 +7,9 @@
 //! plane: NV12's interleaved plane at the same stride, I420's two planes at half of it.
 //! Media Foundation and V4L2 (`bytesperline`) both lay them out so. The output frames are
 //! tightly packed, with the size, colour and `pts` the caller gives.
+//!
+//! A multi-planar source (V4L2's `NV12M` and `YUV420M`) has each plane in its own
+//! buffer, with its own stride: [`copy_planes`] takes them one by one.
 
 use crate::PlatformError;
 use crate::media::{PixelFormat, VideoFrame, VideoFrameInfo};
@@ -88,6 +91,44 @@ pub fn copy_planar(
     Ok(frame)
 }
 
+/// Copies a planar frame (`info.format` is NV12 or I420) whose planes are each in their
+/// own buffer, `planes[i]` holding plane `i` with its rows `stride` bytes apart.
+///
+/// # Errors
+/// [`PlatformError::Os`] naming `call` when a plane is missing or shorter than the format
+/// and its stride need, and the frame's own error for a size it can't hold.
+pub fn copy_planes(
+    call: &'static str,
+    planes: &[(&[u8], usize)],
+    info: VideoFrameInfo,
+) -> Result<VideoFrame, PlatformError> {
+    let mut frame = VideoFrame::zeroed(info)?;
+    let count = info.format.plane_count();
+    if planes.len() < count {
+        return Err(PlatformError::Os {
+            call,
+            code: None,
+            message: format!(
+                "a video buffer with {} planes, where its format needs {count}",
+                planes.len()
+            ),
+        });
+    }
+    for (plane, &(src, stride)) in planes.iter().enumerate().take(count) {
+        let Some(geometry) = info.plane(plane)? else {
+            continue;
+        };
+        for (y, row) in rows(call, src, 0, stride, geometry.row_bytes, geometry.height)?.enumerate()
+        {
+            let dst = frame
+                .row_mut(plane, y as u32)
+                .ok_or_else(|| short(call, src.len(), 0))?;
+            dst.copy_from_slice(row);
+        }
+    }
+    Ok(frame)
+}
+
 /// Converts packed 4:2:2 (YUY2: `Y0 U Y1 V` per two pixels, rows `stride` bytes apart) to
 /// NV12 with `info`'s size, colour and `pts`. Luma is copied; each NV12 chroma sample
 /// averages the two rows of its block (an odd last row stands alone), with the horizontal
@@ -145,7 +186,7 @@ mod tests {
         VideoFrameInfo,
     };
 
-    use super::{copy_planar, yuy2_to_nv12};
+    use super::{copy_planar, copy_planes, yuy2_to_nv12};
 
     const CALL: &str = "test";
 
@@ -190,6 +231,46 @@ mod tests {
         assert_eq!(frame.row(0, 1), Some(&[5, 6, 7, 8][..]));
         assert_eq!(frame.row(1, 0), Some(&[11, 12][..]));
         assert_eq!(frame.row(2, 0), Some(&[21, 22][..]));
+    }
+
+    #[test]
+    fn separate_planes_are_copied_with_their_own_strides() {
+        // 4x2 NV12M: luma at stride 6, chroma in its own buffer at stride 8.
+        let luma = [
+            1, 2, 3, 4, 0, 0, //
+            5, 6, 7, 8,
+        ];
+        let chroma = [10, 20, 30, 40, 0, 0, 0, 0];
+        let frame = copy_planes(
+            CALL,
+            &[(&luma, 6), (&chroma, 8)],
+            info(4, 2, PixelFormat::Nv12),
+        )
+        .expect("copy");
+        assert_eq!(frame.row(0, 1), Some(&[5, 6, 7, 8][..]));
+        assert_eq!(frame.row(1, 0), Some(&[10, 20, 30, 40][..]));
+        // 4x2 YUV420M: three buffers.
+        let frame = copy_planes(
+            CALL,
+            &[(&luma, 6), (&[11, 12][..], 2), (&[21, 22, 0][..], 3)],
+            info(4, 2, PixelFormat::I420),
+        )
+        .expect("copy");
+        assert_eq!(frame.row(1, 0), Some(&[11, 12][..]));
+        assert_eq!(frame.row(2, 0), Some(&[21, 22][..]));
+        // A missing or short plane is an error naming the call.
+        for planes in [
+            &[(&luma[..], 6)][..],
+            &[(&luma[..], 6), (&chroma[..3], 8)][..],
+        ] {
+            assert!(matches!(
+                copy_planes("VIDIOC_DQBUF", planes, info(4, 2, PixelFormat::Nv12)),
+                Err(PlatformError::Os {
+                    call: "VIDIOC_DQBUF",
+                    ..
+                })
+            ));
+        }
     }
 
     #[test]

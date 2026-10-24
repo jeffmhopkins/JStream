@@ -3,11 +3,13 @@
 //!
 //! There is no library: the device nodes (`/dev/videoN`) are opened and driven with
 //! `ioctl`s (`abi`, declared by hand from `<linux/videodev2.h>`, and `device`). A node is
-//! listed when it captures single-planar video with streaming I/O. Its formats are the
+//! listed when it captures video with streaming I/O, through the single-planar API or the
+//! multi-planar one (as many SoC cameras and HDMI capture bridges do). Its formats are the
 //! sizes and frame intervals the driver enumerates for the pixel formats the backend
-//! delivers (`format`): YUYV converted to NV12, NV12 and I420 as they are, and MJPEG
-//! handed to the engine's decoder. An open stream maps four driver buffers and runs its
-//! own capture thread (`stream`).
+//! delivers (`format`): YUYV converted to NV12, NV12 and I420 (also with their planes in
+//! separate buffer planes, `NV12M` and `YUV420M`) as they are, and MJPEG handed to the
+//! engine's decoder. An open stream maps four driver buffers and runs its own capture
+//! thread (`stream`).
 
 #[cfg(any(target_os = "linux", test))]
 mod abi;
@@ -32,7 +34,8 @@ mod backend {
 
     use super::device::Device;
     use super::format::{
-        c_name, color, formats, fourcc_for, is_capture, is_device_path, min_stride, node_number,
+        c_name, capture_type, color, formats, fourcc_for, is_device_path, node_number,
+        plane_strides,
     };
     use super::stream::{Capture, Deliver, V4l2Stream};
     use crate::MonotonicClock;
@@ -98,10 +101,9 @@ mod backend {
         if !is_device_path(id.as_str()) {
             return Err(not_found(id));
         }
-        let device = Device::open(id.as_str())?;
-        if !is_capture(&device.capability()?) {
-            return Err(not_found(id));
-        }
+        let mut device = Device::open(id.as_str())?;
+        let ty = capture_type(&device.capability()?).ok_or_else(|| not_found(id))?;
+        device.set_type(ty);
         Ok(device)
     }
 
@@ -119,7 +121,7 @@ mod backend {
                 let Ok(cap) = device.capability() else {
                     continue;
                 };
-                if !is_capture(&cap) {
+                if capture_type(&cap).is_none() {
                     continue;
                 }
                 let name = c_name(&cap.card);
@@ -160,12 +162,10 @@ mod backend {
             };
             let clock = MonotonicClock::new()?;
             let opened = open_capture(device)?;
-            if !formats(&opened.enumerate()).contains(format) {
-                return Err(unsupported());
-            }
-            let fourcc = fourcc_for(format, &opened.pixel_formats()).ok_or_else(unsupported)?;
+            let fourcc = fourcc_for(format, &opened.enumerate()).ok_or_else(unsupported)?;
             let (width, height) = (format.size.width(), format.size.height());
-            let pix = opened.set_format(fourcc, width, height)?;
+            let settled = opened.set_format(fourcc, width, height)?;
+            let pix = settled.pix;
             if (pix.pixelformat, pix.width, pix.height) != (fourcc, width, height) {
                 return Err(unsupported());
             }
@@ -175,7 +175,8 @@ mod backend {
                 (CaptureEncoding::Mjpeg, Some(decoder)) => Deliver::Decode(decoder),
                 (encoding, _) if !encoding.is_compressed() => Deliver::Raw {
                     encoding,
-                    stride: (pix.bytesperline as usize).max(min_stride(encoding, width)),
+                    strides: plane_strides(encoding, fourcc, width, &settled.bytesperline)
+                        .ok_or_else(unsupported)?,
                 },
                 _ => return Err(unsupported()),
             };

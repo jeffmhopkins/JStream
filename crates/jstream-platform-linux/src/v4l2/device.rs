@@ -1,6 +1,12 @@
 //! A V4L2 device node, its `ioctl`s and its memory-mapped buffers, behind safe RAII
 //! types (R-UNSAFE-003): [`Device`] owns the file descriptor, [`Streaming`] the mapped
 //! buffers and the stream it turned on, and both undo what they did when dropped.
+//!
+//! A node captures through the single-planar API (`V4L2_BUF_TYPE_VIDEO_CAPTURE`) or the
+//! multi-planar one (`_MPLANE`), as its capabilities say ([`Device::set_type`]). The
+//! multi-planar API describes formats with `v4l2_pix_format_mplane` and buffers with an
+//! array of `v4l2_plane`s, each mapped on its own; a single-plane format (YUYV, NV12,
+//! MJPEG) through it has one plane, laid out as the single-planar API's buffer.
 
 use std::ffi::{CString, c_ulong, c_void};
 use std::io;
@@ -11,9 +17,10 @@ use jstream_platform::PlatformError;
 use jstream_platform::media::Timebase;
 
 use super::abi::{
-    BUF_TYPE_VIDEO_CAPTURE, Buffer, CAP_TIMEPERFRAME, Capability, FIELD_NONE, FMT_FLAG_EMULATED,
-    FRMIVAL_TYPE_DISCRETE, FRMSIZE_TYPE_DISCRETE, FmtDesc, Format, Fract, FrmIvalEnum, FrmSizeEnum,
-    MEMORY_MMAP, PixFormat, RequestBuffers, StreamParm, VIDIOC_DQBUF, VIDIOC_ENUM_FMT,
+    BUF_TYPE_VIDEO_CAPTURE, BUF_TYPE_VIDEO_CAPTURE_MPLANE, Buffer, CAP_TIMEPERFRAME, Capability,
+    FIELD_NONE, FMT_FLAG_EMULATED, FRMIVAL_TYPE_DISCRETE, FRMSIZE_TYPE_DISCRETE, FmtDesc, Format,
+    FormatMplane, Fract, FrmIvalEnum, FrmSizeEnum, MAX_PLANES, MEMORY_MMAP, PixFormat,
+    PixFormatMplane, Plane, RequestBuffers, StreamParm, VIDIOC_DQBUF, VIDIOC_ENUM_FMT,
     VIDIOC_ENUM_FRAMEINTERVALS, VIDIOC_ENUM_FRAMESIZES, VIDIOC_G_FMT, VIDIOC_G_PARM, VIDIOC_QBUF,
     VIDIOC_QUERYBUF, VIDIOC_QUERYCAP, VIDIOC_REQBUFS, VIDIOC_S_FMT, VIDIOC_S_PARM,
     VIDIOC_STREAMOFF, VIDIOC_STREAMON,
@@ -49,6 +56,47 @@ pub(crate) struct Device {
     fd: OwnedFd,
     /// What the device is, for errors.
     pub(crate) what: String,
+    /// The buffer type it captures through: `BUF_TYPE_VIDEO_CAPTURE` or `_MPLANE`.
+    ty: u32,
+}
+
+/// The format a driver settled on: the single-planar fields (for a multi-planar format,
+/// its first plane's line and image sizes), and each buffer plane's `bytesperline`.
+#[derive(Clone, Debug)]
+pub(crate) struct Settled {
+    pub(crate) pix: PixFormat,
+    pub(crate) bytesperline: Vec<u32>,
+}
+
+impl Settled {
+    fn single(pix: PixFormat) -> Self {
+        Self {
+            bytesperline: vec![pix.bytesperline],
+            pix,
+        }
+    }
+
+    fn multi(mp: &PixFormatMplane) -> Self {
+        let n = usize::from(mp.num_planes).min(MAX_PLANES);
+        let first = mp.plane_fmt[0];
+        Self {
+            pix: PixFormat {
+                width: mp.width,
+                height: mp.height,
+                pixelformat: mp.pixelformat,
+                field: mp.field,
+                bytesperline: first.bytesperline,
+                sizeimage: first.sizeimage,
+                colorspace: mp.colorspace,
+                flags: u32::from(mp.flags),
+                ycbcr_enc: u32::from(mp.ycbcr_enc),
+                quantization: u32::from(mp.quantization),
+                xfer_func: u32::from(mp.xfer_func),
+                ..PixFormat::default()
+            },
+            bytesperline: mp.plane_fmt[..n].iter().map(|p| p.bytesperline).collect(),
+        }
+    }
 }
 
 impl Device {
@@ -84,7 +132,20 @@ impl Device {
         }
         // SAFETY: `fd` is a descriptor this call just opened and nothing else owns.
         let fd = unsafe { OwnedFd::from_raw_fd(fd) };
-        Ok(Self { fd, what })
+        Ok(Self {
+            fd,
+            what,
+            ty: BUF_TYPE_VIDEO_CAPTURE,
+        })
+    }
+
+    /// Captures through buffer type `ty` (single-planar until this is called).
+    pub(crate) fn set_type(&mut self, ty: u32) {
+        self.ty = ty;
+    }
+
+    fn multi_planar(&self) -> bool {
+        self.ty == BUF_TYPE_VIDEO_CAPTURE_MPLANE
     }
 
     pub(crate) fn raw(&self) -> i32 {
@@ -136,7 +197,7 @@ impl Device {
             // SAFETY: all-zero is a valid `v4l2_fmtdesc`.
             let mut desc: FmtDesc = unsafe { std::mem::zeroed() };
             desc.index = index;
-            desc.type_ = BUF_TYPE_VIDEO_CAPTURE;
+            desc.type_ = self.ty;
             // SAFETY: `VIDIOC_ENUM_FMT` takes a `v4l2_fmtdesc`.
             if unsafe { self.ioctl(VIDIOC_ENUM_FMT, &mut desc) }.is_err() {
                 break;
@@ -173,7 +234,7 @@ impl Device {
             }
         }
         if out.is_empty()
-            && let Some(current) = self.current_format()
+            && let Some(Settled { pix: current, .. }) = self.current_format()
             && current.pixelformat == fourcc
             && current.width > 0
             && current.height > 0
@@ -184,13 +245,22 @@ impl Device {
     }
 
     /// `VIDIOC_G_FMT`'s capture format, when the driver reports one.
-    fn current_format(&self) -> Option<PixFormat> {
+    fn current_format(&self) -> Option<Settled> {
+        if self.multi_planar() {
+            // SAFETY: all-zero is a valid `v4l2_format`.
+            let mut f: FormatMplane = unsafe { std::mem::zeroed() };
+            f.type_ = self.ty;
+            // SAFETY: `VIDIOC_G_FMT` takes a `v4l2_format`, which `FormatMplane` is
+            // (the same size, its union read as `pix_mp`).
+            unsafe { self.ioctl(VIDIOC_G_FMT, &mut f) }.ok()?;
+            return Some(Settled::multi(&f.pix_mp));
+        }
         // SAFETY: all-zero is a valid `v4l2_format`.
         let mut f: Format = unsafe { std::mem::zeroed() };
-        f.type_ = BUF_TYPE_VIDEO_CAPTURE;
+        f.type_ = self.ty;
         // SAFETY: `VIDIOC_G_FMT` takes a `v4l2_format`.
         unsafe { self.ioctl(VIDIOC_G_FMT, &mut f) }.ok()?;
-        Some(f.pix)
+        Some(Settled::single(f.pix))
     }
 
     /// The frame intervals of `fourcc` at `width` x `height`: each discrete one, or a
@@ -225,7 +295,7 @@ impl Device {
     fn current_interval(&self) -> Option<Fract> {
         // SAFETY: all-zero is a valid `v4l2_streamparm`.
         let mut parm: StreamParm = unsafe { std::mem::zeroed() };
-        parm.type_ = BUF_TYPE_VIDEO_CAPTURE;
+        parm.type_ = self.ty;
         // SAFETY: `VIDIOC_G_PARM` takes a `v4l2_streamparm`.
         unsafe { self.ioctl(VIDIOC_G_PARM, &mut parm) }.ok()?;
         let t = parm.capture.timeperframe;
@@ -255,10 +325,26 @@ impl Device {
         fourcc: u32,
         width: u32,
         height: u32,
-    ) -> Result<PixFormat, PlatformError> {
+    ) -> Result<Settled, PlatformError> {
+        if self.multi_planar() {
+            // SAFETY: all-zero is a valid `v4l2_format`.
+            let mut f: FormatMplane = unsafe { std::mem::zeroed() };
+            f.type_ = self.ty;
+            f.pix_mp = PixFormatMplane {
+                width,
+                height,
+                pixelformat: fourcc,
+                field: FIELD_NONE,
+                ..PixFormatMplane::default()
+            };
+            // SAFETY: `VIDIOC_S_FMT` takes a `v4l2_format`, which `FormatMplane` is.
+            unsafe { self.ioctl(VIDIOC_S_FMT, &mut f) }
+                .map_err(|e| os_error("VIDIOC_S_FMT", &self.what, &e))?;
+            return Ok(Settled::multi(&f.pix_mp));
+        }
         // SAFETY: all-zero is a valid `v4l2_format`.
         let mut f: Format = unsafe { std::mem::zeroed() };
-        f.type_ = BUF_TYPE_VIDEO_CAPTURE;
+        f.type_ = self.ty;
         f.pix = PixFormat {
             width,
             height,
@@ -269,7 +355,29 @@ impl Device {
         // SAFETY: `VIDIOC_S_FMT` takes a `v4l2_format`.
         unsafe { self.ioctl(VIDIOC_S_FMT, &mut f) }
             .map_err(|e| os_error("VIDIOC_S_FMT", &self.what, &e))?;
-        Ok(f.pix)
+        Ok(Settled::single(f.pix))
+    }
+
+    /// `request` (`QUERYBUF`, `QBUF` or `DQBUF`) on memory-mapped buffer `index`. A
+    /// multi-planar buffer is given an array of every plane the driver may fill, which
+    /// comes back with the buffer.
+    fn buffer_ioctl(
+        &self,
+        request: c_ulong,
+        index: u32,
+    ) -> io::Result<(Buffer, [Plane; MAX_PLANES])> {
+        let mut planes = [Plane::default(); MAX_PLANES];
+        let mut b = Buffer::mmap(self.ty, index);
+        if self.multi_planar() {
+            // `m.planes` and `length` (the array's size) describe `planes`, which
+            // outlives the call below.
+            b.m = planes.as_mut_ptr() as usize as u64;
+            b.length = MAX_PLANES as u32;
+        }
+        // SAFETY: the three requests take a `v4l2_buffer`; a multi-planar one points to
+        // `MAX_PLANES` writable `v4l2_plane`s, alive for the call.
+        unsafe { self.ioctl(request, &mut b) }?;
+        Ok((b, planes))
     }
 
     /// `VIDIOC_S_PARM` with `period` as the frame interval, when the driver takes one.
@@ -277,7 +385,7 @@ impl Device {
     pub(crate) fn set_period(&self, period: Timebase) -> Result<Option<Fract>, PlatformError> {
         // SAFETY: all-zero is a valid `v4l2_streamparm`.
         let mut parm: StreamParm = unsafe { std::mem::zeroed() };
-        parm.type_ = BUF_TYPE_VIDEO_CAPTURE;
+        parm.type_ = self.ty;
         // SAFETY: `VIDIOC_G_PARM` takes a `v4l2_streamparm`.
         if unsafe { self.ioctl(VIDIOC_G_PARM, &mut parm) }.is_err()
             || parm.capture.capability & CAP_TIMEPERFRAME == 0
@@ -302,7 +410,7 @@ impl Device {
     pub(crate) fn stream(self) -> Result<Streaming, PlatformError> {
         let mut req = RequestBuffers {
             count: BUFFERS,
-            type_: BUF_TYPE_VIDEO_CAPTURE,
+            type_: self.ty,
             memory: MEMORY_MMAP,
             ..RequestBuffers::default()
         };
@@ -322,16 +430,30 @@ impl Device {
             on: false,
         };
         for index in 0..req.count {
-            let mut b = Buffer::mmap(index);
             let device = &streaming.device;
-            // SAFETY: `VIDIOC_QUERYBUF` takes a `v4l2_buffer`.
-            unsafe { device.ioctl(VIDIOC_QUERYBUF, &mut b) }
+            let (b, planes) = device
+                .buffer_ioctl(VIDIOC_QUERYBUF, index)
                 .map_err(|e| os_error("VIDIOC_QUERYBUF", &device.what, &e))?;
-            let mapped = Mapped::new(device, b.offset(), b.length)?;
+            let mapped = if device.multi_planar() {
+                let n = (b.length as usize).min(MAX_PLANES);
+                if n == 0 {
+                    return Err(PlatformError::Os {
+                        call: "VIDIOC_QUERYBUF",
+                        code: None,
+                        message: format!("{}: a buffer with no planes", device.what),
+                    });
+                }
+                planes[..n]
+                    .iter()
+                    .map(|p| Mapped::new(device, p.offset(), p.length))
+                    .collect::<Result<Vec<_>, _>>()?
+            } else {
+                vec![Mapped::new(device, b.offset(), b.length)?]
+            };
             streaming.buffers.push(mapped);
             streaming.queue(index)?;
         }
-        let mut ty = BUF_TYPE_VIDEO_CAPTURE as i32;
+        let mut ty = streaming.device.ty as i32;
         // SAFETY: `VIDIOC_STREAMON` takes the buffer type as an `int`.
         unsafe { streaming.device.ioctl(VIDIOC_STREAMON, &mut ty) }
             .map_err(|e| os_error("VIDIOC_STREAMON", &streaming.device.what, &e))?;
@@ -395,9 +517,9 @@ impl Drop for Mapped {
 /// unmaps the buffers and closes the device.
 #[derive(Debug)]
 pub(crate) struct Streaming {
-    /// Dropped first (fields drop in declaration order): the buffers are unmapped
-    /// before the descriptor closes.
-    buffers: Vec<Mapped>,
+    /// Each buffer's mapped planes (one, single-planar). Dropped first (fields drop in
+    /// declaration order): the buffers are unmapped before the descriptor closes.
+    buffers: Vec<Vec<Mapped>>,
     device: Device,
     on: bool,
 }
@@ -407,7 +529,8 @@ pub(crate) struct Filled<'a> {
     pub(crate) index: u32,
     pub(crate) flags: u32,
     pub(crate) timestamp: super::abi::Timeval,
-    pub(crate) bytes: &'a [u8],
+    /// Each plane's bytes (one, single-planar), from its data offset to its used size.
+    pub(crate) planes: Vec<&'a [u8]>,
 }
 
 impl Streaming {
@@ -421,21 +544,19 @@ impl Streaming {
 
     /// Hands buffer `index` back to the driver.
     pub(crate) fn queue(&self, index: u32) -> Result<(), PlatformError> {
-        let mut b = Buffer::mmap(index);
-        // SAFETY: `VIDIOC_QBUF` takes a `v4l2_buffer`.
-        unsafe { self.device.ioctl(VIDIOC_QBUF, &mut b) }
+        self.device
+            .buffer_ioctl(VIDIOC_QBUF, index)
+            .map(drop)
             .map_err(|e| os_error("VIDIOC_QBUF", &self.device.what, &e))
     }
 
     /// The next filled buffer, or `None` when none is ready yet.
     pub(crate) fn dequeue(&self) -> Result<Option<Filled<'_>>, PlatformError> {
-        let mut b = Buffer::mmap(0);
-        // SAFETY: `VIDIOC_DQBUF` takes a `v4l2_buffer`.
-        match unsafe { self.device.ioctl(VIDIOC_DQBUF, &mut b) } {
-            Ok(()) => {}
+        let (b, planes) = match self.device.buffer_ioctl(VIDIOC_DQBUF, 0) {
+            Ok(got) => got,
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
             Err(e) => return Err(os_error("VIDIOC_DQBUF", &self.device.what, &e)),
-        }
+        };
         let mapped = self
             .buffers
             .get(b.index as usize)
@@ -447,11 +568,27 @@ impl Streaming {
                     self.device.what, b.index
                 ),
             })?;
+        let planes = if self.device.multi_planar() {
+            let n = (b.length as usize).min(MAX_PLANES);
+            mapped
+                .iter()
+                .zip(&planes[..n])
+                .map(|(m, p)| {
+                    let used = m.bytes(p.bytesused as usize);
+                    used.get(p.data_offset as usize..).unwrap_or_default()
+                })
+                .collect()
+        } else {
+            mapped
+                .iter()
+                .map(|m| m.bytes(b.bytesused as usize))
+                .collect()
+        };
         Ok(Some(Filled {
             index: b.index,
             flags: b.flags,
             timestamp: b.timestamp,
-            bytes: mapped.bytes(b.bytesused as usize),
+            planes,
         }))
     }
 }
@@ -459,7 +596,7 @@ impl Streaming {
 impl Drop for Streaming {
     fn drop(&mut self) {
         if self.on {
-            let mut ty = BUF_TYPE_VIDEO_CAPTURE as i32;
+            let mut ty = self.device.ty as i32;
             // SAFETY: `VIDIOC_STREAMOFF` takes the buffer type as an `int`. It dequeues
             // every buffer, so none is in the driver's hands when they are unmapped.
             let _ = unsafe { self.device.ioctl(VIDIOC_STREAMOFF, &mut ty) };

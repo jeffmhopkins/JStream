@@ -110,6 +110,78 @@ pub(crate) struct Format {
     pub(crate) align: [u64; 0],
 }
 
+/// `struct v4l2_plane_pix_format`: one plane of a multi-planar format.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct PlaneFormat {
+    pub(crate) sizeimage: u32,
+    pub(crate) bytesperline: u32,
+    pub(crate) reserved: [u16; 6],
+}
+
+/// `struct v4l2_pix_format_mplane` (packed in the header; these fields need no padding).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct PixFormatMplane {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) pixelformat: u32,
+    pub(crate) field: u32,
+    pub(crate) colorspace: u32,
+    pub(crate) plane_fmt: [PlaneFormat; MAX_PLANES],
+    pub(crate) num_planes: u8,
+    pub(crate) flags: u8,
+    pub(crate) ycbcr_enc: u8,
+    pub(crate) quantization: u8,
+    pub(crate) xfer_func: u8,
+    pub(crate) reserved: [u8; 7],
+}
+
+/// `struct v4l2_format` for a multi-planar capture: the same 208 bytes as [`Format`],
+/// with the union read as `pix_mp`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FormatMplane {
+    pub(crate) type_: u32,
+    /// The union's alignment.
+    pub(crate) pad: u32,
+    pub(crate) pix_mp: PixFormatMplane,
+    pub(crate) rest: [u8; 200 - 192],
+    pub(crate) align: [u64; 0],
+}
+
+/// `struct v4l2_plane`: one plane of a multi-planar buffer. The `m` union is read as
+/// `mem_offset` (memory-mapped buffers), in its first four bytes.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Plane {
+    pub(crate) bytesused: u32,
+    pub(crate) length: u32,
+    pub(crate) m: u64,
+    pub(crate) data_offset: u32,
+    pub(crate) reserved: [u32; 11],
+}
+
+impl Plane {
+    /// The plane's offset to `mmap`, from the `m` union (see [`Buffer::offset`]).
+    pub(crate) fn offset(&self) -> u32 {
+        union_first_word(self.m)
+    }
+}
+
+/// `VIDEO_MAX_PLANES`.
+pub(crate) const MAX_PLANES: usize = 8;
+
+/// A `__u32` at the start of a 64-bit union: its low 32 bits on a little-endian
+/// machine, its high ones on a big-endian one.
+fn union_first_word(m: u64) -> u32 {
+    if cfg!(target_endian = "little") {
+        m as u32
+    } else {
+        (m >> 32) as u32
+    }
+}
+
 /// `struct v4l2_captureparm`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -185,26 +257,20 @@ pub(crate) struct Buffer {
 }
 
 impl Buffer {
-    /// A memory-mapped capture buffer, `index` or not yet known.
-    pub(crate) fn mmap(index: u32) -> Self {
+    /// A memory-mapped capture buffer of type `type_`, `index` or not yet known.
+    pub(crate) fn mmap(type_: u32, index: u32) -> Self {
         Self {
             index,
-            type_: BUF_TYPE_VIDEO_CAPTURE,
+            type_,
             memory: MEMORY_MMAP,
             ..Self::default()
         }
     }
 
-    /// The buffer's offset to `mmap`, from the `m` union.
+    /// The buffer's offset to `mmap`, from the `m` union: `m.offset` is a `__u32` at the
+    /// start of the union, whose other members are wider.
     pub(crate) fn offset(&self) -> u32 {
-        // `m.offset` is a `__u32` at the start of the union; the union's other members
-        // are wider, so its low 32 bits on a little-endian machine, its high ones on a
-        // big-endian one.
-        if cfg!(target_endian = "little") {
-            self.m as u32
-        } else {
-            (self.m >> 32) as u32
-        }
+        union_first_word(self.m)
     }
 }
 
@@ -217,6 +283,10 @@ const _: () = {
     assert!(size_of::<FrmSizeEnum>() == 44);
     assert!(size_of::<FrmIvalEnum>() == 52);
     assert!(size_of::<Format>() == 208);
+    assert!(size_of::<FormatMplane>() == 208);
+    assert!(size_of::<PixFormatMplane>() == 192);
+    assert!(size_of::<PlaneFormat>() == 20);
+    assert!(size_of::<Plane>() == 64);
     assert!(size_of::<StreamParm>() == 204);
     assert!(size_of::<RequestBuffers>() == 20);
     assert!(size_of::<Buffer>() == 88);
@@ -247,6 +317,8 @@ pub(crate) const VIDIOC_ENUM_FRAMEINTERVALS: c_ulong =
 
 /// `V4L2_CAP_VIDEO_CAPTURE`: single-planar capture.
 pub(crate) const CAP_VIDEO_CAPTURE: u32 = 0x1;
+/// `V4L2_CAP_VIDEO_CAPTURE_MPLANE`: multi-planar capture.
+pub(crate) const CAP_VIDEO_CAPTURE_MPLANE: u32 = 0x1000;
 /// `V4L2_CAP_STREAMING`: streaming I/O (`mmap`).
 pub(crate) const CAP_STREAMING: u32 = 0x0400_0000;
 /// `V4L2_CAP_DEVICE_CAPS`: `device_caps` describes this node.
@@ -256,6 +328,8 @@ pub(crate) const CAP_TIMEPERFRAME: u32 = 0x1000;
 
 /// `V4L2_BUF_TYPE_VIDEO_CAPTURE`.
 pub(crate) const BUF_TYPE_VIDEO_CAPTURE: u32 = 1;
+/// `V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE`.
+pub(crate) const BUF_TYPE_VIDEO_CAPTURE_MPLANE: u32 = 9;
 /// `V4L2_MEMORY_MMAP`.
 pub(crate) const MEMORY_MMAP: u32 = 1;
 /// `V4L2_FIELD_NONE`: progressive frames.
@@ -286,6 +360,10 @@ pub(crate) const PIX_FMT_JPEG: u32 = fourcc(b"JPEG");
 pub(crate) const PIX_FMT_NV12: u32 = fourcc(b"NV12");
 /// `V4L2_PIX_FMT_YUV420`: I420.
 pub(crate) const PIX_FMT_YUV420: u32 = fourcc(b"YU12");
+/// `V4L2_PIX_FMT_NV12M`: NV12 with each plane in its own buffer plane.
+pub(crate) const PIX_FMT_NV12M: u32 = fourcc(b"NM12");
+/// `V4L2_PIX_FMT_YUV420M`: I420 with each plane in its own buffer plane.
+pub(crate) const PIX_FMT_YUV420M: u32 = fourcc(b"YM12");
 
 /// `V4L2_COLORSPACE_SMPTE170M`, `_REC709`, `_JPEG`, `_SRGB` and `_BT2020`.
 pub(crate) const COLORSPACE_SMPTE170M: u32 = 1;
@@ -333,6 +411,17 @@ mod tests {
         assert_eq!(offset_of!(Buffer, memory), 60);
         assert_eq!(offset_of!(Buffer, m), 64);
         assert_eq!(offset_of!(Buffer, length), 72);
+        assert_eq!(offset_of!(PlaneFormat, bytesperline), 4);
+        assert_eq!(offset_of!(PixFormatMplane, colorspace), 16);
+        assert_eq!(offset_of!(PixFormatMplane, plane_fmt), 20);
+        assert_eq!(offset_of!(PixFormatMplane, num_planes), 180);
+        assert_eq!(offset_of!(PixFormatMplane, ycbcr_enc), 182);
+        assert_eq!(offset_of!(PixFormatMplane, quantization), 183);
+        assert_eq!(offset_of!(PixFormatMplane, xfer_func), 184);
+        assert_eq!(offset_of!(FormatMplane, pix_mp), 8);
+        assert_eq!(offset_of!(Plane, length), 4);
+        assert_eq!(offset_of!(Plane, m), 8);
+        assert_eq!(offset_of!(Plane, data_offset), 16);
         assert_eq!(VIDIOC_QUERYCAP, 0x8068_5600);
         assert_eq!(VIDIOC_ENUM_FMT, 0xc040_5602);
         assert_eq!(VIDIOC_ENUM_FRAMESIZES, 0xc02c_564a);
@@ -366,6 +455,14 @@ mod tests {
             (BUF_FLAG_TIMESTAMP_MASK, BUF_FLAG_TIMESTAMP_MONOTONIC),
             (0xe000, 0x2000)
         );
+        assert_eq!(
+            (
+                CAP_VIDEO_CAPTURE_MPLANE,
+                BUF_TYPE_VIDEO_CAPTURE_MPLANE,
+                MAX_PLANES
+            ),
+            (0x1000, 9, 8)
+        );
     }
 
     #[test]
@@ -375,13 +472,20 @@ mod tests {
         assert_eq!(PIX_FMT_JPEG, 0x4745_504a);
         assert_eq!(PIX_FMT_NV12, 0x3231_564e);
         assert_eq!(PIX_FMT_YUV420, 0x3231_5559);
+        assert_eq!(PIX_FMT_NV12M, 0x3231_4d4e);
+        assert_eq!(PIX_FMT_YUV420M, 0x3231_4d59);
     }
 
     #[test]
     fn a_buffers_mmap_offset_is_the_unions_first_word() {
-        let mut b = Buffer::mmap(2);
+        let mut b = Buffer::mmap(BUF_TYPE_VIDEO_CAPTURE, 2);
         b.m = u64::from_ne_bytes([0x10, 0x20, 0, 0, 0xaa, 0xbb, 0xcc, 0xdd]);
         assert_eq!(b.offset(), u32::from_ne_bytes([0x10, 0x20, 0, 0]));
         assert_eq!((b.index, b.type_, b.memory), (2, 1, 1));
+        let p = Plane {
+            m: b.m,
+            ..Plane::default()
+        };
+        assert_eq!(p.offset(), b.offset());
     }
 }
