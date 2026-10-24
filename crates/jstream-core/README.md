@@ -1875,11 +1875,15 @@ device), it says so to the program stage, which from then on opens each new vide
 session without the context: on the CPU path, taking the readback like any other, so a
 recording started after a fallback encodes and fails nothing (#699). A session that
 opens on the GPU path claims the context first, and holds the claim until the render
-thread has its tap. A fallback due meanwhile waits for the tap, which then rules it out
-as above, so a session opened just before a fallback can't fail the stage either. The
+thread has its tap. A fallback for composite errors that falls due meanwhile waits for
+the tap, which then rules it out as above: the session no longer arrives with no encode
+targets, and the errors run on to the 31st, as with any session on the GPU path. The
 two sides meet at one gate (`GpuGate`): the fallback shuts it and then looks for
 claims, and a session claims it and then looks whether it is shut, so one always sees
-the other (#733). A lost context device shuts it whatever the claims.
+the other (#733). A lost context device shuts it whatever the claims, so a claimed
+session whose tap arrives after the loss fails the stage, as one already attached does.
+The claim is taken before the encoder opens, so it also holds a fallback off while an
+encoder that ends up on the CPU path is opening.
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as

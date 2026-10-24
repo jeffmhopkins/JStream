@@ -2057,6 +2057,10 @@ impl Drop for GpuClaim {
 impl GpuGate {
     /// A claim for a session about to open on the context, or `None` once the render
     /// thread has left it: the session then opens on the CPU path.
+    ///
+    /// It is taken before the encoder opens, since a later claim would reopen the race,
+    /// so it holds a composite-error fallback off for the whole open, also for an encoder
+    /// that ends up on the CPU path (whose claim is then dropped).
     fn claim(self: &Arc<Self>) -> Option<GpuClaim> {
         self.claims.fetch_add(1, Ordering::SeqCst);
         let claim = GpuClaim(Arc::clone(self));
