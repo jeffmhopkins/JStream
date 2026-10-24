@@ -163,6 +163,39 @@ fn a_redacting_store_registers_what_it_stores_and_loads() {
     );
 }
 
+/// A report is made by the app's `create` (`install_creating`, #656: on Windows the apps
+/// pass one that makes the file user-only), and a name already taken moves on to the next
+/// one through that `create` too.
+#[test]
+fn a_report_is_made_by_the_apps_create() {
+    /// The app's `create`: `create_new`, plus a marker beside each file it makes.
+    fn marked(path: &Path) -> std::io::Result<std::fs::File> {
+        let file = super::create_new(path)?;
+        std::fs::write(path.with_extension("made-by-app"), "")?;
+        Ok(file)
+    }
+    let dir = scratch("create-hook");
+    let now = UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+    let stem = format!(
+        "{REPORT_PREFIX}{}-{}",
+        Utc::from(now).compact(),
+        std::process::id()
+    );
+    std::fs::write(dir.join(format!("{stem}-000.txt")), "taken").expect("written");
+    let path = write_report(&dir, now, "report", marked).expect("written");
+    assert_eq!(
+        path,
+        dir.join(format!("{stem}-001.txt")),
+        "the next free name"
+    );
+    assert_eq!(std::fs::read_to_string(&path).expect("readable"), "report");
+    assert!(
+        path.with_extension("made-by-app").exists(),
+        "made by the app's create"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn old_reports_are_pruned_to_the_cap() {
     let dir = scratch("prune");
@@ -175,7 +208,7 @@ fn old_reports_are_pruned_to_the_cap() {
     }
     // Files that only share the folder are never touched.
     std::fs::write(dir.join("jstream-daemon-1.log"), "log").expect("written");
-    let path = write_report(&dir, SystemTime::now(), "new").expect("written");
+    let path = write_report(&dir, SystemTime::now(), "new", super::create_new).expect("written");
     let left = reports(&dir);
     assert_eq!(left.len(), MAX_REPORTS + 1, "{left:?}");
     assert!(left.iter().any(|p| p.ends_with("jstream-daemon-1.log")));

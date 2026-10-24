@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -92,13 +92,15 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Frames:** a free-threaded frame pool of two BGRA buffers. On each `FrameArrived`,
     on a WinRT thread-pool thread, the frame is copied into a staging texture, read back
     and converted to NV12 in BT.709 limited range, which is what the H.264 encoder's CPU
-    path takes. Chroma is left-sited, the H.264 default: each chroma sample filters the
+    path takes, by `jstream_platform::nv12`, the converter Linux's VA-API encoder uses
+    too. Chroma is left-sited, the H.264 default: each chroma sample filters the
     two rows of its block with a `[1 2 1]` tap centred on the block's left column. NV12
     needs even dimensions, so an odd width or height loses its last column or row. When
     the content size changes, the pool is recreated at the new size, and the frames
     after it have that size.
-  - **Mailbox:** frames go to a single-slot mailbox, one atomic pointer that both sides
-    swap, so `latest` never waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
+  - **Mailbox:** frames go to `jstream_platform::mailbox`, the single-slot mailbox every
+    platform's capture shares: one atomic cell that both sides swap, so `latest` never
+    waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
     replaced before `latest` took it counts in `frames_skipped`, and its planes are reused
     for the next frame of the same size. Otherwise each frame allocates its planes, on
     the capture thread, and the mailbox boxes every frame it is given.
@@ -158,7 +160,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     budget, as ARCH step 6 asks.
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
-  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): the **AAC encoder** and
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): the **AAC encoder** and
   the **video encoders** (H.264, HEVC and AV1), from CPU frames or from encode targets on
   the GPU. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
@@ -216,6 +218,15 @@ The code is ported from spikes S1 to S3. This first cut has:
     - **Choosing an encoder** on the CPU path: hardware encoder MFTs come first, then the
       OS software encoder (H.264 only), following `HardwarePreference`. The first one that accepts the
       media types wins, and `CodecInfo::hardware` says which kind it was.
+    - **First-frame fallback** (#443): with `Prefer`, a hardware encoder on the CPU path
+      that refuses the first frame at `ProcessInput` is replaced by the software MFT,
+      which gets that frame (`FirstFrameFallback`, `codec/fallback.rs`). No packet has
+      come out yet, so the stream sees one decoder configuration. It logs a warning
+      through `tracing` (the crate's one logging dependency) naming both encoders and
+      the refusal, and `info()` then reports the software encoder. Once the hardware
+      encoder has taken a frame, a refusal fails the session as before. `Require` and
+      the GPU path have no software to fall back to. The logic is tested with fake
+      encoders on every platform.
     - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
       size, no B-frames (so packets come out in presentation order and `dts == pts`),
       low latency, the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
@@ -240,7 +251,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** video decoders, which report `Unsupported` until then.
 
 - **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
-  Foundation's source reader ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  Foundation's source reader ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)):
   - **Devices:** the video capture devices Media Foundation enumerates. A device's
     `DeviceId` is its symbolic link (its device interface path), which stays the same
     across reboots and replugging into the same port; its name is the friendly name.
@@ -274,7 +285,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     A panic on the capture thread (the decoder's included) ends it with `InvalidState`.
     Dropping the stream doesn't wait: the thread stops after its current read and then
     releases the device and drops the decoder.
-  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`: the first synchronous
+  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`, which
+    `MfCodecs::capture_decoder` makes for the engine: the first synchronous
     MJPEG decoder MFT Media Foundation ranks (Microsoft's, on Windows), created on the
     capture thread at the first frame and again if the size changes. It takes NV12
     output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
@@ -285,7 +297,7 @@ The code is ported from spikes S1 to S3. This first cut has:
 
 - **`MfMediaDecoders`** (`MediaDecoders`), local media files through the Media
   Foundation Source Reader (`decode/`,
-  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)):
   - **Opening:** `MFCreateSourceReaderFromURL` on the file's host path, with the
     `\\?\` prefix `canonicalize` adds removed, since the source resolver would read it
     as a URL scheme. Advanced video processing is on, so the reader converts the
@@ -367,7 +379,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     binary that delay-loads the DLL gets an error rather than a delay-load exception on
     Windows 10 or an N edition. The media source must already be registered
     machine-wide, so `start` then checks for its `HKLM` class key and is `Unsupported` without it (registering
-    is `jstream-daemon --register-vcam`, through `register_vcam` below). It then creates, on a D3D11 device of its own
+    is the optional `jstream-daemon --register-vcam`, through `register_vcam` below). It then creates, on a D3D11 device of its own
     on the default hardware adapter, a ring of three shared BGRA textures and a shared
     fence, plus the control block. They are named in **this session's namespace**,
     because a non-elevated engine can't create `Global\` objects
@@ -424,8 +436,18 @@ The code is ported from spikes S1 to S3. This first cut has:
     isn't UTF-8 is refused as `Unsupported`, without naming it. The copy Windows returns is zeroed before
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
+- **`create_private_file`** and **`check_private_file`**, user-only files for a host's
+  secrets (#344: the daemon's token, devices and log files; #656: both apps' crash
+  reports), as mode `0600` gives them on Unix. `create_private_file` makes a new file (`CREATE_NEW`, never replacing
+  one) with a protected DACL for SYSTEM and the user (`jstream-vcam-proto`'s
+  `sddl_user_only`, built like the vcam's `sddl_objects`) in the same `CreateFileW`
+  call, so it never carries its folder's inherited entries. `check_private_file` reads
+  an open file's owner and DACL and applies the `security` rule with no extra trustees:
+  the owner must be the user, SYSTEM or Administrators, and no one else may hold more
+  than `READ_CONTROL`, `SYNCHRONIZE` or `FILE_READ_ATTRIBUTES`.
+
 - **`check_media_foundation`**, the Media Foundation check
-  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md#consequences)): Windows N and
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md#consequences)): Windows N and
   KN editions ship without Media Foundation until the user installs the Media Feature
   Pack, and Windows Server until it adds the Server Media Foundation feature. The check
   loads `mfplat.dll` from System32 only and looks for `MFStartup`. If that fails, it
@@ -442,19 +464,37 @@ The code is ported from spikes S1 to S3. This first cut has:
     `MfMediaDecoders`; `mfplat.dll` for `MfMjpegDecoder`;
     `mfplat.dll` and `mfsensorgroup.dll` for `WindowsVcam`. The check itself never imports Media Foundation.
 
-- **`register_vcam`** and **`vcam_registration`**, the virtual camera's registration
-  ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Frame Server ignores
-  per-user registration, so `register_vcam` writes the media source's class machine-wide:
-  `HKLM\Software\Classes\CLSID\{clsid}` with `InprocServer32` naming the DLL and
-  `ThreadingModel = Both`, the path written last. It then adds a read-and-execute ACE for
-  LOCAL SERVICE, Frame Server's account, to the DLL file's DACL. It needs an elevated
-  process (`is_elevated`); `run_elevated` relaunches the current executable with the
-  `runas` verb, hidden, and waits for its exit code, which is the one UAC prompt (a
-  declined prompt is `InvalidState`). `vcam_registration` needs no elevation: it reads the
-  registered path and compares it with the DLL the host ships (`VCAM_DLL`, beside the
-  executable), ignoring case, `\\?\` and `/`. The answer is `Missing`, `Current` or
-  `Moved`, the last when a portable install was moved after registering. That comparison
-  is tested on every platform.
+- **`register_vcam`**, **`unregister_vcam`** and **`vcam_registration`**, the virtual
+  camera's optional registration, from an administrators-only copy
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md),
+  [ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Only a host's explicit
+  opt-in step calls the first two. Frame Server ignores per-user registration, so both
+  need an elevated process (`is_elevated`); `run_elevated` relaunches the current
+  executable with the `runas` verb, hidden, and waits for its exit code, which is the one
+  UAC prompt (a declined prompt is `InvalidState`).
+  - **Register:** `register_vcam` creates `vcam_copy_dir`, `%ProgramFiles%\JStream\vcam\`
+    (`program_files` is `FOLDERID_ProgramFiles`), and replaces its DACL with `COPY_DACL`,
+    protected so nothing is inherited: SYSTEM and Administrators full control, LOCAL
+    SERVICE (Frame Server's account) and Users read and execute. It copies the shipped
+    DLL in under a staging name, gives the file the same protected DACL, renames a
+    previous copy aside (Windows lets a loaded DLL be renamed but not replaced) and moves
+    the new one into place, then deletes the leftovers it can. Last it writes
+    `HKLM\Software\Classes\CLSID\{clsid}` with `InprocServer32` naming the copy and
+    `ThreadingModel = Both`, the path written last. The DLL in the user-writable portable
+    folder is never registered (#242).
+  - **Unregister:** `unregister_vcam` deletes the class keys, then the copy's folder, and
+    `%ProgramFiles%\JStream` if that is then empty. A copy Frame Server still has loaded
+    makes it fail after the keys are gone; running it again finishes it.
+  - **Status:** `vcam_registration` needs no elevation. It reads the registered path and
+    compares it with the copy's (ignoring case, `\\?\`, quotes and `/`), then the copy's
+    content with the DLL the host ships (`VCAM_DLL`, beside the executable). The answer
+    is `Missing`, `Current`, or `Outdated` with why: `Elsewhere` (a DLL outside the
+    folder, such as one an older JStream registered from its portable folder),
+    `Differs` (an update) or `CopyMissing`.
+
+  The path, content and DACL decisions are tested on every platform. CI's Windows job
+  runs the OS calls that need no elevation (reading the registration, finding Program
+  Files, creating the DACL's SIDs); the elevated steps are checked on hardware.
 
 - **`PluginBlock`** and **`ProAudioThread`**, for CLAP filters hosted out of process
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)).
@@ -492,11 +532,13 @@ decode through `MfMediaDecoders`), the virtual camera taking
 `VideoSurface::Gpu`, and a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
-packet flags, positions across a device move), the capture helpers (BGRA and RGBA to NV12 with
-known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
+packet flags, positions across a device move), the capture helpers (target IDs; the
+BGRA and RGBA to NV12 converter and the mailbox are `jstream-platform`'s, tested there), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the video
 encoder helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts`
-mapping), the GPU capture ring's slot
+mapping), the first-frame fallback with fake encoders (`codec::fallback`: a refused
+first frame reopened in software, a later refusal failing, `Busy` keeping it armed, a
+failed software open, and when it applies), the GPU capture ring's slot
 choice (reuse, drop when full, release on resize), the credential helpers (target names
 of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
 the Media Foundation check's decision (edition kinds and the advice for each) and the
@@ -568,12 +610,13 @@ virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 - **Render times.** `AudioRenderBuffer::time` (when the first frame will play) is always
   `None` for now. `IAudioClock` can give it once the engine needs output sync, for
   example for monitoring with delay compensation.
-- **Hardware encoders and CPU frames.** A hardware MFT that takes NV12 when its media
-  types are set might still refuse system-memory samples at `ProcessInput`. If it does,
-  `HardwarePreference::Prefer` fails instead of falling back. The fallback only happens
-  when the media types are refused, which is enough for software-only machines. The
-  `hw-tests` hardware test will show whether this happens. The GPU path, which feeds
-  hardware encoders D3D11 textures as S1 did, makes the question moot for them.
+- **Hardware encoders and CPU frames** (answered for the first frame, #443). A hardware
+  MFT that takes NV12 when its media types are set might still refuse system-memory
+  samples at `ProcessInput`. With `Prefer`, a refusal of the first frame falls back to
+  the software MFT (First-frame fallback, above); a later one fails the output. Whether
+  Intel and NVIDIA encoders refuse at all still needs a `hw-tests` run on them. The GPU
+  path, which feeds hardware encoders D3D11 textures as S1 did, makes the question moot
+  for them.
 - **Moving to a default device with another format.** For now the stream ends with
   `DeviceLost` and the engine reopens it. Instead the backend could ask WASAPI to convert
   to the old format, which would keep the stream running but would resample if the

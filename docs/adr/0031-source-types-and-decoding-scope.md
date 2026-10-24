@@ -2,14 +2,15 @@
 id = "ADR-0031"
 title = "Source types for v1 and decoding scope"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0061-source-types-and-decoding-scope-v2.md"
 tier = "maintainer"
 -->
 
 # ADR-0031: Source types for v1 and decoding scope
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0061: Source types and decoding scope v2: Linux's software H.264 and AAC](0061-source-types-and-decoding-scope-v2.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0003](0003-media-stack-and-codecs.md).

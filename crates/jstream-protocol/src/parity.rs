@@ -28,10 +28,10 @@ use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 pub const COLLECTION_REV: Rev = Rev(1);
 
 /// The kinds an implementation must describe for [`collection`] to apply: the source
-/// kinds `webcam`, a video kind, and `desktop_audio` and `mic`, audio kinds with no
-/// video, all without parameters, so every implementation reports their settings as an
-/// empty map; and the audio filter kind `gain`, whose one parameter the collection
-/// always sets, so its settings read back as given.
+/// kind `webcam`, described as the engine's built-in kind is, whose one parameter
+/// `device` the collection leaves at its default; `desktop_audio` and `mic`, audio kinds
+/// with no video and no parameters; and the audio filter kind `gain`, whose one
+/// parameter the collection always sets, so its settings read back as given.
 pub fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -40,8 +40,51 @@ pub fn kinds() -> Vec<KindDescriptor> {
             name: "Webcam".into(),
             version: 1,
             video: true,
+            audio: true,
+            params: vec![ParamDescriptor {
+                id: "device".into(),
+                ty: ParamType::String {
+                    multiline: false,
+                    max_len: 1024,
+                },
+                default: serde_json::Value::from(""),
+                label: "Device".into(),
+                description: Some(
+                    "The ID of the webcam or capture card, as the platform lists it. Empty \
+                     captures the first device listed."
+                        .into(),
+                ),
+                group: None,
+                advanced: false,
+                visible_if: None,
+                live: false,
+            }],
+        },
+        KindDescriptor {
+            kind_id: "display".into(),
+            category: KindCategory::Source,
+            name: "Display capture".into(),
+            version: 1,
+            video: true,
             audio: false,
-            params: vec![],
+            params: vec![ParamDescriptor {
+                id: "target".into(),
+                ty: ParamType::String {
+                    multiline: false,
+                    max_len: 1024,
+                },
+                default: serde_json::Value::from(""),
+                label: "Display".into(),
+                description: Some(
+                    "The ID of the display to capture, as `capture.targets` lists it. Empty \
+                     captures the primary display."
+                        .into(),
+                ),
+                group: None,
+                advanced: false,
+                visible_if: None,
+                live: false,
+            }],
         },
         KindDescriptor {
             kind_id: "desktop_audio".into(),
@@ -152,6 +195,7 @@ pub fn collection() -> Batch {
                 name: "B".into(),
                 role: Some(SceneRole::Group),
             },
+            source(screen()),
             source(nested_b()),
             source(cam()),
             add("i1", "cam"),
@@ -1453,13 +1497,13 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         ),
         (
             Batch::single(Edit::SourceSetAudio {
-                source_id: SourceId::new("cam"),
+                source_id: SourceId::new("screen"),
                 enabled: Some(false),
                 follow: None,
                 gain_db: None,
                 muted: None,
             }),
-            invalid("edits.0.source_id", "source `cam` has no audio"),
+            invalid("edits.0.source_id", "source `screen` has no audio"),
         ),
         (
             Batch::single(Edit::SourceSetAudio {
@@ -1513,11 +1557,11 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         ),
         (
             Batch::single(Edit::SendSet {
-                source_id: SourceId::new("cam"),
+                source_id: SourceId::new("screen"),
                 bus_id: BusId::new("vod"),
                 gain_db: Finite32::ZERO,
             }),
-            invalid("edits.0.source_id", "source `cam` has no audio"),
+            invalid("edits.0.source_id", "source `screen` has no audio"),
         ),
         (
             Batch::single(Edit::SendSet {
@@ -1570,6 +1614,9 @@ fn sends() -> Vec<SendInfo> {
         gain_db: finite(gain_db),
     };
     vec![
+        send("aux", BusId::master(), 0.0),
+        send("cam", BusId::master(), 0.0),
+        send("cam_copy", BusId::master(), 0.0),
         send("desk", BusId::master(), 0.0),
         send("mic", BusId::master(), -1.5),
         send("mic", BusId::new("vod"), -3.0),
@@ -1860,6 +1907,7 @@ fn sources() -> Vec<SourceInfo> {
             audio: Some(mic_audio),
             ..mic()
         },
+        screen(),
     ]
 }
 
@@ -1871,6 +1919,7 @@ fn desk() -> SourceInfo {
         kind: SourceKind::Builtin {
             kind: "desktop_audio".into(),
         },
+        settings: crate::Settings::new(),
         audio: Some(SourceAudio::new(AudioFollow::Always)),
         ..cam()
     }
@@ -1914,6 +1963,8 @@ fn aux() -> SourceInfo {
     }
 }
 
+/// A webcam as `source.create` makes it: a kind with video and audio (its paired audio)
+/// follows `when_shown`.
 fn cam() -> SourceInfo {
     SourceInfo {
         source_id: SourceId::new("cam"),
@@ -1921,11 +1972,29 @@ fn cam() -> SourceInfo {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
-        settings: crate::Settings::new(),
+        settings: [("device".to_owned(), serde_json::Value::from(""))]
+            .into_iter()
+            .collect(),
         duplicated_from: None,
         filters: Default::default(),
         meta: Default::default(),
+        audio: Some(SourceAudio::new(AudioFollow::WhenShown)),
+    }
+}
+
+/// A display capture, never placed: the collection's one source with no audio.
+fn screen() -> SourceInfo {
+    SourceInfo {
+        source_id: SourceId::new("screen"),
+        name: "Screen".into(),
+        kind: SourceKind::Builtin {
+            kind: "display".into(),
+        },
+        settings: [("target".to_owned(), serde_json::Value::from(""))]
+            .into_iter()
+            .collect(),
         audio: None,
+        ..cam()
     }
 }
 

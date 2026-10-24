@@ -117,6 +117,14 @@ impl RtmpUrl {
         &self.host
     }
 
+    /// Whether publishing here sends the stream key across the network unencrypted:
+    /// plain `rtmp://` to a host other than this machine. `localhost` and loopback
+    /// addresses (`127.0.0.0/8`, `::1`, and IPv4 loopback mapped into IPv6) don't count,
+    /// so a local relay raises no warning (#353).
+    pub fn sends_key_in_cleartext(&self) -> bool {
+        self.scheme == Scheme::Rtmp && !is_loopback(&self.host)
+    }
+
     /// The port, explicit or the scheme's default.
     pub fn port(&self) -> u16 {
         self.port
@@ -202,9 +210,35 @@ impl fmt::Debug for StreamKey {
     }
 }
 
+/// Whether `host` names this machine: `localhost` or a loopback address.
+fn is_loopback(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.to_canonical().is_loopback())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Plain `rtmp://` to a remote host sends the key in the clear; `rtmps://` and
+    /// loopback don't (#353).
+    #[test]
+    fn only_plain_rtmp_to_a_remote_host_sends_the_key_in_cleartext() {
+        let clear = |url: &str| RtmpUrl::parse(url).unwrap().sends_key_in_cleartext();
+        assert!(clear("rtmp://a.rtmp.youtube.com/live2"));
+        assert!(clear("RTMP://192.168.1.20:1935/live"));
+        assert!(clear("rtmp://[2001:db8::1]/live"));
+        assert!(clear("rtmp://localhost.example.com/live"));
+        assert!(!clear("rtmps://a.rtmps.youtube.com/live2"));
+        assert!(!clear("rtmp://localhost/live"));
+        assert!(!clear("rtmp://LOCALHOST:1936/live"));
+        assert!(!clear("rtmp://127.0.0.1/live"));
+        assert!(!clear("rtmp://127.8.9.10/live"));
+        assert!(!clear("rtmp://[::1]:1936/live"));
+        assert!(!clear("rtmp://[::ffff:127.0.0.1]/live"));
+    }
 
     #[test]
     fn parses_youtube_style_url() {

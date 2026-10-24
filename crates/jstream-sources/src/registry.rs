@@ -6,7 +6,6 @@ use crate::browser::BrowserKind;
 use crate::capture::CaptureKind;
 use crate::chat::ChatKind;
 use crate::color::ColorKind;
-use crate::describe::described;
 use crate::image::ImageKind;
 use crate::media::MediaKind;
 use crate::scope::{SpectrumKind, WaveformKind};
@@ -22,15 +21,13 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
+    /// The built-in kinds (ADR-0061, docs/adr/0061-source-types-and-decoding-scope-v2.md).
     /// `browser`, `chat_message`, `color`, `image`, `media`, `text`, `waveform`,
     /// `spectrum` and `youtube_chat` produce frames (`browser` and its `youtube_chat`
     /// preset through the injected backend, on the GPU). `display` and `window` say what
-    /// the platform captures ([`Source::capture`]). `audio_input`, `desktop_audio` and
-    /// `app_audio` are audio-only: the engine records them, and `create` fails with
-    /// [`SourceError::AudioOnly`]. `webcam` is described only, so its sources can be
-    /// created and configured but fail to start with
-    /// [`SourceError::NotBuilt`].
+    /// the platform captures ([`Source::capture`]), and so does `webcam`, a webcam or
+    /// capture card. `audio_input`, `desktop_audio` and `app_audio` are audio-only: the
+    /// engine records them, and `create` fails with [`SourceError::AudioOnly`].
     pub fn builtin() -> Self {
         let mut kinds: BTreeMap<String, Box<dyn SourceKind>> = BTreeMap::new();
         let mut add = |kind: Box<dyn SourceKind>| {
@@ -41,6 +38,7 @@ impl Registry {
         add(Box::new(ColorKind::new()));
         add(Box::new(CaptureKind::display()));
         add(Box::new(CaptureKind::window()));
+        add(Box::new(CaptureKind::webcam()));
         add(Box::new(ImageKind::new()));
         add(Box::new(MediaKind::new()));
         add(Box::new(TextKind::new()));
@@ -48,9 +46,6 @@ impl Registry {
         add(Box::new(SpectrumKind::new()));
         add(Box::new(ChatKind::new()));
         for kind in audio::kinds() {
-            add(Box::new(kind));
-        }
-        for kind in described() {
             add(Box::new(kind));
         }
         Self { kinds }

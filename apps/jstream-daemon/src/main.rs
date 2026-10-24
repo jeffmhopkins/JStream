@@ -8,8 +8,9 @@
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
-//! Media Foundation is installed, and `--register-vcam` registers the virtual camera's
-//! media source (`register`). With `--collection` it loads the collection from a file
+//! Media Foundation is installed. The optional `--register-vcam` registers an
+//! administrators-only copy of the virtual camera's media source, and `--unregister-vcam`
+//! removes it (`register`). With `--collection` it loads the collection from a file
 //! and saves every change there, and it records every batch, undo, redo and action in an
 //! audit log next to its log files. Not yet: the web UI.
 //!
@@ -98,6 +99,9 @@ fn main() -> ExitCode {
         Ok(Invocation::RegisterVcam) => register::register()
             .map_err(Failure::Failed)
             .and_then(|message| print(&message)),
+        Ok(Invocation::UnregisterVcam) => register::unregister()
+            .map_err(Failure::Failed)
+            .and_then(|message| print(&message)),
         Ok(Invocation::Serve(options)) => run(options),
         Err(message) => Err(Failure::Usage(format!(
             "{message}\n(run `jstream-daemon --help` for usage)"
@@ -174,7 +178,8 @@ fn crash_line(line: &str) {
 fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Failure> {
     logs::create_dir(dir)
         .with_context(|| format!("could not create the log directory `{}`", dir.display()))?;
-    jstream_crash::install(
+    // Reports are made like the log files: user-only on Unix and on Windows (#656).
+    jstream_crash::install_creating(
         dir.to_owned(),
         Program {
             name: env!("CARGO_PKG_NAME"),
@@ -182,6 +187,7 @@ fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Fa
         },
         secrets.clone(),
         crash_line,
+        logs::create_new,
     );
     let files = logs::LogFiles::open(dir)
         .with_context(|| format!("could not create a log file in `{}`", dir.display()))?;

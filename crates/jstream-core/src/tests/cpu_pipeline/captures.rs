@@ -1,14 +1,14 @@
-//! An output captures what its render snapshots place (C3): one capture per display or
-//! window its program mix shows, started when a source comes on program, stopped when it
-//! goes, and started again after a failure.
+//! An output captures what its render snapshots place (C3, C4c): one capture per
+//! display, window or webcam its program mix shows, started when a source comes on
+//! program, stopped when it goes, and started again after a failure.
 
-use super::super::{add, batch, connected, create, edits, output_call, query};
+use super::super::{add, batch, connected, create, edits, output_call, output_state, query};
 use super::{Fakes, engine, fakes, pump_until, share, start};
 use crate::runtime::{RETRY_MS, cpu_draw};
 use crate::{Engine, RecordingPublish};
 use jstream_control::Control;
 use jstream_media::FrameSize;
-use jstream_platform::fake::FakeCapture;
+use jstream_platform::fake::{FAKE_CAPTURE_CARD, FAKE_WEBCAM, FakeCapture, FakeVideoDevices};
 use jstream_platform::{
     Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, DeviceId, MediaClock,
     PlatformError, VideoSurface,
@@ -340,6 +340,131 @@ fn a_failed_capture_is_started_again() {
     assert!(
         setup.until(|| setup.live() == 1 && setup.starts(&window("w1")) == 3),
         "and starts again"
+    );
+    block_on_stop(&control);
+}
+
+/// The fakes with a video-device backend the test keeps a handle on.
+fn with_devices() -> (Fakes, FakeVideoDevices) {
+    let mut fakes = fakes();
+    let devices = FakeVideoDevices::new(fakes.clock.clone());
+    fakes.backends.video_devices = Arc::new(devices.clone());
+    (fakes, devices)
+}
+
+fn webcam(source: &str, device: &str) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(source),
+        name: source.into(),
+        kind: SourceKind::Builtin {
+            kind: "webcam".into(),
+        },
+        duplicated_from: None,
+        settings: Settings([("device".to_owned(), json!(device))].into_iter().collect()),
+    }
+}
+
+/// A webcam on program is opened on the video-device backend while an output runs:
+/// once for the sources that name the same device, closed when they leave the program
+/// mix, and every one closed when the output stops. An empty `device` is the first
+/// device listed.
+#[test]
+fn an_output_opens_the_webcams_its_program_shows() {
+    let (fakes, devices) = with_devices();
+    let engine = engine(
+        share(&fakes.backends),
+        cpu_draw(),
+        Box::new(RecordingPublish::new()),
+    );
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            webcam("cam", ""),
+            webcam("again", ""),
+            webcam("card", FAKE_CAPTURE_CARD),
+            add("a", "i1", "cam"),
+            add("a", "i2", "again"),
+            add("a", "i3", "card"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let until = |done: &mut dyn FnMut() -> bool| pump_until(&fakes.clock, &fakes.audio, done);
+    let mut events = control.events();
+    start(&control, &mut events);
+    assert!(
+        until(&mut || devices.open_streams() == 2),
+        "the webcam, shared by two sources, and the card: {}",
+        devices.open_streams()
+    );
+
+    batch(
+        &control,
+        edits(vec![Edit::ItemRemove {
+            item_id: ItemId::new("i3"),
+        }]),
+    )
+    .expect("removed");
+    assert!(
+        until(&mut || devices.open_streams() == 1),
+        "the card was closed"
+    );
+
+    block_on_stop(&control);
+    assert_eq!(
+        devices.open_streams(),
+        0,
+        "stopping the output closes the webcam"
+    );
+}
+
+/// An unplugged webcam's stream reports `DeviceLost`: it is closed and tried again
+/// every [`RETRY_MS`], which fails while the device is gone, and the output stays up.
+#[test]
+fn an_unplugged_webcam_is_closed_and_the_output_stays_up() {
+    let (fakes, devices) = with_devices();
+    let engine = engine(
+        share(&fakes.backends),
+        cpu_draw(),
+        Box::new(RecordingPublish::new()),
+    );
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            webcam("cam", FAKE_WEBCAM),
+            add("a", "i1", "cam"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let mut events = control.events();
+    start(&control, &mut events);
+    assert!(
+        pump_until(&fakes.clock, &fakes.audio, || devices.open_streams() == 1),
+        "the webcam was opened"
+    );
+
+    devices.unplug(&DeviceId::new(FAKE_WEBCAM));
+    assert!(
+        pump_until(&fakes.clock, &fakes.audio, || devices.open_streams() == 0),
+        "the lost webcam was closed"
+    );
+    let since = fakes.clock.now().ticks();
+    assert!(pump_until(&fakes.clock, &fakes.audio, || {
+        fakes.clock.now().ticks() - since > 2 * RETRY_MS * 1_000
+    }));
+    assert_eq!(
+        devices.open_streams(),
+        0,
+        "a gone webcam doesn't open again"
+    );
+    assert_eq!(
+        output_state(&control, "yt"),
+        jstream_protocol::OutputState::Active
     );
     block_on_stop(&control);
 }
