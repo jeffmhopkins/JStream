@@ -32,6 +32,12 @@ pub struct PageSpec {
     pub fps: u32,
     /// Custom CSS applied on every load ([`css_script`]).
     pub css: String,
+    /// Whether a page from the internet may make requests to this computer and the local
+    /// network, for widgets that talk to a local app. Off, they are refused
+    /// ([`RequestPolicy`](crate::RequestPolicy), #347). On, it covers only the origin of
+    /// the source's own URL: a third-party frame inside it, or a page it navigates or
+    /// redirects to, is refused all the same (#721).
+    pub local_network: bool,
 }
 
 /// Where a page loads from.

@@ -117,16 +117,56 @@ impl Collection {
     }
 }
 
-/// What is selected: a scene being edited, and an item in it.
+/// What is selected: a scene being edited, and items in it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Selection {
     /// The scene the sources list and the canvas show.
     pub scene: Option<SceneId>,
-    /// The item the properties form edits. Always an item of `scene`.
+    /// The primary item: the one the properties form edits. Always an item of `scene`.
     pub item: Option<ItemId>,
+    /// The other selected items, which the canvas moves, scales and rotates with the
+    /// primary one. Items of `scene`, without `item`, and empty when `item` is `None`.
+    pub also: Vec<ItemId>,
 }
 
 impl Selection {
+    /// Whether `item_id` is selected, as the primary item or another.
+    pub fn contains(&self, item_id: &ItemId) -> bool {
+        self.item.as_ref() == Some(item_id) || self.also.contains(item_id)
+    }
+
+    /// Every selected item, the primary one first.
+    pub fn items(&self) -> impl Iterator<Item = &ItemId> {
+        self.item.iter().chain(&self.also)
+    }
+
+    /// The selection with `items` selected in the same scene: the first is the primary
+    /// one. Duplicates are dropped.
+    pub fn with_items(&self, items: impl IntoIterator<Item = ItemId>) -> Selection {
+        let mut all: Vec<ItemId> = Vec::new();
+        for id in items {
+            if !all.contains(&id) {
+                all.push(id);
+            }
+        }
+        let mut all = all.into_iter();
+        Selection {
+            scene: self.scene.clone(),
+            item: all.next(),
+            also: all.collect(),
+        }
+    }
+
+    /// The selection with `item_id` added, as the new primary item, or removed if it
+    /// was selected; removing the primary item makes the next one primary.
+    pub fn toggled(&self, item_id: &ItemId) -> Selection {
+        if self.contains(item_id) {
+            self.with_items(self.items().filter(|id| *id != item_id).cloned())
+        } else {
+            self.with_items(std::iter::once(item_id.clone()).chain(self.items().cloned()))
+        }
+    }
+
     /// The selection after the state or the program scene changed: the scene is kept
     /// while it exists, else falls back to the program scene, else to the first listed
     /// scene; the item is kept while it is still in that scene.
@@ -143,11 +183,16 @@ impl Selection {
                     .next()
                     .map(|s| s.scene_id.clone())
             });
-        let item = self.item.clone().filter(|item_id| {
-            let in_scene = collection.item(item_id).map(|(s, _)| &s.scene_id);
-            in_scene.is_some() && in_scene == scene.as_ref()
-        });
-        Selection { scene, item }
+        let in_scene = |item_id: &&ItemId| {
+            let found = collection.item(item_id).map(|(s, _)| &s.scene_id);
+            found.is_some() && found == scene.as_ref()
+        };
+        let kept: Vec<ItemId> = self.items().filter(in_scene).cloned().collect();
+        Selection {
+            scene,
+            ..Selection::default()
+        }
+        .with_items(kept)
     }
 }
 
@@ -218,8 +263,11 @@ pub struct Studio {
     pub kinds: RwSignal<Option<Vec<KindSummary>>>,
     /// The kind descriptors read so far, by kind ID.
     pub descriptors: RwSignal<HashMap<String, KindDescriptor>>,
-    /// The last call that failed, for the status bar.
+    /// The last call that failed, for the problem bar.
     pub problem: RwSignal<Option<String>>,
+    /// Bumped when an output's stream key was set or cleared, which no event reports, so
+    /// the header re-reads the outputs Go Live may start.
+    pub keys_changed: RwSignal<u64>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
     /// The counter [`fresh_id`] continues from.
@@ -236,6 +284,7 @@ impl Studio {
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
             problem: RwSignal::new(None),
+            keys_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
             next_id: StoredValue::new(0),
         }
@@ -257,7 +306,7 @@ impl Studio {
         let studio = *self;
         let first = session.clone();
         spawn_local(async move {
-            if let Ok(QueryResult::StudioGet { program_scene }) =
+            if let Ok(QueryResult::StudioGet { program_scene, .. }) =
                 query(&first, Query::StudioGet).await
             {
                 studio.program.set(program_scene);
@@ -273,7 +322,7 @@ impl Studio {
     }
 
     /// Keeps the kinds `kind.list` answered. A failed `kind.list` shows its error in the
-    /// status bar and leaves "New source" empty, as an engine that lists no kinds does;
+    /// problem bar and leaves "New source" empty, as an engine that lists no kinds does;
     /// existing sources and scenes can still be placed.
     fn take_kinds(&self, listed: Result<Vec<KindSummary>, ControlError>) {
         let kinds = listed.unwrap_or_else(|error| {
@@ -355,13 +404,27 @@ impl Studio {
     pub fn select_scene(&self, scene_id: SceneId) {
         self.selection.set(Selection {
             scene: Some(scene_id),
-            item: None,
+            ..Selection::default()
         });
     }
 
-    /// Selects an item of the selected scene, or none.
+    /// Selects one item of the selected scene alone, or none.
     pub fn select_item(&self, item_id: Option<ItemId>) {
-        self.selection.update(|s| s.item = item_id);
+        self.select_items(item_id);
+    }
+
+    /// Selects these items of the selected scene, the first as the primary one.
+    pub fn select_items(&self, items: impl IntoIterator<Item = ItemId>) {
+        let next = self.selection.with_untracked(|s| s.with_items(items));
+        if self.selection.with_untracked(|s| *s != next) {
+            self.selection.set(next);
+        }
+    }
+
+    /// Adds an item to the selection, or removes it if it was selected.
+    pub fn toggle_item(&self, item_id: &ItemId) {
+        let next = self.selection.with_untracked(|s| s.toggled(item_id));
+        self.selection.set(next);
     }
 
     /// A new ID with this prefix, unused in the current collection.
@@ -377,12 +440,12 @@ impl Studio {
         id
     }
 
-    /// Shows a failed call in the status bar.
+    /// Shows a failed call in the problem bar.
     pub fn report(&self, error: &ControlError) {
         self.problem.set(Some(error.to_string()));
     }
 
-    /// Sends `edits` as one batch, reporting a failure in the status bar. The state
+    /// Sends `edits` as one batch, reporting a failure in the problem bar. The state
     /// follows from the `state.changed` the batch causes.
     pub fn apply(&self, session: &Session, edits: Vec<Edit>) {
         let studio = *self;
@@ -394,7 +457,7 @@ impl Studio {
         });
     }
 
-    /// Runs an action, reporting a failure in the status bar.
+    /// Runs an action, reporting a failure in the problem bar.
     pub fn act(&self, session: &Session, action: jstream_control::protocol::Action) {
         let studio = *self;
         let session = session.clone();
@@ -622,6 +685,7 @@ mod tests {
         assert!(!c.id_taken("z"));
         let other = QueryResult::StudioGet {
             program_scene: None,
+            preview_scene: None,
         };
         assert_eq!(Collection::from_result(other), None);
     }
@@ -644,20 +708,50 @@ mod tests {
         let kept = Selection {
             scene: Some(SceneId::new("a")),
             item: Some(ItemId::new("i2")),
+            also: vec![ItemId::new("i1")],
         };
         assert_eq!(kept.reconcile(&c, Some(&b)), kept);
         let gone = Selection {
             scene: Some(SceneId::new("deleted")),
             item: Some(ItemId::new("i2")),
+            also: Vec::new(),
         };
         assert_eq!(
             gone.reconcile(&c, Some(&b)),
             Selection {
-                scene: Some(b),
-                item: None
+                scene: Some(b.clone()),
+                ..Selection::default()
             },
             "an item outside the selected scene is dropped"
         );
+        let moved = Selection {
+            scene: Some(b.clone()),
+            item: Some(ItemId::new("i2")),
+            also: vec![ItemId::new("i3")],
+        };
+        assert_eq!(
+            moved.reconcile(&c, None),
+            Selection {
+                scene: Some(b),
+                item: Some(ItemId::new("i3")),
+                also: Vec::new(),
+            },
+            "the next selected item in the scene becomes the primary one"
+        );
+    }
+
+    #[test]
+    fn items_are_added_and_removed() {
+        let one = Selection::default().with_items([ItemId::new("i1")]);
+        let two = one.toggled(&ItemId::new("i2"));
+        assert_eq!(two.item, Some(ItemId::new("i2")));
+        assert_eq!(two.also, vec![ItemId::new("i1")]);
+        assert!(two.contains(&ItemId::new("i1")) && two.contains(&ItemId::new("i2")));
+        let back = two.toggled(&ItemId::new("i2"));
+        assert_eq!(back, one, "removing the primary item promotes the next");
+        assert_eq!(back.toggled(&ItemId::new("i1")), Selection::default());
+        let dup = Selection::default().with_items(["a", "b", "a"].map(ItemId::new));
+        assert_eq!(dup.items().count(), 2);
     }
 
     #[test]
@@ -707,7 +801,7 @@ mod tests {
     }
 
     /// An engine that lists no kinds offers none, quietly; a failed `kind.list` offers
-    /// none either, but says why in the status bar (#401).
+    /// none either, but says why in the problem bar (#401).
     #[test]
     fn a_failed_kind_list_is_reported() {
         let engine = MockEngine::new();

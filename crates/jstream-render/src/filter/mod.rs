@@ -2,15 +2,11 @@
 //! filter chains). Each kind is a `video_filter` descriptor plus a GPU pass that reads one
 //! premultiplied linear image and writes another, possibly of a different size.
 //!
-//! This is the shared harness the filter groups build on. The chain runtime (V0) will
-//! keep a [`VideoFilter`] per enabled filter of a source's video chain and run them in
-//! order through [`crate::Compositor::apply_filter`]; until then nothing in the engine
-//! calls it, and the kinds are not in `kind.list`.
-
-#![allow(
-    dead_code,
-    reason = "Lane V: the harness lands before the filter groups that use it"
-)]
+//! This is the shared harness the filter groups build on. `jstream-core`'s chain runtime
+//! (V0) keeps a [`VideoFilter`] per enabled filter of a source's video chain and runs
+//! them in order, each into a layer it keeps, through
+//! [`crate::Compositor::apply_filter_into`]; [`descriptors`] is how its `kind.list`
+//! gets these kinds.
 
 mod aspect;
 mod assets;
@@ -22,6 +18,7 @@ mod pass;
 #[cfg(test)]
 pub(crate) mod testing;
 
+pub use assets::{Lut, LutError, lut_image};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
 pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Shader};
@@ -96,9 +93,9 @@ impl VideoFilter {
     }
 
     /// The size this filter draws for an input of `width` by `height`. Most filters keep
-    /// the size; some change it (for example aspect ratio, padding, a drop shadow, an
-    /// outside outline or a glow), which changes the source's reported size for every
-    /// placement.
+    /// the size; aspect ratio reshapes it, which changes the source's reported size for
+    /// every placement. An effect that draws outside its input (a drop shadow, an outside
+    /// outline, a glow) keeps it, and what falls past the frame is cut (ADR-0065 §5).
     pub fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         self.pass.output_size(width, height)
     }

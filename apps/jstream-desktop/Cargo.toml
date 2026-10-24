@@ -34,8 +34,12 @@ anyhow.workspace = true
 # The control token and the UI's CSP nonces, from the OS.
 getrandom.workspace = true
 jstream-core.workspace = true
+# Local, redacted crash reports (ADR-0067).
+jstream-crash.workspace = true
 # The data folder (`paths`, ADR-0020) and, on Windows, the backend traits.
 jstream-platform.workspace = true
+# On Windows, the output kinds the publish opener reads.
+jstream-protocol.workspace = true
 jstream-server.workspace = true
 # The runtime the server runs on; `sync` for its shutdown signal, `time` to bound it.
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
@@ -47,13 +51,12 @@ tracing-subscriber.workspace = true
 # The tests connect to the host's server as a client would.
 jstream-control = { workspace = true, features = ["ws"] }
 
-# The window (WebView2) and the live engine on Windows: the platform backends, stream
-# keys in Credential Manager, and the output kinds the publish opener reads.
+# The window (WebView2) and the live engine on Windows: the platform backends and stream
+# keys in Credential Manager.
 [target.'cfg(windows)'.dependencies]
 # The CEF backend for browser sources, with the `cef` feature only.
 jstream-browser = { workspace = true, optional = true }
 jstream-platform-windows.workspace = true
-jstream-protocol.workspace = true
 # Names the browser backend the engine takes (`BrowserBackend`, from `jstream-browser`).
 jstream-sources.workspace = true
 tauri.workspace = true

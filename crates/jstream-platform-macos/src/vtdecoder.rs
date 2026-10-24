@@ -3,7 +3,9 @@
 //! order.
 //!
 //! The decoder is opened with [`vt_decoder_settings`] (hardware by default, Apple's
-//! software decoder for `HardwarePreference::Avoid`), but its session waits for the first
+//! software decoder for `HardwarePreference::Avoid`). `HardwarePreference::Require` is
+//! checked then, with `VTIsHardwareDecodeSupported` ([`vt_decoder_hardware`]), so a Mac
+//! without a hardware decoder for the codec refuses it at once. Its session waits for the first
 //! packet with a complete set of parameter sets: a format description is made from them,
 //! and a new session whenever a keyframe brings different ones (a resolution change).
 //! Packets before that are dropped, as a decoder joining mid-stream drops them.
@@ -23,7 +25,6 @@
 use std::ffi::{c_int, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr::{self, NonNull};
-use std::slice;
 use std::sync::OnceLock;
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -42,25 +43,24 @@ use objc2_core_media::{
     kCMTimeInvalid,
 };
 use objc2_core_video::{
-    CVImageBuffer, CVPixelBuffer, CVPixelBufferGetBaseAddress, CVPixelBufferGetBaseAddressOfPlane,
-    CVPixelBufferGetBytesPerRow, CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferGetHeight,
-    CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
-    CVPixelBufferIsPlanar, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags,
-    CVPixelBufferUnlockBaseAddress, kCVPixelBufferIOSurfacePropertiesKey,
-    kCVPixelBufferPixelFormatTypeKey,
+    CVImageBuffer, CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetPixelFormatType,
+    CVPixelBufferGetWidth, kCVPixelBufferIOSurfacePropertiesKey, kCVPixelBufferPixelFormatTypeKey,
 };
 use objc2_video_toolbox::{
     VTDecodeFrameFlags, VTDecodeInfoFlags, VTDecompressionOutputCallbackRecord,
-    VTDecompressionSession, VTSessionCopyProperty,
+    VTDecompressionSession, VTIsHardwareDecodeSupported, VTSessionCopyProperty,
     kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder,
     kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder,
     kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder,
 };
 
 use crate::annexb::{cm_time_parts, copy_rows, media_time_from_cm};
-use crate::codec::{VtDecoderSettings, vt_decoder_settings};
+use crate::codec::{
+    VtDecoderSettings, vt_decoder_hardware, vt_decoder_name, vt_decoder_settings, vt_no_decoder,
+};
 use crate::decode::{Reorder, sets_complete, split_access_unit};
 use crate::fourcc::{os_status, pixel_format_from_cv};
+use crate::pixel_buffer::ReadLocked;
 
 /// Decoded frames waiting for [`poll`](VideoDecoder::poll), at most; beyond that
 /// [`can_accept`](VideoDecoder::can_accept) says no. Frames held for reordering don't
@@ -86,6 +86,13 @@ fn codec_name(codec: Codec) -> &'static str {
         Codec::Hevc => "HEVC",
         _ => "H.264",
     }
+}
+
+/// `VTIsHardwareDecodeSupported`: whether this Mac has a hardware decoder for a Core
+/// Media codec type. True does not promise one is free at every moment.
+pub(crate) fn hardware_decode_supported(codec_type: u32) -> bool {
+    // SAFETY: a plain query taking a FourCC by value, with no pointers or state.
+    unsafe { VTIsHardwareDecodeSupported(codec_type) }
 }
 
 /// What the output callback hands to the decoder.
@@ -128,56 +135,6 @@ impl Drop for Session {
     }
 }
 
-/// A pixel buffer locked for reading, unlocked when dropped.
-struct ReadLocked<'a>(&'a CVPixelBuffer);
-
-impl<'a> ReadLocked<'a> {
-    fn lock(buffer: &'a CVPixelBuffer) -> Result<Self, PlatformError> {
-        // SAFETY: the buffer is live; a read-only lock lets us read its planes.
-        let status =
-            unsafe { CVPixelBufferLockBaseAddress(buffer, CVPixelBufferLockFlags::ReadOnly) };
-        check(
-            status,
-            "CVPixelBufferLockBaseAddress",
-            "locking a decoded frame",
-        )?;
-        Ok(Self(buffer))
-    }
-
-    /// Plane `index`'s bytes (the whole buffer for a packed format) and its stride.
-    fn plane(&self, index: usize) -> Option<(&[u8], usize)> {
-        let buffer = self.0;
-        let (base, stride, rows) = if CVPixelBufferIsPlanar(buffer) {
-            (
-                CVPixelBufferGetBaseAddressOfPlane(buffer, index),
-                CVPixelBufferGetBytesPerRowOfPlane(buffer, index),
-                CVPixelBufferGetHeightOfPlane(buffer, index),
-            )
-        } else if index == 0 {
-            (
-                CVPixelBufferGetBaseAddress(buffer),
-                CVPixelBufferGetBytesPerRow(buffer),
-                CVPixelBufferGetHeight(buffer),
-            )
-        } else {
-            return None;
-        };
-        let base = NonNull::new(base.cast::<u8>())?;
-        let len = stride.checked_mul(rows)?;
-        // SAFETY: while the buffer is locked, Core Video's base address for the plane
-        // points at `rows` rows of `stride` bytes it owns. The borrow is tied to `&self`,
-        // so it ends before the unlock.
-        Some((unsafe { slice::from_raw_parts(base.as_ptr(), len) }, stride))
-    }
-}
-
-impl Drop for ReadLocked<'_> {
-    fn drop(&mut self) {
-        // SAFETY: this buffer was locked with the same (read-only) flags in `lock`.
-        let _ = unsafe { CVPixelBufferUnlockBaseAddress(self.0, CVPixelBufferLockFlags::ReadOnly) };
-    }
-}
-
 /// `buffer`'s picture as a tightly packed CPU frame presented at `pts`.
 pub(crate) fn copy_image(
     buffer: &CVPixelBuffer,
@@ -198,18 +155,14 @@ pub(crate) fn copy_image(
         color: ColorInfo::default(),
         pts,
     };
-    let locked = ReadLocked::lock(buffer)?;
+    let locked = ReadLocked::lock(buffer, "a decoded frame")?;
     let mut planes = Vec::with_capacity(format.plane_count());
     for index in 0..format.plane_count() {
         let Some(geometry) = info.plane(index)? else {
             break;
         };
-        let (src, src_stride) = locked
-            .plane(index)
-            .ok_or_else(|| PlatformError::Unsupported {
-                what: format!("plane {index} of a decoded {format:?} frame"),
-            })?;
         let rows = usize::try_from(geometry.height).unwrap_or(usize::MAX);
+        let (src, src_stride) = locked.plane(index, rows)?;
         let mut data = vec![0u8; geometry.row_bytes * rows];
         copy_rows(
             src,
@@ -526,12 +479,12 @@ impl VtDecoder {
     /// [`PlatformError::Unsupported`] for a configuration VideoToolbox can't take.
     pub(crate) fn open(config: &VideoDecoderConfig) -> Result<Self, PlatformError> {
         let settings = vt_decoder_settings(config)?;
+        let hardware = vt_decoder_hardware(
+            &settings,
+            config.codec,
+            hardware_decode_supported(settings.codec_type),
+        )?;
         let (sender, receiver) = mpsc::channel();
-        let kind = if settings.enable_hardware {
-            "hardware"
-        } else {
-            "software"
-        };
         Ok(Self {
             open: None,
             context: Box::new(CallbackContext {
@@ -542,10 +495,10 @@ impl VtDecoder {
             settings,
             config: *config,
             info: CodecInfo {
-                name: format!("VideoToolbox {} decoder ({kind})", codec_name(config.codec)),
+                name: vt_decoder_name(config.codec, hardware),
                 codec: config.codec,
                 role: CodecRole::VideoDecoder,
-                hardware: settings.enable_hardware,
+                hardware,
             },
             reorder: Reorder::default(),
             pending: Vec::new(),
@@ -584,11 +537,14 @@ impl VtDecoder {
                 NonNull::from(&mut raw),
             )
         };
-        let name = codec_name(codec);
-        if status != NO_ERR && self.settings.require_hardware {
+        // `open` checked that the Mac has a hardware decoder for the codec, so under
+        // Require a missing decoder here is none for this stream; any other status is the
+        // call failing, a bad parameter set say, and is reported as that.
+        if self.settings.require_hardware && vt_no_decoder(status) {
             return Err(PlatformError::Unsupported {
                 what: format!(
-                    "a hardware {name} decoder for this stream on this Mac ({})",
+                    "a {} for this stream on this Mac ({})",
+                    vt_decoder_name(codec, true),
                     os_status("VTDecompressionSessionCreate", status, "opening")
                 ),
             });
@@ -606,8 +562,7 @@ impl VtDecoder {
         // SAFETY: a Create function returned it, so this takes over its +1 reference.
         let session = Session(unsafe { CFRetained::from_raw(raw) });
         let hardware = uses_hardware(&session.0);
-        let kind = if hardware { "hardware" } else { "software" };
-        self.info.name = format!("VideoToolbox {name} decoder ({kind})");
+        self.info.name = vt_decoder_name(codec, hardware);
         self.info.hardware = hardware;
         self.open = Some(Open {
             session,
@@ -769,8 +724,8 @@ mod tests {
         VideoFrameInfo,
     };
     use jstream_platform::{
-        Codecs, HardwarePreference, PlatformError, RateControl, VideoDecoder, VideoDecoderConfig,
-        VideoEncoderConfig, VideoSurface,
+        CodecRole, Codecs, HardwarePreference, PlatformError, RateControl, VideoDecoder,
+        VideoDecoderConfig, VideoEncoderConfig, VideoSurface,
     };
 
     use crate::{VideoToolboxCodecs, timebase};
@@ -885,6 +840,33 @@ mod tests {
         let mut d = decoder(Codec::H264, PixelFormat::Nv12);
         let frames = decode_all(d.as_mut(), &packets[1..]);
         check_frames(&frames, &packets[at..], PixelFormat::Nv12);
+    }
+
+    #[test]
+    fn decoders_are_listed_and_match_what_opens() {
+        let codecs = VideoToolboxCodecs::new();
+        let list = codecs.list().expect("list");
+        for codec in [Codec::H264, Codec::Hevc] {
+            let listed: Vec<_> = list
+                .iter()
+                .filter(|info| info.role == CodecRole::VideoDecoder && info.codec == codec)
+                .collect();
+            assert!(
+                listed.iter().any(|info| !info.hardware),
+                "{codec:?}: Apple's software decoder is listed"
+            );
+            let hardware = listed.iter().any(|info| info.hardware);
+            let require = codecs.video_decoder(&VideoDecoderConfig {
+                codec,
+                output_format: PixelFormat::Nv12,
+                hardware: HardwarePreference::Require,
+            });
+            match require {
+                Ok(d) => assert!(hardware && d.info().hardware, "{codec:?}"),
+                Err(PlatformError::Unsupported { .. }) => assert!(!hardware, "{codec:?}"),
+                Err(other) => panic!("{codec:?}: {other}"),
+            }
+        }
     }
 
     #[test]

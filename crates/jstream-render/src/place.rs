@@ -8,6 +8,7 @@ use jstream_protocol::{
 };
 
 use crate::error::RenderError;
+use crate::mips::Region;
 use crate::scene::{Crop, LegacyTransform, Placement};
 
 /// The most vertices a [`Shape`] has: a rectangle cut by the near plane.
@@ -48,12 +49,41 @@ pub(crate) struct Shape {
     /// to it, so a fringe pixel samples the content's edge, not the crop or what `fill`
     /// clips away. [`NO_UV_BOUNDS`] for a 2D item.
     pub uv_bounds: [f32; 4],
+    /// The crop's texels, in whole source pixels: what a 3D item's mip chain is built
+    /// from. Carried as integers from the item's crop, never recovered from its texture
+    /// coordinates, which don't round-trip through `f32`. `None` for a 2D item.
+    pub crop: Option<Region>,
 }
 
 impl Shape {
     /// The vertices, in order around the polygon.
     pub(crate) fn vertices(&self) -> &[Vertex] {
         &self.vertices[..self.len]
+    }
+
+    /// Whether this is a 3D item's shape, which has edge lines and samples mips.
+    pub(crate) fn is_3d(&self) -> bool {
+        self.edges[0] != NO_EDGE
+    }
+
+    /// Maps the texture coordinates, the vertices' and the clamp bounds, from the
+    /// source's into a chain's whose `[0, 1]` spans `[u, v, width, height]` of it.
+    pub(crate) fn remap_uv(&mut self, onto: [f32; 4]) {
+        let map = |value: f32, start: f32, span: f32| (value - start) / span;
+        for vertex in &mut self.vertices[..self.len] {
+            vertex.uv = [
+                map(vertex.uv[0], onto[0], onto[2]),
+                map(vertex.uv[1], onto[1], onto[3]),
+            ];
+        }
+        if self.uv_bounds != NO_UV_BOUNDS {
+            self.uv_bounds = [
+                map(self.uv_bounds[0], onto[0], onto[2]),
+                map(self.uv_bounds[1], onto[1], onto[3]),
+                map(self.uv_bounds[2], onto[0], onto[2]),
+                map(self.uv_bounds[3], onto[1], onto[3]),
+            ];
+        }
     }
 
     /// A 2D quad: `w = 1` and no edge coverage.
@@ -67,6 +97,7 @@ impl Shape {
             len: 4,
             edges: [NO_EDGE; MAX_VERTICES],
             uv_bounds: NO_UV_BOUNDS,
+            crop: None,
         }
     }
 }
@@ -125,7 +156,9 @@ fn legacy(
 ///
 /// Clipping happens in the box's local frame, before rotation, so it is exact for any
 /// in-plane rotation. With 3D neutral every corner is in front of the viewer and the
-/// placement is affine, so linear UVs are correct. Any other 3D is [`drawn`].
+/// placement is affine, so linear UVs are correct. A flip arrives as the content's
+/// swapped UV pair, so the same interpolation mirrors the clipped part. Any other 3D is
+/// [`drawn`].
 fn boxed(
     source_width: u32,
     source_height: u32,
@@ -139,7 +172,11 @@ fn boxed(
         return Ok(None);
     };
     if !geometry.is_neutral_3d() {
-        return drawn(geometry, &content);
+        return drawn(
+            geometry,
+            &content,
+            crop_region(source_width, source_height, crop),
+        );
     }
     let half_w = geometry.size.width.get() * 0.5;
     let half_h = geometry.size.height.get() * 0.5;
@@ -166,11 +203,34 @@ fn boxed(
     Ok(Some(Shape::flat(corners, uvs)))
 }
 
+/// The texels `crop` keeps of a `source_width` × `source_height` source, at least one
+/// on each axis and never past the source. `ItemGeometry::content` has already returned
+/// `None` for a crop that keeps nothing, so the clamps only guard the arithmetic.
+fn crop_region(source_width: u32, source_height: u32, crop: ProtocolCrop) -> Region {
+    let span = |start: u32, end: u32, size: u32| {
+        let start = start.min(size.saturating_sub(1));
+        let width = size.saturating_sub(start).saturating_sub(end).max(1);
+        (start, width)
+    };
+    let (x, width) = span(crop.left, crop.right, source_width);
+    let (y, height) = span(crop.top, crop.bottom, source_height);
+    Region {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
 /// A 3D item (ADR-0050 decisions 1, 2 and 6): the drawn polygon, clipped to the box and
 /// the near plane, with its edge lines, and each vertex pushed out by [`PUSH_OUT`] along
 /// both its edges. The pushed point is mapped back into the plane, so its `w` and texture
 /// coordinate stay exact; where it can't be (past the near plane), the vertex stays.
-fn drawn(geometry: ItemGeometry, content: &ContentRect) -> Result<Option<Shape>, RenderError> {
+fn drawn(
+    geometry: ItemGeometry,
+    content: &ContentRect,
+    crop: Region,
+) -> Result<Option<Shape>, RenderError> {
     let Some(polygon) = geometry.drawn_polygon(content).map_err(placement_error)? else {
         return Ok(None);
     };
@@ -205,6 +265,7 @@ fn drawn(geometry: ItemGeometry, content: &ContentRect) -> Result<Option<Shape>,
         len,
         edges,
         uv_bounds,
+        crop: Some(crop),
     }))
 }
 
@@ -293,6 +354,7 @@ mod tests {
 
     use super::{NO_EDGE, NO_UV_BOUNDS, Shape, placement_error, shape};
     use crate::error::RenderError;
+    use crate::mips::Region;
     use crate::scene::{Crop, LegacyTransform, Placement};
 
     fn near(got: [f32; 2], expected: [f32; 2]) {
@@ -496,6 +558,31 @@ mod tests {
     }
 
     #[test]
+    fn a_flip_mirrors_the_clipped_uvs_and_keeps_the_corners() {
+        let Placement::Geometry(geometry) = boxed(20.0, 20.0, FitMode::Fill, 0.0) else {
+            unreachable!("boxed is a geometry");
+        };
+        let mirrored = Placement::Geometry(ItemGeometry {
+            flip_h: true,
+            flip_v: true,
+            ..geometry
+        });
+        // The same middle half as the unflipped fill, sampled right to left and bottom
+        // to top.
+        let q = shape(4, 2, mirrored, Crop::NONE)
+            .expect("finite")
+            .expect("draws");
+        assert_eq!(
+            q.corners(),
+            [[40.0, 30.0], [60.0, 30.0], [60.0, 50.0], [40.0, 50.0]]
+        );
+        assert_eq!(
+            q.uvs(),
+            [[0.75, 1.0], [0.25, 1.0], [0.25, 0.0], [0.75, 0.0]]
+        );
+    }
+
+    #[test]
     fn a_geometry_rotates_about_its_centre_and_crops_first() {
         let crop = Crop {
             left: 2,
@@ -639,5 +726,84 @@ mod tests {
                     .is_none()
             );
         }
+    }
+
+    /// Every geometry an edit may store draws (#629 rounds 1 and 2, B1 and B4): each 3D
+    /// item `check_drawable` accepts, from a sweep of every input up to past
+    /// `MAX_DRAWN_PX`, gives a shape for every source, thin ones included, and with and
+    /// without a crop, not a placement error that would fail its whole frame.
+    #[test]
+    fn every_drawable_geometry_gives_a_shape() {
+        let mut accepted = 0;
+        for geometry in crate::tests::extreme_geometries(40_000) {
+            if geometry.check_drawable().is_err() {
+                continue;
+            }
+            accepted += 1;
+            for (width, height) in crate::tests::SOURCES {
+                let crops = [
+                    Crop::NONE,
+                    Crop {
+                        left: width / 3,
+                        top: height / 3,
+                        right: width / 4,
+                        bottom: height / 4,
+                    },
+                ];
+                for crop in crops {
+                    shape(width, height, Placement::Geometry(geometry), crop).unwrap_or_else(
+                        |err| panic!("{geometry:?} on {width}x{height} {crop:?}: {err}"),
+                    );
+                }
+            }
+        }
+        assert!(accepted > 5_000, "{accepted} accepted");
+    }
+
+    /// A 3D item's mip region is its crop's texels exactly, at sizes where `k / W * W`
+    /// isn't `k` in `f32`: 1920 × 1080 cropped to columns 63..241 and rows 7..69 is
+    /// (63, 7, 178, 62), not a texel wider on each side (#687 round 1 B1). Every whole
+    /// left and top edge at 1920 × 1080 comes out as itself. A 2D item has no region.
+    #[test]
+    fn a_3d_items_region_is_its_crops_texels() {
+        let geometry = Placement::Geometry(in_3d(30.0, 0.0, 0.0, None));
+        let region = |crop: Crop| {
+            shape(1920, 1080, geometry, crop)
+                .expect("finite")
+                .expect("draws")
+                .crop
+                .expect("a 3D item has a region")
+        };
+        let crop = Crop {
+            left: 63,
+            top: 7,
+            right: 1920 - 241,
+            bottom: 1080 - 69,
+        };
+        assert_eq!(
+            region(crop),
+            Region {
+                x: 63,
+                y: 7,
+                width: 178,
+                height: 62
+            }
+        );
+        for edge in 0..1080 {
+            let crop = Crop {
+                left: edge,
+                top: edge,
+                right: 1,
+                bottom: 0,
+            };
+            let got = region(crop);
+            assert_eq!((got.x, got.y), (edge, edge));
+            assert_eq!((got.width, got.height), (1919 - edge, 1080 - edge));
+        }
+        assert_eq!(region(Crop::NONE), Region::whole(1920, 1080));
+        let flat = shape(1920, 1080, boxed(20.0, 20.0, FitMode::Fit, 0.0), crop)
+            .expect("finite")
+            .expect("draws");
+        assert_eq!(flat.crop, None);
     }
 }
