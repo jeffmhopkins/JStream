@@ -871,6 +871,14 @@ source: crates/jstream-core/src/kinds.rs
         "label": "Display",
         "description": "The ID of the display to capture, as `capture.targets` lists it. Empty captures the primary display.",
         "live": false
+      },
+      {
+        "id": "show_cursor",
+        "type": "bool",
+        "default": true,
+        "label": "Show cursor",
+        "description": "Whether the pointer shows in the capture.",
+        "live": false
       }
     ]
   },
@@ -1946,6 +1954,14 @@ source: crates/jstream-core/src/kinds.rs
         "default": "",
         "label": "Window",
         "description": "The ID of the window to capture, as `capture.targets` lists it. Empty captures nothing.",
+        "live": false
+      },
+      {
+        "id": "show_cursor",
+        "type": "bool",
+        "default": true,
+        "label": "Show cursor",
+        "description": "Whether the pointer shows in the capture.",
         "live": false
       }
     ]
