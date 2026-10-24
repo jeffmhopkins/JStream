@@ -87,8 +87,9 @@ and calls this crate.
   (`Compositor::context`), so a caller can tell a texture from that context from one
   it can't sample. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
-  before the submit that samples it, and ends that submit by moving each staged
-  texture to `PRESENT`, as `stage` requires. Staging stays the safe method on
+  before the submit that samples it, holding the context's `SubmitLock` from the stage
+  through that submit, and ends that submit by moving each staged texture to
+  `PRESENT`, as `stage` requires. Staging stays the safe method on
   `jstream-platform`. This crate never calls wgpu-hal.
 - An `Image` draws only in the `Compositor` that made it. It carries that
   compositor's identity, and `render` refuses an item whose image came from another
@@ -116,7 +117,9 @@ and calls this crate.
   `jstream-media`'s `ColorInfo`: BT.709 only, limited range (the default) or full.
   `Nv12Converter::submit` runs a pass into a platform `GpuFrame` in a submit of its
   own, which is how `jstream-core`'s render thread feeds an encoder that takes GPU
-  frames.
+  frames. A converter made with `Nv12Converter::for_compositor` shares the
+  compositor's `SubmitLock` (`Compositor::submit_lock`) and holds it from the stage
+  through that submit.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's, and so is the choice of encode target each tick. Also
@@ -261,8 +264,11 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    dimensions, and dropping a row or column is the caller's choice to make. The caller
    records the pass into its own encoder, after the composite, and stages a shared
    target's `FrameSync` before that submit. `Nv12Converter::submit` does that for a
-   platform `GpuFrame`: it stages the frame, records the pass, transitions the frame's
-   texture to `PRESENT` as the composite does with the frames it samples, and submits.
+   platform `GpuFrame`: it records the pass, transitions the frame's texture to
+   `PRESENT` as the composite does with the frames it samples, then stages the frame
+   and submits with its `SubmitLock` held. `Nv12Converter::for_compositor` takes the
+   compositor's lock, which on a platform context is the context's (#667);
+   `Nv12Converter::new` makes one of its own, for a queue nothing else submits on.
 
 The composite and resolve passes are one command buffer and one `queue.submit`. `FrameSync::stage` runs
 before that submit, for every distinct hold the scene samples, and the command buffer
@@ -270,7 +276,10 @@ ends by transitioning each of those textures to `PRESENT` (on D3D12 the `COMMON`
 the platform's other APIs read a shared texture in), which `stage` requires of the
 submit. `render_into` does the same. Staging comes after every other step that can
 fail (targets, vertex buffer, readback buffer), so a refused canvas or readback stages
-nothing. The compositor lets go of the holds after the submit, so it keeps no platform
+nothing. From the first stage through the submit, the compositor holds the queue's
+`SubmitLock`. On a platform context that is the context's lock, which the platform's
+other submitters on that queue take too, so none of their submits takes the staged
+wait and signal. The lock is let go before the readback's wait. The compositor lets go of the holds after the submit, so it keeps no platform
 texture busy between frames. The output texture is the
 compositor's own, not a shared encode target, so nothing transitions it; an encode
 target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
@@ -671,7 +680,8 @@ stacking); crop; integer scale; 90° rotation about the top-left; opacity over a
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
 staged once per submit, and not staged when the item is hidden or when a readback
-too large for a buffer refuses the render. Nested scenes
+too large for a buffer refuses the render; on a platform context it is staged with the
+context's `SubmitLock` held, which is free again after the submit. Nested scenes
 (`render_image`), three pixel tests and an ownership check: an image placed in
 another scene lands where its scene put the item and is transparent elsewhere, and
 survives a later `render`; a half-opaque item stays exact in linear light; images
@@ -731,7 +741,8 @@ encodes as black, and a single red column shows up in the two blocks whose `[1 2
 taps reach it, which centre-sited chroma would not do. Odd sizes, a size mismatch,
 BT.601 and a non-sRGB source are refused. `submit` stages its frame once and leaves
 the conversion in the planes, with a plane texture standing in for the platform's
-target. The native path (plane views of an `NV12`
+target. A converter made for a compositor stages with the compositor's `SubmitLock`
+held, and lets it go after the submit. The native path (plane views of an `NV12`
 texture, compared with the planes path) runs where the adapter has
 `TEXTURE_FORMAT_NV12`. It skips on lavapipe, which offers the feature but writes its
 plane-1 render into plane 0's memory (the Y plane's first rows came back holding the

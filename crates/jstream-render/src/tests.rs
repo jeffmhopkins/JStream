@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use jstream_media::{ColorInfo, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo};
-use jstream_platform::{FrameSync, GpuFrame, PlatformError};
+use jstream_platform::{AdapterId, FrameSync, GpuContext, GpuFrame, PlatformError, SubmitLock};
 
 use crate::{
     Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, RenderError,
@@ -696,6 +696,83 @@ fn a_refused_readback_stages_and_keeps_no_hold() {
     opened.compositor.render(&scene, false).expect("render");
     assert_eq!(count.load(Ordering::SeqCst), 1);
     assert_eq!(Arc::strong_count(&sync), holders);
+}
+
+/// A [`FrameSync`] that records, each time it is staged, whether `lock` was held then.
+#[derive(Debug)]
+struct LockSync {
+    lock: SubmitLock,
+    held: std::sync::Mutex<Vec<bool>>,
+}
+
+impl FrameSync for LockSync {
+    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+        let held = self.lock.try_lock().is_none();
+        self.held
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(held);
+        Ok(())
+    }
+}
+
+/// On a platform context, render holds the context's submit lock while it stages a
+/// frame and lets it go after the submit, so a platform thread that submits on the same
+/// queue under that lock can't take the staged wait and signal (#667).
+#[test]
+fn a_frame_is_staged_under_the_contexts_submit_lock() {
+    let Some(opened) = open() else {
+        return;
+    };
+    // The opened compositor's device as a platform context, so no second device is
+    // created under the WARP lock. Declared after `opened`, so it drops first.
+    let context = GpuContext::new(
+        opened.compositor.adapter().clone(),
+        opened.compositor.device().clone(),
+        opened.compositor.queue().clone(),
+        AdapterId {
+            luid: None,
+            vendor: 0,
+        },
+        None,
+    );
+    let mut compositor = Compositor::on_context(&context);
+    let sync = Arc::new(LockSync {
+        lock: context.submit_lock().clone(),
+        held: std::sync::Mutex::new(Vec::new()),
+    });
+    let info = VideoFrameInfo {
+        size: FrameSize::new(2, 2).unwrap(),
+        format: PixelFormat::Rgba8,
+        color: ColorInfo::default(),
+        pts: MediaTime::zero(Timebase::NANOS),
+    };
+    let srgb = srgb_texture(&compositor, 2, 2, [255, 0, 0, 255]);
+    let frame = GpuFrame::new(srgb, info, Arc::clone(&sync) as Arc<dyn FrameSync>);
+    let image = compositor.import_frame(&frame).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let scene = Scene {
+        canvas: FrameSize::new(2, 2).unwrap(),
+        background: Color::BLACK,
+        items: &items,
+    };
+    compositor
+        .render(&scene, true)
+        .expect("render with readback");
+    compositor.render(&scene, false).expect("render");
+    let layer = compositor.layer(2, 2).expect("layer");
+    compositor
+        .render_into(&scene, &layer)
+        .expect("render into a layer");
+    assert_eq!(
+        *sync.held.lock().unwrap(),
+        [true, true, true],
+        "each stage happened with the context's submit lock held"
+    );
+    assert!(
+        context.submit_lock().try_lock().is_some(),
+        "render lets the lock go after its submit"
+    );
 }
 
 /// A straight-alpha `Rgba8UnormSrgb` texture, the kind `import` takes, filled with one colour.

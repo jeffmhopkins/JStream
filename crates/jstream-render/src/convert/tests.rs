@@ -325,6 +325,63 @@ fn submit_stages_the_frame_and_converts_into_it() {
     );
 }
 
+/// A converter made for a compositor stages its frame under the compositor's submit
+/// lock, so a platform thread's submit on the same queue can't come between the
+/// staging and the conversion's submit (#667).
+#[test]
+fn submit_stages_under_the_compositors_submit_lock() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let c = &opened.compositor;
+    let (w, h) = (2, 2);
+    let texture = source(c.device(), c.queue(), w, h, &pattern(w, h));
+    let converter = Nv12Converter::for_compositor(c);
+    let planes = converter.planes(size(w, h)).expect("planes");
+    let pass = converter
+        .bind(&texture, &planes.target(), FULL)
+        .expect("bind");
+    let sync = Arc::new(LockSync {
+        lock: c.submit_lock().clone(),
+        held: std::sync::Mutex::new(Vec::new()),
+    });
+    let info = VideoFrameInfo {
+        size: size(w, h),
+        format: PixelFormat::Nv12,
+        color: FULL,
+        pts: MediaTime::zero(Timebase::MICROS),
+    };
+    let frame = GpuFrame::new(
+        planes.y().clone(),
+        info,
+        Arc::clone(&sync) as Arc<dyn FrameSync>,
+    );
+    converter.submit(c.queue(), &pass, &frame).expect("submit");
+    assert_eq!(*sync.held.lock().expect("not poisoned"), [true]);
+    assert!(
+        c.submit_lock().try_lock().is_some(),
+        "the lock is let go after the submit"
+    );
+}
+
+/// Records, each time it is staged, whether `lock` was held then.
+#[derive(Debug)]
+struct LockSync {
+    lock: jstream_platform::SubmitLock,
+    held: std::sync::Mutex<Vec<bool>>,
+}
+
+impl FrameSync for LockSync {
+    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+        let held = self.lock.try_lock().is_none();
+        self.held
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(held);
+        Ok(())
+    }
+}
+
 /// Counts its stages.
 #[derive(Debug)]
 struct Stages(Arc<AtomicUsize>);
