@@ -242,7 +242,8 @@ state machine. Contents:
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), an output starting a capture for each display and
-  window on program, sharing one between sources, stopping it when its source leaves
+  window on program, one per source even when two show the same target, asking for the
+  pointer as each source's `show_cursor` says, stopping it when its source leaves
   and starting it again after a failed start or a lost target, and opening each webcam
   on program from the fake video devices, shared between sources, closed when it leaves
   or the output stops, and closed when unplugged with the output staying up
@@ -411,6 +412,9 @@ WebSocket API does, minus serialization:
   they never reach the engine, so the audit log doesn't record them; the server logs
   them. A device's `hello` reaches the engine as `device:<name>`, so the audit
   log names it.
+- `plugin.install`, `plugin.grant` and `plugin.enable` fail with `unsupported`: the
+  engine hosts no plugins yet (WA1). The differential script sends two of them, so the
+  mock answers the same.
 
 ### Dependencies
 
@@ -845,11 +849,16 @@ captures for it on the render thread, and nothing in `video.snapshot`, which has
 capture; a stored frame wins. The `Shot` lists what the passes of the program, or the
 tracks of a running transition, and of every mix capture (`Shot::captures`, a
 `jstream-sources` `CaptureSpec` each: a display or window by its capture-backend target
-ID, or the primary display; a video device by its ID, or the first one listed), and
-sources with the same `target` or `device` share one capture, whichever mixes show
-them.
-Sharing is by `target` value: a `display` source with an empty `target` and one that
-names the primary display's ID capture the same monitor twice. A window source with no window chosen shows nothing. The capture is part of
+ID, or the primary display; a video device by its ID, or the first one listed), with the
+source it is for and its `show_cursor` setting (`snapshot::CaptureKey`). Each display or
+window source has a capture of its own, whichever mixes show it, so a backend that keeps
+a grant per source (the ScreenCast portal's restore token, `Capture::start_with` with
+`CaptureOptions::for_source`) keeps each source's apart. The cost: two sources showing
+the same monitor or window run two captures of it, each with its own stream, mailbox and
+upload or import; one source shown by several mixes still runs one. A video device opens
+once, so sources with the same `device` share one capture, whose key names no source.
+The primary display that fills an output with no scene belongs to no source and has a
+capture of its own. A window source with no window chosen shows nothing. The capture is part of
 what the shot draws, so a new target publishes a new snapshot.
 
 **Live sources.** `live::LiveSources` keeps one running `jstream-sources` `Source` per
@@ -1030,7 +1039,15 @@ for every `app` reference, the asset is unreadable and the source draws nothing.
 `Engine::set_source_frame` stores the latest straight sRGB RGBA8 frame for a source
 id. It changes no `rev` and emits no event, and a frame may arrive before the source
 exists. An applied `source.delete` drops the deleted source's frame, unless the same
-batch created a source under that id again. Width or height of zero, a buffer whose length is not `width * height * 4`,
+batch created a source under that id again, and then has the capture backend forget
+what it keeps for that source (`Capture::forget_source`, such as the portal's restore
+token), so a new source given the id asks again. So does a source an undo brings back:
+the grant isn't held for undo history, so it never outlives the source it was given to.
+That runs on `jstream-forget`, a
+thread the engine starts when backends are injected (`forget.rs`), since it can remove
+a file, never under the engine's lock; the deleted source's capture, if one runs,
+stops when the render thread takes the next snapshot. Without that thread (it failed
+to start, which is logged) deleted sources keep their grants. Width or height of zero, a buffer whose length is not `width * height * 4`,
 or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
@@ -1924,9 +1941,16 @@ the context, at a fallback and at the end, so the platform's state goes first as
 `GpuContext` requires.
 
 **Captures** (`runtime/captures.rs`). Opening the program stage starts no capture. Each tick the
-render thread compares what the snapshot captures (`Shot::captures`) with what it runs:
-it asks the pipeline's `jstream-capture` thread to start each new one, and hands it
-the stream of each one no longer shown, which that thread drops, so starting and
+render thread compares what the snapshot captures (`Shot::captures`, one key per
+source, so two sources showing the same target run two captures; see *Snapshots* in
+Design) with what it runs: it asks the pipeline's `jstream-capture` thread to start
+each new one, with `Capture::start_with` and the source's `CaptureOptions::for_source`
+(the defaults for the primary display that fills an output with no scene). A source
+whose `show_cursor` is on asks for the pointer as `CursorCapture::Drawn`, drawn in by
+the OS; off, as `Hidden`, left out (WGC's `IsCursorCaptureEnabled`). The engine never
+draws the pointer itself. A changed
+`show_cursor` is a new key, so that source's capture starts again. The render thread
+hands that thread the stream of each one no longer shown, which it drops, so starting and
 stopping a capture (OS calls that can block) never run on the render thread. Both go
 through channels it never waits on, and it takes the started streams with `try_recv`
 ([R-RT-002](../../docs/RULES.md#R-RT-002),

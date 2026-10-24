@@ -16,6 +16,7 @@ mod error;
 mod filter;
 mod gpu;
 mod image;
+mod mips;
 mod place;
 mod scene;
 pub mod transition;

@@ -18,6 +18,10 @@
 //! same format; a device that is gone, or that changed format, ends the stream with
 //! [`PlatformError::DeviceLost`]. Anything it does to the stream it does with the IOProc
 //! stopped.
+//!
+//! Desktop and application audio record a process tap the same way, through the private
+//! aggregate device the stream owns ([`super::tap`]). Its watcher ends the stream when
+//! that device stops working, the tapped output is removed, or the tapped process exits.
 
 use std::cell::UnsafeCell;
 use std::ffi::c_void;
@@ -45,6 +49,8 @@ use objc2_core_audio_types::{AudioBuffer, AudioBufferList, AudioTimeStamp, Audio
 
 use super::hal::{self, SYSTEM, address, scope};
 use super::layout::{ChannelMap, SamplePositions, StreamPlan, frames_hns};
+use super::permission::SYSTEM_AUDIO_HINT;
+use super::tap::{Tap, TapKind};
 use crate::MachClock;
 use crate::fourcc::os_status;
 
@@ -62,24 +68,45 @@ const MIN_CHUNK_FRAMES: u32 = 512;
 /// `noErr`.
 const NO_ERR: i32 = 0;
 
+/// What a stream records or plays.
+#[derive(Clone, Debug)]
+pub(super) enum Source {
+    /// The system default for the direction, followed when it changes.
+    Default,
+    /// One device by UID.
+    Device(DeviceId),
+    /// A process tap (input only).
+    Tap(TapKind),
+}
+
 /// Which device a stream records or plays.
 #[derive(Clone, Debug)]
 pub(super) struct Which {
     /// Recording or playing.
     pub(super) direction: AudioDirection,
-    /// One device by UID, or `None` for the system default, followed when it changes.
-    pub(super) device: Option<DeviceId>,
+    /// The device, or the tap.
+    pub(super) source: Source,
 }
 
 impl Which {
-    /// The device to use now.
-    pub(super) fn resolve(&self) -> Result<AudioObjectID, PlatformError> {
-        match &self.device {
-            None => hal::default_device(self.direction)?.ok_or_else(|| PlatformError::NotFound {
-                kind: "audio device",
-                id: format!("the default {}", self.noun()),
-            }),
-            Some(id) => hal::find(id, self.direction),
+    /// The device to use now, and the tap it records, if it is one.
+    fn attach(&self) -> Result<(Option<Tap>, AudioObjectID), PlatformError> {
+        match &self.source {
+            Source::Default => {
+                let device = hal::default_device(self.direction)?.ok_or_else(|| {
+                    PlatformError::NotFound {
+                        kind: "audio device",
+                        id: format!("the default {}", self.noun()),
+                    }
+                })?;
+                Ok((None, device))
+            }
+            Source::Device(id) => Ok((None, hal::find(id, self.direction)?)),
+            Source::Tap(kind) => {
+                let tap = Tap::create(kind)?;
+                let device = tap.device();
+                Ok((Some(tap), device))
+            }
         }
     }
 
@@ -91,9 +118,10 @@ impl Which {
     }
 
     fn what(&self) -> String {
-        match &self.device {
-            None => format!("the default audio {}", self.noun()),
-            Some(id) => format!("audio {} {:?}", self.noun(), id.as_str()),
+        match &self.source {
+            Source::Default => format!("the default audio {}", self.noun()),
+            Source::Device(id) => format!("audio {} {:?}", self.noun(), id.as_str()),
+            Source::Tap(kind) => kind.what(),
         }
     }
 
@@ -556,11 +584,12 @@ fn device_listeners(
 }
 
 /// The watcher's state. Fields drop in order: the listeners and the IOProc before what
-/// they point to.
+/// they point to, and the IOProc before the tap's device it runs on.
 struct Watch {
     device_listeners: Vec<Listener>,
     _default_listener: Option<Listener>,
     capture: Option<Capture>,
+    tap: Option<Tap>,
     device: AudioObjectID,
     which: Which,
     format: AudioFormat,
@@ -597,8 +626,11 @@ impl Watch {
     fn reconcile(&mut self, changed: bool) -> Result<(), PlatformError> {
         let mismatch = self.shared.mismatch.swap(false, Ordering::SeqCst);
         let direction = self.which.direction;
-        let target = match &self.which.device {
-            None => match hal::default_device(direction)? {
+        if let Some(reason) = self.tap.as_ref().and_then(Tap::gone) {
+            return Err(self.lost(reason));
+        }
+        let target = match &self.which.source {
+            Source::Default => match hal::default_device(direction)? {
                 Some(d) if hal::is_alive(d) => d,
                 _ => {
                     return Err(self.lost(&format!(
@@ -607,13 +639,15 @@ impl Watch {
                     )));
                 }
             },
-            Some(_) if hal::is_alive(self.device) => self.device,
-            Some(_) => return Err(self.lost("the device was removed or stopped working")),
+            Source::Device(_) | Source::Tap(_) if hal::is_alive(self.device) => self.device,
+            Source::Device(_) | Source::Tap(_) => {
+                return Err(self.lost("the device was removed or stopped working"));
+            }
         };
         if target == self.device && !mismatch && !changed {
             return Ok(());
         }
-        let plan = hal::plan(target, direction)?;
+        let plan = plan(self.tap.as_ref(), target, direction)?;
         if plan.format != self.format {
             return Err(self.lost(&format!(
                 "its format changed from {:?} to {:?}; reopen the stream",
@@ -693,9 +727,23 @@ impl Drop for Running {
     }
 }
 
-/// The format `which` would be recorded or played in now.
+/// How to run `device` now: the tap's plan when it is a tap's device.
+fn plan(
+    tap: Option<&Tap>,
+    device: AudioObjectID,
+    direction: AudioDirection,
+) -> Result<StreamPlan, PlatformError> {
+    match tap {
+        Some(tap) => tap.plan(),
+        None => hal::plan(device, direction),
+    }
+}
+
+/// The format `which` would be recorded or played in now. For a tap, that means making
+/// one for a moment, without starting it.
 pub(super) fn format(which: &Which) -> Result<AudioFormat, PlatformError> {
-    Ok(hal::plan(which.resolve()?, which.direction)?.format)
+    let (tap, device) = which.attach()?;
+    Ok(plan(tap.as_ref(), device, which.direction)?.format)
 }
 
 /// Starts recording `which`.
@@ -718,9 +766,13 @@ pub(super) fn open_output(
 /// thread.
 fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, PlatformError> {
     let direction = which.direction;
-    let device = which.resolve()?;
-    let plan = hal::plan(device, direction)?;
+    let (tap, device) = which.attach()?;
+    let plan = plan(tap.as_ref(), device, direction)?;
     let format = plan.format;
+    if tap.is_some() {
+        // A tap without the permission records silence, and nothing says so.
+        tracing::info!(target: "jstream_platform_macos::audio", "{}: {SYSTEM_AUDIO_HINT}", which.what());
+    }
     let plan_map = plan.map.clone();
     let mut rt = Rt {
         handler,
@@ -740,7 +792,7 @@ fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, Platform
     });
     let (tx, rx) = mpsc::channel();
     let notify = Box::new(Notify { tx: tx.clone() });
-    let default_listener = which.device.is_none().then(|| {
+    let default_listener = matches!(which.source, Source::Default).then(|| {
         Listener::add(
             SYSTEM,
             address(which.default_selector(), kAudioObjectPropertyScopeGlobal),
@@ -753,6 +805,7 @@ fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, Platform
         device_listeners,
         _default_listener: default_listener.flatten(),
         capture: Some(capture),
+        tap,
         device,
         which,
         format,
@@ -760,9 +813,10 @@ fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, Platform
         notify,
         shared,
     };
-    let name = match direction {
-        AudioDirection::Input => "jstream-coreaudio-in",
-        AudioDirection::Output => "jstream-coreaudio-out",
+    let name = match (&watch.which.source, direction) {
+        (Source::Tap(_), _) => "jstream-coreaudio-tap",
+        (_, AudioDirection::Input) => "jstream-coreaudio-in",
+        (_, AudioDirection::Output) => "jstream-coreaudio-out",
     };
     let thread = thread::Builder::new()
         .name(name.to_owned())

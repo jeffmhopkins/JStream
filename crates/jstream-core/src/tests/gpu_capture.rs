@@ -46,7 +46,6 @@ use crate::runtime::{
 };
 use crate::snapshot::CaptureImage;
 use crate::{Engine, InProcessControl, RecordingPublish};
-use jstream_sources::CaptureSpec;
 
 /// The colour every GPU capture frame composites to.
 const RED: [u8; 4] = [255, 0, 0, 255];
@@ -333,7 +332,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         Arc::default(),
     );
     let opened = open_capture(&parts).expect("a capture path");
-    let mut stream = start_capture(&opened.backends, &CaptureSpec::Display(None))
+    let mut stream = start_capture(&opened.backends, &crate::snapshot::CaptureKey::primary())
         .expect("a capture starts on some path");
     let frame = stream.latest().expect("latest").expect("a first frame");
     (
@@ -686,9 +685,11 @@ fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
         let mut inner = (gpu_draw())(context)?;
         let opens = Arc::clone(&opens);
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
-            let gpu_frame = captures
-                .frame(&CaptureSpec::Display(None))
-                .is_some_and(|frame| matches!(frame.image, CaptureImage::Gpu(_)));
+            let gpu_frame = shot.captures().iter().any(|key| {
+                captures
+                    .frame(key)
+                    .is_some_and(|frame| matches!(frame.image, CaptureImage::Gpu(_)))
+            });
             match breaks {
                 Breaks::GpuFrames if gpu_frame => {
                     return Err(DrawError::Failed("unsupported format".to_owned()));
