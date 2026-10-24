@@ -64,15 +64,17 @@ pub fn value_of<'a>(param: &'a ParamDescriptor, settings: &'a Settings) -> &'a V
     settings.get(&param.id).unwrap_or(&param.default)
 }
 
-/// The `source.set_settings` patch that turns `stored` into `draft`: each value that
-/// differs, and `null` (the default) for each one the draft no longer has.
-pub fn draft_patch(stored: &Settings, draft: &Settings) -> Settings {
+/// The `source.set_settings` patch of what the user changed in `draft` from `base`, the
+/// settings the draft started from: each value that differs, and `null` (the default)
+/// for each one the draft no longer has. A field the user left alone is not in it, so a
+/// change another client made meanwhile stays.
+pub fn draft_patch(base: &Settings, draft: &Settings) -> Settings {
     let mut patch: Settings = draft
         .iter()
-        .filter(|(id, value)| stored.get(id) != Some(*value))
+        .filter(|(id, value)| base.get(id) != Some(*value))
         .map(|(id, value)| (id, value.clone()))
         .collect();
-    for (id, _) in stored.iter().filter(|(id, _)| draft.get(id).is_none()) {
+    for (id, _) in base.iter().filter(|(id, _)| draft.get(id).is_none()) {
         patch.insert(id, Value::Null);
     }
     patch
@@ -932,5 +934,20 @@ mod tests {
         assert!(draft_patch(&stored, &stored).is_empty());
         // Defaults: an empty draft resets everything stored.
         assert_eq!(draft_patch(&stored, &Settings::new()).iter().count(), 3);
+    }
+
+    #[test]
+    fn the_draft_patch_leaves_other_clients_changes_alone() {
+        // The dialog opened on `base`; meanwhile another client changed the text and set
+        // a colour. The user changed only the size, so only the size is sent.
+        let base: Settings = [("text", json!("A")), ("size", json!(34))]
+            .into_iter()
+            .collect();
+        let mut draft = base.clone();
+        draft.insert("size".to_owned(), json!(48));
+        let want: Settings = [("size", json!(48))].into_iter().collect();
+        assert_eq!(draft_patch(&base, &draft), want);
+        // Nothing changed: nothing is sent, whatever is stored now.
+        assert!(draft_patch(&base, &base).is_empty());
     }
 }

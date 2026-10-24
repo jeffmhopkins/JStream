@@ -52,9 +52,34 @@ pub fn shows(kind: &SourceKind) -> bool {
 #[component]
 pub fn SourceProperties() -> impl IntoView {
     let dialog = expect_context::<PropertiesDialog>();
+    let studio = expect_context::<Studio>();
+    let close = move || dialog.0.set(None);
     move || {
         dialog.0.get().map(|source_id| {
-            view! { <PropertiesBody source_id=source_id close=move || dialog.0.set(None) /> }
+            // A source just created reaches the collection after the dialog opens, so
+            // the dialog waits for it; one that leaves once shown closes it.
+            let present = {
+                let source_id = source_id.clone();
+                Memo::new(move |_| {
+                    studio.collection.with(|c| {
+                        c.as_ref()
+                            .and_then(|c| c.source(&source_id))
+                            .is_some_and(|s| shows(&s.kind))
+                    })
+                })
+            };
+            let seen = StoredValue::new(false);
+            move || {
+                if present.get() {
+                    seen.set_value(true);
+                    Some(view! { <PropertiesBody source_id=source_id.clone() close=close /> })
+                } else {
+                    if seen.get_value() {
+                        request_animation_frame(close);
+                    }
+                    None
+                }
+            }
         })
     }
 }
@@ -85,6 +110,9 @@ fn PropertiesBody(
     let picture = has_picture(&kind_id);
     let audio = source.audio.is_some();
 
+    // What the dialog opened on: OK sends only what the user changed from it, so an
+    // edit another client made meanwhile stays (ADR-0032, last writer wins per field).
+    let opened = StoredValue::new((source.settings.clone(), source.name.clone()));
     let draft = RwSignal::new(source.settings.clone());
     let name = RwSignal::new(source.name.clone());
     let errors = RwSignal::new(HashMap::<String, String>::new());
@@ -122,15 +150,14 @@ fn PropertiesBody(
         let source_id = source_id.clone();
         move |_| {
             let Some(s) = session.get() else { return };
-            let stored = studio.collection.with_untracked(|c| {
-                c.as_ref()
-                    .and_then(|c| c.source(&source_id))
-                    .map(|s| (s.settings.clone(), s.name.clone()))
-            });
-            let Some((stored, old_name)) = stored else {
+            if studio
+                .collection
+                .with_untracked(|c| c.as_ref().and_then(|c| c.source(&source_id)).is_none())
+            {
                 close();
                 return;
-            };
+            }
+            let (base, old_name) = opened.get_value();
             let mut edits = Vec::new();
             let new_name = name.get_untracked().trim().to_owned();
             if !new_name.is_empty() && new_name != old_name {
@@ -139,7 +166,7 @@ fn PropertiesBody(
                     name: new_name,
                 });
             }
-            let patch = draft.with_untracked(|d| draft_patch(&stored, d));
+            let patch = draft.with_untracked(|d| draft_patch(&base, d));
             if !patch.is_empty() {
                 edits.push(Edit::SourceSetSettings {
                     source_id: source_id.clone(),

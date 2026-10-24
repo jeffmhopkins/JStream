@@ -178,8 +178,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
   its first placement. A scene is nested through a `scene` source, reusing one that
-  already shows it. The new item is selected; a new source's Properties dialog opens,
-  and a placement of an existing one shows in the Inspector. A `kind.list`
+  already shows it. The new item is selected; a new source's Properties dialog opens
+  once the engine has accepted the batch, waiting for the collection to list the
+  source, and a placement of an existing one shows in the Inspector. A `kind.list`
   that fails leaves only the placed kinds and Scene, and its error shows as any failed
   call's does.
 - **The Inspector** ([UI features › inspector](../../docs/UI-FEATURES.md#inspector))
@@ -232,10 +233,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `scene` source has no settings.
 - **The Properties dialog** (`source_properties.rs`) is the prototype's: the name and the
   same form on the left, on a draft instead of the stored settings, and the source's
-  filter chains on the right. OK sends a rename (unless the name is blank or the same)
-  and one `source.set_settings` with each changed value and `null` for each one the
-  draft dropped (`draft_patch`), as one batch, and closes once the engine accepts it;
-  Cancel, Escape and the backdrop drop the draft; Defaults empties it. A filter's eye
+  filter chains on the right. OK sends only what the user changed since the dialog
+  opened, so another client's edit meanwhile stays: a rename (unless the name is blank
+  or as it opened) and one `source.set_settings` with each changed value and `null` for
+  each one the draft dropped (`draft_patch`), as one batch, and closes once the engine
+  accepts it;
+  Cancel, Escape and the backdrop drop the draft; Defaults empties it. Enter in a
+  field blurs it before pressing OK, so the field's `change` reaches the draft first. A filter's eye
   (`filter.set_enabled`) and remove (`filter.remove`) apply at once. A double click on
   an item and Properties… in the item menus open it for the item's source; a nested
   scene's item shows in the Inspector instead, until scenes have their dialog.
@@ -499,8 +503,10 @@ browser, and `mod.rs` is the component.
   values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so the output and
   the preview follow the drag without changing `rev`. The calls go one at a time, the
   values that arrive while one is in flight collapsing into the newest; the committing
-  batch follows them with `ends_gesture` (or none, if no `live.set` got through), and
-  Escape sends `live.cancel` instead. The
+  batch follows them with `ends_gesture` (or none, if no `live.set` got through), on
+  the gesture's own scene, and Escape sends `live.cancel` instead, as does a commit
+  that fails or can't be sent, so the output doesn't keep the dragged geometry.
+  Gesture IDs come from `fresh_id`, so they are unique for the session. The
   local geometries stay drawn until no commit is in flight and the collection has
   caught up with the last one's revision; a later drag replaces only its own items',
   so a nudge still in flight isn't lost. A commit that fails shows its error and stops

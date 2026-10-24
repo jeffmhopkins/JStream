@@ -28,7 +28,7 @@ use crate::store::Studio;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
-use jstream_control::protocol::{GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev};
+use jstream_control::protocol::{GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneId};
 use leptos::ev;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -143,9 +143,8 @@ pub fn Canvas() -> impl IntoView {
     let snapping = RwSignal::new(true);
     let viewport = RwSignal::new(None::<Viewport>);
     let drag = StoredValue::new(None::<Drag>);
-    // The drag's gesture, which shows it live on output, and how many drags opened one.
+    // The drag's gesture, which shows it live on output.
     let live = StoredValue::new_local(None::<live::Live>);
-    let gestures = StoredValue::new(0_u32);
     // What the drag in progress does, for the readout.
     let active = RwSignal::new(None::<Active>);
     let marquee = RwSignal::new(None::<(Point, Point)>);
@@ -242,32 +241,48 @@ pub fn Canvas() -> impl IntoView {
 
     // Sends the items' new geometries as one batch, and shows them until the
     // collection has them.
-    // A drag's commit ends its gesture, if its live values opened one.
-    let commit = move |placed: Vec<(ItemId, ItemGeometry)>, gesture: Option<GestureId>| {
-        let (Some(open), Some((scene_id, _))) = (
-            session.and_then(|s| s.get()),
-            layout.with_untracked(|l| l.as_ref().and_then(|l| l.scene.clone())),
-        ) else {
+    // A drag's commit names its gesture's scene, and ends the gesture if its live
+    // values opened one; a commit that can't be sent or fails cancels the gesture, so
+    // the output doesn't keep the dragged geometry (ADR-0032).
+    let commit = move |placed: Vec<(ItemId, ItemGeometry)>,
+                       scene: Option<SceneId>,
+                       gesture: Option<GestureId>| {
+        let Some(open) = session.and_then(|s| s.get()) else {
             return;
         };
-        if placed.is_empty() {
+        let scene_id = scene.or_else(|| {
+            layout.with_untracked(|l| l.as_ref().and_then(|l| l.scene.clone()).map(|(id, _)| id))
+        });
+        let Some(scene_id) = scene_id.filter(|_| !placed.is_empty()) else {
+            if let Some(gesture) = gesture {
+                spawn_local(async move {
+                    if let Err(error) = model::live_cancel(&*open.control, gesture).await {
+                        problem(&error);
+                    }
+                });
+            }
             return;
-        }
+        };
         show(placed.clone());
         awaiting.update_value(|a| a.in_flight += 1);
         spawn_local(async move {
-            let result = model::commit(&*open.control, scene_id, placed.clone(), gesture).await;
-            drop(open);
+            let result =
+                model::commit(&*open.control, scene_id, placed.clone(), gesture.clone()).await;
             awaiting.update_value(|a| a.in_flight = a.in_flight.saturating_sub(1));
             match result {
                 Ok(rev) => awaiting.update_value(|a| a.last = a.last.max(Some(rev))),
                 Err(error) => {
                     problem(&error);
+                    if let Some(gesture) = gesture {
+                        // The engine still holds the gesture: drop its live values.
+                        let _cancelled = model::live_cancel(&*open.control, gesture).await;
+                    }
                     // Stop showing the failed geometries, unless a later gesture has
                     // already replaced them.
                     preview.update(|shown| shown.retain(|entry| !placed.contains(entry)));
                 }
             }
+            drop(open);
             drop_preview_if_caught_up();
         });
     };
@@ -348,9 +363,11 @@ pub fn Canvas() -> impl IntoView {
         // A box drag opens a gesture, so the output follows it before the drop.
         let gesture = match (&action, session, current.scene.as_ref()) {
             (Action::One { .. } | Action::Group(_), Some(session), Some((scene_id, _))) => {
-                gestures.update_value(|n| *n += 1);
-                let id = GestureId::new(format!("drag-{}", gestures.get_value()));
-                Some(live::Live::new(id, scene_id.clone(), session, problem))
+                // Unique for the session, so a remounted canvas never reuses one.
+                session.get().map(|open| {
+                    let id = GestureId::new(studio.fresh_id(&open, "drag"));
+                    live::Live::new(id, scene_id.clone(), session, problem)
+                })
             }
             _ => None,
         };
@@ -569,8 +586,10 @@ pub fn Canvas() -> impl IntoView {
         if keep && !moved.is_empty() {
             match gesture {
                 // The commit waits for the live values sent before it.
-                Some(gesture) => gesture.commit(move |ending| commit(moved, ending)),
-                None => commit(moved, None),
+                Some(gesture) => {
+                    gesture.commit(move |scene, ending| commit(moved, Some(scene), ending));
+                }
+                None => commit(moved, None, None),
             }
         } else {
             if let Some(gesture) = gesture {
@@ -619,7 +638,7 @@ pub fn Canvas() -> impl IntoView {
                 if moved.is_empty() {
                     return;
                 }
-                commit(moved, None);
+                commit(moved, None, None);
             }
             _ => return,
         }

@@ -13,9 +13,9 @@ use leptos::task::spawn_local;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// What runs once the gesture's last values are out: the commit, given the gesture to
-/// end if `live.set` opened one, else `None`.
-type Then = Box<dyn FnOnce(Option<GestureId>)>;
+/// What runs once the gesture's last values are out: the commit, given the gesture's
+/// scene and the gesture to end if `live.set` opened one, else `None`.
+type Then = Box<dyn FnOnce(SceneId, Option<GestureId>)>;
 
 /// How the gesture ends.
 enum End {
@@ -81,7 +81,7 @@ impl Live {
     }
 
     /// Ends the gesture with `then`, the commit, once the values before it are out.
-    pub fn commit(&self, then: impl FnOnce(Option<GestureId>) + 'static) {
+    pub fn commit(&self, then: impl FnOnce(SceneId, Option<GestureId>) + 'static) {
         self.finish(End::Commit(Box::new(then)));
     }
 
@@ -147,7 +147,7 @@ impl Live {
                 continue;
             }
             match end {
-                Some(End::Commit(then)) => then(opened.then_some(gesture)),
+                Some(End::Commit(then)) => then(scene_id, opened.then_some(gesture)),
                 Some(End::Cancel) if opened => {
                     if let Err(error) = model::live_cancel(&*open.control, gesture).await {
                         (self.report)(&error);

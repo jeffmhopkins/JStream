@@ -66,7 +66,20 @@ pub fn Modal(
                 .and_then(|e| e.dyn_into::<leptos::web_sys::HtmlElement>().ok());
             if let Some(primary) = primary {
                 event.prevent_default();
-                primary.click();
+                // A field commits on `change`, which the prevented Enter no longer
+                // fires: blurring it fires it now, so the primary button reads the
+                // typed value.
+                if let Some(field) = event
+                    .target()
+                    .and_then(|t| t.dyn_into::<leptos::web_sys::HtmlElement>().ok())
+                {
+                    let _ = field.blur();
+                    primary.click();
+                    // Back to the field, should the dialog stay open (a refused OK).
+                    let _ = field.focus();
+                } else {
+                    primary.click();
+                }
             }
         }
         _ => {}

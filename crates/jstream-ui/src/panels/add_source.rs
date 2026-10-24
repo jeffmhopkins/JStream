@@ -12,13 +12,14 @@ use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::panels::source_properties::PropertiesDialog;
-use crate::store::{Collection, Studio};
+use crate::store::{Collection, Studio, apply};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
     Canvas, Edit, ItemGeometry, ItemId, KindCategory, KindSummary, SceneId, Settings, Size,
     SourceId, SourceKind, Vec2,
 };
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 
 /// A group of the type list, in the order the list shows them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -605,13 +606,21 @@ fn AddSourceBody(
                 return;
             };
             close();
-            studio.apply(&s, edits);
             studio.select_item(Some(item_id));
-            // A new source's properties open at once, as in OBS; a placement of an
-            // existing one shows in the Inspector.
+            // A new source's properties open once the engine has it, as in OBS; the
+            // dialog waits for the collection to catch up. A placement of an existing
+            // source shows in the Inspector.
             match (&choice, props) {
-                (Choice::New, Some(props)) if t.kind.is_some() => props.open(source_id),
+                (Choice::New, Some(props)) if t.kind.is_some() => {
+                    spawn_local(async move {
+                        match apply(&s, edits, None).await {
+                            Ok(_) => props.open(source_id),
+                            Err(error) => studio.report(&error),
+                        }
+                    });
+                }
                 _ => {
+                    studio.apply(&s, edits);
                     if let Some(dock) = dock {
                         dock.0.update(|d| d.show(PanelId::Inspector));
                     }
