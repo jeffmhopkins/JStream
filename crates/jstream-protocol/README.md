@@ -137,7 +137,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `events.dropped`,
   `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
   `live.changed`, `live.ended` and `plugin.state_changed`.
-- **Plugins** (`plugin.rs`, ADR-0069, which is on `wave/m1-3`): `PluginClass` (`read`,
+- **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
   classes, adding a `hotkey.set`'s bound action and a `live.set`'s edits, or the
@@ -1111,21 +1111,22 @@ later.
 
 ### Plugins
 
-WASM automation plugins (0.35, ADR-0069, which is on `wave/m1-3`) call the API through
+WASM automation plugins (0.35, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)) call the API through
 a scoped `Control`, which checks every call against the plugin's grant before it reaches
 the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
 
 - **Classes.** A person grants a plugin classes: `read` (the queries; always granted),
-  `edit` (scene, item, source, filter, bus, send, canvas and hotkey edits, among them a
-  scene's folder, metadata and transitions, a source's metadata and an item's
-  transition settings, `live.set` and `live.cancel`, and `undo`/`redo` on the plugin's
-  own session), `live` (`scene.switch`) and `outputs` (`output.start`, `output.stop`).
-  Everything else is never granted: creating, deleting and retargeting outputs, their
-  encoders and stream keys, video mixes, `video.snapshot` and previews (a capture's
-  pixels could leave through a granted host), `audio.reset_loudness`, folders, labels
-  and transition presets themselves (`folder.*`, `label.*`, `transition.*`), which
-  ADR-0069 names in no class, `studio.set_preview`, `privacy.set` (a plugin never lifts
-  the privacy screen), `youtube.*`, pairing and devices, and `plugin.*` itself.
+  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey and studio
+  edits, among them a scene's folder, metadata and transitions, a source's metadata, an
+  item's transition settings, the `transition.*` presets and `studio.set_preview`,
+  `live.set` and `live.cancel`, and `undo`/`redo` on the plugin's own session), `live`
+  (`scene.switch`) and `outputs` (`output.start`, `output.stop`). Everything else is
+  never granted: creating, deleting and retargeting outputs, their encoders and stream
+  keys, video mixes, `video.snapshot` and previews (a capture's pixels could leave
+  through a granted host), `audio.reset_loudness`, folders and labels themselves
+  (`folder.*`, `label.*`), which ADR-0069 names in no class, `privacy.set` (a plugin
+  never lifts the privacy screen), `youtube.*`, pairing and devices, and `plugin.*`
+  itself.
   `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
   `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
   command can't reach plugins unreviewed.
@@ -1138,8 +1139,9 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
 - **Reach.** A class never widens network or filesystem reach (ADR-0069 S2): a
   `browser` source's URL and a media or image source's file need the grant's `hosts` or
   `folders` beside `edit`. `PluginGrant::check` reads the settings of `source.create`,
-  `source.set_settings`, `filter.add` and `filter.set_settings` (in a batch or a
-  `live.set`) with `settings_reach`, which needs no kind descriptor:
+  `source.set_settings`, `filter.add`, `filter.set_settings`, `transition.create` and
+  `transition.update` (in a batch or a `live.set`) with `settings_reach`, which needs no
+  kind descriptor:
   - an asset reference under the `absolute` root must be inside a granted folder;
   - a string that starts as `scheme://` (after trimming ASCII spaces, control
     characters and Unicode white space from both ends, and dropping tabs and newlines,

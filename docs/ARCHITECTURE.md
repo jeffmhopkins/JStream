@@ -674,7 +674,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
-- **Plugins** (protocol 0.35, ADR-0069, which is on `wave/m1-3`): the actions
+- **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
   with what a person grants it, change the grant and re-enable it; they are for a person,
   so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports

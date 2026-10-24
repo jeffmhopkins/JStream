@@ -29,8 +29,9 @@ pub enum PluginClass {
     /// Every query but the never-granted ones, `kind.*` and `delete.plan`. Always
     /// granted.
     Read,
-    /// The scene, item, source, filter, bus, send, hotkey and canvas edits, live
-    /// parameter edits (`live.*`), and undo and redo on the plugin's own session.
+    /// The scene, item, source, filter, transition, bus, send, hotkey, canvas and studio
+    /// edits, live parameter edits (`live.*`), and undo and redo on the plugin's own
+    /// session.
     Edit,
     /// What changes what is on air: `scene.switch`.
     Live,
@@ -144,6 +145,12 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("video_mix.update", N),
     ("video_mix.delete", N),
     ("output.set_video_mix", N),
+    // Transition edits are in `edit` (ADR-0069 S2 names them); their settings are
+    // checked for reach like a source's.
+    ("transition.create", Class(E)),
+    ("transition.update", Class(E)),
+    ("transition.delete", Class(E)),
+    ("transition.set_default", Class(E)),
     // Not named in any class by ADR-0069 either, so "never" until a PR places them.
     ("folder.create", N),
     ("folder.rename", N),
@@ -154,10 +161,6 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("label.update", N),
     ("label.reorder", N),
     ("label.delete", N),
-    ("transition.create", N),
-    ("transition.update", N),
-    ("transition.delete", N),
-    ("transition.set_default", N),
     // Actions.
     ("live.set", Class(E)),
     ("live.cancel", Class(E)),
@@ -178,7 +181,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // Not named in any class, so "never" until a PR places them.
     ("preview.unsubscribe", N),
     ("audio.reset_loudness", N),
-    ("studio.set_preview", N),
+    // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
+    ("studio.set_preview", Class(E)),
     // The privacy screen covers what is on air; a plugin never lifts it.
     ("privacy.set", N),
     // A person installs, grants and re-enables plugins; a plugin never does (G1).
@@ -328,10 +332,12 @@ impl PluginGrant {
         }
         for edit in edits {
             let settings = match edit {
-                Edit::SourceCreate { settings, .. } | Edit::FilterAdd { settings, .. } => settings,
-                Edit::SourceSetSettings { patch, .. } | Edit::FilterSetSettings { patch, .. } => {
-                    patch
-                }
+                Edit::SourceCreate { settings, .. }
+                | Edit::FilterAdd { settings, .. }
+                | Edit::TransitionCreate { settings, .. } => settings,
+                Edit::SourceSetSettings { patch, .. }
+                | Edit::FilterSetSettings { patch, .. }
+                | Edit::TransitionUpdate { patch, .. } => patch,
                 _ => continue,
             };
             for reach in settings_reach(settings) {
@@ -621,9 +627,10 @@ mod tests {
     use crate::error::ProtocolError;
     use crate::history::{HistoryCall, HistoryOp};
     use crate::hotkey::Chord;
-    use crate::id::{GestureId, OutputId, SceneId, SourceId};
+    use crate::id::{GestureId, OutputId, SceneId, SourceId, TransitionPresetId};
     use crate::query::Query;
     use crate::settings::Settings;
+    use crate::transition::Easing;
     use serde_json::json;
     use std::collections::BTreeSet;
 
@@ -798,6 +805,26 @@ mod tests {
             },
         };
         assert!(forbidden(&edit, &live));
+        // A transition preset's settings are checked the same way.
+        let preset = Call::Batch(Batch::single(Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new("t"),
+            name: "T".into(),
+            kind: "fade".into(),
+            duration_ms: 300,
+            easing: Easing::default(),
+            settings: serde_json::from_value(json!({"file": file("/x.webm")})).expect("map"),
+        }));
+        assert!(forbidden(&edit, &preset));
+        let patch = Call::Batch(Batch::single(Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("t"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: None,
+            patch: serde_json::from_value(json!({"url": "https://attacker.example/"}))
+                .expect("map"),
+        }));
+        assert!(forbidden(&edit, &patch));
         // What reaches nothing is still an ordinary edit.
         assert!(
             edit.check(&create("color", json!({"color": "#112233"})))

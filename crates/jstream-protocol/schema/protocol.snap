@@ -5476,7 +5476,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "edit",
-          "description": "The scene, item, source, filter, bus, send, hotkey and canvas edits, live\nparameter edits (`live.*`), and undo and redo on the plugin's own session.",
+          "description": "The scene, item, source, filter, transition, bus, send, hotkey, canvas and studio\nedits, live parameter edits (`live.*`), and undo and redo on the plugin's own\nsession.",
           "type": "string"
         },
         {
