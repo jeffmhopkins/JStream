@@ -107,8 +107,9 @@ impl Shared {
     /// it, so none comes between render's staging of a frame and render's submit
     /// (#667).
     pub(crate) fn submit_lock(&self) -> &SubmitLock {
-        // Set before the context is handed out, so the fallback is never reached
-        // outside a unit test that builds the state by hand.
+        // `open_device`, the only constructor of the state, sets it before the
+        // context is handed out, so the fallback is never reached; it only keeps this
+        // method total.
         self.submit.get_or_init(SubmitLock::new)
     }
 

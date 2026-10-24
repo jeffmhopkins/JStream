@@ -120,8 +120,7 @@ It has:
   are on the context's one queue, so the frames' `FrameSync` only checks the queue.
   Each copy is submitted under the context's `SubmitLock`, so it can't take the
   timeline-semaphore signal render staged on an encode target for its own next
-  submit (#667). A
-  frame that doesn't import or copy ends the GPU path: the
+  submit (#667). A frame that doesn't import or copy ends the GPU path: the
   stream offers shared memory only, PipeWire renegotiates, and the capture goes on
   with CPU frames. Its `pts` is
   the buffer header's `CLOCK_MONOTONIC` time when that is plausible, else the clock's
