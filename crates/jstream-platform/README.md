@@ -311,7 +311,8 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   each PipeWire frame on it. So render holds the lock from its first `stage` through
   its submit (the composite's, and `Nv12Converter::submit`'s into an encode target),
   and every other thread holds it around its own submits on that queue. Holders keep
-  it only while recording and submitting, never across a wait for the GPU. A device render opens for itself has a lock of its own.
+  it only while recording and submitting, never across a wait for the GPU. A device
+  render opens for itself has a lock of its own.
 - **Encoders and the virtual camera** accept `VideoSurface::Gpu` from the same platform.
   The encoders reach the context through `Codecs::on_context`, a default method like
   `Capture::on_context`. They wait on the D3D11 side for the value the last write
