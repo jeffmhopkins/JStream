@@ -2559,6 +2559,14 @@ impl State {
             other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
+            // This engine hosts no plugins yet (WA1, ADR-0069).
+            other @ (Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
+            }
             Action::PrivacySet { on } => {
                 // The render thread covers the next frame it draws: it reads the flag.
                 if self.privacy.set(on, client_id) {

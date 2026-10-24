@@ -411,6 +411,9 @@ WebSocket API does, minus serialization:
   they never reach the engine, so the audit log doesn't record them; the server logs
   them. A device's `hello` reaches the engine as `device:<name>`, so the audit
   log names it.
+- `plugin.install`, `plugin.grant` and `plugin.enable` fail with `unsupported`: the
+  engine hosts no plugins yet (WA1). The differential script sends two of them, so the
+  mock answers the same.
 
 ### Dependencies
 

@@ -1524,6 +1524,19 @@ fn the_engine_answers_like_the_mock() {
                 gesture_id: GestureId::new("g9"),
             },
         },
+        // Neither hosts plugins yet (ADR-0069): both answer `unsupported`.
+        Call::Action {
+            action: Action::PluginEnable {
+                plugin_id: jstream_protocol::PluginId::new("plg_1"),
+            },
+        },
+        Call::Action {
+            action: Action::PluginInstall {
+                plugin_id: jstream_protocol::PluginId::new("plg_1"),
+                path: "/plugins/one".into(),
+                grant: jstream_protocol::PluginGrant::default(),
+            },
+        },
     ];
     let script: Vec<Call> = script.into_iter().chain(organise_script()).collect();
 

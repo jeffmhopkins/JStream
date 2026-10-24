@@ -30,8 +30,9 @@
 //! nothing a reader has seen changes, and every value keeps its order relative to the
 //! others. An unread drag therefore holds one buffered event.
 //!
-//! `youtube.*` events are dropped on arrival: YouTube is for people, through the UI, so
-//! agents see neither its sign-in state nor its stream health (ADR-0058 §3).
+//! `youtube.*` and `plugin.*` events are dropped on arrival: YouTube and plugins are for
+//! people, through the UI, so agents see neither YouTube's sign-in state and stream
+//! health (ADR-0058 §3) nor a plugin's state (ADR-0069).
 //!
 //! Docs: crates/jstream-mcp/README.md#design, docs/adr/0036-mcp-events-polling-tool.md
 
@@ -119,8 +120,8 @@ impl Buffer {
     /// Appends `event`, dropping the oldest one if the buffer is full. A `stats.tick` or
     /// a `meters.tick` replaces the kept one of its type instead and takes no sequence
     /// number, and a `live.changed` may be merged into an unread one instead
-    /// ([`Buffer::supersede`]). A people-only event (a `youtube.*` one) is not kept:
-    /// agents don't see it (ADR-0058 §3).
+    /// ([`Buffer::supersede`]). A people-only event (a `youtube.*` or `plugin.*`
+    /// one) is not kept: agents don't see it (ADR-0058 §3, ADR-0069).
     pub(crate) fn push(&mut self, event: Event) {
         if is_people_only(&event) {
             return;
@@ -486,14 +487,20 @@ mod tests {
         );
     }
 
-    /// YouTube is for people, through the UI (ADR-0058 §3): its events never reach the
-    /// feed, and take no sequence number.
+    /// YouTube and plugins are for people, through the UI (ADR-0058 §3, ADR-0069): their
+    /// events never reach the feed, and take no sequence number.
     #[test]
     fn youtube_events_are_not_kept() {
         let mut buffer = Buffer::new(10);
         buffer.push(changed(1));
         buffer.push(Event::YoutubeStatusChanged {
             auth: YoutubeAuth::SignedIn,
+        });
+        buffer.push(Event::PluginStateChanged {
+            plugin_id: jstream_protocol::PluginId::new("plg_1"),
+            state: jstream_protocol::PluginState::Enabled,
+            reason: None,
+            remote_name: None,
         });
         buffer.push(changed(2));
         let page = buffer.read(0, 10).expect("a valid cursor");

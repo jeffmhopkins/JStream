@@ -674,6 +674,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
+- **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
+  `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
+  with what a person grants it, change the grant and re-enable it; they are for a person,
+  so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports
+  a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
+  through a scoped `Control` that checks each call against its grant, using
+  `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
+  or never), and the hosts and files a call's settings name against the grant's hosts
+  and folders, since a class never widens network or filesystem reach; a call outside
+  the grant fails with `forbidden` and never reaches the engine. The engine and the mock answer the actions with `unsupported` until the engine
+  hosts plugins.
 - **Studio mode** (protocol 0.30): the action `studio.set_preview { scene_id }` puts a
   scene on preview, also with no `rev` change; `studio.get` and `studio.changed` carry
   `preview_scene` beside `program_scene`.
@@ -822,7 +833,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
-  the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
+  the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). The same
+  holds for the `plugin.*` ops and events: only a person installs or grants a plugin
+  (ADR-0069 G1).
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -832,10 +845,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   `live.changed` events are merged, in place, into the newest one of their gesture that
   no read has returned yet, while only `live.changed` events for other parameters follow
   it, so an unread drag holds one buffered event and `seq` has no gaps. `youtube.*`
-  events are not returned to agents (ADR-0058 §3).
+  and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 667 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 687 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

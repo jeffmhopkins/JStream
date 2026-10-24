@@ -914,8 +914,13 @@ impl State {
                 self.keys.remove(&output_id);
                 return Ok(CallResult::action());
             }
-            // As the engine: the server in front answers these (ADR-0044).
-            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+            // As the engine: the server in front answers the pairing calls (ADR-0044),
+            // and the mock hosts no plugins (ADR-0069).
+            other @ (Action::PairingStart
+            | Action::DeviceRevoke { .. }
+            | Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
                 });
