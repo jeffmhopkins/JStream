@@ -352,17 +352,83 @@ pub(crate) fn changed_after(
     Ok(out)
 }
 
-/// The ledger at the merge base of `HEAD` and `origin/<branch>` (`main`, or the `wave/*`
-/// branch a PR targets): the entries this branch didn't write are the ones equal to it.
-/// Empty when the ledger doesn't exist there; an error when it doesn't parse, since an
-/// empty base would make every entry look like this branch's own.
-pub(crate) fn base_ledger(root: &Path, branch: &str) -> Result<ledger::Ledger> {
-    check_branch(branch, "can only compare against")?;
-    let upstream = format!("{REMOTE}/{branch}");
-    let base = git_ok(root, &["merge-base", "HEAD", &upstream])
-        .with_context(|| format!("finding where this branch left `{upstream}`"))?;
-    let base = String::from_utf8_lossy(&base).trim().to_owned();
-    ledger_at(root, &base, &format!("where this branch left `{upstream}`"))
+/// The ledgers where this branch left its upstreams: the entries this branch didn't write
+/// are the ones equal to an entry of any of them. For `main` or a `wave/*` branch that is
+/// the one ledger at their merge base with `HEAD`. Any other branch is a stacked PR's base
+/// (#715), which must be an ancestor of `HEAD`: its ledger is the one at `origin/<branch>`
+/// itself, so the base PR's entries are excluded. A stacked PR may also have merged `main`
+/// or a wave ahead of its base, so the ledgers where `HEAD` left `origin/main` and each
+/// `origin/wave/*` are excluded too (#719 B1). A ledger is empty where the file doesn't
+/// exist; one that doesn't parse is an error, since an empty base would make every entry
+/// look like this branch's own.
+pub(crate) fn base_ledgers(root: &Path, branch: &str) -> Result<Vec<ledger::Ledger>> {
+    let mut upstreams = vec![format!("{REMOTE}/{branch}")];
+    if check_branch(branch, "").is_err() {
+        check_stacked_base(root, branch, &upstreams[0])?;
+        let waves = git_ok(
+            root,
+            &[
+                "for-each-ref",
+                "--format=%(refname:strip=2)",
+                &format!("refs/remotes/{REMOTE}/wave/"),
+            ],
+        )?;
+        upstreams.push(format!("{REMOTE}/{BRANCH}"));
+        upstreams.extend(String::from_utf8_lossy(&waves).lines().map(str::to_owned));
+    }
+    let mut ledgers = Vec::new();
+    for (i, upstream) in upstreams.iter().enumerate() {
+        let base = git(root, &["merge-base", "HEAD", upstream])?;
+        if !base.status.success() {
+            // The branch named must share history with HEAD; a trunk that isn't fetched
+            // or shares none has nothing to exclude.
+            if i == 0 {
+                bail!(
+                    "finding where this branch left `{upstream}`: {}",
+                    String::from_utf8_lossy(&base.stderr).trim()
+                );
+            }
+            continue;
+        }
+        let base = String::from_utf8_lossy(&base.stdout).trim().to_owned();
+        ledgers.push(ledger_at(
+            root,
+            &base,
+            &format!("where this branch left `{upstream}`"),
+        )?);
+    }
+    Ok(ledgers)
+}
+
+/// Refuses a stacked base `branch` that isn't a valid branch name, isn't on the remote, or
+/// isn't an ancestor of `HEAD` (merge its newer commits first).
+fn check_stacked_base(root: &Path, branch: &str, upstream: &str) -> Result<()> {
+    let named = git(root, &["check-ref-format", "--branch", branch])?;
+    if branch.starts_with('-') || !named.status.success() {
+        bail!(
+            "can only compare against `{BRANCH}`, a `wave/<name>` branch or a stacked PR's \
+             base branch, not `{branch}`"
+        );
+    }
+    let commit = format!("refs/remotes/{upstream}^{{commit}}");
+    if !git(root, &["rev-parse", "--verify", "--quiet", &commit])?
+        .status
+        .success()
+    {
+        bail!("`{upstream}` doesn't exist: fetch it, or name the branch this PR is stacked on");
+    }
+    let ancestor = git(root, &["merge-base", "--is-ancestor", upstream, "HEAD"])?;
+    match ancestor.status.code() {
+        Some(0) => Ok(()),
+        Some(1) => bail!(
+            "`{upstream}` isn't an ancestor of this branch: merge it first, so that every \
+             entry differing from its ledger is this branch's own"
+        ),
+        _ => bail!(
+            "`git merge-base --is-ancestor {upstream} HEAD` failed: {}",
+            String::from_utf8_lossy(&ancestor.stderr).trim()
+        ),
+    }
 }
 
 /// Refuses any branch but `main` and `wave/<name>`; `refusal` says what the caller does
