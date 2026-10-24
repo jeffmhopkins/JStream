@@ -37,7 +37,8 @@ Print the checks, the commit each one runs from and what it needs, then exit.
 Answer every question with skip and decline every step that needs a yes.
 
 .PARAMETER NoBuild
-Use the builds already in the worktrees; don't fetch or build.
+Use the worktrees as they are: don't fetch, and don't build the daemons and apps. The
+cargo test steps, the browser helper and the desktop UI still compile what they need.
 
 .PARAMETER WorkDir
 Where the worktrees and their builds live. Default %LOCALAPPDATA%\JStream-windows-pass.
@@ -920,6 +921,8 @@ function Test-YouTube {
     Ask 'ends by itself' 'After the output stopped, did Studio end the broadcast by itself?'
     if (Confirm 'Search this run''s logs for the stream key? This reads the key file in memory and prints only file names, never the key.') {
         $key = (Get-Content -LiteralPath $keyFile -Raw).Trim()
+        # Redacted from the zip too, in case this check finds it in a log.
+        if ($key) { $script:Secrets.Add($key) }
         $found = @(Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object { $_.Extension -ne '.flv' } |
             Where-Object { (Select-String -LiteralPath $_.FullName -SimpleMatch -Pattern $key -Quiet) } | ForEach-Object { $_.FullName })
         $key = $null
@@ -995,6 +998,7 @@ regsvr32 /s '$test\jstream_vcam_windows.dll'
         $code = Invoke-Elevated @"
 Copy-Item -Force -LiteralPath 'C:\Windows\ServiceProfiles\LocalService\AppData\Local\JStream\vcam\vcam.log' -Destination '$vlog'
 regsvr32 /s /u '$test\jstream_vcam_windows.dll'
+Remove-Item -Recurse -Force -LiteralPath '$test' -ErrorAction SilentlyContinue
 "@ (Join-Path $OutDir 'vcam-unregister.log')
         if ($null -eq $code) { Warn 'cleanup' "declined: run regsvr32 /u $test\jstream_vcam_windows.dll as administrator" }
     }

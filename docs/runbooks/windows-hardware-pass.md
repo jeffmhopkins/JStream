@@ -40,14 +40,17 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
   (`pull/<n>/head`). The script fetches each into `refs/jstream-pass/<name>` and checks it
   out as a detached worktree under `%LOCALAPPDATA%\JStream-windows-pass\src\<name>`, where
   its build stays for the next run. The checkout the script runs from, its branch and its
-  files are not changed. `-NoBuild` reuses the worktrees as they are. The source table at
+  files are not changed. `-NoBuild` reuses the worktrees as they are, without fetching or building the daemons
+  and apps; the `cargo test` steps, the browser helper and the desktop UI still compile what
+  they need. The source table at
   the top of the script is the one place to change when a PR merges.
 - **What it asks first.** Every step that changes the machine asks before it runs, and
   a no is recorded as skipped: anything run as administrator (each is one UAC prompt),
   registering or unregistering the virtual camera, a forced GPU reset, installing a tool
   with `cargo install`, and reading the stream key file. The files it creates under
   `%PUBLIC%` for the ACL checks are removed when the check ends. `-Unattended` declines
-  all of these and skips every question.
+  all of these and skips every question. Its timed steps still run, since their automatic
+  checks need no one: it records the display, and the webcam with its microphone.
 - **Questions.** A check only a person can judge (the Camera app shows the frames, Studio
   goes live) asks pass, fail or skip where it happens.
 - **When you act.** Every line that needs you starts with a magenta `>>> YOU:` and a beep.
@@ -62,8 +65,9 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
   daemon's console.
 - **Report.** The run folder (`%LOCALAPPDATA%\JStream-windows-pass\runs\<time>`, or
   `-OutDir`) gets `report.md`, `results.json`, every step's log and the recordings. The zip
-  beside it holds the text files only, with the run's tokens replaced by `***`; token
-  files, key files and recordings stay out. The script ends by printing the zip's path
+  beside it holds the text files only, with the run's tokens replaced by `***`, and the
+  stream key too once you let the YouTube check search the logs for it. Token files, key
+  files and recordings stay out. The script ends by printing the zip's path
   and a summary, one line per check, to paste back with it. If the run left something on
   the machine (a virtual camera still registered, the Camera app open), the report and
   the last lines say what and how to undo it.
