@@ -1518,13 +1518,21 @@ mod tests {
         let (origin, work) = origin_and_clone("merged-prs-dep", &files);
         verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
         commit_all(&origin, "stamps");
+        // An earlier wave landed #18 before the branch's base.
+        origin.write("src/old.rs", "old\n");
+        commit_all(
+            &origin,
+            "chore(wave): land wave/m1 (#20)\n\n* feat: old (#18)\n",
+        );
         work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
         work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
         let pr = "the branch's a1 edit, which the section text still describes";
         verify(&work.0, "S#a", "agent:work", pr).expect("S verifies on work");
         commit_all(&work, "work: a1");
         // #21 changes only D#e; #22 changes D#d; the wave carried #28 and #29 and changes
-        // a.rs, which the branch changed too.
+        // a.rs, which the branch changed too. Its body, like GitHub's, lists every commit
+        // on the wave branch with their bodies: #18 again, which the base already has, a
+        // nested squash body, and a subject citing issue #5.
         origin.write("D.md", &d.replace("Else.", "Else, from main."));
         commit_all(&origin, "main: e (#21)");
         origin.write(
@@ -1537,7 +1545,9 @@ mod tests {
         verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
         commit_all(
             &origin,
-            "chore(wave): land wave/m2 (#30)\n\n* feat: x (W1) (#28)\n* fix: y (#29)\n",
+            "chore(wave): land wave/m2 (#30)\n\n* feat: x (W1) (#28)\n\n* wip\n\n\
+             * feat: old (#18)\n\nCo-Authored-By: A <a@b>\n\n---------\n\n\
+             * fix: y (#5) (#29)\n\n* fix: y (#5)\n\nbody\n",
         );
 
         let m = merge::merge_main(&work.0, "main").expect("merges");

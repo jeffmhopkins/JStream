@@ -14,7 +14,8 @@
 //! block from the merged sources, as `docs generate` would (ADR-0038). Every other conflict
 //! is left untouched for a person.
 
-use std::collections::BTreeMap;
+use std::cell::{OnceCell, RefCell};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::{Command, Output};
 
@@ -68,17 +69,36 @@ pub(crate) struct Commit {
     /// `<hash> <subject>`.
     pub(crate) line: String,
     /// The PRs it came from: the `(#N)` a squash merge ends its subject with and, for a
-    /// wave's landing squash, the `* <subject> (#N)` lines of its body, which are the PRs
-    /// the wave carried (docs/runbooks/waves.md#landing). In ascending order.
+    /// wave's landing squash, the `* <subject> (#N)` lines of its body that name a PR the
+    /// branch didn't already have (docs/DOCS.md#notes). In ascending order.
     pub(crate) prs: Vec<u32>,
 }
 
 impl Commit {
     /// The commit whose `<hash> <subject>` is `line` and whose whole message is `message`.
-    pub(crate) fn new(line: &str, message: &str) -> Self {
-        let mut prs: Vec<u32> = super::progress::merged_in(message)
-            .iter()
-            .filter_map(|m| u32::try_from(m.number).ok())
+    ///
+    /// A landing squash's body is GitHub's list of every commit on the wave branch, and
+    /// the bodies nested in them (#775 B1). So it also names PRs earlier waves landed,
+    /// which the branch's base already has (`landed`), and issues that commit subjects
+    /// cite as `(#A)` before their own `(#B)`. Neither counts; the subject's own `(#N)`
+    /// always does.
+    pub(crate) fn new(line: &str, message: &str, landed: &BTreeSet<u32>) -> Self {
+        let numbers = |text: &str| -> Vec<u32> {
+            super::progress::merged_in(text)
+                .iter()
+                .filter_map(|m| u32::try_from(m.number).ok())
+                .collect()
+        };
+        let subject = message
+            .trim_start_matches('\n')
+            .lines()
+            .next()
+            .unwrap_or("");
+        let own = numbers(subject);
+        let cited = issue_refs(message);
+        let mut prs: Vec<u32> = numbers(message)
+            .into_iter()
+            .filter(|n| own.contains(n) || (!landed.contains(n) && !cited.contains(n)))
             .collect();
         prs.sort_unstable();
         prs.dedup();
@@ -87,6 +107,32 @@ impl Commit {
             prs,
         }
     }
+}
+
+/// The `A` of each `* <subject> (#A) (#B)` line in `message`: a squash whose PR title
+/// cites an issue, so `A` is that issue, not a PR (GitHub numbers both alike).
+fn issue_refs(message: &str) -> BTreeSet<u32> {
+    let trailing = |s: &str| -> Option<(u32, String)> {
+        let rest = s.trim_end().strip_suffix(')')?;
+        let (head, num) = rest.rsplit_once("(#")?;
+        Some((num.parse().ok()?, head.to_owned()))
+    };
+    message
+        .lines()
+        .filter_map(|l| l.strip_prefix("* "))
+        .filter_map(|l| trailing(trailing(l)?.1.as_str()))
+        .map(|(n, _)| n)
+        .collect()
+}
+
+/// The PRs whose squash subjects, or wave landings' bodies, are in the history of `rev`:
+/// what a branch based at `rev` already has.
+fn landed_at(root: &Path, rev: &str) -> Result<BTreeSet<u32>> {
+    let log = git_ok(root, &["log", "--format=%B%x00", rev])?;
+    Ok(super::progress::merged_in(&String::from_utf8_lossy(&log))
+        .iter()
+        .filter_map(|m| u32::try_from(m.number).ok())
+        .collect())
 }
 
 /// The merge `docs merge-main` made last on this branch: the latest merge on its
@@ -102,6 +148,22 @@ pub(crate) struct MergePoint {
     /// The commit `docs merge-main` left the branch at: the merge, or the `docs migrate`
     /// commit it made right after it. What changed since is the branch's own later work.
     after: String,
+    /// The PRs already in `base`'s history ([`landed_at`]), read on first use.
+    landed: OnceCell<BTreeSet<u32>>,
+    /// Files read at merged revisions for [`dep_changed`], by `<rev>:<path>`, so a run
+    /// shows each once however many `dep:` inputs read it (#775 N2).
+    shown: RefCell<BTreeMap<String, Option<String>>>,
+}
+
+impl MergePoint {
+    /// The PRs the branch already had before the merge: those in its base's history.
+    fn landed(&self, root: &Path) -> Result<&BTreeSet<u32>> {
+        if let Some(l) = self.landed.get() {
+            return Ok(l);
+        }
+        let l = landed_at(root, &self.base)?;
+        Ok(self.landed.get_or_init(|| l))
+    }
 }
 
 /// The subject of the commit `docs merge-main` makes after a merge for what `docs migrate`
@@ -353,6 +415,8 @@ pub(crate) fn last_merge(root: &Path) -> Result<Option<MergePoint>> {
         theirs,
         base,
         after,
+        landed: OnceCell::new(),
+        shown: RefCell::default(),
     }))
 }
 
@@ -569,6 +633,7 @@ pub(crate) fn merged_commits(
     ];
     args.extend(paths.iter().copied());
     let log = String::from_utf8_lossy(&git_ok(root, &args)?).into_owned();
+    let landed = point.landed(root)?;
     let mut out = Vec::new();
     for record in log.split('\x1e').skip(1) {
         let mut parts = record.splitn(4, '\x1f');
@@ -576,20 +641,31 @@ pub(crate) fn merged_commits(
         else {
             bail!("invariant: `git log` wrote a record without its fields: {record:?}");
         };
-        let changed: Vec<&str> = parts
-            .next()
-            .unwrap_or_default()
+        let listed = parts.next().unwrap_or_default().to_owned();
+        // `git log` lists no files for a merge commit: take what it changed against its
+        // first parent instead, so it counts only for the inputs whose files it touched
+        // (#775 N1).
+        let listed = if listed.trim().is_empty() {
+            let mut diff = vec!["-c", "core.quotePath=false", "diff", "--name-only"];
+            let first = format!("{full}^1");
+            diff.extend([first.as_str(), full, "--"]);
+            diff.extend(paths.iter().copied());
+            String::from_utf8_lossy(&git_ok(root, &diff)?).into_owned()
+        } else {
+            listed
+        };
+        let changed: Vec<&str> = listed
             .lines()
             .map(str::trim)
             .filter(|l| !l.is_empty())
             .collect();
         let mut counts = false;
         for (input, path) in inputs {
-            if !changed.is_empty() && !changed.contains(&path.as_str()) {
+            if !changed.contains(&path.as_str()) {
                 continue;
             }
             counts = match input.strip_prefix("dep:") {
-                Some(dep) => dep_changed(root, full, path, dep)?,
+                Some(dep) => dep_changed(root, point, full, path, dep)?,
                 None => true,
             };
             if counts {
@@ -597,21 +673,27 @@ pub(crate) fn merged_commits(
             }
         }
         if counts {
-            out.push(Commit::new(line, message));
+            out.push(Commit::new(line, message, landed));
         }
     }
     Ok(out)
 }
 
 /// Whether commit `rev` changed the text `dep` names in `path`, against its first parent.
-fn dep_changed(root: &Path, rev: &str, path: &str, dep: &str) -> Result<bool> {
+fn dep_changed(root: &Path, point: &MergePoint, rev: &str, path: &str, dep: &str) -> Result<bool> {
     let text = |rev: String| -> Result<Option<String>> {
-        let show = git(root, &["show", &format!("{rev}:{path}")])?;
-        Ok(show
+        let key = format!("{rev}:{path}");
+        if let Some(t) = point.shown.borrow().get(&key) {
+            return Ok(t.as_ref().and_then(|t| hash::dep_text_in(dep, t)));
+        }
+        let show = git(root, &["show", &key])?;
+        let t = show
             .status
             .success()
-            .then(|| String::from_utf8_lossy(&show.stdout).into_owned())
-            .and_then(|t| hash::dep_text_in(dep, &t)))
+            .then(|| String::from_utf8_lossy(&show.stdout).into_owned());
+        let out = t.as_ref().and_then(|t| hash::dep_text_in(dep, t));
+        point.shown.borrow_mut().insert(key, t);
+        Ok(out)
     };
     Ok(text(format!("{rev}^"))? != text(rev.to_owned())?)
 }
@@ -897,6 +979,7 @@ mod tests {
     /// body lists as `* <subject> (#N)`.
     #[test]
     fn merged_prs_come_from_squash_subjects() {
+        let none = BTreeSet::new();
         let commits: Vec<Commit> = [
             "a1b2c3 docs: fix (#591) ",
             "d4e5f6 core: frame sync (#581)",
@@ -905,7 +988,7 @@ mod tests {
             "0d0e0f again (#581)",
             "101112 not a number (#x)",
         ]
-        .map(|l| Commit::new(l, l.split_once(' ').map_or(l, |(_, s)| s)))
+        .map(|l| Commit::new(l, l.split_once(' ').map_or(l, |(_, s)| s), &none))
         .to_vec();
         assert_eq!(pr_numbers(&commits), vec![581, 591]);
         assert_eq!(pr_list(&[581, 591]), "#581, #591");
@@ -919,15 +1002,78 @@ mod tests {
             "131415 chore(wave): land wave/m2 (#470)",
             "chore(wave): land wave/m2 (#470)\n\n* feat(cli): b (W2) (#316)\n* feat: a (W1) (#315)\n\n\
              body that mentions (#9) in passing\n* not a pr\n",
+            &none,
         );
         assert_eq!(wave.prs, vec![315, 316, 470]);
         // Only a landing squash's body is read.
-        let plain = Commit::new("161718 fix: c (#20)", "fix: c (#20)\n\n* reverts (#19)\n");
+        let plain = Commit::new(
+            "161718 fix: c (#20)",
+            "fix: c (#20)\n\n* reverts (#19)\n",
+            &none,
+        );
         assert_eq!(plain.prs, vec![20]);
         assert_eq!(
             pr_numbers([&wave, &plain, &commits[0]]),
             vec![20, 315, 316, 470, 591]
         );
+    }
+
+    /// #775 B1: a real landing squash's body (the shape of #754's) is GitHub's list of
+    /// every commit on the wave branch, with the bodies nested in them. Only the PRs the
+    /// branch didn't already have count: not earlier waves' PRs, not builder commits that
+    /// name one, and not issues a subject cites before its own `(#N)`.
+    #[test]
+    fn landing_bodies_count_only_new_prs() {
+        let body = "chore(wave): land wave/m1-3 (#754)
+
+* feat(transitions): studio mode and transitions on program (T1) (#260)
+
+* wip(protocol, graph): transition presets
+
+* fix(transitions): None waits for its delay
+
+Review round 1 on #260:
+- B1: the None effect now shows an item when its delay ends.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+* docs(outputs): the virtual-camera output runs in jstream-core (#320)
+
+* docs(outputs): the virtual-camera output lives in jstream-core's runtime (#310)
+
+Since #213 the virtual_cam output runs in jstream-core.
+
+* docs: re-verify sections after merging main's stamp ledger
+
+---------
+
+* feat(render): composite GPU capture frames without a CPU copy (E3b) (#219)
+
+* Re-verify docs after merging wave/m1 (#251)
+
+* docs(adr): accept ADR-0066, an optional vcam (#242) (#556)
+
+* docs(security): record the maintainer's accepted vcam DLL risk (#242)
+
+* wip
+
+* docs(adr): accept ADR-0066, superseding ADR-0020 (#242)
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+* Merge branch 'main' into wave/m1-3
+
+* feat(transitions): studio mode and transitions on program (T1) (#260)
+";
+        // Earlier waves landed #219, #251 and #310.
+        let landed = BTreeSet::from([219, 251, 310]);
+        let c = Commit::new("b2383cad chore(wave): land wave/m1-3 (#754)", body, &landed);
+        assert_eq!(c.prs, vec![260, 320, 556, 754]);
+        // The subject's own number counts even when it is in `landed`.
+        let c = Commit::new("161718 fix: c (#251)", "fix: c (#251)\n", &landed);
+        assert_eq!(c.prs, vec![251]);
     }
 
     const DOC: &str = "<!-- @doc\nid = \"T\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n";
