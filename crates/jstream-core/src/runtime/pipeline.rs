@@ -236,11 +236,6 @@ fn scale_nearest(own: FrameSize, rgba: &[u8], size: FrameSize, out: &mut Vec<u8>
     }
 }
 
-/// A fake Annex-B encoder does not emit SPS/PPS. FLV and MP4 still need a decoder
-/// configuration, so the muxers are given the mux crate's baseline sets.
-const SPS: [u8; 5] = [0x67, 0x42, 0xC0, 0x1E, 0xDA];
-const PPS: [u8; 4] = [0x68, 0xCE, 0x3C, 0x80];
-
 /// Counters a caller can read while an output is running.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OutputStats {
@@ -1213,7 +1208,8 @@ impl Nv12Passes {
 pub(crate) enum PipelineEvent {
     /// A fatal error: the watcher settles `failed`.
     Failed(String),
-    /// The publish link went down and is being re-established: `reconnecting`.
+    /// The publish link went down and is being re-established, or came back after
+    /// dropping again soon after a reconnect and is not yet stable: `reconnecting`.
     LinkDown,
     /// The publish link is up again: `active`.
     LinkUp,
@@ -1825,8 +1821,6 @@ fn stream_info(
         video_kbps,
         audio_kbps: profile.audio.kbps,
         sample_rate: SAMPLE_RATE,
-        sps: &SPS,
-        pps: &PPS,
     })
 }
 
