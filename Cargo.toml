@@ -17,6 +17,11 @@ anyhow = "1"
 # The render snapshot (ARCH › Threads, "State to RT threads"): the control side swaps an
 # immutable snapshot that the render thread loads without a lock. No dependencies.
 arc-swap = { version = "1.9", default-features = false }
+# Vulkan types and calls for the Linux GPU interop's DMA-BUF modifier queries
+# (`jstream-platform-linux`, ADR-0004, ADR-0060 §3), next to wgpu-hal's Vulkan backend.
+# The 0.38 line wgpu-hal 30 already brings in (wgpu is pinned exactly), so it adds no
+# crate. No default features: wgpu-hal turns on the loader it uses.
+ash = { version = "0.38", default-features = false, features = ["std"] }
 # Test-only global allocator that flags allocations inside a marked scope (R-RT-001).
 # Warn mode counts violations instead of aborting, so a test can assert on them, in
 # debug and release builds alike.
@@ -115,20 +120,23 @@ leptos = { version = "0.8", default-features = false, features = ["csr"] }
 mach2 = { version = "0.6", default-features = false }
 # Foundation through the objc2 framework crates (ADR-0063 §12), for the running macOS
 # version (`NSProcessInfo`), the arrays, errors and strings ScreenCaptureKit hands back,
-# and the numbers and UUIDs of a Core Audio tap description (`NSValue`, `NSUUID`).
+# the numbers and UUIDs of a Core Audio tap description (`NSValue`, `NSUUID`), and a
+# camera output's video settings (`NSDictionary`, with `NSObject` for its keys).
 # The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
 # only `std` and the classes the macOS crate calls.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSError", "NSProcessInfo", "NSString", "NSUUID", "NSValue"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSEnumerator", "NSError", "NSObject", "NSProcessInfo", "NSString", "NSURL", "NSUUID", "NSValue"] }
 # Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
 # crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
 # and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
-# `CVPixelBuffer` for its input; and CF data for the Keychain store's secrets (§9). The
+# `CVPixelBuffer` for its input; the decoder's `VTDecompressionSession`, fed
+# `CMSampleBuffer`s made from `CMBlockBuffer`s and H.264 or HEVC format descriptions;
+# and CF data for the Keychain store's secrets (§9). The
 # 0.3 line, as `objc2-foundation`; plain C APIs, so no `objc2` feature and no build
 # script. Only the headers the macOS crate calls.
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFData", "CFDictionary", "CFNumber", "CFString"] }
-objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "objc2-core-video"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "CMTimeRange", "objc2-core-audio-types", "objc2-core-video"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
-objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
+objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTDecompressionProperties", "VTDecompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }
 # AudioToolbox and Core Audio's base types through the objc2 framework crates (ADR-0063 §7,
 # §12), for the AAC-LC `AudioConverter`: the converter and its properties, the codec's
 # bit-rate control mode, and `AudioStreamBasicDescription` and `AudioBufferList` for its
@@ -143,11 +151,15 @@ objc2-core-audio-types = { version = "0.3", default-features = false, features =
 # `objc2` and `objc2-foundation` features are only for `CATapDescription`, an
 # Objective-C class (no blocks or dispatch features).
 objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2", "objc2-core-audio-types", "objc2-foundation"] }
-# AVFoundation through the objc2 framework crates (ADR-0063 §4, §11, §12), for the
-# Microphone permission: `AVCaptureDevice`'s authorization status and request for the
-# audio media type. The 0.3 line, as above; no build script. Only those headers, and
-# `block2` for the request's completion handler.
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+# AVFoundation through the objc2 framework crates (ADR-0063 §4, §6, §10, §11, §12), for
+# the Microphone and Camera permissions (`AVCaptureDevice`'s authorization status and
+# request); webcams (ADR-0063 §10): the discovery session, the device's formats, and a
+# capture session with a video data output; and the media-file source: `AVURLAsset`,
+# its tracks, and the `AVAssetReader` that demuxes and decodes them. The 0.3 line, as
+# above; no build script. Only those headers, `block2` for the completion handlers,
+# `dispatch2` for the video output's callback queue, and the Core Media and Core Video
+# types the frames come in.
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVAsset", "AVAssetReader", "AVAssetReaderOutput", "AVAssetTrack", "AVCaptureDevice", "AVCaptureInput", "AVCaptureOutputBase", "AVCaptureSession", "AVCaptureVideoDataOutput", "AVError", "AVMediaFormat", "block2", "dispatch2", "objc2-core-media", "objc2-core-video"] }
 # ScreenCaptureKit through the objc2 framework crates (ADR-0063 §3, §12), for display and
 # window capture: `SCShareableContent` lists targets, `SCStream` captures them, and
 # `SCError` has the codes for a refused permission or a stopped stream. The 0.3 line, as

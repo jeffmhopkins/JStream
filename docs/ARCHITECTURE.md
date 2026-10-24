@@ -54,7 +54,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature, opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` (and on macOS `jstream-platform-macos`, on the backends built so far) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature, opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, CEF's bootstrap exe renamed plus this crate's DLL, which a host's CEF backend starts and drives over pipes. Hosts that turn on browser sources ship it next to their own exe ([ADR-0048](adr/0048-sandboxed-browser-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 | `jstream-plugin-host` | Not a host of the engine: the out-of-process CLAP plugin host, one process per CLAP filter instance, started by the engine ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). It talks to the engine only through a shared-memory block and framed messages on its stdin and stdout, never the protocol ([its README](../apps/jstream-plugin-host/README.md#purpose)). |
@@ -143,7 +143,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
-| 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), VideoToolbox/AudioToolbox, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens (M3; [ADR-0063](adr/0063-macos-platform-support.md); Apple frameworks through the objc2 crates) | **yes** |
+| 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), AVFoundation webcams, VideoToolbox/AudioToolbox, AVFoundation media files, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens (M3; [ADR-0063](adr/0063-macos-platform-support.md); Apple frameworks through the objc2 crates) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac` (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
@@ -875,7 +875,11 @@ is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's fo
 geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
 which is clipped to the box, then rotated about the box centre), or a legacy 0.3
 transform through `legacy_quad` (crop, scale against the current source size,
-top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+top-left at `position`, clockwise rotation about that corner). A geometry with
+non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn polygon,
+clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
+analytic edge coverage. Mips and anisotropic sampling for 3D items are not built yet,
+and the engine still refuses non-neutral 3D. Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
@@ -914,7 +918,7 @@ descriptors whose passes `apply_filter` draws from any image (an upload, a layer
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
 runtime that runs a source's video chain before placement is not built yet. Still
-outside this crate: P010, 3D, loading effect packs (`jstream-effects`; this crate draws
+outside this crate: P010, mips and anisotropic sampling for 3D items (ADR-0050 decision 5), loading effect packs (`jstream-effects`; this crate draws
 them through the filter harness), and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
