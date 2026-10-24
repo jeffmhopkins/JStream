@@ -37,7 +37,7 @@ async function centre(locator) {
 test('the Editing layout docks every panel, and the View menu hides and adds them', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(zone(page, 'Left sidebar').getByRole('tab')).toHaveText(['Scenes', 'Scene objects']);
-  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector']);
+  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector', 'Transform']);
   await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs', 'Transitions']);
   // Empty zones are hidden until a panel is dragged.
   await expect(zone(page, 'Top dock')).toBeHidden();
@@ -50,9 +50,9 @@ test('the Editing layout docks every panel, and the View menu hides and adds the
   await inspector.click();
   await expect(tab(page, 'Inspector')).toHaveCount(0);
   await expect(inspector).toHaveText(/add/);
-  // The menu stays open; adding puts the panel back in its home zone.
+  // The menu stays open; adding puts the panel back at the end of its home zone.
   await inspector.click();
-  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector']);
+  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Transform', 'Inspector']);
   await page.keyboard.press('Escape');
   await expect(page.locator('header.app-header')).toContainText('Layout: Editing (modified)');
 });
@@ -92,16 +92,16 @@ test('a lone panel collapses by its title, and closes on a second click of its Ã
   await expect(scenes).toBeHidden();
   await tab(page, 'Scenes').click();
   await expect(scenes).toBeVisible();
-  // The inspector is alone in its zone, so it doesn't collapse.
+
+  const close = page.getByRole('button', { name: 'Close Transform' });
+  await tab(page, 'Transform').hover();
+  await close.click();
+  await expect(close).toHaveAttribute('title', 'Click again to close Transform');
+  await close.click();
+  await expect(tab(page, 'Transform')).toHaveCount(0);
+  // The inspector is now alone in its zone, so it doesn't collapse.
   await tab(page, 'Inspector').click();
   await expect(page.getByRole('tabpanel', { name: 'Inspector' })).toBeVisible();
-
-  const close = page.getByRole('button', { name: 'Close Scene objects' });
-  await tab(page, 'Scene objects').hover();
-  await close.click();
-  await expect(close).toHaveAttribute('title', 'Click again to close Scene objects');
-  await close.click();
-  await expect(tab(page, 'Scene objects')).toHaveCount(0);
 });
 
 test('splitters resize zones, and the layout survives a reload', async ({ page, daemon }) => {

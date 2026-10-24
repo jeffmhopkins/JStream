@@ -60,11 +60,14 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
-  that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
+  that are only between stamps or only inside `@generated` blocks, takes main's `by` and note
+  for each ledger entry both sides recorded at the same content, moves inline stamps a branch from before ADR-0053 still
   has, and lists the sections left stale: each stale input with the note the branch had
-  written on it and the merged commits that changed it. `docs verify --merge` then keeps
-  those notes and adds what the merge changed ([Verification notes](#notes)), and refuses
-  an input whose file the branch changed after the merge.
+  written on it and the merged commits that changed it, then the PRs those commits came
+  from. `docs verify --merge` then keeps those notes and adds what the merge changed
+  ([Verification notes](#notes)), and refuses an input whose file the branch changed after
+  the merge. It and `--renote` list the merged PRs behind the entries they rewrite and
+  name any the note leaves out.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -323,7 +326,15 @@ cargo xtask docs migrate                       # move inline stamps to the ledge
 wave's ([runbook](runbooks/waves.md#current)). Every
 conflict in the ledger takes main's side: a merge never leaves a section falsely fresh,
 and a conflict usually leaves it stale, for a re-read. The result must parse, and is
-rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
+rewritten in canonical form. Once the ledger has no conflict left, each entry whose hash
+equals main's entry for the same input takes main's entry, `by` and note included,
+whether it conflicted or not. Both sides verified the same content of that input, so no
+section's freshness changes; but the last note on it becomes the one main wrote for it,
+and the branch's ledger diff keeps only the inputs it verified at other content. This goes
+into the merge commit itself, and `merge-main` names each section it changed. A
+fast-forward, or a merge with nothing to bring in, makes no merge commit and takes
+nothing; neither does a merge whose ledger doesn't parse, which the steps after the commit
+report. In a doc, a conflict whose two sides are only inline `verified` lines
 inside `@section` blocks (either side may have none, as when `main` moved them to the
 ledger) takes main's side too. A conflict whose two sides lie wholly inside `@generated`
 blocks that `docs generate` writes, such as two PRs each regenerating the README's progress
@@ -340,17 +351,24 @@ changed the file the input lives in.
 
 `docs verify <DOC#anchor> --by <who> --merge "<text>"` re-verifies such a section after the
 re-read. It finds the branch's latest merge (one that no `origin/main` or `origin/wave/*`
-branch contains) and the entries the branch had written itself before it. Each entry a
-verify would rewrite, and each the branch had written whose input the merge has since
-changed, gets the branch's note on it, then ` | merge: `, then the text. An earlier merge's
-addendum is dropped first, because what it brought in is part of the base by then. An entry
-the branch hadn't written gets `merge: ` and the text alone. Because it rewrites the
-branch's entries whose input the merge changed even when they are fresh, it also repairs a
-plain re-verify after the merge that replaced the branch's notes. It refuses, naming each
-input, when the file an entry it would rewrite lives in (the doc itself for `body`, the
-covered file, the target doc for `dep:`) differs, committed or not, from what `merge-main`
-left: the merge, or its `docs migrate` commit. The branch's earlier note doesn't cover
-such a later edit, so verify that section with `--note` instead, covering both.
+branch contains) and the entries the branch had written itself before it. An input whose
+hash equals the merged side's entry gets that entry as it is, `by` and note included: the
+branch changes nothing in it, so its diff against the merged side shows no rewrite there.
+Each other entry a verify would rewrite, and each the branch had written whose input the
+merge has since changed, gets the branch's note on it, then ` | merge: `, then the text.
+An earlier merge's addendum is dropped first, because what it brought in is part of the
+base by then. An entry the branch hadn't written gets `merge: ` and the text alone. Because
+it rewrites the branch's entries whose input the merge changed even when they are fresh, it
+also repairs a plain re-verify after the merge that replaced the branch's notes. It
+refuses, naming each input, when the file an entry it would rewrite with the branch's note
+lives in (the doc itself for `body`, the covered file, the target doc for `dep:`) differs,
+committed or not, from what `merge-main` left: the merge, or its `docs migrate` commit.
+The branch's earlier note doesn't cover such a later edit, so verify that section with
+`--note` instead, covering both. An entry taken from the merged side is never refused,
+since it carries no note of the branch's. It fails when the ledger on the branch before the
+merge, at the merge base or on the merged side doesn't parse, rather than taking none or
+every one of the entries for the branch's own; `merge-main` fails the same way when it
+lists the branch's notes, after it has committed the merge.
 
 `docs verify <DOC#anchor> --by <who> --renote "<note>"` replaces the `by` and `note` of a
 section that is already fresh, as when a reviewer asks for a better note, without touching
@@ -456,10 +474,18 @@ holds**. The note says what was checked and why it still holds, e.g.:
   cover the PR's whole change to that input: it is the one the reviewer reads.
 - After `docs merge-main`, each stale section needs its own note: what its earlier note
   said about this PR's change, plus what the merge changed in that section's inputs.
-  `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry and
-  adds the text, and `merge-main` prints the merged commits behind each stale input to
-  write it from ([Hash-bound verification](#verification)). The text is still per
-  section: one stock text across every stale section, such as "rechecked after merging
+  `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
+  this PR changes and adds the text. On an input whose hash equals the merged side's
+  entry, it keeps that entry as it is, which `merge-main` has already given main's note.
+  `merge-main` prints the merged commits behind each
+  stale input to write it from ([Hash-bound verification](#verification)), and under each
+  stale section the PRs (`(#N)` in their subjects) those commits came from. `--merge` and
+  `--renote` print the PRs behind the entries they rewrite (an entry kept as the merged
+  side wrote it is left out) and name any the text leaves out: credit each PR whose change
+  the note covers, by number. A wave lands on `main` as one squash commit, so after
+  merging `main` that is the wave's PR; the PRs inside it are in the wave branch's
+  history. The text is
+  still per section: one stock text across every stale section, such as "rechecked after merging
   main", fails review. A section this PR also changed after the merge takes `--note`, and
   `--merge` refuses it.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
@@ -738,7 +764,7 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
   lines) among its leading inner attributes: only whitespace, comments and other inner
   attributes may come before it. One inside a comment or later in the file doesn't count.
 - **Native code** ([R-DEP-002](RULES.md#R-DEP-002),
-  [ADR-0031](adr/0031-source-types-and-decoding-scope.md)): every resolved package, members or
+  [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): every resolved package, members or
   not, that has a `links =` key or whose build script compiles C must be on the
   native-code allowlist, with any feature that entry requires enabled. "Compiles C" is a
   heuristic: a build-dependency on `cc`, `cmake`, `autotools` or `nasm-rs`, or on a build

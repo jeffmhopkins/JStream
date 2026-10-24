@@ -276,27 +276,36 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
 }
 
 /// `docs verify <DOC#anchor> --by <who> --merge <text>`: the same after `docs merge-main`,
-/// for a section the merge left stale. Each rewritten entry keeps the note this branch had
-/// written on it before the merge and adds `text`, what the merge changed in the section's
-/// inputs (docs/DOCS.md#notes). It refuses when the file of a rewritten input changed after
+/// for a section the merge left stale. An input whose hash equals the merged side's entry
+/// gets that entry unchanged (#596). Each other rewritten entry keeps the note this branch
+/// had written on it before the merge and adds `text`, what the merge changed in the
+/// section's inputs (docs/DOCS.md#notes). It refuses when the file of a rewritten input changed after
 /// the merge: the branch's earlier note doesn't cover that edit, so it needs `--note`.
-fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
+/// Returns the merged PRs it reported on the rewritten entries' files.
+fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Vec<u32>> {
     let text = check_stamp(by, text)?;
     let point = merge::last_merge(root)?.context(
         "no merge on this branch to carry notes across (run `cargo xtask docs merge-main` \
          first, or verify with --note)",
     )?;
     let branch = merge::branch_entries(root, &point)?;
+    let merged = merge::merged_ledger(root, &point)?;
+    let reported = std::cell::RefCell::new(Vec::new());
     stamp_section(root, target, &|doc, key, old, inputs| {
-        let stamp = ledger::restamp_merge(old, inputs, branch.get(key), by, text);
+        let theirs = merged.sections.get(key);
+        let stamp = ledger::restamp_merge(old, inputs, branch.get(key), theirs, by, text);
+        // An entry taken as it is from the merged side carries no note of this branch's, so
+        // a later edit to its file doesn't refuse it.
         let rewritten: Vec<(&String, String)> = stamp
             .iter()
             .filter(|(k, e)| old.and_then(|o| o.get(*k)) != Some(*e))
+            .filter(|(k, e)| theirs.and_then(|t| t.get(*k)) != Some(*e))
             .map(|(k, _)| (k, merge::input_path(doc, k)))
             .collect();
         let mut paths: Vec<String> = rewritten.iter().map(|(_, p)| p.clone()).collect();
         paths.sort();
         paths.dedup();
+        *reported.borrow_mut() = report_merged_prs(root, &point, key, &paths, text)?;
         let later = merge::changed_after(root, &point, &paths)?;
         let refused: Vec<String> = rewritten
             .iter()
@@ -312,18 +321,28 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
             );
         }
         Ok(stamp)
-    })
+    })?;
+    Ok(reported.into_inner())
 }
 
 /// `docs verify <DOC#anchor> --by <who> --renote <text> [--from wave/<name>]`: replaces the
 /// `by` and `note` of the entries this branch wrote on a section that is already fresh,
 /// keeping their hashes, as when a reviewer asks for a better note. The branch's entries are
 /// those that differ from the ledger where it left `origin/main` (or the wave it targets).
-/// A stale section is refused: re-read it and verify with `--note` or `--merge`.
-fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) -> Result<()> {
+/// A stale section is refused: re-read it and verify with `--note` or `--merge`. Returns the
+/// PRs this branch's last merge brought in on those entries' files, which it reports.
+fn verify_renote(
+    root: &Path,
+    target: &str,
+    by: &str,
+    note: &str,
+    branch: &str,
+) -> Result<Vec<u32>> {
     let note = check_stamp(by, note)?;
     let base = merge::base_ledger(root, branch)?;
-    stamp_section(root, target, &|_, key, old, inputs| {
+    let point = merge::last_merge(root)?;
+    let reported = std::cell::RefCell::new(Vec::new());
+    stamp_section(root, target, &|doc, key, old, inputs| {
         if !ledger::diff(old, inputs).is_empty() {
             bail!(
                 "{key} is stale: re-read it and verify with --note (or --merge after \
@@ -331,10 +350,52 @@ fn verify_renote(root: &Path, target: &str, by: &str, note: &str, branch: &str) 
             );
         }
         let old = old.context("invariant: a fresh section has a stamp")?;
+        if let Some(p) = &point {
+            // The entries `renote` rewrites: this branch's own.
+            let base = base.sections.get(key);
+            let mut paths: Vec<String> = old
+                .iter()
+                .filter(|(k, e)| base.and_then(|b| b.get(*k)) != Some(*e))
+                .map(|(k, _)| merge::input_path(doc, k))
+                .collect();
+            paths.sort();
+            paths.dedup();
+            *reported.borrow_mut() = report_merged_prs(root, p, key, &paths, note)?;
+        }
         ledger::renote(old, base.sections.get(key), by, note).with_context(|| {
             format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
         })
-    })
+    })?;
+    Ok(reported.into_inner())
+}
+
+/// Prints the PRs `point`'s merge brought in on `paths`, the files of the entries a verify
+/// of `key` rewrites, and those `note` doesn't name, so a note written after a merge
+/// credits each PR whose change it covers (docs/DOCS.md#notes). It only advises: a note may
+/// rightly leave out a PR that changed nothing this section says. Returns the PRs.
+fn report_merged_prs(
+    root: &Path,
+    point: &merge::MergePoint,
+    key: &str,
+    paths: &[String],
+    note: &str,
+) -> Result<Vec<u32>> {
+    let prs = merge::pr_numbers(&merge::merged_commits(root, point, paths)?);
+    if prs.is_empty() {
+        return Ok(prs);
+    }
+    eprintln!(
+        "{key}: the merge brought in {} on the entries this verify rewrites",
+        merge::pr_list(&prs)
+    );
+    let unnamed = merge::unnamed_prs(note, &prs);
+    if !unnamed.is_empty() {
+        eprintln!(
+            "  the note doesn't name {}: credit each PR whose change it covers (docs/DOCS.md#notes)",
+            merge::pr_list(&unnamed)
+        );
+    }
+    Ok(prs)
 }
 
 /// The section's new stamp from its doc's path, its key, its current stamp and its current
@@ -697,6 +758,9 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             for s in &m.stamps {
                 eprintln!("took {branch}'s stamp: {s}");
             }
+            for s in &m.adopted {
+                eprintln!("took {branch}'s note where it verified the same content: {s}");
+            }
             for path in &m.generated {
                 if m.committed {
                     eprintln!("regenerated after a conflict in its @generated blocks: {path}");
@@ -744,6 +808,11 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                     if i.commits.len() > SHOWN {
                         eprintln!("    merged: … and {} more", i.commits.len() - SHOWN);
                     }
+                }
+                let inputs = m.inputs.get(s).into_iter().flatten();
+                let prs = merge::pr_numbers(inputs.flat_map(|i| &i.commits));
+                if !prs.is_empty() {
+                    eprintln!("  merged PRs on these inputs: {}", merge::pr_list(&prs));
                 }
             }
             eprintln!(
@@ -845,6 +914,17 @@ mod tests {
                 .output()
                 .is_ok_and(|o| o.status.success());
             assert!(ok, "git {args:?} failed");
+        }
+
+        /// The commit `rev` names.
+        fn rev(&self, rev: &str) -> String {
+            let out = Command::new("git")
+                .args(["rev-parse", rev])
+                .current_dir(&self.0)
+                .output()
+                .expect("invariant: git runs");
+            assert!(out.status.success(), "git rev-parse {rev} failed");
+            String::from_utf8_lossy(&out.stdout).trim().to_owned()
         }
 
         /// `docs check` messages containing `needle`.
@@ -1307,6 +1387,120 @@ mod tests {
         );
     }
 
+    /// #697: after `docs merge-main`, an entry the branch holds at the same hash as main's,
+    /// but with a note of its own (as an older `verify --merge` left on inputs a PR into a
+    /// wave doesn't change, #607 review B5), takes main's entry; one the branch verified at
+    /// other content keeps the branch's note. The change is part of the merge commit, so
+    /// nothing follows it, and a merge with nothing new adopts nothing.
+    #[test]
+    fn merge_main_takes_main_entries_at_the_same_hash() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        let t = s.replace("\"S\"", "\"T\"").replace("src/**", "lib/**");
+        files.extend([
+            ("S.md", s),
+            ("T.md", t.as_str()),
+            ("src/a.rs", "a\n"),
+            ("src/b.rs", "b\n"),
+            ("lib/c.rs", "c\n"),
+        ]);
+        let (origin, work) = origin_and_clone("merge-adopt", &files);
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies");
+        verify(&origin.0, "T#a", "agent:main", NOTE).expect("T verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+
+        // The branch changes b.rs and verifies it, then carries its own note on a.rs,
+        // which it leaves alone, at main's hash.
+        work.write("src/b.rs", "b work\n");
+        let work_note = "b is the branch's change to b.rs and the text still describes it";
+        verify(&work.0, "S#a", "agent:work", work_note).expect("S verifies on work");
+        let mut l = ledger::Ledger::read(&work.0).expect("reads");
+        let a = l
+            .sections
+            .get_mut("S#a")
+            .and_then(|s| s.get_mut("file:src/a.rs"))
+            .expect("invariant: a.rs is stamped");
+        let main_a = a.clone();
+        a.by = Some("agent:work".into());
+        a.note = Some("a note of the branch's on an input it leaves alone".into());
+        l.write(&work.0).expect("writes");
+        commit_all(&work, "work: b");
+        let before = work.rev("HEAD");
+        // Main moves on elsewhere, so the merge is a real one with no ledger conflict.
+        origin.write("lib/c.rs", "c main\n");
+        verify(&origin.0, "T#a", "agent:main", NOTE).expect("T verifies on main");
+        commit_all(&origin, "main: c");
+
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert!(
+            m.committed && m.refused.is_empty() && m.stamps.is_empty(),
+            "{m:?}"
+        );
+        assert_eq!(m.adopted, vec!["S#a".to_owned()]);
+        assert!(m.stale.is_empty(), "{m:?}");
+        let s = &ledger::Ledger::read(&work.0).expect("reads").sections["S#a"];
+        assert_eq!(s["file:src/a.rs"], main_a);
+        assert_eq!(s["file:src/b.rs"].note.as_deref(), Some(work_note));
+        // In the merge commit itself: HEAD is the merge, its first parent the branch.
+        assert_eq!(work.rev("HEAD^1"), before);
+        assert_eq!(work.rev("HEAD^2"), origin.rev("HEAD"));
+        let status = Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(&work.0)
+            .output()
+            .expect("invariant: git runs");
+        assert!(status.stdout.is_empty(), "{status:?}");
+        assert!(work.diags("is stale").is_empty());
+
+        // Nothing new on main: no merge, nothing adopted.
+        let m = merge::merge_main(&work.0, "main").expect("up to date");
+        assert!(m.committed && m.adopted.is_empty(), "{m:?}");
+        assert_eq!(work.rev("HEAD^1"), before);
+    }
+
+    /// #679 B2: `merge-main`, `--merge` and `--renote` report the same PRs: those behind the
+    /// entries they rewrite, not a merged PR on an input whose entry comes from the merged
+    /// side as it is.
+    #[test]
+    fn merged_prs_are_those_behind_the_rewritten_entries() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([
+            ("S.md", s),
+            ("src/a.rs", "a1\n\n\n\n\na5\n"),
+            ("src/b.rs", "b\n"),
+        ]);
+        let (origin, work) = origin_and_clone("merged-prs", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        let pr = "the branch's a1 edit, which the section text still describes";
+        verify(&work.0, "S#a", "agent:work", pr).expect("S verifies on work");
+        commit_all(&work, "work: a1");
+        // #11 changes a.rs, which the branch changed too; #12 changes only b.rs.
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 main\n");
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
+        commit_all(&origin, "main: a5 (#11)");
+        origin.write("src/b.rs", "b main\n");
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
+        commit_all(&origin, "main: b (#12)");
+
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        let i = &m.inputs["S#a"];
+        assert_eq!(
+            merge::pr_numbers(i.iter().flat_map(|i| &i.commits)),
+            vec![11]
+        );
+        let text = "main's a5 edit (#11) is outside what the text says about a.rs";
+        let prs = verify_merge(&work.0, "S#a", "agent:work", text).expect("S verifies");
+        assert_eq!(prs, vec![11]);
+        let better = "the branch's a1 edit; #11's a5 edit is outside what the text says";
+        let prs = verify_renote(&work.0, "S#a", "agent:review", better, "main").expect("renotes");
+        assert_eq!(prs, vec![11]);
+    }
+
     /// The subjects of `<hash> <subject>` lines.
     fn subjects(commits: &[String]) -> Vec<&str> {
         commits
@@ -1384,10 +1578,82 @@ mod tests {
         let i = &m.inputs["S#a"];
         assert_eq!(i[0].note.as_deref(), Some(joined(first).as_str()), "{i:?}");
         assert_eq!(subjects(&i[0].commits), vec!["main: a5 2 (#2)"]);
+        // #677: the PRs behind the section are the ones its note credits.
+        assert_eq!(merge::pr_numbers(&i[0].commits), vec![2]);
         let second = "main's second a5 edit (#2) is outside it too";
         verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
         assert_eq!(note("file:src/a.rs"), joined(second));
         assert!(work.diags("is stale").is_empty());
+    }
+
+    /// #596: on an input whose hash after the merge equals the merged side's entry,
+    /// `docs verify --merge` keeps that entry byte for byte, even when the branch had
+    /// written its own entry there before the merge (#539 N3, #323). The branch's note is
+    /// still kept and extended on the input the branch changed.
+    #[test]
+    fn verify_merge_keeps_the_merged_entry_on_inputs_the_branch_leaves_alone() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([
+            ("S.md", s),
+            ("src/a.rs", "a1\n\n\n\n\na5\n"),
+            ("src/b.rs", "b1\n\n\n\n\nb5\n"),
+        ]);
+        let (origin, work) = origin_and_clone("verify-merge-theirs", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+
+        // The branch changes a.rs, and makes an edit to b.rs that the wave also makes (as
+        // when part of the branch's work lands in the wave through another PR).
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        work.write("src/b.rs", "b1 new\n\n\n\n\nb5\n");
+        let pr = "the branch's a1 and b1 edits, which the section text still describes";
+        verify(&work.0, "S#a", "agent:work", pr).expect("S verifies on work");
+        commit_all(&work, "work: a1 and b1");
+        // The wave changes a5, and b.rs to a version that contains the branch's edit, and
+        // restamps both with its own note.
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 wave\n");
+        origin.write("src/b.rs", "b1 new\n\n\n\n\nb5 wave\n");
+        let wave = "the wave's a5 and b edits, which the section text still describes";
+        verify(&origin.0, "S#a", "agent:wave-owner", wave).expect("S verifies on the wave");
+        commit_all(&origin, "wave: a5 and b");
+        let theirs = ledger::Ledger::read(&origin.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        merge::merge_main(&work.0, "main").expect("merges");
+        // Git on Windows checks the merge out with CRLF line endings.
+        let merged_b = std::fs::read_to_string(work.0.join("src/b.rs"))
+            .expect("invariant: written")
+            .replace("\r\n", "\n");
+        assert_eq!(merged_b, "b1 new\n\n\n\n\nb5 wave\n", "b.rs is the wave's");
+
+        let first = "the wave's a5 edit is outside what the text says about a.rs";
+        verify_merge(&work.0, "S#a", "agent:work", first).expect("S verifies after the merge");
+        let entries = ledger::Ledger::read(&work.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        assert_eq!(entries["file:src/b.rs"], theirs["file:src/b.rs"]);
+        let a = &entries["file:src/a.rs"];
+        assert_eq!(
+            a.note.as_deref(),
+            Some(format!("{pr}{}{first}", ledger::MERGE_MARK).as_str())
+        );
+        assert_eq!(a.by.as_deref(), Some("agent:work"));
+        assert!(work.diags("is stale").is_empty());
+        // The ledger's text on b.rs is the wave's, byte for byte.
+        let text = |root: &Path| {
+            let t = std::fs::read_to_string(root.join(ledger::PATH)).expect("invariant: written");
+            t.lines()
+                .skip_while(|l| !l.contains("file:src/b.rs"))
+                .take_while(|l| !l.trim().is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(text(&work.0), text(&origin.0));
+        assert!(!text(&work.0).is_empty());
     }
 
     /// #525: `docs verify --merge` refuses a section when the file of an input it would
@@ -1568,6 +1834,103 @@ mod tests {
         assert!(err.contains(ledger::PATH), "{err}");
         let after = std::fs::read_to_string(work.0.join(ledger::PATH)).expect("written");
         assert_eq!(before, after, "nothing was written");
+    }
+
+    /// #551: `docs verify --merge` fails when the ledger at the merge base doesn't parse,
+    /// rather than taking every entry the branch had before its merge for its own.
+    #[test]
+    fn verify_merge_refuses_an_unparsable_base_ledger() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([("S.md", s), ("src/a.rs", "a\n")]);
+        let (origin, work) = origin_and_clone("verify-merge-bad-base", &files);
+        origin.write(ledger::PATH, "this is [not a ledger\n");
+        commit_all(&origin, "broken ledger");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        std::fs::remove_file(work.0.join(ledger::PATH)).expect("invariant: pulled");
+        verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies");
+        commit_all(&work, "work: a fresh ledger");
+        origin.write("src/a.rs", "a main\n");
+        commit_all(&origin, "main: a");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        let before = std::fs::read_to_string(work.0.join(ledger::PATH)).expect("written");
+        let err = verify_merge(
+            &work.0,
+            "S#a",
+            "agent:work",
+            "main's a.rs edit is outside what the text says",
+        )
+        .expect_err("the base ledger doesn't parse");
+        let err = format!("{err:#}");
+        assert!(err.contains("at the merge's base"), "{err}");
+        assert!(err.contains("doesn't parse"), "{err}");
+        assert!(err.contains(ledger::PATH), "{err}");
+        let after = std::fs::read_to_string(work.0.join(ledger::PATH)).expect("written");
+        assert_eq!(before, after, "nothing was written");
+    }
+
+    /// #551: `docs verify --merge` fails when the ledger on the branch before its merge
+    /// doesn't parse, rather than finding no entries of the branch's own. Here the branch
+    /// committed a broken ledger and repaired it after the merge, uncommitted.
+    #[test]
+    fn verify_merge_refuses_an_unparsable_branch_ledger() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([("S.md", s), ("src/a.rs", "a\n")]);
+        let (origin, work) = origin_and_clone("verify-merge-bad-branch", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        work.write(ledger::PATH, "this is [not a ledger\n");
+        commit_all(&work, "work: broken ledger");
+        origin.write("src/a.rs", "a main\n");
+        commit_all(&origin, "main: a");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        work.git(&["checkout", "origin/main", "--", ledger::PATH]);
+        let before = std::fs::read_to_string(work.0.join(ledger::PATH)).expect("written");
+        let err = verify_merge(
+            &work.0,
+            "S#a",
+            "agent:work",
+            "main's a.rs edit is outside what the text says",
+        )
+        .expect_err("the branch's ledger doesn't parse");
+        let err = format!("{err:#}");
+        assert!(err.contains("on this branch before its merge"), "{err}");
+        assert!(err.contains("doesn't parse"), "{err}");
+        assert!(err.contains(ledger::PATH), "{err}");
+        let after = std::fs::read_to_string(work.0.join(ledger::PATH)).expect("written");
+        assert_eq!(before, after, "nothing was written");
+    }
+
+    /// #551 N1: `docs merge-main` moves inline stamps and lists the branch's notes after it
+    /// commits the merge, so a ledger that doesn't parse fails there; the error says the
+    /// merge is committed rather than reading as a failed merge.
+    #[test]
+    fn merge_main_says_the_merge_is_committed_when_the_notes_cannot_be_listed() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([("S.md", s), ("src/a.rs", "a\n")]);
+        let (origin, work) = origin_and_clone("merge-main-bad-branch", &files);
+        work.write(ledger::PATH, "this is [not a ledger\n");
+        commit_all(&work, "work: broken ledger");
+        origin.write("src/a.rs", "a main\n");
+        commit_all(&origin, "main: a");
+        let err = merge::merge_main(&work.0, "main").expect_err("the notes can't be listed");
+        let err = format!("{err:#}");
+        assert!(err.contains("the merge is committed"), "{err}");
+        assert!(err.contains(ledger::PATH), "{err}");
+        let out = Command::new("git")
+            .args(["rev-list", "--parents", "-n", "1", "HEAD"])
+            .current_dir(&work.0)
+            .output()
+            .expect("git runs");
+        let parents = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(
+            parents.split_whitespace().count(),
+            3,
+            "HEAD is the merge: {parents}"
+        );
     }
 
     /// ADR-0053 transition: a branch from before the ledger re-stamped a section inline and

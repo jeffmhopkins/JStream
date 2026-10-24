@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use jstream_media::{ColorInfo, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo};
-use jstream_platform::{FrameSync, GpuFrame, PlatformError};
+use jstream_platform::{AdapterId, FrameSync, GpuContext, GpuFrame, PlatformError, SubmitLock};
 
 use crate::{
     Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, RenderError,
@@ -183,6 +183,48 @@ fn crop_keeps_the_uncut_texels() {
     near(&snapshot, 0, 0, [0, 255, 0, 255], 0);
     near(&snapshot, 1, 1, [0, 255, 0, 255], 0);
     near(&snapshot, 2, 0, [0, 0, 0, 255], 0);
+}
+
+#[test]
+fn an_image_is_placed_at_its_extent() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    // 8x4 texels, each row red for its first quarter and green for the rest, standing
+    // for a 4x2 image (ADR-0073): it places as 4x2, and its crop counts in those pixels.
+    let mut pixels = Vec::new();
+    for _row in 0..4 {
+        for x in 0..8 {
+            let rgba = if x < 4 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 255, 0, 255]
+            };
+            pixels.extend_from_slice(&rgba);
+        }
+    }
+    let mut image = opened.compositor.upload_rgba8(8, 4, &pixels).unwrap();
+    assert_eq!(image.extent(), (8, 4));
+    image.set_extent(FrameSize::new(4, 2).unwrap());
+    assert_eq!((image.width(), image.height()), (8, 4));
+    // One extent pixel off the left is two texels: what is left is one pixel of red
+    // and two of green, three pixels wide.
+    let items = [item(
+        &image,
+        Placement::IDENTITY,
+        Crop {
+            left: 1,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        },
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 4, 2, Color::BLACK, &items);
+    near(&snapshot, 0, 0, [255, 0, 0, 255], 0);
+    near(&snapshot, 1, 1, [0, 255, 0, 255], 0);
+    near(&snapshot, 2, 0, [0, 255, 0, 255], 0);
+    near(&snapshot, 3, 1, [0, 0, 0, 255], 0);
 }
 
 #[test]
@@ -717,6 +759,83 @@ fn a_refused_readback_stages_and_keeps_no_hold() {
     opened.compositor.render(&scene, false).expect("render");
     assert_eq!(count.load(Ordering::SeqCst), 1);
     assert_eq!(Arc::strong_count(&sync), holders);
+}
+
+/// A [`FrameSync`] that records, each time it is staged, whether `lock` was held then.
+#[derive(Debug)]
+pub(crate) struct LockSync {
+    pub(crate) lock: SubmitLock,
+    pub(crate) held: std::sync::Mutex<Vec<bool>>,
+}
+
+impl FrameSync for LockSync {
+    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+        let held = self.lock.try_lock().is_none();
+        self.held
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(held);
+        Ok(())
+    }
+}
+
+/// On a platform context, render holds the context's submit lock while it stages a
+/// frame and lets it go after the submit, so a platform thread that submits on the same
+/// queue under that lock can't take the staged wait and signal (#667).
+#[test]
+fn a_frame_is_staged_under_the_contexts_submit_lock() {
+    let Some(opened) = open() else {
+        return;
+    };
+    // The opened compositor's device as a platform context, so no second device is
+    // created under the WARP lock. Declared after `opened`, so it drops first.
+    let context = GpuContext::new(
+        opened.compositor.adapter().clone(),
+        opened.compositor.device().clone(),
+        opened.compositor.queue().clone(),
+        AdapterId {
+            luid: None,
+            vendor: 0,
+        },
+        None,
+    );
+    let mut compositor = Compositor::on_context(&context);
+    let sync = Arc::new(LockSync {
+        lock: context.submit_lock().clone(),
+        held: std::sync::Mutex::new(Vec::new()),
+    });
+    let info = VideoFrameInfo {
+        size: FrameSize::new(2, 2).unwrap(),
+        format: PixelFormat::Rgba8,
+        color: ColorInfo::default(),
+        pts: MediaTime::zero(Timebase::NANOS),
+    };
+    let srgb = srgb_texture(&compositor, 2, 2, [255, 0, 0, 255]);
+    let frame = GpuFrame::new(srgb, info, Arc::clone(&sync) as Arc<dyn FrameSync>);
+    let image = compositor.import_frame(&frame).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let scene = Scene {
+        canvas: FrameSize::new(2, 2).unwrap(),
+        background: Color::BLACK,
+        items: &items,
+    };
+    compositor
+        .render(&scene, true)
+        .expect("render with readback");
+    compositor.render(&scene, false).expect("render");
+    let layer = compositor.layer(2, 2).expect("layer");
+    compositor
+        .render_into(&scene, &layer)
+        .expect("render into a layer");
+    assert_eq!(
+        *sync.held.lock().unwrap(),
+        [true, true, true],
+        "each stage happened with the context's submit lock held"
+    );
+    assert!(
+        context.submit_lock().try_lock().is_some(),
+        "render lets the lock go after its submit"
+    );
 }
 
 /// A straight-alpha `Rgba8UnormSrgb` texture, the kind `import` takes, filled with one colour.

@@ -184,7 +184,11 @@ impl Compositor {
         } else {
             None
         };
-        // Last, so no error between the staging and the submit it arms (#391).
+        // Last, so no error between the staging and the submit it arms (#391), and with
+        // the queue's submit lock held until that submit, so no other thread's submit
+        // takes what was staged.
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
         self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
@@ -223,6 +227,7 @@ impl Compositor {
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         // wgpu validates the commands as they are recorded and submitted, so an error in
@@ -312,6 +317,9 @@ impl Compositor {
             });
         }
         self.load(scene)?;
+        // The submit lock is held from staging through the submit, as in `render`.
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
         self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
@@ -322,6 +330,7 @@ impl Compositor {
         self.record_composite(&mut encoder, view, scene);
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -432,6 +441,8 @@ impl Compositor {
         // Staged only once recording succeeded, right before the submit it arms, and
         // handed back to the platform at the end of that submit, as `render` does: the
         // input's hold and those of the images the filter reads besides it, each once.
+        // The submit lock is held from staging through the submit, as in `render`.
+        let submitting = self.gpu.submit.lock();
         for (sync, _) in &self.staged {
             if let Err(err) = sync.stage(&self.gpu.queue) {
                 self.staged.clear();
@@ -440,6 +451,7 @@ impl Compositor {
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -464,6 +476,12 @@ impl Compositor {
     /// The queue [`Self::render`] submits to.
     pub fn queue(&self) -> &wgpu::Queue {
         &self.gpu.queue
+    }
+
+    /// The lock held from staging a platform frame through the submit it arms on
+    /// [`Self::queue`]: the context's on a platform context, else the compositor's own.
+    pub(crate) fn submit_lock(&self) -> &jstream_platform::SubmitLock {
+        &self.gpu.submit
     }
 
     /// The adapter the device was opened on.
@@ -524,10 +542,11 @@ impl Compositor {
             max_buffer_size: self.gpu.max_buffer_size,
             context: self.gpu.context.clone(),
             faults: Arc::clone(&self.gpu.faults),
+            submit: self.gpu.submit.clone(),
         })
     }
 
-    fn maker(&self) -> Maker<'_> {
+    pub(crate) fn maker(&self) -> Maker<'_> {
         Maker {
             gpu: &self.gpu,
             layout: &self.image_layout,
@@ -605,12 +624,8 @@ impl Compositor {
                     detail: format!("{} is not a finite value in 0..=1", item.opacity),
                 });
             }
-            let quad = place::quad(
-                item.image.width(),
-                item.image.height(),
-                item.placement,
-                item.crop,
-            )?;
+            let (width, height) = item.image.extent();
+            let quad = place::quad(width, height, item.placement, item.crop)?;
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }

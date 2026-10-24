@@ -23,9 +23,11 @@ use std::thread::{self, JoinHandle};
 
 use arc_swap::ArcSwap;
 use jstream_encode::{AudioInput, VideoInput};
+use jstream_platform::GpuFrame;
 use jstream_render::Reclaimed;
 
 use crate::audio::ScopeTap;
+use crate::runtime::pipeline::VideoTap;
 use crate::runtime::vcam::VcamTap;
 use crate::snapshot::{LiveParams, Shot};
 
@@ -259,7 +261,10 @@ pub(crate) enum Garbage {
     Pixels(Vec<u8>),
     /// The emptied list of encoder sessions such a mix fed, dropped here rather than
     /// on the render thread.
-    Inputs(Vec<VideoInput>),
+    Inputs(Vec<VideoTap>),
+    /// The encode targets of such a mix. A session still encoding one of its frames
+    /// holds that target until it is done.
+    Targets(Vec<GpuFrame>),
     /// A virtual camera's tap the render thread let go of. Once its camera thread has
     /// ended, it holds the last reference to its channels and the output's stop flag.
     Vcam(VcamTap),
@@ -314,6 +319,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Audio(input) => drop(input),
             Garbage::Pixels(pixels) => drop(pixels),
             Garbage::Inputs(inputs) => drop(inputs),
+            Garbage::Targets(targets) => drop(targets),
             Garbage::Vcam(tap) => drop(tap),
             Garbage::Scopes(taps) => drop(taps),
         }

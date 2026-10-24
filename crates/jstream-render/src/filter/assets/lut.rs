@@ -15,7 +15,7 @@ use super::{Reference, asset_param};
 use crate::compositor::Compositor;
 use crate::error::RenderError;
 use crate::filter::params::{Read, Uniforms, filter, float};
-use crate::filter::{Blend, Ctx, Draw, FilterClock, Pass, Shader, VideoFilter};
+use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
 use crate::image::{self, Image};
 
 pub(super) const KIND: &str = "apply_lut";
@@ -23,14 +23,6 @@ pub(super) const KIND: &str = "apply_lut";
 const SHADER: Shader = Shader {
     label: "assets-apply-lut",
     source: include_str!("lut.wgsl"),
-    blend: Blend::Replace,
-};
-
-/// Copies an upload texel for texel into a layer.
-const COPY: Shader = Shader {
-    label: "assets-lut-copy",
-    source: "@fragment fn fs(in: VsOut) -> @location(0) vec4<f32> { \
-             return texel(vec2<i32>(in.pos.xy)); }",
     blend: Blend::Replace,
 };
 
@@ -102,51 +94,16 @@ impl Pass for ApplyLut {
     }
 }
 
-/// The image `apply_lut` reads for `lut`, to hand to [`VideoFilter::set_reference`]:
+/// The image `apply_lut` reads for `lut`, to hand to [`VideoFilter::set_reference`](crate::VideoFilter::set_reference):
 /// the table's 2D tile layout as `Rgba16Float`, so a 33- or 64-point table keeps its
-/// precision. Output values are clamped to `0..=1`.
+/// precision. Output values are clamped to `0..=1`. It is uploaded straight through the
+/// compositor's image maker, with no draw or submit.
 ///
 /// # Errors
 /// [`RenderError::TooLarge`] if the layout (512x512 at most) exceeds the adapter limit.
-pub fn lut_image(compositor: &mut Compositor, lut: &Lut) -> Result<Image, RenderError> {
+pub fn lut_image(compositor: &Compositor, lut: &Lut) -> Result<Image, RenderError> {
     let (width, height, texels) = lut.layout();
-    // A data upload only lives inside a filter pass, where the compositor's image maker
-    // is at hand; copying it into the pass's output layer keeps the f16 values exactly.
-    let mut upload = VideoFilter::of(
-        "assets-lut-upload",
-        Box::new(Upload {
-            width,
-            height,
-            texels,
-        }),
-    );
-    let unused = compositor.layer(1, 1)?;
-    compositor.apply_filter(&mut upload, &unused, FilterClock::default())
-}
-
-struct Upload {
-    width: u32,
-    height: u32,
-    texels: Vec<[f32; 4]>,
-}
-
-impl Pass for Upload {
-    fn update(&mut self, _: &Settings) {}
-
-    fn output_size(&self, _: u32, _: u32) -> (u32, u32) {
-        (self.width, self.height)
-    }
-
-    fn encode(&mut self, ctx: &mut Ctx<'_>, _: &Image, output: &Image) -> Result<(), RenderError> {
-        let data = image::upload_unit_f16(&ctx.maker, self.width, self.height, &self.texels)?;
-        ctx.draw(&Draw {
-            shader: COPY,
-            input: &data,
-            aux: None,
-            params: &Uniforms::new().finish(),
-            target: output,
-        })
-    }
+    image::upload_unit_f16(&compositor.maker(), width, height, &texels)
 }
 
 #[cfg(test)]
@@ -204,7 +161,7 @@ mod tests {
         };
         let input = quadrants(&opened);
         for size in [2, 17, 33] {
-            let table = lut_image(&mut opened.compositor, &Lut::identity(size)).expect("table");
+            let table = lut_image(&opened.compositor, &Lut::identity(size)).expect("table");
             let mut f = filter("apply_lut", json!({ "lut": asset() }));
             f.set_reference(Some(Arc::new(table)));
             let out = run(&mut opened, &mut f, &input, 0.0);
@@ -221,7 +178,7 @@ mod tests {
         };
         let input = quadrants(&opened);
         let invert = Lut::from_fn(2, |[r, g, b]| [1.0 - r, 1.0 - g, 1.0 - b]);
-        let table = lut_image(&mut opened.compositor, &invert).expect("table");
+        let table = lut_image(&opened.compositor, &invert).expect("table");
         let mut f = filter("apply_lut", json!({ "lut": asset() }));
         f.set_reference(Some(Arc::new(table)));
         let out = run(&mut opened, &mut f, &input, 0.0);
@@ -231,7 +188,7 @@ mod tests {
         }
 
         let swap = Lut::from_fn(9, |[r, g, b]| [b, r, g]);
-        let table = lut_image(&mut opened.compositor, &swap).expect("table");
+        let table = lut_image(&opened.compositor, &swap).expect("table");
         f.set_reference(Some(Arc::new(table)));
         let out = run(&mut opened, &mut f, &input, 0.0);
         let swapped = |[r, g, b, a]: [u8; 4]| [b, r, g, a];
@@ -262,7 +219,7 @@ mod tests {
         }
         // A table but a null setting: the setting was cleared before the runtime caught up.
         let invert = Lut::from_fn(2, |[r, g, b]| [1.0 - r, 1.0 - g, 1.0 - b]);
-        let table = lut_image(&mut opened.compositor, &invert).expect("table");
+        let table = lut_image(&opened.compositor, &invert).expect("table");
         let mut cleared = filter("apply_lut", json!({}));
         cleared.set_reference(Some(Arc::new(table)));
         let out = run(&mut opened, &mut cleared, &input, 0.0);
@@ -282,8 +239,8 @@ mod tests {
         let Some(mut opened) = open() else {
             return;
         };
-        let mut other = opened.compositor.sibling();
-        let table = lut_image(&mut other, &Lut::identity(2)).expect("table");
+        let other = opened.compositor.sibling();
+        let table = lut_image(&other, &Lut::identity(2)).expect("table");
         let input = quadrants(&opened);
         let mut f = filter("apply_lut", json!({ "lut": asset() }));
         f.set_reference(Some(Arc::new(table)));

@@ -249,9 +249,9 @@ fn video_packets_keep_order_and_pts_and_finish_drains() {
 
 /// A snapshot of a video session taken while frames flow never counts a frame encoded,
 /// refused or published (one packet per frame) that it doesn't count received, nor more
-/// keyframes than packets. The
-/// push used to count a frame received only after sending it, so the encode thread
-/// could encode and publish it first (#709's `encoded: 1, received: 0`).
+/// keyframes than packets. The push used to count a frame received only after sending it,
+/// so the encode thread could encode and publish it first (#709's `encoded: 1,
+/// received: 0`).
 #[test]
 fn stats_never_count_more_encoded_than_received() {
     let session = VideoSession::open(&FakeCodecs, video_config(3), options(4)).unwrap();

@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use jstream_media::FrameSize;
 use jstream_platform::GpuFrame;
 
 use crate::compositor::Compositor;
@@ -295,6 +296,15 @@ impl<K: Ord + Clone> ResourceCache<K> {
     /// The live image for `key`, if this cache holds one.
     pub fn get(&self, key: &K) -> Option<&Image> {
         self.live.get(key).map(|entry| &entry.image)
+    }
+
+    /// Places `key`'s image as if it were `extent` ([`Image::set_extent`]), if there is
+    /// one. An upload or a layer made again, at a new size, is placed at its own size
+    /// until this is called again.
+    pub fn set_extent(&mut self, key: &K, extent: FrameSize) {
+        if let Some(entry) = self.live.get_mut(key) {
+            entry.image.set_extent(extent);
+        }
     }
 
     /// How many images are live (referenced by a recent frame).
