@@ -26,7 +26,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 
 | Asset | Why it matters | Where it lives |
 |---|---|---|
-| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager today. A macOS Keychain store is built ([ADR-0063](../adr/0063-macos-platform-support.md)) but no app uses it yet, and Linux has none yet. **Accepted** for Linux, not built ([ADR-0071](../adr/0071-linux-secret-store.md)): the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)) |
+| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); Linux has none yet. **Accepted** for Linux, not built ([ADR-0071](../adr/0071-linux-secret-store.md)): the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)) |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
 | Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
@@ -331,9 +331,10 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004", "docs/adr/00
 intercepted connection.
 
 **Controls on main:**
-- Keys and refresh tokens live in Windows Credential Manager. Where an app has no
-  store (the macOS Keychain store is built but not wired into an app yet; Linux has
-  none) `set_key` fails rather than fall back to a file. Secret types print `***` and
+- Keys and refresh tokens live in Windows Credential Manager, and stream keys in the
+  macOS Keychain where the daemon is live on macOS (#639). Where an app has no store
+  (the desktop app on macOS; Linux has none) `set_key` fails rather than fall back to a
+  file. Secret types print `***` and
   are zeroed on drop. The collection never holds a key, and target URLs that could carry
   one (user info, query, fragment) are refused.
 - RTMPS and the YouTube API use rustls with the OS roots and hostname checks; nothing

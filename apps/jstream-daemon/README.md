@@ -294,8 +294,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   - the stand-in `NoGpuInterop`, which sends the engine to its own device and CPU
     frames until the Metal interop does;
   - no virtual camera, no CLAP scan and no YouTube sign-in;
-  - `MacosKeychain` as its stream key store, behind `crash::Redacting` through
-    `live_redacting` as on Windows, and the same publish opener.
+  - `MacosKeychain` as its stream key store, behind `jstream_crash::Redacting` with
+    the daemon's `Secrets` through `live_redacting` as on Windows, and the same
+    publish opener.
 
   Capture, webcams and Core Audio refuse a release below the floor when created, which fails
   startup. Creating them asks for no permission: that happens when a pipeline first

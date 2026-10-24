@@ -247,8 +247,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    push, so a fringe pixel never samples past the crop or what `fill` clips; a 2D item's
    bounds never clamp) and samples at the clamped UV (a 3D item from its
    source's mip chain, step 2); for a straight import it multiplies RGB by the sampled
-   alpha, and for a premultiplied import it divides RGB by alpha (zero where alpha is
-   0), decodes sRGB and multiplies by alpha; then it multiplies all four channels by
+   alpha, for a premultiplied import it divides RGB by alpha (zero where alpha is
+   0), decodes sRGB and multiplies by alpha, and for an opaque import (a capture) it
+   reads alpha as 1; then it multiplies all four channels by
    opacity and by its edge coverage, `clamp(d + 0.5, 0, 1)` for the distance `d` in
    pixels to the nearest edge line (ADR-0050 decision 6), and outputs premultiplied
    linear. A 2D item's edge lines are never crossed, so its coverage is 1 and its edges
