@@ -223,18 +223,14 @@ test('several items are selected, moved and dropped from the selection together'
   await expect(readout(page)).toHaveText('2 items · 1920 × 1080');
 });
 
-test('a double click shows the item in the Inspector', async ({ page, daemon }) => {
+test('a double click opens the item\'s Properties', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(outline(page)).toBeVisible();
-  // Close the Inspector from the View menu.
-  await page.getByRole('button', { name: 'View' }).click();
-  await page.getByRole('menu', { name: 'View' }).getByRole('menuitemcheckbox', { name: /Inspector/ }).click();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.panel-inspector')).toBeHidden();
-
   const centre = await onScreen(page, 960, 540);
   await page.mouse.dblclick(centre.x, centre.y);
-  await expect(page.locator('.panel-inspector .source-title')).toHaveText('Backdrop');
+  const dialog = page.getByRole('dialog', { name: 'Properties' });
+  await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Backdrop');
+  await expect(page.locator('.sources-panel li.row').first()).toHaveClass(/selected/);
 });
 
 test('a double click on the canvas tools selects nothing under them', async ({ page, daemon }) => {

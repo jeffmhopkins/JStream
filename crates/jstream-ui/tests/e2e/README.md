@@ -91,7 +91,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the margin selects the box it touches and Escape clears it; with a second item placed
   (the Intro scene, nested), Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
   canvas takes one out and Shift-click on its row in the sources list adds it back; a
-  double click brings the closed Inspector back showing the item, and a double click
+  double click opens the item's Properties dialog with it selected, and a double click
   on the canvas tools over an item leaves the selection alone.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off and Select all) and on the
@@ -106,6 +106,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   items get a counted head with the duplicates disabled, and Remove from scene removes
   both; a nested scene's menu opens it; a scene row's Rename renames, and the Scenes
   panel's New scene adds one with its name field focused.
+- **Properties dialog** (`properties.spec.js`): opened from an item's menu, it shows
+  the type's title, the source's name and its empty video chain; Cancel and Escape drop
+  a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
+  The mock describes no kinds, so the settings form and the draft patch are covered
+  natively.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
   preview goes to program with Transition, and the old program scene comes back on
   preview; Transition and Cut are off while preview is the program scene; a value the

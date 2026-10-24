@@ -11,6 +11,7 @@ use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::icons::Icon;
+use crate::panels::source_properties::PropertiesDialog;
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
@@ -206,6 +207,11 @@ const ORDER: [&str; 13] = [
     "waveform",
     "spectrum",
 ];
+
+/// The prototype's name and icon for a built-in kind, if it knows the kind.
+pub fn type_label(kind: &str) -> Option<(&'static str, &'static str)> {
+    known(kind).map(|(name, _, icon, ..)| (name, icon))
+}
 
 /// Whether a source of this built-in kind draws a picture: every kind but the
 /// audio-only ones. A kind the prototype doesn't know is taken to have one.
@@ -496,6 +502,7 @@ fn AddSourceBody(
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let dock = use_context::<DockState>();
+    let props = use_context::<PropertiesDialog>();
     let Request {
         scene_id,
         scene_type,
@@ -589,6 +596,7 @@ fn AddSourceBody(
                 source: SourceId::new(studio.fresh_id(&s, "source")),
             };
             let item_id = ids.item.clone();
+            let source_id = ids.source.clone();
             let edits = studio.collection.with_untracked(|c| {
                 c.as_ref()
                     .map(|c| add_edits(&t, &choice, &name.get_untracked(), &scene_id, ids, c))
@@ -599,8 +607,15 @@ fn AddSourceBody(
             close();
             studio.apply(&s, edits);
             studio.select_item(Some(item_id));
-            if let Some(dock) = dock {
-                dock.0.update(|d| d.show(PanelId::Inspector));
+            // A new source's properties open at once, as in OBS; a placement of an
+            // existing one shows in the Inspector.
+            match (&choice, props) {
+                (Choice::New, Some(props)) if t.kind.is_some() => props.open(source_id),
+                _ => {
+                    if let Some(dock) = dock {
+                        dock.0.update(|d| d.show(PanelId::Inspector));
+                    }
+                }
             }
         }
     };

@@ -764,3 +764,28 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .add-existing-list { display: flex; flex-direction: column; gap: 4px; }
 .add-existing-title { font-size: 12px; color: var(--muted); }
 .add-note { font-size: 11px; color: var(--dim); }
+
+/* The Properties dialog (spec-workspace.md 6.2): name and settings on the left, filters
+   on the right; Defaults sits apart from Cancel and OK. */
+.modal.props-dialog { width: 860px; height: 640px; }
+.props-head { display: flex; align-items: center; gap: 10px; }
+.props-head .icon { color: var(--muted); }
+.props-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; }
+.props-settings { min-height: 0; overflow: auto; padding: 14px 16px; }
+.props-name { grid-template-columns: 1fr; gap: 0.25rem; }
+.props-name input { width: 100%; }
+.props-side { min-height: 0; overflow: auto; padding: 14px 16px; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.props-side-head { display: flex; align-items: baseline; gap: 8px; }
+.props-side-title { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); }
+.props-side-note { font-size: 11px; color: var(--dim); }
+.props-chain-head { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.props-filters { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.props-filter { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 6px; background: var(--menu); border-radius: 5px; }
+.props-filter-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.props-filter.off .props-filter-name { color: var(--dim); text-decoration: line-through; }
+.props-eye, .props-remove { width: 24px; height: 24px; padding: 0; border: 0; background: none; color: #c9ced6; }
+.props-filter.off .props-eye { color: var(--faint); }
+.props-empty { margin: 0; font-size: 12px; color: var(--faint); }
+.props-side-foot { margin: auto 0 0; font-size: 11px; color: var(--dim); }
+.props-add-filter { align-self: flex-start; }
+.modal-footer .props-defaults { margin-right: auto; }

@@ -64,7 +64,9 @@ Contents ([Design](#design) explains the choices):
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
   (`sources.rs`), the Add source dialog (`add_source.rs`: `AddSource` and the
   `AddSourceDialog` context that opens it, with its type list and the edits it sends,
-  tested natively), the properties form (`properties.rs`) and the delete confirmation
+  tested natively), the properties form (`properties.rs`), the Properties dialog
+  (`source_properties.rs`: `SourceProperties` and the `PropertiesDialog` context that
+  opens it) and the delete confirmation
   they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (creating, editing and deleting streams, recordings and the virtual camera, their
   stream keys, start and stop, and the pipeline's health), and the calls and
@@ -172,7 +174,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
   its first placement. A scene is nested through a `scene` source, reusing one that
-  already shows it. The new item is selected and the Inspector shown. A `kind.list`
+  already shows it. The new item is selected; a new source's Properties dialog opens,
+  and a placement of an existing one shows in the Inspector. A `kind.list`
   that fails leaves only the placed kinds and Scene, and its error shows as any failed
   call's does.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
@@ -188,6 +191,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
   `scene` source has no settings.
+- **The Properties dialog** (`source_properties.rs`) is the prototype's: the name and the
+  same form on the left, on a draft instead of the stored settings, and the source's
+  filter chains on the right. OK sends a rename (unless the name is blank or the same)
+  and one `source.set_settings` with each changed value and `null` for each one the
+  draft dropped (`draft_patch`), as one batch, and closes once the engine accepts it;
+  Cancel, Escape and the backdrop drop the draft; Defaults empties it. A filter's eye
+  (`filter.set_enabled`) and remove (`filter.remove`) apply at once. A double click on
+  an item and Properties… in the item menus open it for the item's source; a nested
+  scene's item shows in the Inspector instead, until scenes have their dialog.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
   prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
@@ -345,7 +357,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
   the Add source dialog's types and edits, the menu's placement and keys, the item
-  menu's layer moves and arrangements, the form's
+  menu's layer moves and arrangements, the Properties dialog's draft patch, the form's
   sections, parsing and checks); only the components
   themselves need a browser.
 - **Debug bundle size.** A leptos view's type spells out every element and closure
@@ -406,8 +418,8 @@ browser, and `mod.rs` is the component.
   empty canvas, or on the dark margin around the frame, draws a marquee that selects
   every box whose bounds it touches (Shift keeps what was selected); a click there
   clears the selection. Ctrl+A selects every box. The shared selection follows each of
-  these. A double click selects a box alone and shows the Inspector, in place of the
-  prototype's Properties dialog, which the UI doesn't have yet. The pointer is
+  these. A double click selects a box alone and opens its source's Properties dialog
+  ([Design](#design)). The pointer is
   followed over the whole canvas area, so handles reaching past the frame can be
   grabbed. The cursor shows what a press would do. The selected box has
   a 2 px outline, eight resize handles, a rotate knob on a stem above its top edge, and

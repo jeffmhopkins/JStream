@@ -599,7 +599,8 @@ pub fn Canvas() -> impl IntoView {
         event.prevent_default();
     };
 
-    // A double click on an item selects it alone and shows its properties.
+    // A double click on an item selects it alone and opens its properties.
+    let item_cx = item_menu::Context::from_page();
     let on_double = move |event: ev::MouseEvent| {
         let Some((_, point)) = canvas_at(event.client_x(), event.client_y()) else {
             return;
@@ -608,18 +609,21 @@ pub fn Canvas() -> impl IntoView {
             l.as_ref()
                 .and_then(|l| transform::topmost_at(l.boxes(), point).cloned())
         });
-        if let Some(hit) = hit {
-            studio.select_item(Some(hit));
-            if let Some(dock) = dock {
-                dock.0.update(|d| d.show(PanelId::Inspector));
+        match (hit, item_cx) {
+            (Some(hit), Some(cx)) => cx.properties(hit),
+            (Some(hit), None) => {
+                studio.select_item(Some(hit));
+                if let Some(dock) = dock {
+                    dock.0.update(|d| d.show(PanelId::Inspector));
+                }
             }
+            _ => {}
         }
     };
 
     // A right-click opens the canvas menu: the frame's, or the margin's around it.
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
-    let item_cx = item_menu::Context::from_page();
     let on_context = move |event: ev::MouseEvent| {
         let Some(menus) = menus else {
             return;
