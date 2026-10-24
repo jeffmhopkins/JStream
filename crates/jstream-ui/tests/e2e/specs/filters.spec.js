@@ -2,8 +2,8 @@
 // a filter off or on, drag to reorder and remove it; Edit filters… from an item's menu;
 // the Add filter dialog; and the Filter settings dialog, whose changes apply at once and
 // which Cancel puts back. The seed's Backdrop has Sharpen, then Blur turned off. The mock
-// engine lists and describes no kinds, so the last test has the page's socket answer
-// for three (`describeKinds`).
+// engine lists and describes no kinds, so the last two tests have the page's socket
+// answer for three (`describeKinds`); the last also has it refuse one setting.
 import { test, expect, connect, describeKinds, rev, showPanel } from '../fixtures.js';
 
 function panel(page) {
@@ -216,4 +216,38 @@ test('with described kinds, rows summarise, Cancel restores an unconfirmed chang
   // A click on the row closes it.
   await rows.nth(2).locator('.filter-name').click();
   await expect(rows.nth(2)).not.toHaveClass(/\bopen\b/);
+});
+
+test('a setting the engine refuses after its row or dialog has closed shows in the problem bar', async ({ page, daemon }) => {
+  // The engine refuses Sharpen's amount of 0.9, and answers only once the row has closed.
+  const { release } = await describeKinds(page, KINDS, {
+    refuse: (request) => {
+      const call = JSON.stringify(request.call ?? {});
+      return call.includes('filter.set_settings') && call.includes('0.9') ? 'Amount is too sharp' : null;
+    },
+  });
+  await connect(page, daemon);
+  await selectBackdrop(page);
+  const rows = videoRows(panel(page));
+  await rows.nth(0).locator('.filter-name').click();
+  await expect(rows.nth(0)).toHaveClass(/\bopen\b/);
+  const amount = rows.nth(0).locator('.filter-editor').getByRole('spinbutton');
+  await amount.fill('0.9');
+  await amount.press('Enter');
+  await rows.nth(0).locator('.filter-name').click();
+  await expect(rows.nth(0)).not.toHaveClass(/\bopen\b/);
+  release();
+  await expect(page.locator('.problem-bar')).toContainText('Amount is too sharp');
+  await page.locator('.problem-bar').getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.locator('.problem-bar')).toHaveCount(0);
+
+  // The same from the Filter settings dialog, closed by Cancel before the answer.
+  await rows.nth(0).locator('.filter-row').dblclick();
+  const dialog = page.getByRole('dialog', { name: 'Filter settings' });
+  const field = dialog.getByRole('spinbutton');
+  await field.fill('0.9');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  release();
+  await expect(page.locator('.problem-bar')).toContainText('Amount is too sharp');
 });

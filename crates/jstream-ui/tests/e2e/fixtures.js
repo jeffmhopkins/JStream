@@ -118,25 +118,33 @@ export async function nestScene(page, name) {
 /** Makes the engine list and describe `kinds`, each a descriptor as `kind.describe`
  * reports it, which the mock engine can't: the page's WebSocket goes through a route that
  * answers `kind.list` and `kind.describe` for them and passes every other message on.
- * Call it before `connect`. */
-export async function describeKinds(page, kinds) {
+ * With `refuse`, a function of each parsed request returning a reason or null, the route
+ * holds back the requests it names and refuses them, as `invalid_argument` with that
+ * reason, only when the returned `release()` is called. Call it before `connect`. */
+export async function describeKinds(page, kinds, { refuse = () => null } = {}) {
   const answer = (id, result) => JSON.stringify({ type: 'response', id, result: { kind: 'query', result } });
+  const held = [];
   await page.routeWebSocket(/.*/, (ws) => {
     const server = ws.connectToServer();
     ws.onMessage((message) => {
       let query = null;
       let id = null;
+      let reason = null;
       if (typeof message === 'string') {
         try {
           const parsed = JSON.parse(message);
           id = parsed.id;
           query = parsed.call?.kind === 'query' ? parsed.call.query : null;
+          reason = parsed.type === 'request' ? refuse(parsed) : null;
         } catch {
           // Not JSON: pass it on.
         }
       }
       const described = kinds.find((k) => k.kind_id === query?.kind_id);
-      if (query?.type === 'kind.list') {
+      if (reason) {
+        const error = { code: 'invalid_argument', field: 'edits.0', reason, message: reason };
+        held.push(() => ws.send(JSON.stringify({ type: 'error', id, error })));
+      } else if (query?.type === 'kind.list') {
         const list = kinds.map(({ kind_id, category, name, version }) => ({ kind_id, category, name, version }));
         ws.send(answer(id, { type: 'kind.list', kinds: list }));
       } else if (query?.type === 'kind.describe' && described) {
@@ -147,4 +155,5 @@ export async function describeKinds(page, kinds) {
     });
     server.onMessage((message) => ws.send(message));
   });
+  return { release: () => held.splice(0).forEach((send) => send()) };
 }
