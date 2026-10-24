@@ -454,18 +454,58 @@ mod tests {
         /// time, not a tick count: under a loaded test run the fake host's thread can take
         /// seconds to answer. At 1 ms of supervisor time per tick of at least 5 ms, 20 s
         /// stays well inside the default `start_timeout`.
+        ///
+        /// The fake host sends its parameters as it gets ready, and the supervisor can see
+        /// the ready flag a tick before it drains them, so this also waits for `Params`:
+        /// otherwise they would turn up in whatever the test ticks next.
         fn until_ready(&mut self) -> Vec<HostEvent> {
-            let mut seen = Vec::new();
+            self.until_ready_from(Vec::new())
+        }
+
+        /// [`Rig::until_ready`], counting `seen` from a tick the test made itself: the tick
+        /// that starts a host can already see it ready when the host's thread runs at once.
+        fn until_ready_from(&mut self, mut seen: Vec<HostEvent>) -> Vec<HostEvent> {
             let deadline = Instant::now() + READY_WAIT;
             while Instant::now() < deadline {
-                let events = self.tick(Duration::from_millis(1));
-                let ready = events.iter().any(|e| matches!(e, HostEvent::Ready { .. }));
-                seen.extend(events);
-                if ready {
+                seen.extend(self.tick(Duration::from_millis(1)));
+                let ready = seen.iter().any(|e| matches!(e, HostEvent::Ready { .. }));
+                let params = seen.iter().any(|e| matches!(e, HostEvent::Params(_)));
+                if ready && params {
                     return seen;
                 }
             }
             panic!("never ready: {seen:?}");
+        }
+
+        /// Waits, on the wall clock, for the running host to beat, then advances by `by`.
+        /// One long tick reads the heartbeat once, so without a fresh beat it would see a
+        /// host that hasn't beaten for all of `by` and call it hung.
+        fn tick_after_a_beat(&mut self, by: Duration) -> Vec<HostEvent> {
+            let block = self.sup.block().cloned().expect("a running host");
+            let heartbeat = &shared(&block).status.heartbeat;
+            let before = heartbeat.load(Ordering::Acquire);
+            let deadline = Instant::now() + READY_WAIT;
+            while heartbeat.load(Ordering::Acquire) == before {
+                assert!(Instant::now() < deadline, "the host never beat");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            self.now += by;
+            self.sup.tick(self.now)
+        }
+
+        /// Ticks until the supervisor reports the crashed host, returning that tick's
+        /// events. Like [`Rig::until_ready`], the bound is wall time: the fake host's
+        /// thread has to notice the crash and exit first, and a loaded run can leave it
+        /// unscheduled for longer than one tick.
+        fn until_crashed(&mut self) -> Vec<HostEvent> {
+            let deadline = Instant::now() + READY_WAIT;
+            while Instant::now() < deadline {
+                let events = self.tick(Duration::from_millis(1));
+                if !events.is_empty() {
+                    return events;
+                }
+            }
+            panic!("the crash was never reported");
         }
     }
 
@@ -510,7 +550,7 @@ mod tests {
         let mut waits = Vec::new();
         for n in 0..3 {
             rig.hosts.hosts()[n].crash();
-            let events = rig.tick(Duration::from_millis(1));
+            let events = rig.until_crashed();
             let Some(HostEvent::Crashed { retry_in, .. }) = events.last() else {
                 panic!("{events:?}");
             };
@@ -530,7 +570,7 @@ mod tests {
         );
         assert_eq!(rig.sup.crashes(), 3);
         // A stable run forgets the crashes.
-        rig.tick(Duration::from_secs(61));
+        rig.tick_after_a_beat(Duration::from_secs(61));
         assert_eq!(rig.sup.crashes(), 0);
     }
 
@@ -548,8 +588,8 @@ mod tests {
             "{events:?}"
         );
         assert!(first.has_exited(), "the hung host was killed");
-        rig.tick(Duration::from_secs(1));
-        rig.until_ready();
+        let restart = rig.tick(Duration::from_secs(1));
+        rig.until_ready_from(restart);
         assert_eq!(rig.hosts.hosts().len(), 2);
     }
 
