@@ -1208,7 +1208,8 @@ impl Nv12Passes {
 pub(crate) enum PipelineEvent {
     /// A fatal error: the watcher settles `failed`.
     Failed(String),
-    /// The publish link went down and is being re-established: `reconnecting`.
+    /// The publish link went down and is being re-established, or came back after
+    /// dropping again soon after a reconnect and is not yet stable: `reconnecting`.
     LinkDown,
     /// The publish link is up again: `active`.
     LinkUp,

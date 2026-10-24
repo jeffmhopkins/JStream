@@ -59,6 +59,8 @@ pub(crate) enum Sink {
     Flv {
         tagger: FlvTagger,
         publish: Box<dyn LivePublish>,
+        /// The muxer took an H.264 keyframe, so it has its decoder configuration.
+        avc_known: bool,
     },
     Record(RecordSink),
 }
@@ -101,7 +103,11 @@ impl Sink {
                     other => return Err(format!("FLV can't carry {other:?} video")),
                 }
                 .map_err(|err| format!("FLV tagger: {err}"))?;
-                Ok(Self::Flv { tagger, publish })
+                Ok(Self::Flv {
+                    tagger,
+                    publish,
+                    avc_known: false,
+                })
             }
             Destination::Record(path) => {
                 if info.codec != Codec::H264 {
@@ -153,6 +159,7 @@ impl Sink {
                 tracing::info!(path = %recorder.temp_path().display(), "recording");
                 Ok(Self::Record(RecordSink {
                     recorder: Some(recorder),
+                    avc_known: false,
                     keep,
                 }))
             }
@@ -163,7 +170,9 @@ impl Sink {
     /// its init segment with the first keyframe.
     pub(crate) fn start(&mut self) -> Result<(), String> {
         match self {
-            Self::Flv { tagger, publish } => match tagger.start() {
+            Self::Flv {
+                tagger, publish, ..
+            } => match tagger.start() {
                 Ok(tags) => publish_tags(publish, &tags),
                 Err(err) => Err(format!("FLV start: {err}")),
             },
@@ -183,24 +192,47 @@ impl Sink {
             output_drops.fetch_add(1, Ordering::Relaxed);
             tracing::warn!(error = %err, "dropping a packet the muxer rejected");
         };
-        let packet = &with_parameter_sets(packet);
-        match self {
-            Self::Flv { tagger, publish } => match tagger.push(packet) {
-                Ok(tags) => publish_tags(publish, &tags),
+        let avc_known = match self {
+            Self::Flv { avc_known, .. } => avc_known,
+            Self::Record(sink) => &mut sink.avc_known,
+        };
+        // Only until the muxer has a decoder configuration: a later keyframe's stand-in
+        // SPS would replace the encoder's own, which shares its id.
+        let packet = if *avc_known {
+            Cow::Borrowed(packet)
+        } else {
+            with_parameter_sets(packet)
+        };
+        let configures = !*avc_known && packet.codec() == Codec::H264 && packet.is_keyframe();
+        let taken = match self {
+            Self::Flv {
+                tagger, publish, ..
+            } => match tagger.push(&packet) {
+                Ok(tags) => {
+                    publish_tags(publish, &tags)?;
+                    true
+                }
                 Err(err) => {
                     rejected(&err);
-                    Ok(())
+                    false
                 }
             },
-            Self::Record(sink) => match sink.write(packet) {
-                Ok(()) => Ok(()),
+            Self::Record(sink) => match sink.write(&packet) {
+                Ok(()) => true,
                 Err(err @ RecordError::Packet(_)) => {
                     rejected(&err);
-                    Ok(())
+                    false
                 }
-                Err(err) => Err(format!("recording failed: {err}")),
+                Err(err) => return Err(format!("recording failed: {err}")),
             },
+        };
+        if configures && taken {
+            match self {
+                Self::Flv { avc_known, .. } => *avc_known = true,
+                Self::Record(sink) => sink.avc_known = true,
+            }
         }
+        Ok(())
     }
 
     /// Reads what a live destination sent and moves a reconnect along.
@@ -251,15 +283,16 @@ impl Sink {
     }
 }
 
-/// Stand-in H.264 parameter sets (Baseline 3.0, no frame size) for a keyframe that
-/// carries none in-band. Only the fake encoder sends such keyframes; every real one
-/// sends its SPS and PPS with each keyframe, and those go in the decoder configuration.
+/// Stand-in H.264 parameter sets (Baseline 3.0, no frame size) for a first keyframe
+/// that carries none in-band. Only the fake encoder sends such keyframes; every real one
+/// sends its SPS and PPS with its first keyframe, and those go in the decoder
+/// configuration.
 const STAND_IN_SPS: [u8; 5] = [0x67, 0x42, 0xC0, 0x1E, 0xDA];
 const STAND_IN_PPS: [u8; 4] = [0x68, 0xCE, 0x3C, 0x80];
 
 /// `packet`, or for an H.264 keyframe with no SPS or PPS in-band, a copy with the
 /// stand-in sets in front, so the muxers always find a decoder configuration in the
-/// first keyframe.
+/// first keyframe. Only for keyframes before the muxer has one (`avc_known`).
 fn with_parameter_sets(packet: &Packet) -> Cow<'_, Packet> {
     if packet.codec() != Codec::H264
         || !packet.is_keyframe()
@@ -295,6 +328,8 @@ fn publish_tags(publish: &mut Box<dyn LivePublish>, tags: &[FlvTag]) -> Result<(
 /// whose start failed removes its `.part` file.
 pub(crate) struct RecordSink {
     recorder: Option<Recorder>,
+    /// The muxer took an H.264 keyframe, so it has its decoder configuration.
+    avc_known: bool,
     keep: Arc<AtomicBool>,
 }
 
@@ -541,6 +576,33 @@ mod tests {
                 .expect("config")
                 .to_bytes();
         assert_eq!(flv_avc_record(&h264_keyframe(false)), stand_in);
+    }
+
+    /// Once the encoder's own sets configured the muxer, a later keyframe without
+    /// in-band sets goes out as it is: a stand-in SPS there would replace the encoder's,
+    /// which shares its id.
+    #[test]
+    fn a_later_bare_keyframe_gets_no_stand_in_sets() {
+        let publish = RecordingPublish::new();
+        let mut sink = Sink::open(
+            Destination::Publish(Box::new(publish.clone())),
+            &info(Codec::H264),
+            Arc::new(AtomicBool::new(true)),
+        )
+        .expect("open");
+        sink.start().expect("start");
+        let drops = AtomicU64::new(0);
+        sink.forward(&h264_keyframe(true), &drops).expect("first");
+        let bare = h264_keyframe(false);
+        let later = MediaTime::new(3_000, Timebase::MPEG_90K);
+        let later =
+            Packet::new(Codec::H264, true, later, later, bare.data().to_vec()).expect("packet");
+        sink.forward(&later, &drops).expect("later");
+        assert_eq!(drops.into_inner(), 0);
+        let last = publish.tags().pop().expect("a tag");
+        // The frame tag: 5-byte header, then one length-prefixed IDR slice.
+        assert_eq!(last.body[..2], [0x17, 1]);
+        assert_eq!(last.body[5..], [0, 0, 0, 3, 0x65, 0x88, 0x84]);
     }
 
     /// MP4 recording is H.264 only for now, so another codec fails the start with a

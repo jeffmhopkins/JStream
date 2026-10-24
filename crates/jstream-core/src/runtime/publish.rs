@@ -52,9 +52,10 @@ fn rtmp_err(err: RtmpError) -> PublishError {
 
 /// Accepts the FLV tags of one live output. Called on the output thread only.
 pub trait LivePublish: Send {
-    /// Sends one tag. While the link is [`Reconnecting`](LinkState::Reconnecting) a
-    /// destination drops the tag and counts it in [`dropped`](Self::dropped) instead
-    /// of waiting.
+    /// Sends one tag. While the link is down a destination drops the tag and counts it
+    /// in [`dropped`](Self::dropped) instead of waiting. A link can also report
+    /// [`Reconnecting`](LinkState::Reconnecting) while it is up but not yet stable;
+    /// tags are sent then.
     ///
     /// # Errors
     /// When the destination refuses or drops the tag for good (for RTMP: it gave up
