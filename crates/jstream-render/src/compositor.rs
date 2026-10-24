@@ -656,9 +656,12 @@ impl Compositor {
             // mapped from the source's into the chain's.
             let mips = shape.is_3d().then(|| {
                 let image = item.image;
-                let region = shape
-                    .crop
-                    .unwrap_or_else(|| Region::whole(image.width(), image.height()));
+                let texels = (image.width(), image.height());
+                // The crop counts in the extent; the chain is built from texels.
+                let region = shape.crop.map_or_else(
+                    || Region::whole(texels.0, texels.1),
+                    |crop| crop.in_texels(image.extent(), texels),
+                );
                 let chain = self.chain_of(image, region);
                 let (w, h) = (image.width() as f32, image.height() as f32);
                 shape.remap_uv([

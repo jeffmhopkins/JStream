@@ -231,7 +231,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    its texture coordinates; `vs_region` maps the pass onto it), converting an import as
    the composite shader would. So no coarser level averages a texel past the crop into
    the item, and clamping to the chain's edge keeps the anisotropic footprint inside the
-   crop too (#641). The item's UVs and UV bounds are mapped into the chain's. An image
+   crop too (#641). The crop counts in the image's extent, so for an image drawn with
+   more pixels than its extent (ADR-0073) it is scaled to texels and widened outwards to
+   whole ones (`Region::in_texels`). The item's UVs and UV bounds are mapped into the
+   chain's. An image
    keeps a chain per crop it is drawn with, the four most recently used. Each further
    level is one pass that samples the level above at its own texel centres, so the
    linear filter averages 2×2 texels. Each `Image` counts its changes (its clones share
