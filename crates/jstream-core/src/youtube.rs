@@ -202,7 +202,12 @@ impl YoutubeSetup {
     fn saw_grant(&self, grant: &jstream_youtube::Grant) {
         if let Some(hook) = &self.secret_hook {
             hook(SecretKind::RefreshToken, grant.refresh.expose());
-            hook(SecretKind::AccessToken, grant.access.secret().expose());
+            // Not `AccessToken`: the store may refuse the grant, and the current client
+            // then keeps using its own token, which must stay in the slot (#844).
+            hook(
+                SecretKind::SignInAccessToken,
+                grant.access.secret().expose(),
+            );
         }
     }
 

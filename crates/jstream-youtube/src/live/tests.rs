@@ -754,11 +754,12 @@ fn the_secret_hook_sees_a_grants_tokens_and_a_new_streams_key() {
     );
 }
 
-/// Only access tokens supersede the ones before them: the refresh token and stream keys
-/// are kept for the life of the process (#844).
+/// Only a client's access tokens supersede the ones before them: a sign-in's access
+/// token, the refresh token and stream keys are kept for the life of the process (#844).
 #[test]
 fn only_an_access_token_has_a_slot() {
     assert_eq!(SecretKind::AccessToken.slot(), Some("youtube-access-token"));
+    assert_eq!(SecretKind::SignInAccessToken.slot(), None);
     assert_eq!(SecretKind::RefreshToken.slot(), None);
     assert_eq!(SecretKind::StreamKey.slot(), None);
 }

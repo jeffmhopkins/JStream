@@ -135,7 +135,9 @@ impl Secrets {
     /// Registers `value` in `slot`, a value that supersedes the slot's earlier ones (an
     /// access token that replaces the one before it). The slot keeps its newest two
     /// values, so the one just superseded, which a call made before the switch may still
-    /// hold, is redacted too, and anything older is dropped: its secret is gone. Empty
+    /// hold, is redacted too, and anything older is dropped. So only a secret its holder
+    /// no longer has may go in a slot: a value that might never replace the holder's
+    /// own, such as a sign-in's token the store may refuse, is [`register`](Self::register)ed instead. Empty
     /// values, and the slot's newest value again, are ignored.
     pub fn register_in(&self, slot: &'static str, value: &str) {
         if value.is_empty() {
@@ -173,6 +175,12 @@ impl Secrets {
             Some(slot) => secrets.register_in(slot, value),
             None => secrets.register(value),
         })
+    }
+
+    /// Every registered digest, as the panic hook redacts with them.
+    #[cfg(test)]
+    fn digests(&self) -> Vec<Secret> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).all()
     }
 
     /// Whether `value` is registered.

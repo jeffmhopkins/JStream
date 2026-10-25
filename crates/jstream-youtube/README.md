@@ -89,9 +89,12 @@ Contents:
     refresh token and access token at once, then each access token, rotated refresh
     token and stream key (from `list_streams`, `stream` and `insert_stream`) as the
     client gets them, so the host can register them with its crash reports' redaction
-    (#353). `SecretKind` says which of the three each one is, and `SecretKind::slot`
-    names the slot a redaction list keeps access tokens in: each one supersedes the one
-    before, so a refresh replaces the last instead of adding to the list (#844).
+    (#353). `SecretKind` says what each one is, and `SecretKind::slot` names the slot a
+    redaction list keeps a client's access tokens in: each one supersedes the one
+    before, so a refresh replaces the last instead of adding to the list (#844). A
+    sign-in's access token, handed over before the host knows whether a client takes it
+    (`SignInAccessToken`), has no slot, so a refused sign-in can't push the current
+    client's token out.
 - **`chat`:** reading a broadcast's live chat (ADR-0041 §2, §5).
   `LiveClient::chat_messages(live_chat_id, page_token)` reads one page of
   `liveChatMessages.list` (`part=id,snippet,authorDetails`, up to 2000 messages, oldest

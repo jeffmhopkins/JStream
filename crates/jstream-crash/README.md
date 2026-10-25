@@ -57,7 +57,9 @@ Contents:
 - `Secrets::register_in(slot, value)` registers a secret that supersedes its slot's
   earlier ones, such as an OAuth access token, refreshed about every hour. A slot keeps
   its newest two values, so the one just superseded, which a call made before the switch
-  may still hold, is redacted too, and drops older ones, whose secret is gone. The list
+  may still hold, is redacted too, and drops older ones, which their holder no longer
+  has. So a slot only takes a secret that supersedes its holder's last one; a value
+  that might not, such as a sign-in's token the store may refuse, is kept. The list
   then stays bounded however often a token is refreshed (#844). `register` keeps a
   secret for the life of the process, as the control token, stream keys and refresh
   tokens need.

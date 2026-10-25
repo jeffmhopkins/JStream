@@ -136,7 +136,7 @@ fn a_refreshed_secret_replaces_the_one_before_it() {
         "older ones are dropped"
     );
 
-    let registry = secrets.0.lock().expect("lock").all();
+    let registry = secrets.digests();
     assert_eq!(
         redact(&format!("a {} and a {}", token(999), token(998)), &registry),
         "a *** and a ***"

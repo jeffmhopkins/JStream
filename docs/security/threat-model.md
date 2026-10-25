@@ -376,9 +376,12 @@ intercepted connection.
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
 - The daemon's and the desktop app's crash reports replace the control token, and every
   stream key and refresh token their credential stores hold or load, with `***`. The
-  daemon's also replace every OAuth access token, rotated refresh token and stream key
-  YouTube hands its client, a `youtube` output's key included, through the YouTube
-  setup's secret hook (#353).
+  daemon's also replace every rotated refresh token and stream key YouTube hands its
+  client, a `youtube` output's key included, and every sign-in's access token, through
+  the YouTube setup's secret hook (#353). Of the access tokens the client refreshes to,
+  they replace the current one and the one it superseded, which a call made just before
+  the refresh may still hold; older ones are dropped, since the client no longer has
+  them, so hourly refreshes don't grow the list (#844).
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
   Further tests check the server's WebSocket and MCP layers, the daemon's RTMP opener and
   its crash reports.

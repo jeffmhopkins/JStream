@@ -33,8 +33,14 @@ pub type SecretHook = Arc<dyn Fn(SecretKind, &str) + Send + Sync>;
 pub enum SecretKind {
     /// The account's refresh token, or the one Google rotated it to. The host stores it.
     RefreshToken,
-    /// An access token. It lasts about an hour, and each one supersedes the one before.
+    /// An access token a client holds. It lasts about an hour, and each one supersedes
+    /// the one before.
     AccessToken,
+    /// A sign-in's access token, handed over as the code is exchanged, before the host
+    /// decides whether a client takes it. It supersedes nothing: a refused sign-in
+    /// leaves the earlier client using its own token (#844). The client that takes it
+    /// hands it over again as an [`AccessToken`](Self::AccessToken).
+    SignInAccessToken,
     /// A stream's key.
     StreamKey,
 }
@@ -42,12 +48,16 @@ pub enum SecretKind {
 impl SecretKind {
     /// The slot a redaction list keeps this kind in, superseding its earlier values, or
     /// `None` for a kind kept for the life of the process. JStream signs in to one
-    /// account at a time, so access tokens share one slot (#844).
+    /// account at a time, and only its client's tokens supersede each other, so the
+    /// access tokens a client holds share one slot (#844). A sign-in's tokens are kept,
+    /// which human sign-ins bound.
     #[must_use]
     pub fn slot(self) -> Option<&'static str> {
         match self {
             SecretKind::AccessToken => Some("youtube-access-token"),
-            SecretKind::RefreshToken | SecretKind::StreamKey => None,
+            SecretKind::SignInAccessToken | SecretKind::RefreshToken | SecretKind::StreamKey => {
+                None
+            }
         }
     }
 }
