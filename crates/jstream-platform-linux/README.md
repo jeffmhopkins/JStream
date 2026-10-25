@@ -218,9 +218,8 @@ It has:
   A driver that requires a tool JStream's parameter sets turn off (scaling lists, PCM,
   sign data hiding, weighted prediction and the like) is refused as unsupported.
   JStream writes each slice header too where the driver takes packed slice headers along
-  with its packed parameter sets, and
-  a driver that codes no P slices gets each P frame as a B slice with the reference in
-  both lists. The level is the lowest that fits the size, frame rate and peak rate. `poll` never blocks; up
+  with JStream's packed parameter sets, and a driver that codes no P slices gets each P
+  frame as a B slice with the reference in both lists. The level is the lowest that fits the size, frame rate and peak rate. `poll` never blocks; up
   to four frames are in flight, and a fifth is refused as busy. The libva structs are
   hand-written and checked against libva 2.20.0's headers, with their sizes and offsets
   asserted at compile time.

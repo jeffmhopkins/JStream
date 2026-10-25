@@ -627,8 +627,9 @@ impl VaapiEncoder {
     /// # Errors
     /// [`PlatformError::Unsupported`] when the configuration is outside what
     /// [`h264::check`] or [`hevc::check`] accepts, a GPU session isn't configured for
-    /// NV12, or the driver lacks 4:2:0 surfaces or the rate-control mode,
-    /// [`PlatformError::MissingComponent`] when libva is missing, and
+    /// NV12, the driver lacks 4:2:0 surfaces or the rate-control mode, or, for HEVC, the
+    /// driver requires a tool JStream's parameter sets turn off
+    /// ([`hevc::Tools::required_but_off`]), [`PlatformError::MissingComponent`] when libva is missing, and
     /// [`PlatformError::Os`] when the node or the driver fails.
     pub(crate) fn open_on(
         encoder: &VaEncoder,
