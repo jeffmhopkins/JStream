@@ -1,7 +1,8 @@
 //! Reading a captured frame's pixel buffer on the CPU, for both kinds of capture:
 //! ScreenCaptureKit's display and window frames ([`crate::capture`]) and AVFoundation's
-//! camera frames ([`crate::video_device`]). One lock and one set of `SAFETY` arguments,
-//! so the two can't drift apart.
+//! camera frames ([`crate::video_device`]), and VideoToolbox's decoded frames
+//! ([`crate::vtdecoder`]). One lock and one set of `SAFETY` arguments, so they can't
+//! drift apart.
 
 use std::ptr::NonNull;
 use std::slice;
@@ -11,9 +12,9 @@ use jstream_platform::media::MediaTime;
 use objc2_core_media::{CMTime, CMTimeFlags};
 use objc2_core_video::{
     CVPixelBuffer, CVPixelBufferGetBaseAddress, CVPixelBufferGetBaseAddressOfPlane,
-    CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferGetHeightOfPlane,
-    CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress,
-    kCVReturnSuccess,
+    CVPixelBufferGetBytesPerRow, CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferGetHeight,
+    CVPixelBufferGetHeightOfPlane, CVPixelBufferIsPlanar, CVPixelBufferLockBaseAddress,
+    CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress, kCVReturnSuccess,
 };
 
 use crate::annexb::media_time_from_cm;
@@ -88,23 +89,37 @@ impl<'a> ReadLocked<'a> {
         Ok(unsafe { slice::from_raw_parts(base.as_ptr(), len) })
     }
 
-    /// Plane `index`'s first `rows` rows, and its stride.
+    /// Plane `index`'s first `rows` rows, and its stride. A packed buffer is one plane,
+    /// index 0.
     pub(crate) fn plane(&self, index: usize, rows: usize) -> Result<(&[u8], usize), PlatformError> {
         let short = || PlatformError::Unsupported {
             what: format!("plane {index} of {}, shorter than its format", self.what),
         };
-        if CVPixelBufferGetHeightOfPlane(self.buffer, index) < rows {
+        let buffer = self.buffer;
+        let (base, stride, height) = if CVPixelBufferIsPlanar(buffer) {
+            (
+                CVPixelBufferGetBaseAddressOfPlane(buffer, index),
+                CVPixelBufferGetBytesPerRowOfPlane(buffer, index),
+                CVPixelBufferGetHeightOfPlane(buffer, index),
+            )
+        } else if index == 0 {
+            (
+                CVPixelBufferGetBaseAddress(buffer),
+                CVPixelBufferGetBytesPerRow(buffer),
+                CVPixelBufferGetHeight(buffer),
+            )
+        } else {
+            return Err(short());
+        };
+        if height < rows {
             return Err(short());
         }
-        let base =
-            NonNull::new(CVPixelBufferGetBaseAddressOfPlane(self.buffer, index).cast::<u8>())
-                .ok_or_else(short)?;
-        let stride = CVPixelBufferGetBytesPerRowOfPlane(self.buffer, index);
+        let base = NonNull::new(base.cast::<u8>()).ok_or_else(short)?;
         let len = stride.checked_mul(rows).ok_or_else(short)?;
-        // SAFETY: while the buffer is locked, Core Video's base address for the plane
-        // points at its rows (at least `rows`, checked above) of `stride` bytes, which it
-        // owns. The borrow is tied to `&self`, so it ends before the unlock, and nothing
-        // writes to a buffer locked read-only.
+        // SAFETY: while the buffer is locked, Core Video's base address for the plane (or,
+        // for a packed buffer, the whole buffer) points at its rows (at least `rows`,
+        // checked above) of `stride` bytes, which it owns. The borrow is tied to `&self`,
+        // so it ends before the unlock, and nothing writes to a buffer locked read-only.
         Ok((unsafe { slice::from_raw_parts(base.as_ptr(), len) }, stride))
     }
 }

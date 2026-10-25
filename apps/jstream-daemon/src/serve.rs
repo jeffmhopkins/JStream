@@ -7,6 +7,7 @@ use crate::args::Options;
 use crate::youtube;
 use anyhow::Context;
 use jstream_core::{AuditSink, Engine};
+use jstream_crash::Secrets;
 #[cfg(any(windows, target_os = "macos"))]
 use jstream_daemon::live::rtmp;
 use jstream_server::{Connector, Server, ServerConfig, Token};
@@ -19,13 +20,15 @@ use std::sync::Arc;
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
 #[cfg(any(windows, target_os = "macos", test))]
 use {
+    jstream_crash::Redacting,
     jstream_daemon::live::{Connect, live},
     jstream_platform::{Backends, StreamKeyStore},
 };
 
 /// The engine the daemon serves: the collection in `--collection`'s file (else an empty
 /// one that is not saved), the placeholder outputs, and `audit` recording every batch,
-/// undo, redo and action.
+/// undo, redo and action. Every stream key and refresh token that passes through its
+/// credential stores is registered with `secrets`, the crash reports' redaction (#353).
 ///
 /// On Windows it is live (see `jstream_daemon::live`): the OS backends (WGC capture, WASAPI audio, Media
 /// Foundation codecs and webcams, the QPC clock), stream keys in Credential Manager, and a publish
@@ -42,6 +45,7 @@ pub fn engine(
     options: &Options,
     audit: Arc<dyn AuditSink>,
     youtube: Option<youtube::Client>,
+    secrets: &Secrets,
 ) -> anyhow::Result<Arc<Engine>> {
     let mut engine = Engine::new().with_audit(audit);
     if let Some(path) = &options.collection {
@@ -56,7 +60,7 @@ pub fn engine(
         .iter()
         .cloned()
         .fold(engine, Engine::with_output);
-    let engine = with_youtube(engine, youtube);
+    let engine = with_youtube(engine, youtube, secrets);
     #[cfg(windows)]
     let engine = {
         let backends = windows_backends()?;
@@ -67,6 +71,7 @@ pub fn engine(
             backends,
             Arc::new(jstream_platform_windows::WindowsCredentials),
             rtmp(),
+            secrets,
         );
         // After `with_backends`, so pages start on the media clock. Clones share the
         // engine's sources, so this gives the browser to `engine` too.
@@ -80,6 +85,7 @@ pub fn engine(
         macos_backends()?,
         Arc::new(jstream_platform_macos::MacosKeychain),
         rtmp(),
+        secrets,
     );
     #[cfg(not(any(windows, target_os = "macos")))]
     let engine = Arc::new(engine);
@@ -93,18 +99,19 @@ pub fn engine(
 /// `jstream-plugin-host.exe`; the daemon serves meanwhile.
 #[cfg(windows)]
 fn scan_clap_plugins(engine: &Arc<Engine>) {
-    let hosts = match jstream_platform_windows::WindowsPluginHosts::new() {
-        Ok(hosts) => hosts,
-        Err(e) => {
-            tracing::warn!(error = %e, "CLAP plugins are unavailable");
-            return;
-        }
-    };
+    let hosts: Arc<dyn jstream_platform::PluginHosts> =
+        match jstream_platform_windows::WindowsPluginHosts::new() {
+            Ok(hosts) => Arc::new(hosts),
+            Err(e) => {
+                tracing::warn!(error = %e, "CLAP plugins are unavailable");
+                return;
+            }
+        };
     let engine = Arc::clone(engine);
     let spawned = std::thread::Builder::new()
         .name("jstream-clap-scan".into())
         .spawn(move || {
-            let scan = engine.scan_clap_plugins(&hosts);
+            let scan = engine.scan_clap_plugins(hosts);
             for (file, error) in &scan.failed {
                 tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
             }
@@ -121,7 +128,7 @@ fn scan_clap_plugins(engine: &Arc<Engine>) {
 /// registers one, and on other platforms, `youtube.status` answers `unavailable`. Never
 /// fails the start: a transport that can't be built is logged, and YouTube stays
 /// unavailable.
-fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
+fn with_youtube(engine: Engine, client: Option<youtube::Client>, secrets: &Secrets) -> Engine {
     #[cfg(windows)]
     {
         if client.is_none() && jstream_youtube::BUILT_IN_CLIENT_ID.is_empty() {
@@ -137,9 +144,10 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
         };
         // Behind `Redacting`, like the stream keys, so a refresh token is registered with
         // the crash redaction as it is stored or loaded (#353).
-        let tokens = Arc::new(crate::crash::Redacting(Arc::new(
-            jstream_platform_windows::WindowsCredentials,
-        )));
+        let tokens = Arc::new(Redacting::new(
+            secrets.clone(),
+            Arc::new(jstream_platform_windows::WindowsCredentials),
+        ));
         if let Some(client) = client {
             tracing::info!("YouTube sign-in is available, with the developer's OAuth client");
             return youtube::set_up(engine, client, transport, tokens);
@@ -154,6 +162,7 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
     }
     #[cfg(not(windows))]
     {
+        let _ = secrets;
         if let Some(client) = client {
             // Unused here: dropped without a word about its values.
             drop((client.id, client.secret));
@@ -279,21 +288,22 @@ pub fn browse(
 }
 
 /// Makes `engine` live through [`jstream_daemon::live::live`], with `keys` behind
-/// [`crash::Redacting`](crate::crash::Redacting) for both the engine and the publish
+/// [`Redacting`] for both the engine and the publish
 /// opener, so every stream key stored (`output.set_key`) or read (each `output.start`)
-/// is registered with the crash reports' redaction (#353). The redaction lives in the
-/// binary's `crash` module, so it wraps the store here, before the library sees it.
+/// is registered with `secrets`, the crash reports' redaction (#353). It wraps the store
+/// here, before the library sees it.
 #[cfg(any(windows, target_os = "macos", test))]
 fn live_redacting(
     engine: Engine,
     backends: Backends,
     keys: Arc<dyn StreamKeyStore>,
     connect: Connect,
+    secrets: &Secrets,
 ) -> Arc<Engine> {
     live(
         engine,
         backends,
-        Arc::new(crate::crash::Redacting(keys)),
+        Arc::new(Redacting::new(secrets.clone(), keys)),
         connect,
     )
 }
@@ -362,6 +372,7 @@ mod tests {
     };
     use jstream_control::{Control, ControlError, WsConfig, WsControl};
     use jstream_core::{AuditMemory, Engine};
+    use jstream_crash::Secrets;
     use jstream_media::Timebase;
     use jstream_platform::fake::{FakeClock, MemoryKeyStore, backends};
     use jstream_server::Token;
@@ -396,7 +407,13 @@ mod tests {
         };
         let token = Token::new(TOKEN).expect("a valid token");
         let server = bind(
-            engine(&options, Arc::new(AuditMemory::new()), None).expect("an engine"),
+            engine(
+                &options,
+                Arc::new(AuditMemory::new()),
+                None,
+                &Secrets::new(),
+            )
+            .expect("an engine"),
             0,
             token,
             None,
@@ -484,7 +501,13 @@ mod tests {
     async fn a_port_in_use_fails_to_bind() {
         let token = Token::new(TOKEN).expect("a valid token");
         let server = bind(
-            engine(&Options::default(), Arc::new(AuditMemory::new()), None).expect("an engine"),
+            engine(
+                &Options::default(),
+                Arc::new(AuditMemory::new()),
+                None,
+                &Secrets::new(),
+            )
+            .expect("an engine"),
             0,
             token.clone(),
             None,
@@ -494,7 +517,13 @@ mod tests {
         .expect("binds");
         let port = server.local_addr().port();
         let error = bind(
-            engine(&Options::default(), Arc::new(AuditMemory::new()), None).expect("an engine"),
+            engine(
+                &Options::default(),
+                Arc::new(AuditMemory::new()),
+                None,
+                &Secrets::new(),
+            )
+            .expect("an engine"),
             port,
             token,
             None,
@@ -603,6 +632,7 @@ mod tests {
 
         let clock = FakeClock::new(Timebase::MICROS);
         let keys = MemoryKeyStore::new();
+        let secrets = Secrets::new();
         // The daemon's own wiring: the library's `live` and `rtmp` (the real
         // `connect_rtmp`), with the key store behind `Redacting` as `engine` builds it.
         let engine = live_redacting(
@@ -610,6 +640,7 @@ mod tests {
             backends(&clock).expect("fake backends"),
             Arc::new(keys.clone()),
             jstream_daemon::live::rtmp(),
+            &secrets,
         );
         let _ = Engine::clone(&engine).with_cpu_compositor();
         let control = session(&engine).await;
@@ -632,7 +663,7 @@ mod tests {
             // On the first pass no start has read the key yet, so this checks that
             // `output.set_key` itself registered it.
             assert!(
-                crate::crash::is_registered(SECRET),
+                secrets.is_registered(SECRET),
                 "output.set_key registers the key before any start reads it"
             );
             let refused = timely(control.call(start(id)))
@@ -643,7 +674,7 @@ mod tests {
             seen.push(format!("{refused:?} {refused} {why}"));
         }
         assert!(
-            crate::crash::is_registered(SECRET),
+            secrets.is_registered(SECRET),
             "the stored key is registered for redaction"
         );
         assert_eq!(keys.len(), 3, "the keys reached the store");
@@ -693,7 +724,8 @@ mod tests {
             ..Options::default()
         };
         let audit = Arc::new(AuditMemory::new());
-        let first = engine(&options, Arc::clone(&audit) as _, None).expect("an engine");
+        let first =
+            engine(&options, Arc::clone(&audit) as _, None, &Secrets::new()).expect("an engine");
         assert!(file.exists(), "a missing file is created");
         let control = session(&first).await;
         timely(control.call(Call::Batch(Batch::single(Edit::SceneCreate {
@@ -711,7 +743,13 @@ mod tests {
         drop(control);
         drop(first);
 
-        let second = engine(&options, Arc::new(AuditMemory::new()), None).expect("an engine");
+        let second = engine(
+            &options,
+            Arc::new(AuditMemory::new()),
+            None,
+            &Secrets::new(),
+        )
+        .expect("an engine");
         let control = session(&second).await;
         match timely(control.call(Call::Query {
             query: Query::SceneList,
@@ -732,7 +770,12 @@ mod tests {
 
         // A file that holds no collection is an error that names it, and is left as it is.
         std::fs::write(&file, "not json").expect("written");
-        let Err(error) = engine(&options, Arc::new(AuditMemory::new()), None) else {
+        let Err(error) = engine(
+            &options,
+            Arc::new(AuditMemory::new()),
+            None,
+            &Secrets::new(),
+        ) else {
             panic!("an unloadable file was loaded");
         };
         let message = format!("{error:#}");

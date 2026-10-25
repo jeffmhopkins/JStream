@@ -3,16 +3,15 @@
 
 use std::io::Write;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use jstream_media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo,
 };
-use jstream_platform::{FrameSync, GpuFrame, PlatformError};
+use jstream_platform::{FrameSync, GpuFrame};
 
 use super::reference::rgba8_to_nv12;
 use super::{Nv12Converter, Nv12Target};
-use crate::tests::open;
+use crate::tests::{LockSync, open};
 use crate::{Color, Crop, Item, LegacyTransform, Placement, RenderError, Scene};
 
 const LIMITED: ColorInfo = ColorInfo {
@@ -287,9 +286,10 @@ fn bad_sizes_formats_and_spaces_are_refused() {
     ));
 }
 
-/// The encode tick's step: the frame's sync is staged once, the planes hold the
-/// conversion, and the frame's texture is handed back in the same submit. A plane
-/// texture stands in for the platform's NV12 encode target, which lavapipe cannot draw.
+/// The encode tick's step: the frame's sync is staged once, with the compositor's
+/// submit lock held (free again after the submit), the planes hold the conversion, and
+/// the frame's texture is handed back in the same submit. A plane texture stands in for
+/// the platform's NV12 encode target, which lavapipe cannot draw.
 #[test]
 fn submit_stages_the_frame_and_converts_into_it() {
     let Some(opened) = open() else {
@@ -300,43 +300,6 @@ fn submit_stages_the_frame_and_converts_into_it() {
     let rgba = pattern(w, h);
     let texture = source(c.device(), c.queue(), w, h, &rgba);
     let converter = Nv12Converter::new(c.device());
-    let planes = converter.planes(size(w, h)).expect("planes");
-    let pass = converter
-        .bind(&texture, &planes.target(), FULL)
-        .expect("bind");
-    let stages = Arc::new(AtomicUsize::new(0));
-    let info = VideoFrameInfo {
-        size: size(w, h),
-        format: PixelFormat::Nv12,
-        color: FULL,
-        pts: MediaTime::zero(Timebase::MICROS),
-    };
-    let frame = GpuFrame::new(
-        planes.y().clone(),
-        info,
-        Arc::new(Stages(Arc::clone(&stages))),
-    );
-    converter.submit(c.queue(), &pass, &frame).expect("submit");
-    assert_eq!(stages.load(Ordering::SeqCst), 1);
-    assert_within_one(
-        &planes.read(c.device(), c.queue()).expect("read"),
-        &rgba8_to_nv12(&rgba, w as usize, h as usize, ColorRange::Full),
-        w as usize,
-    );
-}
-
-/// A converter made for a compositor stages its frame under the compositor's submit
-/// lock, so a platform thread's submit on the same queue can't come between the
-/// staging and the conversion's submit (#667).
-#[test]
-fn submit_stages_under_the_compositors_submit_lock() {
-    let Some(opened) = open() else {
-        return;
-    };
-    let c = &opened.compositor;
-    let (w, h) = (2, 2);
-    let texture = source(c.device(), c.queue(), w, h, &pattern(w, h));
-    let converter = Nv12Converter::for_compositor(c);
     let planes = converter.planes(size(w, h)).expect("planes");
     let pass = converter
         .bind(&texture, &planes.target(), FULL)
@@ -356,41 +319,21 @@ fn submit_stages_under_the_compositors_submit_lock() {
         info,
         Arc::clone(&sync) as Arc<dyn FrameSync>,
     );
-    converter.submit(c.queue(), &pass, &frame).expect("submit");
-    assert_eq!(*sync.held.lock().expect("not poisoned"), [true]);
+    converter.submit(c, &pass, &frame).expect("submit");
+    assert_eq!(
+        *sync.held.lock().unwrap(),
+        [true],
+        "staged once, with the submit lock held"
+    );
     assert!(
         c.submit_lock().try_lock().is_some(),
-        "the lock is let go after the submit"
+        "submit lets the lock go after its submit"
     );
-}
-
-/// Records, each time it is staged, whether `lock` was held then.
-#[derive(Debug)]
-struct LockSync {
-    lock: jstream_platform::SubmitLock,
-    held: std::sync::Mutex<Vec<bool>>,
-}
-
-impl FrameSync for LockSync {
-    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
-        let held = self.lock.try_lock().is_none();
-        self.held
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(held);
-        Ok(())
-    }
-}
-
-/// Counts its stages.
-#[derive(Debug)]
-struct Stages(Arc<AtomicUsize>);
-
-impl FrameSync for Stages {
-    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
-        self.0.fetch_add(1, Ordering::SeqCst);
-        Ok(())
-    }
+    assert_within_one(
+        &planes.read(c.device(), c.queue()).expect("read"),
+        &rgba8_to_nv12(&rgba, w as usize, h as usize, ColorRange::Full),
+        w as usize,
+    );
 }
 
 /// The native path: an `NV12` texture's plane views as render targets, when the
@@ -490,4 +433,23 @@ fn pollster_ready<F: std::future::Future<Output = Result<T, wgpu::RequestDeviceE
         std::task::Poll::Ready(result) => result.expect("request_device"),
         std::task::Poll::Pending => panic!("request_device did not finish inline"),
     }
+}
+
+/// Binding a conversion on a lost device fails with an error, not a panic, so the
+/// render thread can treat it as the loss it is (#695 review B2).
+#[test]
+fn binding_on_a_lost_device_is_an_error() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let c = &opened.compositor;
+    let (w, h) = (4, 2);
+    let texture = source(c.device(), c.queue(), w, h, &pattern(w, h));
+    let converter = Nv12Converter::new(c.device());
+    let planes = converter.planes(size(w, h)).expect("planes");
+    c.device().destroy();
+    assert!(matches!(
+        converter.bind(&texture, &planes.target(), LIMITED),
+        Err(RenderError::Uncaptured { .. })
+    ));
 }

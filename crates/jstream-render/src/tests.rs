@@ -188,6 +188,48 @@ fn crop_keeps_the_uncut_texels() {
 }
 
 #[test]
+fn an_image_is_placed_at_its_extent() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    // 8x4 texels, each row red for its first quarter and green for the rest, standing
+    // for a 4x2 image (ADR-0073): it places as 4x2, and its crop counts in those pixels.
+    let mut pixels = Vec::new();
+    for _row in 0..4 {
+        for x in 0..8 {
+            let rgba = if x < 4 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 255, 0, 255]
+            };
+            pixels.extend_from_slice(&rgba);
+        }
+    }
+    let mut image = opened.compositor.upload_rgba8(8, 4, &pixels).unwrap();
+    assert_eq!(image.extent(), (8, 4));
+    image.set_extent(FrameSize::new(4, 2).unwrap());
+    assert_eq!((image.width(), image.height()), (8, 4));
+    // One extent pixel off the left is two texels: what is left is one pixel of red
+    // and two of green, three pixels wide.
+    let items = [item(
+        &image,
+        Placement::IDENTITY,
+        Crop {
+            left: 1,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        },
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 4, 2, Color::BLACK, &items);
+    near(&snapshot, 0, 0, [255, 0, 0, 255], 0);
+    near(&snapshot, 1, 1, [0, 255, 0, 255], 0);
+    near(&snapshot, 2, 0, [0, 255, 0, 255], 0);
+    near(&snapshot, 3, 1, [0, 0, 0, 255], 0);
+}
+
+#[test]
 fn integer_scale_covers_the_destination() {
     let Some(mut opened) = open() else {
         return;
@@ -423,6 +465,29 @@ fn a_rendered_image_is_refused_by_another_compositor() {
         other.render_image(&scene),
         Err(RenderError::Invalid { what: "image", .. })
     ));
+}
+
+/// An opaque import reads every texel's alpha as 1, so half-transparent red over black
+/// is full red, as a capture should draw (#451), still faded by the item's opacity. A
+/// filter over it sees an opaque input too.
+#[test]
+fn an_opaque_import_ignores_the_textures_alpha() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let srgb = srgb_texture(&opened.compositor, 2, 2, [255, 0, 0, 128]);
+    let image = opened.compositor.import_opaque(srgb, None).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &items);
+    near(&snapshot, 1, 1, [255, 0, 0, 255], 2);
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 0.5)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &items);
+    let red = (linear_to_srgb(0.5) * 255.0).round() as u8;
+    near(&snapshot, 1, 1, [red, 0, 0, 255], 2);
+
+    let mut identity = crate::filter::testing::filter("color_correction", serde_json::json!({}));
+    let out = crate::filter::testing::run(&mut opened, &mut identity, &image, 0.0);
+    near(&out, 1, 1, [255, 0, 0, 255], 2);
 }
 
 /// An imported sRGB texture is straight alpha, so at a texel centre half-transparent red
@@ -700,9 +765,9 @@ fn a_refused_readback_stages_and_keeps_no_hold() {
 
 /// A [`FrameSync`] that records, each time it is staged, whether `lock` was held then.
 #[derive(Debug)]
-struct LockSync {
-    lock: SubmitLock,
-    held: std::sync::Mutex<Vec<bool>>,
+pub(crate) struct LockSync {
+    pub(crate) lock: SubmitLock,
+    pub(crate) held: std::sync::Mutex<Vec<bool>>,
 }
 
 impl FrameSync for LockSync {
@@ -1143,6 +1208,40 @@ fn show_as(
     ([pixel[0], pixel[1], pixel[2], pixel[3]], freed)
 }
 
+/// The cache's opaque import reads the frame's alpha as 1 and is reused frame to frame,
+/// and an import of the same texture under the same key as straight alpha replaces it.
+#[test]
+fn the_cache_imports_a_capture_as_opaque() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&'static str> = ResourceCache::new();
+    let (frame, _) = counted_frame(compositor, 2, 2, [255, 0, 0, 128]);
+    let mut pixel = |cache: &mut ResourceCache<&'static str>, opaque: bool| {
+        cache.begin_frame();
+        let image = if opaque {
+            cache.import_opaque(compositor, &"capture", &frame)
+        } else {
+            cache.import(compositor, &"capture", &frame)
+        }
+        .expect("import");
+        let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
+        let snapshot = draw(compositor, 2, 2, Color::BLACK, &items);
+        drop(cache.end_frame(compositor));
+        let pixel = snapshot.pixel(0, 0).expect("inside");
+        [pixel[0], pixel[1], pixel[2], pixel[3]]
+    };
+    assert_eq!(pixel(&mut cache, true), [255, 0, 0, 255]);
+    assert_eq!(pixel(&mut cache, true), [255, 0, 0, 255], "reused");
+    let half = (linear_to_srgb(128.0 / 255.0) * 255.0).round() as u8;
+    let straight = pixel(&mut cache, false);
+    assert!(
+        straight[0].abs_diff(half) <= 2,
+        "a straight import of the same texture: {straight:?}"
+    );
+}
+
 /// A GPU frame is sampled through the cache with no copy. Each frame stages its own
 /// hold, and the cache lets go of it when the frame ends, so the platform can reuse
 /// the texture. A ring of textures is imported once per texture; a new size retires
@@ -1407,4 +1506,326 @@ fn a_rotated_geometry_turns_about_its_centre() {
     // Vertical after the turn: (32, 16) is inside, (16, 32) is not.
     near(&snapshot, 32, 16, [255, 0, 0, 255], 1);
     near(&snapshot, 16, 32, [0, 0, 0, 255], 0);
+}
+
+/// Sources an edit may place, thin ones included (a 1-texel-wide colour source is valid),
+/// for the "accepted means drawable" tests (#629 round 2 B4).
+pub(crate) const SOURCES: [(u32, u32); 5] =
+    [(64, 36), (8192, 1), (1, 8192), (16384, 1), (1, 16384)];
+
+/// `count` non-neutral 3D geometries from a fixed seed, every input (centre, size, depth
+/// and perspective) spread over magnitudes from 0.1 to f32's limit, far past
+/// `MAX_DRAWN_PX`, at every angle, flipped or not, plus each input at exactly
+/// `MAX_DRAWN_PX`. Callers keep the ones `check_drawable` accepts.
+pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeometry> {
+    use jstream_protocol::{Finite32, FitMode, ItemGeometry, MAX_DRAWN_PX, Size, Vec2};
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let finite = |value: f32| Finite32::new(value).expect("finite");
+    let mut out = Vec::with_capacity(count + 8);
+    let bound = MAX_DRAWN_PX;
+    for (tilt, turn) in [(60.0, 0.0), (-127.0, -14.5), (13.0, -15.8), (89.0, 89.0)] {
+        for perspective in [0.28, bound] {
+            out.push(ItemGeometry {
+                center: Vec2::new(bound, -bound).expect("finite"),
+                size: Size::try_new(bound, bound).expect("positive"),
+                fit_mode: FitMode::Fit,
+                rotation_deg: finite(206.9),
+                tilt_deg: finite(tilt),
+                turn_deg: finite(turn),
+                depth_px: finite(-bound),
+                perspective_px: Some(finite(perspective)),
+                flip_h: true,
+                flip_v: false,
+            });
+        }
+    }
+    while out.len() < count {
+        // Half the geometries reach f32's limit (10^-1 to 10^38), so the bound is what
+        // refuses them; the other half stay near it (10^-1 to 10^16), so many pass.
+        let top = if next() < 0.5 { 39.0 } else { 17.0 };
+        let magnitude = |next: &mut dyn FnMut() -> f64| {
+            10f64.powf(next() * top - 1.0).min(f64::from(f32::MAX)) as f32
+        };
+        let sign = |next: &mut dyn FnMut() -> f64| if next() < 0.5 { -1.0 } else { 1.0 };
+        let cx = sign(&mut next) * magnitude(&mut next);
+        let cy = sign(&mut next) * magnitude(&mut next);
+        let w = magnitude(&mut next);
+        let h = magnitude(&mut next);
+        let depth = sign(&mut next) * magnitude(&mut next);
+        let perspective = (next() < 0.8).then(|| magnitude(&mut next));
+        let angle = |next: &mut dyn FnMut() -> f64| (next() * 360.0 - 180.0) as f32;
+        let fit_mode = [FitMode::Fit, FitMode::Fill, FitMode::Stretch][(next() * 3.0) as usize % 3];
+        let tilt = angle(&mut next);
+        let turn = angle(&mut next);
+        let rotation = angle(&mut next);
+        let (flip_h, flip_v) = (next() < 0.5, next() < 0.5);
+        let Ok(size) = Size::try_new(w, h) else {
+            continue;
+        };
+        out.push(ItemGeometry {
+            center: Vec2::new(cx, cy).expect("finite"),
+            size,
+            fit_mode,
+            rotation_deg: finite(rotation),
+            tilt_deg: finite(tilt),
+            turn_deg: finite(turn),
+            depth_px: finite(depth),
+            perspective_px: perspective.map(finite),
+            flip_h,
+            flip_v,
+        });
+    }
+    out
+}
+
+/// A lost device (#349) is reported by `lost`, and drawing on it fails instead of
+/// panicking, so the caller can open a new compositor. `destroy` stands in for a driver
+/// reset: wgpu reports both through the same device-lost callback.
+#[test]
+fn a_lost_device_is_reported_and_fails_without_a_panic() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = Color::rgb(1.0, 0.0, 0.0);
+    let image = solid(&opened.compositor, 2, 2, [0, 0, 255, 255]);
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    draw(&mut opened.compositor, 4, 3, red, &items);
+    assert_eq!(opened.compositor.lost(), None);
+
+    opened.compositor.device().destroy();
+    assert_eq!(opened.compositor.lost().as_deref(), Some("destroyed"));
+    let scene = Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: red,
+        items: &items,
+    };
+    assert!(
+        opened.compositor.render(&scene, true).is_err(),
+        "a lost device draws nothing"
+    );
+    // Uploads and layers raise the invalid-resource errors a loss leaves; none panics.
+    let _ = opened.compositor.upload_rgba8(1, 1, &[0, 0, 0, 255]);
+    let _ = opened.compositor.render_image(&scene);
+}
+
+/// An uncaptured wgpu error fails the next frame instead of panicking, and a frame after
+/// it draws again: wgpu's default handler would have panicked on the thread.
+#[test]
+fn an_uncaptured_error_fails_the_next_frame() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let device = opened.compositor.device().clone();
+    let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("zero-sized"),
+            size: wgpu::Extent3d {
+                width: 0,
+                height: 0,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+    }));
+    assert!(made.is_ok(), "the error is kept, not panicked on");
+    let scene = Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: Color::BLACK,
+        items: &[],
+    };
+    let failed = opened.compositor.render(&scene, true).map(|_| ());
+    assert!(
+        matches!(failed, Err(RenderError::Uncaptured { .. })),
+        "a zero-sized texture is a validation error: {failed:?}"
+    );
+    assert_eq!(opened.compositor.lost(), None);
+    draw(&mut opened.compositor, 4, 3, Color::BLACK, &[]);
+}
+
+/// An image of four equal quadrants: `colors` is top-left, top-right, bottom-left,
+/// bottom-right.
+fn quadrants(compositor: &Compositor, side: u32, colors: [[u8; 4]; 4]) -> crate::Image {
+    let half = side / 2;
+    let pixels: Vec<u8> = (0..side)
+        .flat_map(|y| (0..side).map(move |x| (x, y)))
+        .flat_map(|(x, y)| colors[usize::from(y >= half) * 2 + usize::from(x >= half)])
+        .collect();
+    compositor
+        .upload_rgba8(side, side, &pixels)
+        .expect("invariant: the image bytes match")
+}
+
+/// [`geometry`] with `flip_h` and `flip_v` set.
+fn flipped(
+    center: [f32; 2],
+    size: [f32; 2],
+    fit_mode: jstream_protocol::FitMode,
+    rotation_deg: f32,
+    flip_h: bool,
+    flip_v: bool,
+) -> Placement {
+    let Placement::Geometry(base) = geometry(center, size, fit_mode, rotation_deg) else {
+        unreachable!("geometry is a geometry");
+    };
+    Placement::Geometry(jstream_protocol::ItemGeometry {
+        flip_h,
+        flip_v,
+        ..base
+    })
+}
+
+/// Golden test of a geometry's flips on a 64×32 canvas, sampled every 4 pixels. An 8×8
+/// image with red, green, blue and white quadrants (top-left, top-right, bottom-left,
+/// bottom-right) is stretched into 16×16 boxes:
+/// - top row, left to right: unflipped, `flip_h`, `flip_v`, both;
+/// - bottom left, at (8, 24): `flip_h` and turned 90° clockwise, so the mirror happens
+///   in the box's own frame before the turn (green|red over white|blue, turned, is
+///   white|green over blue|red);
+/// - beside it, at (24, 24): the red|green|blue|white bands filling the box and flipped,
+///   so the middle green|blue half shows mirrored as blue|green.
+#[test]
+fn golden_geometry_flips_mirror_the_content_in_the_box() {
+    use jstream_protocol::FitMode;
+
+    let Some(mut opened) = open() else {
+        return;
+    };
+    const R: [u8; 4] = [255, 0, 0, 255];
+    const G: [u8; 4] = [0, 255, 0, 255];
+    const B: [u8; 4] = [0, 0, 255, 255];
+    const W: [u8; 4] = [255, 255, 255, 255];
+    let image = quadrants(&opened.compositor, 8, [R, G, B, W]);
+    let quarters = bands(&opened.compositor, 8, 8, &[R, G, B, W]);
+    let boxed = |x: f32, flip_h: bool, flip_v: bool| {
+        item(
+            &image,
+            flipped(
+                [x, 8.0],
+                [16.0, 16.0],
+                FitMode::Stretch,
+                0.0,
+                flip_h,
+                flip_v,
+            ),
+            Crop::NONE,
+            1.0,
+        )
+    };
+    let items = [
+        boxed(8.0, false, false),
+        boxed(24.0, true, false),
+        boxed(40.0, false, true),
+        boxed(56.0, true, true),
+        item(
+            &image,
+            flipped(
+                [8.0, 24.0],
+                [16.0, 16.0],
+                FitMode::Stretch,
+                90.0,
+                true,
+                false,
+            ),
+            Crop::NONE,
+            1.0,
+        ),
+        item(
+            &quarters,
+            flipped([24.0, 24.0], [16.0, 16.0], FitMode::Fill, 0.0, true, false),
+            Crop::NONE,
+            1.0,
+        ),
+    ];
+    let snapshot = draw(&mut opened.compositor, 64, 32, Color::BLACK, &items);
+    let expected = "\
+RRGGGGRRBBWWWWBB
+RRGGGGRRBBWWWWBB
+BBWWWWBBRRGGGGRR
+BBWWWWBBRRGGGGRR
+WWGGBBGG........
+WWGGBBGG........
+BBRRBBGG........
+BBRRBBGG........
+";
+    assert_eq!(grid(&snapshot, 4), expected);
+}
+
+/// A flipped geometry draws the same pixels as the legacy negative scale it converts
+/// from ([`jstream_protocol::ItemGeometry::from_legacy`]).
+#[test]
+fn a_flipped_geometry_matches_its_legacy_negative_scale() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let image = quadrants(
+        &opened.compositor,
+        8,
+        [
+            [255, 0, 0, 255],
+            [0, 255, 0, 255],
+            [0, 0, 255, 255],
+            [255, 255, 255, 255],
+        ],
+    );
+    // Top-left at (24, 4), reflected left to right: it covers x 8..24 and y 4..28.
+    let transform = LegacyTransform {
+        position: [24.0, 4.0],
+        scale: [-2.0, 3.0],
+        rotation_deg: 0.0,
+    };
+    let legacy = jstream_protocol::ItemGeometry::from_legacy(
+        jstream_protocol::ItemTransform {
+            position: jstream_protocol::Vec2::new(24.0, 4.0).expect("finite"),
+            scale: jstream_protocol::Vec2::new(-2.0, 3.0).expect("finite"),
+            rotation_deg: jstream_protocol::Finite32::ZERO,
+        },
+        jstream_protocol::Crop::NONE,
+        8,
+        8,
+    )
+    .expect("finite")
+    .expect("drawn");
+    assert!(legacy.geometry.flip_h && !legacy.geometry.flip_v);
+    let old = draw(
+        &mut opened.compositor,
+        32,
+        32,
+        Color::BLACK,
+        &[item(&image, Placement::Legacy(transform), Crop::NONE, 1.0)],
+    );
+    let new = draw(
+        &mut opened.compositor,
+        32,
+        32,
+        Color::BLACK,
+        &[item(
+            &image,
+            Placement::Geometry(legacy.geometry),
+            Crop::NONE,
+            1.0,
+        )],
+    );
+    let expected = "\
+........
+..GGRR..
+..GGRR..
+..GGRR..
+..WWBB..
+..WWBB..
+..WWBB..
+........
+";
+    assert_eq!(grid(&old, 4), expected);
+    assert_eq!(grid(&new, 4), expected);
 }

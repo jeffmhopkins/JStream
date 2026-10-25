@@ -135,10 +135,7 @@ mod tests {
         const R: [u8; 4] = [255, 0, 0, 255];
         const C: [u8; 4] = [0, 0, 255, 128];
         let input = image(&opened, 2, &[R, C, C, R]);
-        let mut filter = VideoFilter {
-            kind: "test-copy".into(),
-            pass: Box::new(Copy),
-        };
+        let mut filter = VideoFilter::of("test-copy", Box::new(Copy));
         let output = opened
             .compositor
             .apply_filter(&mut filter, &input, FilterClock::default())
@@ -165,16 +162,197 @@ mod tests {
             .compositor
             .import_premultiplied(texture, None)
             .expect("a Unorm texture imports premultiplied");
-        let mut filter = VideoFilter {
-            kind: "test-copy".into(),
-            pass: Box::new(Copy),
-        };
+        let mut filter = VideoFilter::of("test-copy", Box::new(Copy));
         let output = opened
             .compositor
             .apply_filter(&mut filter, &input, FilterClock::default())
             .expect("apply_filter");
         let snapshot = read(&mut opened, &output);
         near(&snapshot, 1, 1, [128, 0, 0, 128], 2);
+    }
+
+    /// `apply_filter_into` redraws a caller's layer frame after frame, and refuses an
+    /// output of the wrong size, the input itself, or an image that isn't a layer.
+    #[test]
+    fn a_filter_redraws_into_the_same_layer() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const R: [u8; 4] = [255, 0, 0, 255];
+        const G: [u8; 4] = [0, 255, 0, 255];
+        let mut filter = VideoFilter::of("test-copy", Box::new(Copy));
+        let output = opened.compositor.layer(2, 1).expect("layer");
+        for colour in [R, G] {
+            let input = image(&opened, 2, &[colour, colour]);
+            opened
+                .compositor
+                .apply_filter_into(&mut filter, &input, &output, FilterClock::default())
+                .expect("apply_filter_into");
+            let snapshot = read(&mut opened, &output);
+            near(&snapshot, 0, 0, colour, 1);
+            near(&snapshot, 1, 0, colour, 1);
+        }
+        let input = image(&opened, 2, &[R, R]);
+        let wrong = opened.compositor.layer(3, 1).expect("layer");
+        let refused = |result: Result<(), RenderError>| {
+            assert!(
+                matches!(result, Err(RenderError::Invalid { .. })),
+                "{result:?}"
+            );
+        };
+        let clock = FilterClock::default();
+        refused(
+            opened
+                .compositor
+                .apply_filter_into(&mut filter, &input, &wrong, clock),
+        );
+        refused(
+            opened
+                .compositor
+                .apply_filter_into(&mut filter, &output, &output, clock),
+        );
+        let upload = image(&opened, 2, &[R, R]);
+        refused(
+            opened
+                .compositor
+                .apply_filter_into(&mut filter, &input, &upload, clock),
+        );
+    }
+
+    /// The scratch layers `filter` keeps, by texture.
+    fn kept(filter: &VideoFilter) -> Vec<wgpu::Texture> {
+        filter
+            .scratch()
+            .kept()
+            .iter()
+            .map(|layer| layer.texture().clone())
+            .collect()
+    }
+
+    /// V0 (#369): a filter's scratch layer is kept between calls at one size and redrawn
+    /// each call, and an input of another size replaces it.
+    #[test]
+    fn a_scratch_layer_is_kept_and_redrawn_at_one_size() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const R: [u8; 4] = [255, 0, 0, 255];
+        const G: [u8; 4] = [0, 255, 0, 255];
+        let mut filter = VideoFilter::of("test-copy", Box::new(Copy));
+        let mut first = None;
+        for colour in [R, G] {
+            let input = image(&opened, 2, &[colour, colour]);
+            let output = opened
+                .compositor
+                .apply_filter(&mut filter, &input, FilterClock::default())
+                .expect("apply_filter");
+            let snapshot = read(&mut opened, &output);
+            near(&snapshot, 0, 0, colour, 1);
+            near(&snapshot, 1, 0, colour, 1);
+            let layers = kept(&filter);
+            assert_eq!(layers.len(), 1, "one scratch layer");
+            match &first {
+                None => first = Some(layers),
+                Some(first) => assert_eq!(&layers, first, "the same layer, redrawn"),
+            }
+        }
+        let wider = image(&opened, 3, &[R, R, R]);
+        let output = opened
+            .compositor
+            .apply_filter(&mut filter, &wider, FilterClock::default())
+            .expect("apply_filter");
+        near(&read(&mut opened, &output), 2, 0, R, 1);
+        let layers = kept(&filter);
+        assert_eq!(layers.len(), 1);
+        assert_ne!(
+            Some(&layers),
+            first.as_ref(),
+            "a new size makes a new layer"
+        );
+        let layer = &filter.scratch().kept()[0];
+        assert_eq!((layer.width(), layer.height()), (3, 1));
+    }
+
+    /// V0 (#369): a real multi-pass kind's two scratch layers are different, are kept for
+    /// the next call, and draw what the first call drew. A video delay's held frames are
+    /// its own, not scratch, so a scratch layer can never overwrite one.
+    #[test]
+    fn a_multi_pass_kind_draws_the_same_from_kept_layers() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const R: [u8; 4] = [255, 0, 0, 255];
+        const T: [u8; 4] = [0, 0, 0, 0];
+        let mut outline = super::filter("outline", serde_json::json!({"width": 2.0}));
+        let input = image(
+            &opened,
+            4,
+            &[T, T, T, T, T, R, R, T, T, R, R, T, T, T, T, T],
+        );
+        let first = super::run(&mut opened, &mut outline, &input, 0.0);
+        let layers = kept(&outline);
+        assert_eq!(layers.len(), 2, "outline uses two scratch layers");
+        assert_ne!(layers[0], layers[1], "two layers of one call are different");
+        let again = super::run(&mut opened, &mut outline, &input, 0.0);
+        assert_eq!(kept(&outline), layers, "kept for the next call");
+        assert_eq!(again, first, "drawn the same from the kept layers");
+
+        let mut delay = super::filter("video_delay", serde_json::json!({"delay_ms": 100}));
+        for i in 0..4 {
+            super::run(&mut opened, &mut delay, &input, f64::from(i) * 0.05);
+        }
+        assert!(kept(&delay).is_empty(), "held frames aren't scratch layers");
+    }
+
+    /// #369: a draw keeps its uniform buffers between calls. New settings rewrite them in
+    /// place and draw the new look, and another input draws as a fresh filter does, with
+    /// no new buffers. A multi-pass kind's second call makes none either.
+    #[test]
+    fn a_draw_keeps_its_uniform_buffers_between_calls() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const DARK: [u8; 4] = [64, 64, 64, 255];
+        const G: [u8; 4] = [0, 255, 0, 255];
+        let made = |filter: &VideoFilter| filter.scratch().made_buffers();
+        let mut correction = super::filter("color_correction", serde_json::json!({}));
+        let input = image(&opened, 2, &[DARK, DARK]);
+        let first = super::run(&mut opened, &mut correction, &input, 0.0);
+        near(&first, 0, 0, DARK, 1);
+        assert_eq!(made(&correction), 2, "one draw: two buffers");
+        let again = super::run(&mut opened, &mut correction, &input, 0.5);
+        assert_eq!(again, first, "the same draw from the kept buffers");
+        assert_eq!(made(&correction), 2, "no buffers made for the same draw");
+
+        correction.set_settings(&super::settings(
+            "color_correction",
+            serde_json::json!({"brightness": 0.25}),
+        ));
+        let brighter = super::run(&mut opened, &mut correction, &input, 0.0);
+        let lit = brighter.pixel(0, 0).expect("in the snapshot");
+        assert!(lit[0] > DARK[0] + 20, "new settings draw: {lit:?}");
+        assert_eq!(made(&correction), 2, "new settings rewrite the buffers");
+
+        let other = image(&opened, 2, &[G, G]);
+        let green = super::run(&mut opened, &mut correction, &other, 0.0);
+        let mut fresh = super::filter("color_correction", serde_json::json!({"brightness": 0.25}));
+        let expected = super::run(&mut opened, &mut fresh, &other, 0.0);
+        assert_eq!(
+            green, expected,
+            "the kept buffers draw the other input as a new filter does"
+        );
+        assert_eq!(made(&correction), 2, "another input: no new buffers");
+
+        let mut outline = super::filter("outline", serde_json::json!({"width": 2.0}));
+        let _ = super::run(&mut opened, &mut outline, &input, 0.0);
+        let after_first = made(&outline);
+        assert!(after_first > 2, "outline draws more than once");
+        let _ = super::run(&mut opened, &mut outline, &input, 0.0);
+        assert_eq!(
+            made(&outline),
+            after_first,
+            "a steady multi-pass call makes no buffers"
+        );
     }
 
     /// Every kind is a unique `video_filter` with valid defaults and a pass that its

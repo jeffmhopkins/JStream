@@ -19,14 +19,15 @@ mod image;
 mod mips;
 mod place;
 mod scene;
+pub mod transition;
 
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
 pub use error::RenderError;
 pub use filter::{
-    ExternalFilter, FilterClock, PRELUDE as FILTER_PRELUDE, VideoFilter,
-    descriptors as video_filter_descriptors,
+    ExternalFilter, FilterClock, Lut, LutError, PRELUDE as FILTER_PRELUDE, VideoFilter,
+    descriptors as video_filter_descriptors, lut_image,
 };
 pub use gpu::OpenOptions;
 pub use image::Image;

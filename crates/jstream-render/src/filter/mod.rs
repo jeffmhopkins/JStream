@@ -2,15 +2,11 @@
 //! filter chains). Each kind is a `video_filter` descriptor plus a GPU pass that reads one
 //! premultiplied linear image and writes another, possibly of a different size.
 //!
-//! This is the shared harness the filter groups build on. The chain runtime (V0) will
-//! keep a [`VideoFilter`] per enabled filter of a source's video chain and run them in
-//! order through [`crate::Compositor::apply_filter`]; until then nothing in the engine
-//! calls it, and the kinds are not in `kind.list`.
-
-#![allow(
-    dead_code,
-    reason = "Lane V: the harness lands before the filter groups that use it"
-)]
+//! This is the shared harness the filter groups build on. `jstream-core`'s chain runtime
+//! (V0) keeps a [`VideoFilter`] per enabled filter of a source's video chain and runs
+//! them in order, each into a layer it keeps, through
+//! [`crate::Compositor::apply_filter_into`]; [`descriptors`] is how its `kind.list`
+//! gets these kinds.
 
 mod aspect;
 mod assets;
@@ -22,9 +18,10 @@ mod pass;
 #[cfg(test)]
 pub(crate) mod testing;
 
+pub use assets::{Lut, LutError, lut_image};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
-pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Shader};
+pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Scratch, Shader};
 
 use jstream_protocol::{KindDescriptor, Settings};
 
@@ -55,10 +52,12 @@ fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
 }
 
 /// One built-in video filter with its settings read, ready to draw. It keeps whatever
-/// state its kind needs between frames (a video delay's ring of frames).
+/// state its kind needs between frames (a video delay's ring of frames), and a
+/// multi-pass kind's intermediate layers (`Scratch`).
 pub struct VideoFilter {
     kind: String,
     pass: Box<dyn Pass>,
+    scratch: Scratch,
 }
 
 impl VideoFilter {
@@ -66,10 +65,16 @@ impl VideoFilter {
     /// missing or mistyped setting reads as its default. `None` when `kind_id` is not a
     /// built-in video filter kind.
     pub fn new(kind_id: &str, settings: &Settings) -> Option<Self> {
-        build(kind_id, settings).map(|pass| Self {
-            kind: kind_id.to_owned(),
+        build(kind_id, settings).map(|pass| Self::of(kind_id, pass))
+    }
+
+    /// A filter of `kind` drawn by `pass`, with no layers kept yet.
+    pub(crate) fn of(kind: &str, pass: Box<dyn Pass>) -> Self {
+        Self {
+            kind: kind.to_owned(),
             pass,
-        })
+            scratch: Scratch::default(),
+        }
     }
 
     /// A filter of a kind defined outside this crate (an effect pack), with `settings`
@@ -79,10 +84,7 @@ impl VideoFilter {
         filter: std::sync::Arc<dyn ExternalFilter>,
         settings: &Settings,
     ) -> Self {
-        Self {
-            kind: kind_id.to_owned(),
-            pass: Box::new(external::External::new(filter, settings)),
-        }
+        Self::of(kind_id, Box::new(external::External::new(filter, settings)))
     }
 
     /// The filter's kind ID.
@@ -96,9 +98,9 @@ impl VideoFilter {
     }
 
     /// The size this filter draws for an input of `width` by `height`. Most filters keep
-    /// the size; some change it (for example aspect ratio, padding, a drop shadow, an
-    /// outside outline or a glow), which changes the source's reported size for every
-    /// placement.
+    /// the size; aspect ratio reshapes it, which changes the source's reported size for
+    /// every placement. An effect that draws outside its input (a drop shadow, an outside
+    /// outline, a glow) keeps it, and what falls past the frame is cut (ADR-0065 §5).
     pub fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         self.pass.output_size(width, height)
     }
@@ -112,8 +114,15 @@ impl VideoFilter {
         self.pass.set_reference(image);
     }
 
-    pub(crate) fn pass_mut(&mut self) -> &mut dyn Pass {
-        self.pass.as_mut()
+    /// Its pass and the pool its scratch layers come from, to draw it.
+    pub(crate) fn parts(&mut self) -> (&mut dyn Pass, &mut Scratch) {
+        (self.pass.as_mut(), &mut self.scratch)
+    }
+
+    /// The scratch layers it keeps, for tests.
+    #[cfg(test)]
+    pub(crate) fn scratch(&self) -> &Scratch {
+        &self.scratch
     }
 }
 

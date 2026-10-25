@@ -19,16 +19,20 @@ mod geometry;
 mod history;
 mod hotkey;
 mod id;
+mod keyframe;
 mod kind;
 mod live;
 mod mix;
+mod organise;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
+mod plugin;
 mod preview;
 mod query;
 mod schema;
 mod settings;
+mod transition;
 mod version;
 mod youtube;
 
@@ -54,15 +58,17 @@ pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_F
 pub use finite::Finite32;
 pub use geometry::{
     Canvas, CanvasPoint, ContentRect, DrawnPolygon, DrawnVertex, FitMode, GeometryError,
-    ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, NEAR_W, Placed, PlacementForm, ProjectedQuad,
-    Size, legacy_quad,
+    ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX, NEAR_W, Placed, PlacementForm,
+    ProjectedQuad, Size, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
-    BusId, ClientId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId,
-    OutputId, RequestId, Rev, SceneId, SourceId, VideoMixId,
+    BusId, ClientId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey,
+    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TransitionPresetId,
+    VideoMixId,
 };
+pub use keyframe::{DroppedOverride, ItemOverride, OverrideField};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
@@ -71,7 +77,17 @@ pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
 };
 pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
-pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
+pub use organise::{
+    FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon,
+};
+pub use output::{
+    OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
+    rtmp_url_sends_key_in_cleartext,
+};
+pub use plugin::{
+    PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginScope,
+    PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope, settings_reach,
+};
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
     PreviewCodec, PreviewSettings, StreamKind,
@@ -82,10 +98,17 @@ pub use query::{
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
+pub use transition::{
+    CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
+    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, TransitionEffect, TransitionPresetInfo,
+    TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
+    check_preset_timing, initial_preset,
+};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
 pub use youtube::{
-    BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy, BroadcastTransition,
-    BroadcastType, HealthIssue, IssueSeverity, StreamHealth, StreamInfo, StreamStatus, YoutubeAuth,
+    AudienceStatsInfo, BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy,
+    BroadcastTransition, BroadcastType, HealthIssue, IssueSeverity, QuotaInfo, StatsPolling,
+    StreamHealth, StreamInfo, StreamStatus, YoutubeAuth,
 };
 
 #[cfg(test)]
@@ -101,6 +124,14 @@ mod fixtures;
 #[test]
 fn names_are_valid() {
     fixtures::check_names_are_valid();
+}
+
+/// ADR-0069: every command has a place in the plugin capability table, in a class or
+/// under "never", so no new command is granted to plugins without a PR deciding it.
+#[cfg(test)]
+#[test]
+fn every_command_has_a_plugin_scope() {
+    fixtures::check_every_command_has_a_plugin_scope();
 }
 
 /// R-ARCH-006: every command in the schema is classified as exactly one of edit or

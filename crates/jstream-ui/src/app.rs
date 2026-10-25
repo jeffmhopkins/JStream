@@ -1,13 +1,18 @@
-//! The root component: the connect form until a session is open, then the shell with its
-//! regions, the event loop that keeps the shared [`Studio`] state current, and the
-//! routing: which panel goes in which region, and the inspector's pages.
+//! The root component: the connect form until a session is open, then the shell (the
+//! header over the workspace), and the event loop that keeps the shared [`Studio`] state
+//! current. Which panel sits where is the workspace's dock (`dock.rs`, `workspace.rs`).
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
-use crate::canvas::Canvas;
-use crate::panels::{Mixer, Outputs, Properties, Scenes, Sources};
+use crate::header::Header;
+use crate::menu::{ContextMenu, Menus};
+use crate::panels::AddSource;
+use crate::panels::add_source::AddSourceDialog;
+use crate::panels::filters::{AddFilter, FilterDialogs, FilterSettings};
+use crate::panels::source_properties::{PropertiesDialog, SourceProperties};
 use crate::session::{Session, engine_url_for_page};
 use crate::store::Studio;
+use crate::workspace::{DockState, Workspace, restore};
 use futures_util::StreamExt;
 use jstream_control::ControlError;
 use jstream_control::protocol::Event;
@@ -199,98 +204,31 @@ fn ConnectForm(
     }
 }
 
-/// One page of the inspector: a tab and the panel it shows.
-struct Page {
-    /// The tab's ID, kept while the page list changes.
-    id: &'static str,
-    /// The tab's label.
-    label: &'static str,
-    /// The panel.
-    view: fn() -> AnyView,
-}
-
-/// The inspector's pages, in tab order. A panel that lives in the inspector adds its
-/// line here.
-fn inspector_pages() -> Vec<Page> {
-    vec![
-        Page {
-            id: "properties",
-            label: "Properties",
-            view: || view! { <Properties /> }.into_any(),
-        },
-        Page {
-            id: "outputs",
-            label: "Outputs",
-            view: || view! { <Outputs /> }.into_any(),
-        },
-    ]
-}
-
-/// The inspector: a tab per page, showing one page at a time. With one page there are no
-/// tabs.
-#[component]
-fn Inspector() -> impl IntoView {
-    let pages = inspector_pages();
-    let open = RwSignal::new(pages.first().map_or("", |p| p.id));
-    let tabs = (pages.len() > 1).then(|| {
-        pages
-            .iter()
-            .map(|page| {
-                let id = page.id;
-                view! {
-                    <button
-                        role="tab"
-                        aria-selected=move || if open.get() == id { "true" } else { "false" }
-                        on:click=move |_| open.set(id)
-                    >
-                        {page.label}
-                    </button>
-                }
-            })
-            .collect_view()
-    });
-    let bodies = pages
-        .into_iter()
-        .map(|page| {
-            let id = page.id;
-            view! { <div role="tabpanel" hidden=move || open.get() != id>{(page.view)()}</div> }
-        })
-        .collect_view();
-    view! {
-        {tabs.map(|tabs| view! { <div class="tabs" role="tablist">{tabs}</div> })}
-        {bodies}
-    }
-}
-
-/// The workspace: a status bar over the scene and sources lists, the preview canvas and
-/// the inspector, with the mixer along the bottom. Each region is its own component, so
-/// the panels and the canvas are built separately.
+/// The workspace: the header bar over the dock zones and the preview canvas
+/// (`workspace.rs`). The dock is the browser's kept one, or the Editing layout.
 #[component]
 fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl IntoView {
     let studio = expect_context::<Studio>();
+    provide_context(DockState(RwSignal::new(restore())));
+    provide_context(Menus::new());
+    provide_context(AddSourceDialog::new());
+    provide_context(PropertiesDialog::new());
+    provide_context(FilterDialogs::new());
     view! {
         <div class="shell">
-            <header class="status-bar">
-                <span class="brand">"JStream"</span>
-                <span>{move || info.with(|i| i.url.clone())}</span>
-                <span>"protocol " {move || info.with(|i| i.protocol.clone())}</span>
-                <span>"client " {move || info.with(|i| i.client_id.clone())}</span>
-                <span>"rev " {move || info.with(|i| i.rev.clone())}</span>
-                <button on:click=move |_| disconnect()>"Disconnect"</button>
-            </header>
+            <Header info=info disconnect=disconnect />
             {move || studio.problem.get().map(|problem| view! {
                 <div class="problem-bar" role="alert">
                     <span>{problem}</span>
                     <button on:click=move |_| studio.problem.set(None)>"Dismiss"</button>
                 </div>
             })}
-            <aside class="region scenes"><Scenes /><Sources /></aside>
-            <section class="region canvas"><Canvas /></section>
-            <aside class="region inspector">
-                <Inspector />
-                <crate::pairing::Pairing />
-            </aside>
-            <footer class="region mixer"><Mixer /></footer>
+            <Workspace />
+            <AddSource />
+            <SourceProperties />
+            <AddFilter />
+            <FilterSettings />
+            <ContextMenu />
         </div>
     }
 }

@@ -24,10 +24,20 @@
 //! the running source itself ([`jstream_sources::SourceAudio`]) from when it is built
 //! until it is deleted or built again, and not while its audio is turned off.
 //!
+//! A `webcam` source with audio settings records its device's paired audio input (a
+//! webcam's microphone, a capture card's HDMI audio; ADR-0061), which the thread looks
+//! up on the backends' video devices when it opens the input
+//! ([`jstream_sources::webcam_device`]). A device the platform pairs with no input, or
+//! that isn't connected, leaves the source unavailable, tried again on every tick. A
+//! webcam made before webcams had audio has no audio settings and records nothing.
+//! The microphone opens only while the source has at least one send (#716), whatever
+//! its visibility or follow mode: removing its last send closes it, so a webcam no bus
+//! hears never records, and its channel meter then reads silence.
+//!
 //! While the collection has no audio source, the program records the default
 //! microphone and desktop audio, as it did before audio sources existed, so a
-//! collection made earlier is not silent. A page's audio doesn't count as an audio
-//! source here: it plays alongside the defaults.
+//! collection made earlier is not silent. A page's audio, and a webcam's, don't count
+//! as an audio source here: they play alongside the defaults.
 //!
 //! Each source's open input (an audio source's, a page's or a media file's) is also
 //! listed in [`Routed`], where the engine's audio routing (`crate::audio`) finds it to
@@ -43,22 +53,26 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use jstream_audio::{InputControl, MixerControl};
 use jstream_platform::{
-    AudioInputTarget, AudioIo, AudioProcess, AudioStream, DeviceId, MediaClock,
+    AudioInputTarget, AudioIo, AudioProcess, AudioStream, DeviceId, MediaClock, PlatformError,
+    PluginHosts, VideoDeviceInfo, VideoDevices,
 };
 use jstream_protocol::{SourceId, SourceKind};
-use jstream_sources::{AudioTarget, SourceAudio};
+use jstream_sources::{AudioTarget, SourceAudio, webcam_device};
 
 use crate::drops::{AudioInputDrops, DropLedger, DropSourceId, lock_ledger};
 use crate::filters::{Chain, Chained, chain_of};
 use crate::live::LiveAudio;
 use crate::lock;
+use crate::plugins::filter::ClapCatalog;
+use crate::plugins::supervisor::SupervisorPolicy;
 
 /// How often the thread retries unavailable sources, reopens failed streams and checks
 /// that recorded applications still run.
@@ -129,6 +143,8 @@ struct WantedState {
     /// Each source's audio filter chain, as the mixer runs it. Sources without filters
     /// have no entry.
     chains: BTreeMap<SourceId, Vec<Chained>>,
+    /// What runs the CLAP filters, once a scan has found plugins.
+    clap: Option<Arc<ClapCatalog>>,
     /// How each source fares while the program stage runs.
     status: BTreeMap<SourceId, AudioStatus>,
 }
@@ -149,6 +165,9 @@ enum Recorded {
     Device(AudioTarget),
     /// A running source's own audio.
     Own(OwnAudio),
+    /// A `webcam` source's paired audio: of the video device with this ID, or of the
+    /// first one listed.
+    Paired(Option<String>),
 }
 
 /// A running source's own audio, compared by identity: a source built again has new
@@ -185,9 +204,22 @@ impl AudioSources {
                 let SourceKind::Builtin { kind } = source.kind() else {
                     return None;
                 };
-                let target = AudioTarget::of(kind, source.settings())?;
                 let on = source.audio().is_none_or(|audio| audio.enabled);
-                let recorded = Recorded::Device(target);
+                let recorded = match AudioTarget::of(kind, source.settings()) {
+                    Some(target) => Recorded::Device(target),
+                    // A webcam made before webcams had audio has no audio settings. Its
+                    // microphone opens only while the source has a send (#716): a
+                    // webcam can have its audio on and no send (its last send
+                    // removed), and one that no bus hears must not record.
+                    None if source.audio().is_some() => {
+                        let device = webcam_device(kind, source.settings())?;
+                        if !state.sends().any(|(id, _, _)| id == source.id()) {
+                            return None;
+                        }
+                        Recorded::Paired(device)
+                    }
+                    None => return None,
+                };
                 Some((source.id().clone(), Target { recorded, on }))
             })
             .collect();
@@ -228,6 +260,29 @@ impl AudioSources {
             wanted.live = live;
             changed(&mut wanted, &self.wanted.changed);
         }
+    }
+
+    /// Has the program stage's thread run CLAP filters with `hosts` (ADR-0035), adding
+    /// `plugins` (each kind's plugin file and CLAP id) to those earlier scans found,
+    /// and wakes it, so a CLAP filter waiting for its kind starts.
+    pub(crate) fn add_clap_plugins(
+        &mut self,
+        hosts: Arc<dyn PluginHosts>,
+        plugins: impl IntoIterator<Item = (String, (PathBuf, String))>,
+    ) {
+        let mut wanted = lock(&self.wanted.state);
+        let mut all = wanted
+            .clap
+            .as_ref()
+            .map(|catalog| catalog.plugins.clone())
+            .unwrap_or_default();
+        all.extend(plugins);
+        wanted.clap = Some(Arc::new(ClapCatalog {
+            hosts,
+            plugins: all,
+            policy: SupervisorPolicy::default(),
+        }));
+        self.wanted.changed.notify_all();
     }
 
     /// The wanted set, for the program stage.
@@ -292,6 +347,9 @@ enum Want {
     Live(LiveAudio),
     /// A running source's own audio.
     Own(OwnAudio),
+    /// The audio input paired with the video device with this ID, or with the first one
+    /// listed.
+    Paired(Option<DeviceId>),
 }
 
 impl Want {
@@ -299,6 +357,7 @@ impl Want {
         let target = match recorded {
             Recorded::Device(target) => target,
             Recorded::Own(audio) => return Self::Own(audio.clone()),
+            Recorded::Paired(device) => return Self::Paired(device.clone().map(DeviceId::new)),
         };
         match target {
             AudioTarget::Input { device: None } => Self::Target(AudioInputTarget::DefaultInput),
@@ -319,6 +378,7 @@ struct Wants {
     live: BTreeMap<SourceId, LiveAudio>,
     /// Each source's audio filter chain.
     chains: BTreeMap<SourceId, Vec<Chained>>,
+    clap: Option<Arc<ClapCatalog>>,
 }
 
 impl Wants {
@@ -332,6 +392,7 @@ impl Wants {
                 .map(|(id, live)| (id.clone(), live.clone()))
                 .collect(),
             chains: state.chains.clone(),
+            clap: state.clap.clone(),
         }
     }
 
@@ -393,6 +454,8 @@ struct Open {
     /// Where each audio source's input is listed for the routing.
     wanted: Arc<Wanted>,
     audio: Arc<dyn AudioIo>,
+    /// Where a webcam's paired audio input is looked up.
+    video_devices: Arc<dyn VideoDevices>,
     /// The media clock a live source's sound is stamped on.
     clock: Arc<dyn MediaClock>,
     ledger: Arc<Mutex<DropLedger>>,
@@ -432,6 +495,7 @@ impl AudioInputs {
     pub(crate) fn start(
         mixer: MixerControl,
         audio: Arc<dyn AudioIo>,
+        video_devices: Arc<dyn VideoDevices>,
         clock: Arc<dyn MediaClock>,
         wanted: Arc<Wanted>,
         ledger: Arc<Mutex<DropLedger>>,
@@ -440,6 +504,7 @@ impl AudioInputs {
             mixer,
             wanted: Arc::clone(&wanted),
             audio,
+            video_devices,
             clock,
             ledger,
             inputs: BTreeMap::new(),
@@ -582,6 +647,7 @@ impl Open {
     /// those whose application exited, opens every input that isn't recording, and
     /// brings each source input's filters in line with its chain.
     fn reconcile(&mut self, wants: &Wants) -> Pass {
+        let now = Instant::now();
         let mut notes = Vec::new();
         self.removing.retain(|control| !control.remove());
         let wanted = wanted_inputs(wants);
@@ -604,6 +670,20 @@ impl Open {
             .values()
             .any(|want| matches!(want, Want::App(_)))
             .then(|| self.audio.processes());
+        // Likewise the video devices, only when a webcam's paired audio has to be opened:
+        // it isn't recording, or its stream failed.
+        let devices = wanted
+            .iter()
+            .any(|(key, want)| {
+                matches!(want, Want::Paired(_))
+                    && self.inputs.get(key).is_none_or(|input| {
+                        input
+                            .live
+                            .as_ref()
+                            .is_none_or(|live| live.control.stats().failed)
+                    })
+            })
+            .then(|| self.video_devices.devices());
         for (key, want) in wanted {
             let mut input = self.inputs.remove(&key).unwrap_or(Input {
                 want,
@@ -619,7 +699,7 @@ impl Open {
                 }
             }
             if input.live.is_none() {
-                match self.open(&key, &input.want, processes.as_ref()) {
+                match self.open(&key, &input.want, processes.as_ref(), devices.as_ref()) {
                     Ok(live) => {
                         if input.unavailable.take().is_some() {
                             notes.push(Note::Available(key.clone()));
@@ -636,7 +716,8 @@ impl Open {
             }
             if let (Key::Source(id), Some(live)) = (&key, input.live.as_mut()) {
                 let chain = wants.chains.get(id).map_or(&[][..], Vec::as_slice);
-                for reason in live.chain.apply(&live.control, chain) {
+                let clap = wants.clap.as_deref();
+                for reason in live.chain.apply(&live.control, chain, clap, now) {
                     notes.push(Note::Refused(key.clone(), reason));
                 }
             }
@@ -685,8 +766,17 @@ impl Open {
         key: &Key,
         want: &Want,
         processes: Option<&Result<Vec<AudioProcess>, jstream_platform::PlatformError>>,
+        devices: Option<&Result<Vec<VideoDeviceInfo>, PlatformError>>,
     ) -> Result<Live, String> {
         let (target, pid) = match want {
+            Want::Paired(device) => {
+                let devices = match devices {
+                    Some(Ok(devices)) => devices,
+                    Some(Err(err)) => return Err(format!("listing video devices: {err}")),
+                    None => return Err("video devices were not listed".into()),
+                };
+                (paired_input(devices, device.as_ref())?, None)
+            }
             Want::Live(live) => {
                 let Key::Source(id) = key else {
                     return Err("a live source's sound without its source".into());
@@ -840,6 +930,28 @@ fn ended(
         return Some("the application exited");
     }
     None
+}
+
+/// The audio input paired with the video device `device`, or with the first one listed
+/// when `None`.
+fn paired_input(
+    devices: &[VideoDeviceInfo],
+    device: Option<&DeviceId>,
+) -> Result<AudioInputTarget, String> {
+    let found = match device {
+        Some(id) => devices
+            .iter()
+            .find(|info| &info.id == id)
+            .ok_or_else(|| format!("the video device {} is not connected", id.as_str()))?,
+        None => devices
+            .first()
+            .ok_or_else(|| String::from("no video device is connected"))?,
+    };
+    found
+        .audio
+        .clone()
+        .map(AudioInputTarget::Input)
+        .ok_or_else(|| format!("{} has no paired audio input", found.name))
 }
 
 /// The process that records application `exe`: of the processes with that executable

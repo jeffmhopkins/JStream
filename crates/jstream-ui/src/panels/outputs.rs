@@ -1,6 +1,7 @@
 //! The outputs panel: create, edit and delete outputs (streams, recordings and the
-//! virtual camera), set or clear their stream keys, start and stop them, go live, and
-//! the pipeline's health from `stats.tick`.
+//! virtual camera), set or clear their stream keys, start and stop them, and the
+//! pipeline's health from `stats.tick`. It also holds the logic behind the header's
+//! Go Live (`go_live_targets`, `live_outputs`, `start_or_stop_all`).
 //!
 //! The stream key is write-only (R-SEC-001). It is read from its password field only
 //! when the user saves it, wrapped in a [`SecretString`] at once, sent with
@@ -35,6 +36,20 @@ pub struct OutputRow {
     /// Whether the engine's credential store holds a stream key for it. The key itself
     /// never reaches the UI.
     pub key_set: bool,
+    /// Whether the engine says publishing sends the stream key unencrypted
+    /// (`output.status`'s `cleartext`, from 0.37).
+    pub cleartext: bool,
+}
+
+/// What `output.status` reports that the panel shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Status {
+    /// Whether it runs.
+    pub state: OutputState,
+    /// Whether a stream key is set.
+    pub key_set: bool,
+    /// Whether publishing sends the stream key unencrypted.
+    pub cleartext: bool,
 }
 
 /// The outputs and encoder profiles at one revision, with each output's status.
@@ -62,11 +77,16 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
     };
     let mut rows = Vec::with_capacity(outputs.len());
     for info in outputs {
-        let (state, key_set) = status(control, &info.output_id).await?;
+        let Status {
+            state,
+            key_set,
+            cleartext,
+        } = status(control, &info.output_id).await?;
         rows.push(OutputRow {
             info,
             state,
             key_set,
+            cleartext,
         });
     }
     Ok(Snapshot {
@@ -76,16 +96,23 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
     })
 }
 
-/// One output's runtime state and whether its stream key is set (`output.status`).
-pub async fn status(
-    control: &dyn Control,
-    output_id: &OutputId,
-) -> Result<(OutputState, bool), String> {
+/// One output's runtime state, whether its stream key is set, and whether publishing
+/// sends that key unencrypted (`output.status`).
+pub async fn status(control: &dyn Control, output_id: &OutputId) -> Result<Status, String> {
     let query_status = Query::OutputStatus {
         output_id: output_id.clone(),
     };
     match query(control, query_status).await? {
-        QueryResult::OutputStatus { state, key_set, .. } => Ok((state, key_set)),
+        QueryResult::OutputStatus {
+            state,
+            key_set,
+            cleartext,
+            ..
+        } => Ok(Status {
+            state,
+            key_set,
+            cleartext,
+        }),
         other => Err(unexpected("output.status", other.name())),
     }
 }
@@ -231,16 +258,22 @@ pub enum Vcam {
     Registered,
     /// Not registered: Windows doesn't list the camera until it is.
     NotRegistered,
-    /// Registered for another folder, such as one the install was moved from.
-    Moved,
+    /// Registered, but not for a current copy of this install's DLL: an update changed
+    /// it, or an older JStream registered its own folder. The old registration keeps
+    /// working until the user opts in to register again.
+    Outdated,
     /// The app was started with `--no-vcam`, so its engine has no virtual camera.
     Off,
     /// The page doesn't know: it isn't running in the desktop app.
     Unknown,
 }
 
-/// The command that registers the camera. It asks for administrator rights once.
-pub const REGISTER_HINT: &str = "Run `jstream-daemon --register-vcam` from the JStream folder (it asks for administrator rights once), then restart JStream.";
+/// The optional step that registers the camera. It asks for administrator rights once.
+pub const REGISTER_HINT: &str = "Registering the virtual camera is optional: to use it, run `jstream-daemon --register-vcam` from the JStream folder (it asks for administrator rights once), then restart JStream.";
+
+/// The optional step that updates an outdated registration. Until then the camera keeps
+/// using the copy registered before.
+pub const UPDATE_HINT: &str = "Optional: run `jstream-daemon --register-vcam` from the JStream folder to register this version's camera (it asks for administrator rights), then restart JStream. Until then the camera registered before is used.";
 
 impl Vcam {
     /// The desktop app's `vcam` value; anything else, or none, is [`Vcam::Unknown`].
@@ -248,7 +281,7 @@ impl Vcam {
         match value {
             Some("registered") => Vcam::Registered,
             Some("not_registered") => Vcam::NotRegistered,
-            Some("moved") => Vcam::Moved,
+            Some("outdated") => Vcam::Outdated,
             Some("off") => Vcam::Off,
             _ => Vcam::Unknown,
         }
@@ -259,7 +292,7 @@ impl Vcam {
         match self {
             Vcam::Registered => "Virtual camera: registered",
             Vcam::NotRegistered => "Virtual camera: not registered",
-            Vcam::Moved => "Virtual camera: registered for another folder",
+            Vcam::Outdated => "Virtual camera: registered, but not for this version",
             Vcam::Off => "Virtual camera: off in this app",
             Vcam::Unknown => "Virtual camera: registration not known here",
         }
@@ -269,7 +302,8 @@ impl Vcam {
     pub fn hint(self) -> Option<&'static str> {
         match self {
             Vcam::Registered => None,
-            Vcam::NotRegistered | Vcam::Moved => Some(REGISTER_HINT),
+            Vcam::NotRegistered => Some(REGISTER_HINT),
+            Vcam::Outdated => Some(UPDATE_HINT),
             Vcam::Off => Some("Start JStream without `--no-vcam` to use it."),
             Vcam::Unknown => Some(
                 "The engine checks the camera when it starts: an unregistered one is refused with how to register it.",
@@ -290,7 +324,7 @@ pub fn start_blocker(row: &OutputRow, vcam: Vcam) -> Option<&'static str> {
         OutputKind::VirtualCam => match vcam {
             Vcam::NotRegistered => Some("Register the virtual camera first."),
             Vcam::Off => Some("The virtual camera is off in this app."),
-            Vcam::Registered | Vcam::Moved | Vcam::Unknown => None,
+            Vcam::Registered | Vcam::Outdated | Vcam::Unknown => None,
         },
         _ => Some("This engine's output kind is newer than this page."),
     }
@@ -347,6 +381,17 @@ pub fn describe_kind(kind: &OutputKind) -> String {
         OutputKind::VirtualCam => "Virtual camera: the program as a webcam".into(),
         _ => "An output kind this page doesn't know".into(),
     }
+}
+
+/// The warning an output's card shows when the engine says its server is plain
+/// `rtmp://` to another machine (`output.status`'s `cleartext`): the stream key would
+/// cross the network unencrypted (#353). The rule is the engine's
+/// (`OutputKind::sends_key_in_cleartext`), so `rtmps://` and a loopback relay get none.
+pub const CLEARTEXT_WARNING: &str = "This server is plain rtmp://, so the stream key is sent unencrypted. Use rtmps:// if the service offers it.";
+
+/// [`CLEARTEXT_WARNING`] for an output that needs it, else `None`.
+pub fn cleartext_warning(row: &OutputRow) -> Option<&'static str> {
+    row.cleartext.then_some(CLEARTEXT_WARNING)
 }
 
 /// An output state, for its badge.
@@ -479,6 +524,10 @@ struct Panel {
     loads: StoredValue<u64>,
     /// What the host says about the virtual camera.
     vcam: Vcam,
+    /// Bumped after a stream key changed, for the header ([`Studio::keys_changed`]).
+    ///
+    /// [`Studio::keys_changed`]: crate::store::Studio::keys_changed
+    keys_changed: Option<RwSignal<u64>>,
 }
 
 impl Panel {
@@ -536,28 +585,28 @@ impl Panel {
     /// reports.
     fn refresh_status(self, output_id: OutputId) {
         self.run(move |session| async move {
-            let (state, key_set) = status(&*session.control, &output_id).await?;
+            let Status {
+                state,
+                key_set,
+                cleartext,
+            } = status(&*session.control, &output_id).await?;
             self.rows.try_update(|rows| {
                 if let Some(row) = rows.get_mut(&output_id) {
                     row.state = state;
                     row.key_set = key_set;
+                    row.cleartext = cleartext;
                 }
             });
+            if let Some(keys_changed) = self.keys_changed {
+                keys_changed.try_update(|n| *n += 1);
+            }
             Ok(())
-        });
-    }
-
-    /// Starts or stops each of `outputs`, attempting every one and reporting each
-    /// failure ([`start_or_stop_all`]).
-    fn start_or_stop(self, outputs: Vec<OutputId>, start: bool) {
-        self.run(move |session| async move {
-            start_or_stop_all(&*session.control, outputs, start).await
         });
     }
 }
 
-/// The outputs panel, with go-live and the pipeline's health. Reads the open session
-/// from [`SessionContext`] context.
+/// The outputs panel, with the pipeline's health (Go Live is in the header). Reads the
+/// open session from [`SessionContext`] context.
 #[component]
 pub fn Outputs() -> impl IntoView {
     let Some(session) = use_context::<SessionContext>() else {
@@ -570,6 +619,7 @@ pub fn Outputs() -> impl IntoView {
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
         vcam: Vcam::from_host(crate::host::desktop_vcam().as_deref()),
+        keys_changed: use_context::<crate::store::Studio>().map(|studio| studio.keys_changed),
     };
     let health = RwSignal::new(Health::default());
 
@@ -612,29 +662,11 @@ pub fn Outputs() -> impl IntoView {
             .rows
             .with(|rows| rows.keys().cloned().collect::<Vec<_>>())
     };
-    let targets = move || panel.rows.with(|rows| go_live_targets(rows.values()));
-    let live = move || panel.rows.with(|rows| live_outputs(rows.values()));
     let reading = move || health.with(Health::reading);
 
     view! {
         <section class="outputs">
             <h2>"Outputs"</h2>
-            <div class="go-live">
-                <button
-                    class="primary"
-                    disabled=move || targets().is_empty()
-                    title="Starts every stopped stream output that has its key set"
-                    on:click=move |_| panel.start_or_stop(targets(), true)
-                >
-                    "Go live"
-                </button>
-                <button
-                    disabled=move || live().is_empty()
-                    on:click=move |_| panel.start_or_stop(live(), false)
-                >
-                    "End stream"
-                </button>
-            </div>
             <p class="health" class:dropping=move || reading().dropping() role="status">
                 {move || reading().summary()}
             </p>
@@ -819,6 +851,10 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
             <p class="target">
                 {move || row.with(|row| row.as_ref().map(|row| describe_kind(&row.info.kind)))}
             </p>
+            {move || {
+                row.with(|row| row.as_ref().and_then(cleartext_warning))
+                    .map(|warning| view! { <p class="warning" role="note">{warning}</p> })
+            }}
             <Show when=move || editing.get()>
                 <form class="inline" on:submit=save_target>
                     <input type="text" aria-label="Server URL" bind:value=target />
@@ -1008,9 +1044,10 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, Vcam, create_edit,
-        describe_kind, explain_start_failure, go_live_targets, live_outputs, load, next_output_id,
-        start_blocker, start_or_stop_all, status, take_key,
+        CLEARTEXT_WARNING, Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, UPDATE_HINT,
+        Vcam, cleartext_warning, create_edit, describe_kind, explain_start_failure,
+        go_live_targets, live_outputs, load, next_output_id, start_blocker, start_or_stop_all,
+        status, take_key,
     };
     use jstream_control::protocol::{
         Action, DropCounts, Edit, OutputId, OutputInfo, OutputKind, OutputState, RtmpTarget,
@@ -1042,6 +1079,7 @@ mod tests {
             },
             state,
             key_set,
+            cleartext: true,
         }
     }
 
@@ -1093,8 +1131,9 @@ mod tests {
             engine.stream_key(&id).map(|key| key.expose().to_owned()),
             Some("abcd-1234".into())
         );
-        let (_, key_set) = now(status(&control, &id)).expect("status");
-        assert!(key_set);
+        let status = now(status(&control, &id)).expect("status");
+        assert!(status.key_set);
+        assert!(status.cleartext, "plain rtmp:// to another machine");
 
         let loaded = now(load(&control)).expect("load");
         assert_eq!(go_live_targets(&loaded.outputs), vec![id.clone()]);
@@ -1291,11 +1330,12 @@ mod tests {
             },
             state: OutputState::Stopped,
             key_set: false,
+            cleartext: false,
         };
         let parse = |value| Vcam::from_host(value);
         assert_eq!(parse(Some("registered")), Vcam::Registered);
         assert_eq!(parse(Some("not_registered")), Vcam::NotRegistered);
-        assert_eq!(parse(Some("moved")), Vcam::Moved);
+        assert_eq!(parse(Some("outdated")), Vcam::Outdated);
         assert_eq!(parse(Some("off")), Vcam::Off);
         assert_eq!(parse(Some("later")), Vcam::Unknown);
         assert_eq!(parse(None), Vcam::Unknown);
@@ -1308,11 +1348,21 @@ mod tests {
             start_blocker(&row, Vcam::Off),
             Some("The virtual camera is off in this app.")
         );
-        assert_eq!(start_blocker(&row, Vcam::Moved), None, "the engine decides");
+        assert_eq!(
+            start_blocker(&row, Vcam::Outdated),
+            None,
+            "the engine decides"
+        );
         assert_eq!(Vcam::Registered.hint(), None);
         assert_eq!(Vcam::NotRegistered.hint(), Some(REGISTER_HINT));
-        assert_eq!(Vcam::Moved.hint(), Some(REGISTER_HINT));
-        assert!(REGISTER_HINT.contains("jstream-daemon --register-vcam"));
+        assert_eq!(Vcam::Outdated.hint(), Some(UPDATE_HINT));
+        for hint in [REGISTER_HINT, UPDATE_HINT] {
+            assert!(hint.contains("jstream-daemon --register-vcam"), "{hint}");
+            assert!(
+                hint.contains("ptional"),
+                "the step is named optional: {hint}"
+            );
+        }
         assert!(
             Vcam::Unknown
                 .hint()
@@ -1335,7 +1385,8 @@ mod tests {
     #[test]
     fn a_refused_camera_start_gets_the_hint_that_fits() {
         let unregistered = "action_failed: starting the virtual camera: the virtual camera: its \
-             media source {0B5A3E7C} is not registered (register it with `--register-vcam`)"
+             media source {0B5A3E7C} is not registered (registering it is optional: run \
+             `jstream-daemon --register-vcam`)"
             .to_owned();
         let explained = explain_start_failure(&OutputKind::VirtualCam, unregistered.clone());
         assert!(explained.starts_with(&unregistered), "{explained}");
@@ -1357,6 +1408,35 @@ mod tests {
             },
         };
         assert_eq!(explain_start_failure(&stream, reason.clone()), reason);
+    }
+
+    /// The card warns when the engine reports `cleartext`, whatever the URL says: the
+    /// rule is the engine's (#353, #562). Through the mock, plain `rtmp://` to another
+    /// machine is flagged and `rtmps://` and a loopback relay aren't.
+    #[test]
+    fn the_engine_s_cleartext_flag_decides_the_warning() {
+        let mut row = rtmp("a", OutputState::Stopped, true);
+        assert_eq!(cleartext_warning(&row), Some(CLEARTEXT_WARNING));
+        row.cleartext = false;
+        assert_eq!(cleartext_warning(&row), None);
+
+        let engine = MockEngine::new();
+        let control = engine.connect();
+        let hello = jstream_control::protocol::Hello {
+            protocol: jstream_control::protocol::PROTOCOL_VERSION,
+            client_name: "test".into(),
+        };
+        now(control.hello(hello)).expect("hello");
+        for (id, url, warns) in [
+            ("remote", "rtmp://live.example.com/app", true),
+            ("tls", "rtmps://live.example.com/app", false),
+            ("relay", "rtmp://127.0.0.1:1936/live", false),
+        ] {
+            let create = create_edit(OutputId::new(id), NewKind::Rtmp, url);
+            now(super::edit(&control, create)).expect("create");
+            let status = now(status(&control, &OutputId::new(id))).expect("status");
+            assert_eq!(status.cleartext, warns, "{url}");
+        }
     }
 
     #[test]

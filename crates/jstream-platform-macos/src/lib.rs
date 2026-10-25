@@ -66,7 +66,8 @@ pub use clock::{hns_from_mach, timebase};
 pub use codec::VideoToolboxCodecs;
 pub use codec::{
     AUDIO_AAC, AacSettings, CM_H264, CM_HEVC, VtBitRate, VtDecoderSettings, VtEncoderSettings,
-    aac_settings, vt_decoder_settings, vt_encoder_settings,
+    aac_settings, vt_decoder_hardware, vt_decoder_list, vt_decoder_name, vt_decoder_settings,
+    vt_encoder_settings, vt_no_decoder,
 };
 pub use decode::{Reorder, SplitAccessUnit, annexb_units, sets_complete, split_access_unit};
 pub use fourcc::{

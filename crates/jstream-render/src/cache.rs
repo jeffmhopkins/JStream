@@ -6,10 +6,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use jstream_media::FrameSize;
 use jstream_platform::GpuFrame;
 
 use crate::compositor::Compositor;
 use crate::error::RenderError;
+use crate::filter::VideoFilter;
 use crate::image::{Alpha, Image};
 
 /// Imports of other textures kept under one key: a platform that delivers frames from a
@@ -34,6 +36,10 @@ const KEPT_IMPORTS: usize = 8;
 pub struct ResourceCache<K> {
     live: BTreeMap<K, Entry>,
     retired: Vec<Retired>,
+    /// Video filters the caller let go of ([`Self::retire_filter`]), each with the last
+    /// frame that could have drawn it: a filter can hold textures of its own (a video
+    /// delay's ring), so it waits for the fence like an image.
+    retired_filters: Vec<(VideoFilter, u64)>,
     /// The frame being built. 0 before the first [`Self::begin_frame`].
     frame: u64,
     /// The newest frame whose submitted work the GPU has finished.
@@ -61,17 +67,25 @@ struct Retired {
 /// is allowed (on a collector thread, when the cache lives on a real-time thread).
 #[derive(Debug)]
 #[must_use = "dropping it here frees the textures on this thread"]
-pub struct Reclaimed(Vec<Image>);
+pub struct Reclaimed {
+    images: Vec<Image>,
+    filters: Vec<VideoFilter>,
+}
 
 impl Reclaimed {
-    /// How many images there are.
+    /// How many images and filters there are.
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.images.len() + self.filters.len()
     }
 
     /// Whether there are none.
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.images.is_empty() && self.filters.is_empty()
+    }
+
+    /// How many of them are video filters.
+    pub fn filters(&self) -> usize {
+        self.filters.len()
     }
 }
 
@@ -87,6 +101,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
         Self {
             live: BTreeMap::new(),
             retired: Vec::new(),
+            retired_filters: Vec::new(),
             frame: 0,
             done: Arc::new(AtomicU64::new(0)),
         }
@@ -175,6 +190,21 @@ impl<K: Ord + Clone> ResourceCache<K> {
         self.import_as(compositor, key, frame, Alpha::PremultipliedSrgb)
     }
 
+    /// [`Self::import`] of a captured frame, sampled as [`Compositor::import_opaque`]
+    /// samples it: its alpha is read as 1. An entry under `key` imported another way is
+    /// replaced.
+    ///
+    /// # Errors
+    /// As for [`Compositor::import_opaque`]. The entry is left as it was.
+    pub fn import_opaque(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        frame: &GpuFrame,
+    ) -> Result<&Image, RenderError> {
+        self.import_as(compositor, key, frame, Alpha::Opaque)
+    }
+
     fn import_as(
         &mut self,
         compositor: &Compositor,
@@ -257,9 +287,24 @@ impl<K: Ord + Clone> ResourceCache<K> {
         Ok(self.replace(key, image, 0))
     }
 
+    /// The frame being built: what the last [`Self::begin_frame`] returned, or 0 before
+    /// the first.
+    pub fn frame(&self) -> u64 {
+        self.frame
+    }
+
     /// The live image for `key`, if this cache holds one.
     pub fn get(&self, key: &K) -> Option<&Image> {
         self.live.get(key).map(|entry| &entry.image)
+    }
+
+    /// Places `key`'s image as if it were `extent` ([`Image::set_extent`]), if there is
+    /// one. An upload or a layer made again, at a new size, is placed at its own size
+    /// until this is called again.
+    pub fn set_extent(&mut self, key: &K, extent: FrameSize) {
+        if let Some(entry) = self.live.get_mut(key) {
+            entry.image.set_extent(extent);
+        }
     }
 
     /// How many images are live (referenced by a recent frame).
@@ -272,9 +317,16 @@ impl<K: Ord + Clone> ResourceCache<K> {
         self.live.get(key).map_or(0, |entry| entry.kept.len())
     }
 
-    /// How many retired images are still waiting for their frame's fence.
+    /// How many retired images and filters are still waiting for their frame's fence.
     pub fn pending(&self) -> usize {
-        self.retired.len()
+        self.retired.len() + self.retired_filters.len()
+    }
+
+    /// Hands `filter`, which no frame will draw again, to the cache: it is kept until
+    /// the GPU has finished the current frame, then handed back in [`Reclaimed`] like a
+    /// retired image, so it is dropped where the caller drops those (R-RT-003).
+    pub fn retire_filter(&mut self, filter: VideoFilter) {
+        self.retired_filters.push((filter, self.frame));
     }
 
     /// Ends the frame after its passes were submitted. Drops the frame holds of this
@@ -309,19 +361,30 @@ impl<K: Ord + Clone> ResourceCache<K> {
     /// The retired images whose fence has passed, without ending a frame.
     pub fn reclaim(&mut self) -> Option<Reclaimed> {
         let done = self.done.load(Ordering::Acquire);
-        if !self.retired.iter().any(|retired| retired.after <= done) {
+        if !self.retired.iter().any(|retired| retired.after <= done)
+            && !self.retired_filters.iter().any(|(_, after)| *after <= done)
+        {
             return None;
         }
-        let mut freed = Vec::new();
+        let mut images = Vec::new();
         let mut index = 0;
         while index < self.retired.len() {
             if self.retired[index].after <= done {
-                freed.push(self.retired.swap_remove(index).image);
+                images.push(self.retired.swap_remove(index).image);
             } else {
                 index += 1;
             }
         }
-        Some(Reclaimed(freed))
+        let mut filters = Vec::new();
+        let mut index = 0;
+        while index < self.retired_filters.len() {
+            if self.retired_filters[index].1 <= done {
+                filters.push(self.retired_filters.swap_remove(index).0);
+            } else {
+                index += 1;
+            }
+        }
+        Some(Reclaimed { images, filters })
     }
 
     /// Everything the cache holds, live or retired, for the caller to drop when the
@@ -333,7 +396,14 @@ impl<K: Ord + Clone> ResourceCache<K> {
             all.extend(entry.kept.into_iter().map(|(image, _)| image));
         }
         all.extend(self.retired.drain(..).map(|retired| retired.image));
-        Reclaimed(all)
+        Reclaimed {
+            images: all,
+            filters: self
+                .retired_filters
+                .drain(..)
+                .map(|(filter, _)| filter)
+                .collect(),
+        }
     }
 
     fn replace(&mut self, key: &K, image: Image, version: u64) -> &Image {

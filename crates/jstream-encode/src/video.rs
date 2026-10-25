@@ -2,7 +2,7 @@
 
 use jstream_platform::media::{MediaKind, Packet, PixelFormat};
 use jstream_platform::{
-    Codecs, GpuContext, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    CodecInfo, Codecs, GpuContext, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
 use crate::session::{Core, Counters, Driver, InputHandle};
@@ -12,6 +12,10 @@ use crate::{
 
 struct VideoDriver {
     encoder: Box<dyn VideoEncoder>,
+    /// Whether the encoder is a hardware one, as last seen: a change is a fallback.
+    hardware: bool,
+    /// The encoder's name, as last seen.
+    name: String,
 }
 
 impl Driver for VideoDriver {
@@ -39,6 +43,16 @@ impl Driver for VideoDriver {
     fn request_keyframe(&mut self) -> bool {
         // A refusal leaves the regular keyframes, which subscribers wait for instead.
         self.encoder.request_keyframe().is_ok()
+    }
+
+    fn codec_changed(&mut self) -> Option<CodecInfo> {
+        let info = self.encoder.info();
+        if info.hardware == self.hardware && info.name == self.name {
+            return None;
+        }
+        self.hardware = info.hardware;
+        self.name.clone_from(&info.name);
+        Some(info.clone())
     }
 
     fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
@@ -150,16 +164,17 @@ impl VideoSession {
         path: VideoPath,
     ) -> Result<Self, EncodeError> {
         check_kind(&config)?;
+        let codec = encoder.info().clone();
+        let driver = VideoDriver {
+            hardware: codec.hardware,
+            name: codec.name.clone(),
+            encoder,
+        };
         let info = StreamInfo {
-            codec: encoder.info().clone(),
+            codec,
             settings: EncoderSettings::Video(config),
         };
-        let core = Core::start(
-            "jstream-encode-video",
-            VideoDriver { encoder },
-            info,
-            &options,
-        )?;
+        let core = Core::start("jstream-encode-video", driver, info, &options)?;
         Ok(Self { core, path })
     }
 
@@ -198,9 +213,20 @@ impl VideoSession {
         self.core.request_keyframe();
     }
 
-    /// The codec and settings of the stream.
+    /// The codec and settings of the stream, as the encoder opened.
+    /// [`codec`](Self::codec) has the codec encoding now.
     pub fn info(&self) -> &StreamInfo {
         self.core.info()
+    }
+
+    /// The codec implementation encoding now: [`info`](Self::info)'s, unless the encoder
+    /// fell back to another one after it opened, as a hardware encoder that refuses its
+    /// first frame does with [`HardwarePreference::Prefer`] (#443). Then it is the one it
+    /// fell back to, so a status that reports `hardware` reads it from here.
+    ///
+    /// [`HardwarePreference::Prefer`]: jstream_platform::HardwarePreference::Prefer
+    pub fn codec(&self) -> &CodecInfo {
+        self.core.codec()
     }
 
     /// The session's counters now.

@@ -1,7 +1,8 @@
 //! Dependency edges between scenes and sources, for the cycle check and for delete
 //! rejection (ADR-0025, docs/adr/0025-typed-settings-kind-descriptors.md).
 //!
-//! The edges are: a scene depends on each source its items place; a `scene` source
+//! The edges are: a scene depends on each source its items place, and a keyframe scene
+//! on its parent (ADR-0024 §2); a `scene` source
 //! depends on the scene it shows; and a source depends on every scene, source and bus
 //! its settings, or its filters' settings (ADR-0026), refer to. [`edges`] lists what a
 //! node depends on, for the cycle check, and [`blockers`] lists what depends on a node,
@@ -43,6 +44,7 @@ fn edges(state: &State, node: &Node) -> Vec<Node> {
                 s.items
                     .iter()
                     .map(|i| Node::Source(i.source_id.clone()))
+                    .chain(s.variant_of.iter().map(|p| Node::Scene(p.clone())))
                     .collect()
             })
             .unwrap_or_default(),
@@ -133,7 +135,8 @@ fn dfs(
 }
 
 /// Everything that stops `target`'s delete, in a stable order: the items that place a
-/// source (scene display order, then stacking order), the `scene` sources that show a
+/// source (scene display order, then stacking order), a scene's keyframe scenes (display
+/// order), the `scene` sources that show a
 /// scene (ID order), every settings value that refers to the target (source ID order;
 /// the source's own settings in parameter order, then each filter's, in chain order, as
 /// `filters.<filter_id>.<param>`), then the video mixes that show a scene (ID order). A
@@ -152,6 +155,11 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
             }));
         }
         Node::Scene(scene_id) => {
+            out.extend(state.variants_of(scene_id).map(|v| Blocker {
+                entity: EntityKind::Scene,
+                id: v.id.as_str().to_owned(),
+                field: "variant_of".into(),
+            }));
             out.extend(
                 state
                     .sources()

@@ -1,12 +1,14 @@
-//! What the canvas edits, read from the engine, and the calls that change it: the
-//! scene on program with its items' boxes, `item.set_geometry` as one batch per
-//! finished gesture, and `history.undo` and `history.redo` (ADR-0032).
+//! What the canvas edits and the calls that change it: the selected scene's items'
+//! boxes, taken from the shared [`Collection`], the live values a drag shows as it
+//! goes (`live.set` and `live.cancel`), `item.set_geometry` as one batch per finished
+//! gesture, and `history.undo` and `history.redo` (ADR-0032).
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0032-live-edits-and-undo.md
 
+use crate::store::Collection;
 use jstream_control::protocol::{
-    Batch, Call, CallResult, Canvas, Edit, HistoryCall, HistoryOp, ItemGeometry, ItemId,
-    PlacementForm, Query, QueryResult, Rev, SceneId, SceneRole,
+    Action, Batch, Call, CallResult, Canvas, Edit, GestureId, HistoryCall, HistoryOp, ItemGeometry,
+    ItemId, PlacementForm, Rev, SceneId,
 };
 use jstream_control::{Control, ControlError};
 use std::fmt;
@@ -18,7 +20,7 @@ pub enum CanvasError {
     Control(ControlError),
     /// The engine answered with a result of the wrong kind for the call.
     UnexpectedAnswer {
-        /// The call that was sent (`state.get`, `item.set_geometry`, …).
+        /// The call that was sent (`item.set_geometry`, `history.undo`, …).
         call: &'static str,
     },
 }
@@ -61,7 +63,7 @@ pub struct CanvasItem {
 /// The scene being edited, at one revision.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Layout {
-    /// The revision `state.get` read.
+    /// The revision of the collection it was taken from.
     pub rev: Rev,
     /// The canvas every scene is laid out on.
     pub canvas: Canvas,
@@ -93,88 +95,78 @@ impl Layout {
     }
 }
 
-async fn query(control: &dyn Control, query: Query) -> Result<QueryResult, CanvasError> {
-    let call = query.name();
-    match control.call(Call::Query { query }).await?.result {
-        CallResult::Query { result } => Ok(result),
-        _ => Err(CanvasError::UnexpectedAnswer { call }),
+impl Layout {
+    /// The layout of `scene_id` in `collection`, or an empty one with no scene when it
+    /// names none or a scene the collection doesn't have.
+    pub fn of(collection: &Collection, scene_id: Option<&SceneId>) -> Layout {
+        let Some(scene) = scene_id.and_then(|id| collection.scene(id)) else {
+            return Layout {
+                rev: collection.rev,
+                canvas: collection.canvas,
+                scene: None,
+                items: Vec::new(),
+            };
+        };
+        let items = scene
+            .items
+            .iter()
+            .map(|item| CanvasItem {
+                item_id: item.item_id.clone(),
+                name: collection.source_name(&item.source_id),
+                geometry: match item.placement {
+                    PlacementForm::Geometry => item.geometry,
+                    _ => None,
+                },
+                visible: item.visible,
+            })
+            .collect();
+        Layout {
+            rev: collection.rev,
+            canvas: collection.canvas,
+            scene: Some((scene.scene_id.clone(), scene.name.clone())),
+            items,
+        }
     }
 }
 
-/// Reads the scene on program (or, if `studio.get` names none, the first scene that
-/// isn't a group) with its items.
-pub async fn load(control: &dyn Control) -> Result<Layout, CanvasError> {
-    let QueryResult::StudioGet { program_scene } = query(control, Query::StudioGet).await? else {
-        return Err(CanvasError::UnexpectedAnswer { call: "studio.get" });
-    };
-    let QueryResult::StateGet {
-        rev,
-        canvas,
-        sources,
-        scenes,
-        ..
-    } = query(control, Query::StateGet).await?
-    else {
-        return Err(CanvasError::UnexpectedAnswer { call: "state.get" });
-    };
-    let scene = program_scene
-        .and_then(|id| scenes.iter().find(|scene| scene.scene_id == id))
-        .or_else(|| scenes.iter().find(|scene| scene.role == SceneRole::Scene));
-    let Some(scene) = scene else {
-        return Ok(Layout {
-            rev,
-            canvas,
-            scene: None,
-            items: Vec::new(),
-        });
-    };
-    let name_of = |item: &jstream_control::protocol::ItemInfo| {
-        sources
-            .iter()
-            .find(|source| source.source_id == item.source_id)
-            .map_or_else(|| item.source_id.to_string(), |source| source.name.clone())
-    };
-    let items = scene
-        .items
-        .iter()
-        .map(|item| CanvasItem {
-            item_id: item.item_id.clone(),
-            name: name_of(item),
-            geometry: match item.placement {
-                PlacementForm::Geometry => item.geometry,
-                _ => None,
-            },
-            visible: item.visible,
+/// An `item.set_geometry` for each item in `scene_id`.
+fn geometry_edits(scene_id: &SceneId, placed: Vec<(ItemId, ItemGeometry)>) -> Vec<Edit> {
+    placed
+        .into_iter()
+        .map(|(item_id, geometry)| Edit::ItemSetGeometry {
+            item_id,
+            scene_id: Some(scene_id.clone()),
+            geometry,
         })
-        .collect();
-    Ok(Layout {
-        rev,
-        canvas,
-        scene: Some((scene.scene_id.clone(), scene.name.clone())),
-        items,
-    })
+        .collect()
 }
 
-/// The batch that places `item_id` in `scene_id` at `geometry`: one edit, so one undo
-/// step. It carries no `expected_rev`: a drag's commit is last writer wins per field
-/// (ADR-0032).
-pub fn set_geometry(scene_id: SceneId, item_id: ItemId, geometry: ItemGeometry) -> Call {
-    Call::Batch(Batch::single(Edit::ItemSetGeometry {
-        item_id,
-        scene_id: Some(scene_id),
-        geometry,
-    }))
+/// The batch that places each item in `scene_id` at its new geometry: one batch, so one
+/// undo step however many items a gesture moved, ending the drag's gesture if its live
+/// values reached the engine. It carries no `expected_rev`: a drag's commit is last
+/// writer wins per field (ADR-0032).
+pub fn set_geometry(
+    scene_id: SceneId,
+    placed: Vec<(ItemId, ItemGeometry)>,
+    gesture: Option<GestureId>,
+) -> Call {
+    Call::Batch(Batch {
+        edits: geometry_edits(&scene_id, placed),
+        expected_rev: None,
+        idempotency_key: None,
+        ends_gesture: gesture,
+    })
 }
 
 /// Sends [`set_geometry`]'s batch and returns the revision it produced.
 pub async fn commit(
     control: &dyn Control,
     scene_id: SceneId,
-    item_id: ItemId,
-    geometry: ItemGeometry,
+    placed: Vec<(ItemId, ItemGeometry)>,
+    gesture: Option<GestureId>,
 ) -> Result<Rev, CanvasError> {
     match control
-        .call(set_geometry(scene_id, item_id, geometry))
+        .call(set_geometry(scene_id, placed, gesture))
         .await?
         .result
     {
@@ -185,26 +177,39 @@ pub async fn commit(
     }
 }
 
-/// How many steps the client can undo and redo, when known. The engine reports both
-/// after each history call; after a batch, one step is known to be undoable and
-/// nothing redoable.
+/// Shows the items at these geometries on output while a drag goes on, opening the
+/// gesture if it is new (`live.set`): the collection and its revision don't change.
+pub async fn live_set(
+    control: &dyn Control,
+    gesture: GestureId,
+    scene_id: SceneId,
+    placed: Vec<(ItemId, ItemGeometry)>,
+) -> Result<(), CanvasError> {
+    let action = Action::LiveSet {
+        gesture_id: gesture,
+        values: geometry_edits(&scene_id, placed),
+    };
+    control.call(Call::Action { action }).await?;
+    Ok(())
+}
+
+/// Ends a gesture with no commit (`live.cancel`): the items show their stored geometry.
+pub async fn live_cancel(control: &dyn Control, gesture: GestureId) -> Result<(), CanvasError> {
+    let action = Action::LiveCancel {
+        gesture_id: gesture,
+    };
+    control.call(Call::Action { action }).await?;
+    Ok(())
+}
+
+/// How many steps the client can undo and redo, as the engine reports them after each
+/// history call.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Depths {
     /// Steps that can be undone, or `None` before the engine has said.
     pub undo: Option<u32>,
     /// Steps that can be redone, or `None` before the engine has said.
     pub redo: Option<u32>,
-}
-
-impl Depths {
-    /// After a batch of this client's applied: it can be undone, and it cleared the
-    /// redo stack.
-    pub fn after_batch(self) -> Depths {
-        Depths {
-            undo: Some(self.undo.map_or(1, |n| n.saturating_add(1))),
-            redo: Some(0),
-        }
-    }
 }
 
 /// Undoes or redoes this client's last step (`history.undo` or `history.redo`) and
@@ -246,7 +251,8 @@ mod tests {
     use super::*;
     use jstream_control::MockEngine;
     use jstream_control::protocol::{
-        Action, Hello, ItemTransform, PROTOCOL_VERSION, Settings, Size, SourceId, SourceKind, Vec2,
+        Action, Hello, ItemTransform, PROTOCOL_VERSION, Query, QueryResult, Settings, Size,
+        SourceId, SourceKind, Vec2,
     };
     use std::pin::pin;
     use std::task::{Context, Poll, Waker};
@@ -257,6 +263,19 @@ mod tests {
             Poll::Ready(value) => value,
             Poll::Pending => panic!("the mock's futures are ready at once"),
         }
+    }
+
+    /// The layout of `scene` in the engine's current state.
+    fn load(control: &dyn Control, scene: &str) -> Layout {
+        let answer = now(control.call(Call::Query {
+            query: Query::StateGet,
+        }))
+        .expect("state.get");
+        let CallResult::Query { result } = answer.result else {
+            panic!("state.get answers a query result");
+        };
+        let collection = Collection::from_result(result).expect("a state.get result");
+        Layout::of(&collection, Some(&scene.into()))
     }
 
     fn geometry(cx: f32, cy: f32, w: f32, h: f32) -> ItemGeometry {
@@ -325,6 +344,7 @@ mod tests {
         now(control.call(Call::Action {
             action: Action::SceneSwitch {
                 scene_id: "s2".into(),
+                preset_id: None,
             },
         }))
         .expect("switch");
@@ -332,9 +352,9 @@ mod tests {
     }
 
     #[test]
-    fn the_program_scene_loads_with_its_boxes() {
+    fn a_scene_is_laid_out_with_its_boxes() {
         let control = engine();
-        let layout = now(load(&control)).expect("load");
+        let layout = load(&control, "s2");
         assert_eq!(layout.canvas, Canvas::DEFAULT);
         assert_eq!(layout.scene, Some(("s2".into(), "Main".into())));
         assert_eq!(layout.items.len(), 2);
@@ -344,19 +364,98 @@ mod tests {
         assert_eq!(layout.items[1].name, "Camera");
     }
 
+    /// The gestures `live.list` reports open.
+    fn open_gestures(control: &dyn Control) -> usize {
+        let answer = now(control.call(Call::Query {
+            query: Query::LiveList,
+        }))
+        .expect("live.list");
+        match answer.result {
+            CallResult::Query {
+                result: QueryResult::LiveList { gestures },
+            } => gestures.len(),
+            _ => panic!("live.list answers a live.list result"),
+        }
+    }
+
+    #[test]
+    fn live_values_change_no_revision_and_the_commit_ends_the_gesture() {
+        let control = engine();
+        let before = load(&control, "s2");
+        let gesture = GestureId::new("drag-1");
+        let moving = geometry(200.0, 200.0, 320.0, 180.0);
+        now(live_set(
+            &control,
+            gesture.clone(),
+            "s2".into(),
+            vec![("box".into(), moving)],
+        ))
+        .expect("live.set");
+        assert_eq!(open_gestures(&control), 1);
+        assert_eq!(
+            load(&control, "s2").rev,
+            before.rev,
+            "live values change no rev"
+        );
+
+        let dropped = geometry(220.0, 210.0, 320.0, 180.0);
+        let rev = now(commit(
+            &control,
+            "s2".into(),
+            vec![("box".into(), dropped)],
+            Some(gesture),
+        ))
+        .expect("commit");
+        assert_eq!(rev.0, before.rev.0 + 1);
+        assert_eq!(open_gestures(&control), 0);
+        assert_eq!(
+            load(&control, "s2").geometry_of(&"box".into()),
+            Some(dropped)
+        );
+    }
+
+    #[test]
+    fn a_cancel_ends_the_gesture_with_no_edit() {
+        let control = engine();
+        let before = load(&control, "s2");
+        let gesture = GestureId::new("drag-1");
+        let moving = geometry(200.0, 200.0, 320.0, 180.0);
+        now(live_set(
+            &control,
+            gesture.clone(),
+            "s2".into(),
+            vec![("box".into(), moving)],
+        ))
+        .expect("live.set");
+        now(live_cancel(&control, gesture)).expect("live.cancel");
+        assert_eq!(open_gestures(&control), 0);
+        let after = load(&control, "s2");
+        assert_eq!(after.rev, before.rev);
+        assert_eq!(
+            after.geometry_of(&"box".into()),
+            before.geometry_of(&"box".into())
+        );
+    }
+
     #[test]
     fn a_commit_is_one_undoable_step() {
         let control = engine();
-        let before = now(load(&control)).expect("load");
+        let before = load(&control, "s2");
         let moved = geometry(100.0, 100.0, 320.0, 180.0);
-        let rev = now(commit(&control, "s2".into(), "box".into(), moved)).expect("commit");
+        let rev = now(commit(
+            &control,
+            "s2".into(),
+            vec![("box".into(), moved)],
+            None,
+        ))
+        .expect("commit");
         assert_eq!(rev.0, before.rev.0 + 1);
-        let after = now(load(&control)).expect("load");
+        let after = load(&control, "s2");
         assert_eq!(after.geometry_of(&"box".into()), Some(moved));
 
         let depths = now(history(&control, HistoryOp::Undo)).expect("undo");
         assert_eq!(depths.redo, Some(1));
-        let undone = now(load(&control)).expect("load");
+        let undone = load(&control, "s2");
         assert_eq!(
             undone.geometry_of(&"box".into()),
             before.geometry_of(&"box".into())
@@ -364,7 +463,7 @@ mod tests {
 
         let depths = now(history(&control, HistoryOp::Redo)).expect("redo");
         assert_eq!(depths.redo, Some(0));
-        let redone = now(load(&control)).expect("load");
+        let redone = load(&control, "s2");
         assert_eq!(redone.geometry_of(&"box".into()), Some(moved));
     }
 
@@ -373,13 +472,6 @@ mod tests {
         let control = engine();
         let error = now(history(&control, HistoryOp::Redo)).expect_err("nothing to redo");
         assert!(is_history_empty(&error));
-        assert_eq!(
-            Depths::default().after_batch(),
-            Depths {
-                undo: Some(1),
-                redo: Some(0)
-            }
-        );
     }
 
     #[test]
@@ -390,8 +482,11 @@ mod tests {
             client_name: "test".into(),
         }))
         .expect("hello");
-        let layout = now(load(&control)).expect("load");
+        let layout = load(&control, "s2");
         assert_eq!(layout.scene, None);
         assert!(layout.items.is_empty());
+        let empty = load(&engine(), "s1");
+        assert_eq!(empty.scene, Some(("s1".into(), "Intro".into())));
+        assert!(empty.items.is_empty());
     }
 }

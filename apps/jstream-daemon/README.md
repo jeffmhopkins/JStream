@@ -45,9 +45,10 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
-- **Virtual camera registration** (`register.rs`, Windows only): `--register-vcam`
-  registers the media source DLL shipped beside the daemon, and startup logs a warning
-  when the registration names another folder ([Design](#design)).
+- **Virtual camera registration** (`register.rs`, Windows only): the optional
+  `--register-vcam` registers an administrators-only copy of the media source DLL
+  shipped beside the daemon, `--unregister-vcam` removes it, and startup only logs the
+  registration's state ([Design](#design)).
 - **Live engine wiring** (`live.rs`, in the crate's library target `lib.rs`): the
   backends, the stream key store and the publish opener that make an engine live
   ([Design](#design)). It is a library so the integration tests build the daemon's own
@@ -62,11 +63,11 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   a terminal is attributed to the terminal app, which then needs the grant.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
-- **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
-  log directory ([Design](#design)).
-- **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
-  crash hook in a child process, with a stream key and a refresh token loaded through
-  `crash::Redacting`; the real `connect_rtmp` failing against loopback servers without
+- **Crash reports**: `jstream-crash`'s panic hook, which writes a redacted report into
+  the log directory ([Design](#design)).
+- **Tests** (`serve.rs`, `token.rs`, `args.rs` and `logs.rs` unit tests, the token
+  registered for redaction, and the stream key registered through the live engine's
+  `Redacting` store; the real `connect_rtmp` failing against loopback servers without
   naming the key, through `serve::live_redacting`, in `serve.rs`; the publish opener and
   the live engine on the platform fakes, in `live.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
@@ -91,7 +92,7 @@ only there), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
-Why a crate: it is a host binary of its own (ADR-0020 ships `jstream-daemon.exe` next
+Why a crate: it is a host binary of its own (ADR-0066 ships `jstream-daemon.exe` next
 to the desktop app), and only an app may link both `jstream-core` and `jstream-server`
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)).
 
@@ -119,24 +120,28 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `--youtube-client <path>` | Windows, for developers: a Google OAuth client to use for YouTube sign-in instead of JStream's built-in one, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables, else the built-in client. |
-| `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
+| `--register-vcam` | Windows, optional: registers the virtual camera for this machine from an administrators-only copy, then exits (see **Virtual camera** below). Takes no other options. |
+| `--unregister-vcam` | Windows: removes the virtual camera's registration and its copy, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
 
 - **The token file.** If it exists, its token (the file's text without surrounding
   whitespace) is reused, so clients keep working across restarts. If it doesn't, it is
   created with a new random token and a newline. An existing file that is empty, holds
-  no valid token (visible ASCII, no spaces), is not a regular file, or (on Unix) gives
-  group or others any permission (mode bits `077`), is refused with exit code 1, and
-  left as it is.
+  no valid token (visible ASCII, no spaces), is not a regular file, or that other users
+  may access (on Unix, any group or other permission, mode bits `077`; on Windows, an
+  owner other than you, SYSTEM or Administrators, or a DACL letting anyone else in), is
+  refused with exit code 1, and left as it is. A new file is user-only on both.
   The parent directory must exist. The token itself is never printed.
 - **Paired devices.** Devices paired with `jstream-cli pair`
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) are kept in
   `<token file>.devices` beside the token file (for example `token.devices`): their
-  names and token digests, never a token, user-only on Unix. It is created at the first
-  pairing, so devices stay paired across restarts; deleting it unpairs them all. A
-  device file that can't be read or parsed, or (on Unix) that group or others can read,
-  is a startup failure (exit 1). A device token works only while the daemon listens on
+  names and token digests, never a token, user-only (mode `0600` on Unix, a protected
+  DACL for SYSTEM and the user on Windows). It is created at the first pairing, so
+  devices stay paired across restarts; deleting it unpairs them all. A device file that
+  can't be read or parsed, or that other users may access (on Unix, any group or other
+  permission; on Windows, another owner or a DACL entry letting anyone but the user,
+  SYSTEM or Administrators in), is a startup failure (exit 1). A device token works only while the daemon listens on
   `127.0.0.1`, which it always does for now.
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
@@ -162,11 +167,13 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   directory is `logs` in the data directory: `%APPDATA%\JStream` on Windows,
   `~/Library/Application Support/JStream` on macOS, `$XDG_DATA_HOME/jstream` (else
   `~/.local/share/jstream`) elsewhere, or a `data` folder beside the exe when a file
-  named `portable` sits there (ADR-0020). At `info` and above, the first line logged
+  named `portable` sits there (ADR-0066). At `info` and above, the first line logged
   names the file. A log directory that can't be created, or a data directory that can't
   be found (no portable marker, and no `HOME` or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
-  `0600`.
+  `0600`; on Windows the files (logs and crash reports, which `jstream-crash` makes through
+  `logs::create_new`, #656) are created with a protected DACL for SYSTEM and the user,
+  and the directories keep what they inherit.
 - **Crash reports.** A panic writes `crash-<UTC time>-<pid>-<n>.txt` into the log
   directory and prints `crash report: <path>` to stderr; the newest 10 are kept.
   Nothing is uploaded ([R-SEC-004](../../docs/RULES.md#R-SEC-004)): attach the report
@@ -206,18 +213,27 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   and before touching the token file. If Media Foundation is there but has no AAC
   encoder, it does the same with `error: Media Foundation's AAC encoder is not
   installed: …`. Listing the codecs fails with exit 1.
-- **Virtual camera (Windows).** `jstream-daemon --register-vcam` registers
-  `jstream_vcam_windows.dll` from the daemon's own folder machine-wide, as the Windows
-  camera Frame Server requires. From a normal prompt it shows one UAC prompt and runs
-  itself elevated, without a window. It prints `virtual camera: registered <dll>`, adding
-  the old path when the registration named another folder, or `virtual camera: already
-  registered (<dll>)` without asking for elevation, leaving the registration and the
-  file's ACL as they are (a DLL registered with `regsvr32`, or rebuilt in place, keeps
-  whatever ACL it has). A missing DLL, a declined prompt or a
-  failed registration exits 1; from an administrator prompt the error says what failed.
-  At startup the daemon logs a warning when the registration names another folder (a
-  moved install), and an `info` line when there is none. Elsewhere `--register-vcam`
-  fails with exit 1.
+- **Virtual camera (Windows).** Registering the camera is optional, and only these
+  two flags do it or ask for elevation
+  ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)).
+  `jstream-daemon --register-vcam` copies the `jstream_vcam_windows.dll` beside the
+  daemon to `%ProgramFiles%\JStream\vcam\`, a folder only administrators can write to,
+  and registers that copy machine-wide, as the Windows camera Frame Server requires. The
+  DLL in the daemon's own folder is never registered. From a normal prompt it shows one
+  UAC prompt and runs itself elevated, without a window. It prints `virtual camera:
+  registered <copy>, a copy of <dll>`, adding the old path when something else was
+  registered, or `virtual camera: already registered (<copy>)` without asking for
+  elevation when the copy already has this DLL's content. After an update whose DLL
+  changed, running it again replaces the copy: a new opt-in, with its own prompt.
+  `jstream-daemon --unregister-vcam` removes the registration and the copy's folder,
+  with one prompt, or prints `virtual camera: not registered` without one. A copy the
+  camera still has loaded can't be deleted: the registration is removed, it exits 1
+  and says to close the camera's apps and run it again. A missing DLL, a declined
+  prompt or a failed step exits 1; from an administrator prompt the error says what
+  failed. At startup the daemon only reports: a warning when the registration names a
+  DLL outside that folder or a copy whose content differs from this DLL's, saying
+  registering again is optional, and an `info` line when there is none. Elsewhere both
+  flags fail with exit 1.
 - **Collection file.** With `--collection`, the engine loads the file at startup
   (upgrading an older version) and replaces it atomically after every applied batch,
   undo and redo, before the call returns. A file that can't be read, holds no
@@ -232,13 +248,16 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   the call and its edits by name, the output an action names, the `rev` before and
   after, and the result code. Never a call's arguments, so never a stream key
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
-  `audit.1.jsonl`, replacing the one before. A log that can't be opened is a startup
-  failure (exit 1).
+  `audit.1.jsonl`, replacing the one before. Both files are created user-only (mode
+  `0600` on Unix, a protected DACL for SYSTEM and the user on Windows), and so is each
+  save of the collection file. A log that can't be opened is a startup failure (exit 1),
+  and so, on Windows, is an existing `audit.jsonl` whose owner or DACL lets anyone but
+  you, SYSTEM or Administrators in; the error says why.
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened, or on macOS a backend refuses to open (a release below the floor), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 0 | Stopped by a signal, printed the help or version, or registered or unregistered the virtual camera (`--register-vcam`, `--unregister-vcam`) |
+| 1 | Failed: `--register-vcam` or `--unregister-vcam` could not finish (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened, or on macOS a backend refuses to open (a release below the floor), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -263,14 +282,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `MFCreateVirtualCamera` (before Windows 11) or before `--register-vcam`),
   `WindowsCredentials` as its
   stream key store (`with_key_store`; `serve.rs`'s `live_redacting` puts it behind
-  `crash::Redacting` before calling `live`, so each key is registered with the crash reports' redaction, [Crash reports](#design)), and a
+  `jstream_crash::Redacting` before calling `live`, so each key is registered with the crash reports' redaction, [Crash reports](#design)), and a
   publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
   starts. A `jstream-clap-scan` thread then scans the CLAP plugins with
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
   audio-filter kinds once found, and logs each file it couldn't scan; the daemon
-  serves meanwhile. Without `jstream-plugin-host.exe` beside the daemon every file
-  fails to scan, and is logged.
+  serves meanwhile. The engine keeps the hosts, and from then on starts a
+  `jstream-plugin-host.exe` for each CLAP filter in a source's audio chain. Without
+  `jstream-plugin-host.exe` beside the daemon every file fails to scan, and is logged.
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,
@@ -278,8 +298,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   - the stand-in `NoGpuInterop`, which sends the engine to its own device and CPU
     frames until the Metal interop does;
   - no virtual camera, no CLAP scan and no YouTube sign-in;
-  - `MacosKeychain` as its stream key store, behind `crash::Redacting` through
-    `live_redacting` as on Windows, and the same publish opener.
+  - `MacosKeychain` as its stream key store, behind `jstream_crash::Redacting` with
+    the daemon's `Secrets` through `live_redacting` as on Windows, and the same
+    publish opener.
 
   Capture, webcams and Core Audio refuse a release below the floor when created, which fails
   startup. Creating them asks for no permission: that happens when a pipeline first
@@ -298,8 +319,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   opener upgrades it only to read the target. `live` (`live.rs`, in the library
   target) is that wiring over any backends, key store and connect function, and `rtmp`
   the `connect_rtmp` connect function: `serve.rs` passes them the Windows backends and
-  Credential Manager (behind `crash::Redacting`, which is the binary's, so the library
-  never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
+  Credential Manager (behind `jstream_crash::Redacting`, which the binary adds, so the
+  library never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
   fakes, so the end-to-end test runs the daemon's wiring, not a copy of it.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
@@ -329,14 +350,17 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   imports, and fails when a listed DLL is no longer imported. It checks only the DLLs
   it lists, so a DLL added to `build.rs` alone, or a new Media Foundation import listed
   nowhere, gets past it.
-- **Virtual camera registration** (`register.rs`). `--register-vcam` is a separate mode
-  that exits without serving, so it creates no logs or token. The registry and ACL work
-  is `jstream-platform-windows`'s (`register_vcam`), because the daemon has no `unsafe`.
-  A non-elevated daemon doesn't write: it relaunches itself elevated with the same fixed
-  argument (`run_elevated`), then reads the registration back, so success is judged by
-  what the registry holds rather than by the hidden child's output. A registration that
-  already names this DLL is left alone, so repeating the command never prompts. The
-  startup check (`log_status`) only logs: the daemon serves without the camera, and
+- **Virtual camera registration** (`register.rs`). `--register-vcam` and
+  `--unregister-vcam` are separate modes that exit without serving, so they create no
+  logs or token. The copy, DACL and registry work is `jstream-platform-windows`'s
+  (`register_vcam`, `unregister_vcam`), because the daemon has no `unsafe`. A
+  non-elevated daemon doesn't write: it relaunches itself elevated with the same fixed
+  argument (`run_elevated`), then reads the registration back
+  (`vcam_registration`, which compares the copy with the shipped DLL by content), so
+  success is judged by what the registry and the copy hold rather than by the hidden
+  child's output. A registration whose copy already has this DLL's content is left
+  alone, so repeating the command never prompts. The startup check (`log_status`) only
+  logs, and never prompts: the daemon serves without the camera, and
   `WindowsVcam::start` refuses to start an unregistered camera on its own.
 - **YouTube** (`youtube.rs`, `serve.rs`). `youtube::client` reads a developer's OAuth
   client from `--youtube-client`'s file (Google's `{"installed": {…}}` download, or the two
@@ -346,7 +370,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   and before the token is touched. `serve.rs` then calls `Engine::with_youtube` with
   that client, else with `YoutubeSetup::built_in` (JStream's client, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), `None`
   while it is empty), over `jstream_youtube::HttpsTransport` (the OS's root store) with
-  `WindowsCredentials` behind `crash::Redacting` as the token store (so each refresh
+  `WindowsCredentials` behind `jstream_crash::Redacting` as the token store (so each refresh
   token is redacted from crash reports, [Crash reports](#design)), before the engine
   goes live; core keeps the
   token under its fixed account ID. Off Windows there is no OAuth token store, so a
@@ -385,8 +409,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   first two are logged at `warn`. While the program stage runs, the engine lends the
   backend the stage's own GPU context in place of that device (`Engine::use_gpu`), so
   pages paint where the compositor samples them and are drawn into the mix; it takes
-  the context back when the stage stops, leaving the backend with no device, so the
-  device the daemon opens covers only paints before the first stage
+  the context back when the stage stops, or when the stage leaves the GPU path mid-run
+  (its pages then deliver no frames for the rest of that stage), leaving the backend
+  with no device, so the device the daemon opens covers only paints before the first
+  stage
   ([jstream-core › Design](../../crates/jstream-core/README.md#design), *Live sources*).
   The daemon doesn't build or link CEF (only the helper does); the
   feature is off by default until the helper and CEF's runtime are packaged
@@ -420,8 +446,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`
-  header unchanged. The file is created with `create_new`, so a file that appears
-  meanwhile is never replaced, and on Unix with mode `0600`. The random bytes are drawn
+  header unchanged. The file is created new (`CREATE_NEW` on Windows), so a file that
+  appears meanwhile is never replaced, and user-only: mode `0600` on Unix, and on
+  Windows a protected DACL for SYSTEM and the user set by the same `CreateFileW` call
+  (`jstream_platform_windows::create_private_file`, #344), so it never has a shared
+  folder's inherited entries. An existing file is refused, with "delete it to get a new
+  token", if other users may access it: on Unix any group or other permission; on
+  Windows (`check_private_file`) an owner other than the user, SYSTEM or Administrators,
+  a missing or null DACL, or an allow entry giving anyone else more than reading its
+  descriptor or attributes. Administrators are trusted as root is on Unix. The random bytes are drawn
   before the file is created, and a failed write removes the file, so no empty or
   partial token is left to be reused. Reusing an existing token keeps configured
   clients working; rotating it means deleting the file and restarting.
@@ -463,9 +496,12 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `FILE_SHARE_DELETE`, so the same is expected, untested).
 - **The data directory** comes from `jstream-platform`'s `paths` module, the desktop
   app's too: `%APPDATA%\JStream`, or a `data` folder beside the exe when a `portable`
-  marker file sits there ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md),
+  marker file sits there ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md),
   [jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
-- **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)). The panic
+- **Crash reports** ([`jstream-crash`](../../crates/jstream-crash/README.md#purpose),
+  [ADR-0067](../../docs/adr/0067-shared-crash-reports.md),
+  [R-SEC-004](../../docs/RULES.md#R-SEC-004)). `main` makes the `Secrets` list and hands
+  it to the hook, to `token.rs` and to `serve.rs`. The panic
   hook, installed as soon as the log directory exists, writes the daemon and protocol
   versions, OS and architecture, the UTC time, the process ID, the thread name, the
   panic's location and message (cut at 16 KiB), and a backtrace (`std`'s, always
@@ -474,31 +510,36 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   line ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): the control token, by `token.rs`,
   and every stream key the live engine stores or reads, since `serve::live_redacting` hands
   `live`, and through it the engine and the publish opener, its key store behind
-  `crash::Redacting`, which
+  `Redacting`, which
   registers each secret as it is stored or loaded, and every YouTube refresh token,
   since `serve.rs` hands YouTube its Credential Manager token store behind
-  `crash::Redacting` too. Secrets that pass through neither store are not registered
+  `Redacting` too. Secrets that pass through neither store are not registered
   yet: a YouTube-bound output's stream key, which core reads with `Youtube::ingest`
   and hands straight to its connect, and the OAuth access token (left open on #353);
   only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
-  whose stderr line would quote the message unredacted. A panic in a tokio task writes
+  whose stderr line would quote the message unredacted; `main.rs`'s `crash_line` prints
+  the hook's redacted line instead (the crate never prints). A panic in a tokio task writes
   a report too, even though the daemon carries on. The oldest reports beyond 10 are
   deleted before each new one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
-  (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
+  (`--token-file`, `--port`, `--output`, `--collection`, `--ui-dir`, `--log-dir`,
+  `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-platform` (`Backends`, the key store trait, the data directory),
   `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
-  (the backends, the key store and the Media Foundation check), `jstream-platform-macos`
-  on macOS only (the backends built so far, the GPU-interop stand-in and the Keychain key store),
+  (the backends, the key store, the Media Foundation check and the user-only token
+  and log files), `jstream-platform-macos` on macOS only (the backends built so far,
+  the GPU-interop stand-in and the Keychain key store),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
-  OAuth client file), `anyhow`, `tracing` (the startup line) and `blake3` (the crash
-  reports' secret digests), all already in the tree through core and the server, tokio (`rt-multi-thread` for the runtime,
+  OAuth client file), `anyhow` and `tracing` (the startup line), all already in the
+  tree through core and the server; `jstream-crash` (the crash reports,
+  [ADR-0067](../../docs/adr/0067-shared-crash-reports.md)), a workspace crate only the
+  two apps use; tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
   only `sharded-slab` and `thread_local`), and `getrandom`
@@ -507,8 +548,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`), for the live engine and opener tests and
-  `crash.rs`'s `Redacting` tests (`MemoryKeyStore`, `MemoryTokenStore`);
+  `jstream-platform` (feature `fake`), for the live engine and opener tests;
   `jstream-browser` (feature `fake`), for the browser wiring's test;
   `jstream-youtube` (feature `fake`), for the YouTube setup's test.
 
@@ -522,13 +562,13 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    question 5).
 2. **Default token file location.** The platform config directory
    ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence); `%APPDATA%\JStream`
-   or the portable folder per [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)),
+   or the portable folder per [ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)),
    once the engine's settings code locates it. Until then the path is required, and the
    same variable serves the daemon and the CLI.
-3. **Windows ACL.** On Windows the new file gets its directory's ACL, which is
-   user-only under `%APPDATA%` but not everywhere, and an existing file's ACL is not
-   checked. Restricting it explicitly needs the Windows security API, so it belongs in
-   `jstream-platform-windows`, the crate allowed `unsafe`.
+3. **Windows ACL on real hardware.** The token, devices and log files are now created
+   with a user-only DACL and an existing token or devices file's DACL is checked (#344),
+   but that has only run in CI's `windows-latest` job, never on a machine with a token
+   in a shared folder, a domain account or a synced folder.
 4. **Native crash dumps.** Only panics write a report. A native crash (an access
    violation in a driver or FFI code, an abort) writes nothing yet, though
    [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence) plans local minidumps.
@@ -536,9 +576,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    which is `unsafe` and so belongs in `jstream-platform-windows`
    ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001); the daemon forbids `unsafe`), or
    an out-of-process monitor (`crash-handler` and `minidumper`), whose attach call is
-   `unsafe` too and which adds a helper process. Either needs testing on Windows.
+   `unsafe` too and which adds a helper process. Either needs testing on Windows, and
+   would be shared with the desktop app through `jstream-crash` (ADR-0067).
 5. **Data directory.** The log directory's default is `logs` in the data directory
-   (`jstream-platform`'s `paths`, which handles ADR-0020's `portable` marker), and
+   (`jstream-platform`'s `paths`, which handles ADR-0066's `portable` marker), and
    `--log-dir` overrides it. The token file (question 2) and the collection
    (question 6) don't default to it yet.
 6. **Default collection file.** Without `--collection` the collection is not saved.

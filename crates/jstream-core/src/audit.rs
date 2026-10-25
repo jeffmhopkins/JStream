@@ -21,7 +21,7 @@ use jstream_protocol::{
     Rev, SceneId,
 };
 use std::fmt::Write as _;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -61,6 +61,8 @@ pub struct AuditEntry {
     pub gesture_id: Option<GestureId>,
     /// How that gesture ended: `cancelled` or `expired`.
     pub outcome: Option<LiveOutcome>,
+    /// The state `privacy.set` asked for (ADR-0027 §4).
+    pub privacy: Option<bool>,
     /// The collection `rev` before the call.
     pub rev_before: Rev,
     /// The collection `rev` after it. Equal to `rev_before` unless a batch was applied.
@@ -114,6 +116,9 @@ impl AuditEntry {
         if let Some(outcome) = self.outcome {
             line.push_str(",\"outcome\":");
             json_string(&mut line, outcome.name());
+        }
+        if let Some(on) = self.privacy {
+            let _ = write!(line, ",\"privacy\":{on}");
         }
         let _ = write!(
             line,
@@ -184,7 +189,8 @@ pub const QUEUE_ENTRIES: usize = 1024;
 /// When a line would take the file past its size limit, the file is renamed to
 /// `audit.1.jsonl` (replacing the one before) and a new one is started, so the log uses
 /// at most about twice the limit. A failed write is logged at `warn` and the entry lost:
-/// the audit log never fails a call. On Unix the file is created with mode `0600`.
+/// the audit log never fails a call. The file is created user-only: mode `0600` on Unix,
+/// a protected DACL for SYSTEM and the user on Windows.
 ///
 /// Dropping it lets the writer finish what is queued, then joins it.
 pub struct AuditFile {
@@ -328,14 +334,7 @@ impl Writer {
 }
 
 fn append(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    options.open(path)
+    crate::private_file::open_append(path)
 }
 
 fn dropped_line(time: SystemTime, dropped: u64) -> String {
@@ -398,6 +397,7 @@ pub(crate) fn gesture_entry(
         scene_id: None,
         gesture_id: Some(ended.gesture_id),
         outcome: Some(ended.outcome),
+        privacy: None,
         rev_before: rev,
         rev_after: rev,
         error: None,
@@ -421,6 +421,7 @@ pub(crate) struct Pending {
     edits: Vec<&'static str>,
     output_id: Option<OutputId>,
     scene_id: Option<SceneId>,
+    privacy: Option<bool>,
     rev_before: Rev,
 }
 
@@ -429,6 +430,12 @@ impl Pending {
     /// between that read and the call, so for an applied batch the entry uses the
     /// batch's own `rev` minus one instead.
     pub(crate) fn new(call: &Call, rev_before: Rev, client_name: String) -> Self {
+        let privacy = match call {
+            Call::Action {
+                action: Action::PrivacySet { on },
+            } => Some(*on),
+            _ => None,
+        };
         let (name, edits, output_id, scene_id) = match call {
             Call::Batch(batch) => (
                 "batch",
@@ -451,6 +458,7 @@ impl Pending {
             edits,
             output_id,
             scene_id,
+            privacy,
             rev_before,
         }
     }
@@ -487,6 +495,7 @@ impl Pending {
             scene_id: self.scene_id,
             gesture_id: None,
             outcome: None,
+            privacy: self.privacy,
             rev_before,
             rev_after,
             error: result.as_ref().err().map(ProtocolError::code),
@@ -507,7 +516,9 @@ fn action_output(action: &Action) -> Option<OutputId> {
 
 fn action_scene(action: &Action) -> Option<SceneId> {
     match action {
-        Action::SceneSwitch { scene_id } => Some(scene_id.clone()),
+        Action::SceneSwitch { scene_id, .. } | Action::StudioSetPreview { scene_id } => {
+            Some(scene_id.clone())
+        }
         _ => None,
     }
 }
@@ -589,6 +600,7 @@ mod tests {
             scene_id: None,
             gesture_id: None,
             outcome: None,
+            privacy: None,
             rev_before: Rev(n),
             rev_after: Rev(n),
             error: None,
@@ -631,6 +643,23 @@ mod tests {
             "{\"time\":\"2025-10-15T00:42:15.007Z\",\"client_id\":\"client_1\",\
              \"client_name\":\"claude-desktop\",\"request_id\":\"req_4\",\"call\":\"output.set_key\",\"output_id\":\"out_yt\",\
              \"rev_before\":4,\"rev_after\":4,\"result\":\"ok\"}"
+        );
+    }
+
+    /// `privacy.set` records the state it asked for, and nothing else of the call.
+    #[test]
+    fn a_privacy_line_records_on_or_off() {
+        let entry = AuditEntry {
+            call: "privacy.set",
+            output_id: None,
+            privacy: Some(true),
+            ..entry(5)
+        };
+        assert_eq!(
+            entry.to_json_line(),
+            "{\"time\":\"2025-10-15T00:42:15.007Z\",\"client_id\":\"client_1\",\
+             \"client_name\":\"claude-desktop\",\"request_id\":\"req_5\",\"call\":\"privacy.set\",\
+             \"privacy\":true,\"rev_before\":5,\"rev_after\":5,\"result\":\"ok\"}"
         );
     }
 

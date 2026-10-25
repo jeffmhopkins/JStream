@@ -156,7 +156,9 @@ fn legacy(
 ///
 /// Clipping happens in the box's local frame, before rotation, so it is exact for any
 /// in-plane rotation. With 3D neutral every corner is in front of the viewer and the
-/// placement is affine, so linear UVs are correct. Any other 3D is [`drawn`].
+/// placement is affine, so linear UVs are correct. A flip arrives as the content's
+/// swapped UV pair, so the same interpolation mirrors the clipped part. Any other 3D is
+/// [`drawn`].
 fn boxed(
     source_width: u32,
     source_height: u32,
@@ -556,6 +558,31 @@ mod tests {
     }
 
     #[test]
+    fn a_flip_mirrors_the_clipped_uvs_and_keeps_the_corners() {
+        let Placement::Geometry(geometry) = boxed(20.0, 20.0, FitMode::Fill, 0.0) else {
+            unreachable!("boxed is a geometry");
+        };
+        let mirrored = Placement::Geometry(ItemGeometry {
+            flip_h: true,
+            flip_v: true,
+            ..geometry
+        });
+        // The same middle half as the unflipped fill, sampled right to left and bottom
+        // to top.
+        let q = shape(4, 2, mirrored, Crop::NONE)
+            .expect("finite")
+            .expect("draws");
+        assert_eq!(
+            q.corners(),
+            [[40.0, 30.0], [60.0, 30.0], [60.0, 50.0], [40.0, 50.0]]
+        );
+        assert_eq!(
+            q.uvs(),
+            [[0.75, 1.0], [0.25, 1.0], [0.25, 0.0], [0.75, 0.0]]
+        );
+    }
+
+    #[test]
     fn a_geometry_rotates_about_its_centre_and_crops_first() {
         let crop = Crop {
             left: 2,
@@ -699,6 +726,38 @@ mod tests {
                     .is_none()
             );
         }
+    }
+
+    /// Every geometry an edit may store draws (#629 rounds 1 and 2, B1 and B4): each 3D
+    /// item `check_drawable` accepts, from a sweep of every input up to past
+    /// `MAX_DRAWN_PX`, gives a shape for every source, thin ones included, and with and
+    /// without a crop, not a placement error that would fail its whole frame.
+    #[test]
+    fn every_drawable_geometry_gives_a_shape() {
+        let mut accepted = 0;
+        for geometry in crate::tests::extreme_geometries(40_000) {
+            if geometry.check_drawable().is_err() {
+                continue;
+            }
+            accepted += 1;
+            for (width, height) in crate::tests::SOURCES {
+                let crops = [
+                    Crop::NONE,
+                    Crop {
+                        left: width / 3,
+                        top: height / 3,
+                        right: width / 4,
+                        bottom: height / 4,
+                    },
+                ];
+                for crop in crops {
+                    shape(width, height, Placement::Geometry(geometry), crop).unwrap_or_else(
+                        |err| panic!("{geometry:?} on {width}x{height} {crop:?}: {err}"),
+                    );
+                }
+            }
+        }
+        assert!(accepted > 5_000, "{accepted} accepted");
     }
 
     /// A 3D item's mip region is its crop's texels exactly, at sizes where `k / W * W`

@@ -6,9 +6,7 @@
 //! encode target).
 
 use jstream_media::{ColorInfo, ColorRange, ColorSpace, FrameSize};
-use jstream_platform::SubmitLock;
 
-use crate::Compositor;
 use crate::error::RenderError;
 
 /// Y plane format, and the format a native NV12 texture's plane 0 is viewed as.
@@ -19,8 +17,6 @@ const UV_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg8Unorm;
 /// Builds [`Nv12Pass`]es on one device. Holds the two pipelines, so make it once.
 pub struct Nv12Converter {
     device: wgpu::Device,
-    /// Held from staging a frame through the submit it arms ([`Self::submit`]).
-    submit: SubmitLock,
     layout: wgpu::BindGroupLayout,
     y_pipeline: wgpu::RenderPipeline,
     uv_pipeline: wgpu::RenderPipeline,
@@ -28,23 +24,9 @@ pub struct Nv12Converter {
 }
 
 impl Nv12Converter {
-    /// Compiles the conversion pipelines on `compositor`'s device, which the sources
-    /// and targets must be on, and shares its submit lock
-    /// ([`Compositor::submit_lock`]), so a submit another thread makes on the queue
-    /// can't take what [`Self::submit`] stages (#667). This is the one to use for the
-    /// platform's encode targets.
-    pub fn for_compositor(compositor: &Compositor) -> Self {
-        Self::with_lock(compositor.device(), compositor.submit_lock().clone())
-    }
-
-    /// Compiles the conversion pipelines on `device`, with a submit lock of its own:
-    /// for a device whose queue no other thread submits on. Use
-    /// [`Self::for_compositor`] for the compositor's.
+    /// Compiles the conversion pipelines on `device`, which must be the device the
+    /// sources and targets are on (the compositor's, [`crate::Compositor::device`]).
     pub fn new(device: &wgpu::Device) -> Self {
-        Self::with_lock(device, SubmitLock::new())
-    }
-
-    fn with_lock(device: &wgpu::Device, submit: SubmitLock) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render nv12"),
             source: wgpu::ShaderSource::Wgsl(include_str!("nv12.wgsl").into()),
@@ -108,7 +90,6 @@ impl Nv12Converter {
         };
         Self {
             device: device.clone(),
-            submit,
             y_pipeline: pipeline("fs_y", Y_FORMAT),
             uv_pipeline: pipeline("fs_uv", UV_FORMAT),
             layout,
@@ -188,14 +169,23 @@ impl Nv12Converter {
         }
         let params = params(color)?;
         let bytes: Vec<u8> = params.iter().flat_map(|v| v.to_le_bytes()).collect();
-        let buffer = wgpu::util::DeviceExt::create_buffer_init(
-            &self.device,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("jstream-render nv12 params"),
-                contents: &bytes,
-                usage: wgpu::BufferUsages::UNIFORM,
-            },
-        );
+        // Not `create_buffer_init`, which panics when the buffer can't be mapped, as on
+        // a lost device: that is an error the caller recovers from.
+        let size = (bytes.len() as u64).next_multiple_of(wgpu::COPY_BUFFER_ALIGNMENT);
+        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("jstream-render nv12 params"),
+            size,
+            usage: wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: true,
+        });
+        buffer
+            .get_mapped_range_mut(..)
+            .map_err(|err| RenderError::Uncaptured {
+                detail: format!("mapping the nv12 parameters: {err}"),
+            })?
+            .slice(..bytes.len())
+            .copy_from_slice(&bytes);
+        buffer.unmap();
         let view = source.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("jstream-render nv12"),
@@ -220,24 +210,27 @@ impl Nv12Converter {
         })
     }
 
-    /// Converts into a platform frame in a submit of its own, on `queue`: `pass`, bound
-    /// to `frame`'s texture, then the texture handed back to the platform
+    /// Converts into a platform frame in a submit of its own, on `compositor`'s queue:
+    /// `pass`, bound to `frame`'s texture, then the texture handed back to the platform
     /// (`TextureUses::PRESENT`, as the compositor does with the source frames it
     /// samples), with `frame`'s sync staged around the submit. This is the encode
     /// tick's step: the platform's encoder reads the frame once its fence is signalled.
-    /// Submit it after the composite that wrote the source. The converter's submit lock
-    /// is held from the staging through the submit.
+    /// Submit it after the composite that wrote the source. Like `render`, it holds the
+    /// compositor's `SubmitLock` from the stage through the submit, so no other thread's
+    /// submit on a platform context's queue takes the staged wait and signal.
     ///
     /// # Errors
     /// [`RenderError::Sync`] when staging the frame fails. Nothing is submitted then,
     /// though the platform may already have armed the queue's next submit.
     pub fn submit(
         &self,
-        queue: &wgpu::Queue,
+        compositor: &crate::Compositor,
         pass: &Nv12Pass,
         frame: &jstream_platform::GpuFrame,
     ) -> Result<(), RenderError> {
-        // Recorded first, so the lock is held only for the staging and the submit.
+        let queue = compositor.queue();
+        let _submitting = compositor.submit_lock().lock();
+        frame.stage(queue).map_err(RenderError::Sync)?;
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -252,10 +245,6 @@ impl Nv12Converter {
                 state: wgpu::TextureUses::PRESENT,
             }),
         );
-        // No other submit on the queue may come between the staging and this one, or
-        // it would carry the frame's wait and signal (#667).
-        let _submitting = self.submit.lock();
-        frame.stage(queue).map_err(RenderError::Sync)?;
         queue.submit([encoder.finish()]);
         Ok(())
     }

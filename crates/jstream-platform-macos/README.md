@@ -80,8 +80,15 @@ It has:
   write from the format (`aac_lc_config`, read with `asc_from_magic_cookie`), or opening
   fails. It also opens a **VideoToolbox H.264 or HEVC decoder** for a configuration
   **`vt_decoder_settings`** accepts (NV12 or BGRA output, P010 from HEVC; the hardware
-  decoder enabled, required, or avoided as the preference says). Decoders aren't listed:
-  VideoToolbox has no list of them. The `VTDecompressionSession` opens on the first
+  decoder enabled, required, or avoided as the preference says). VideoToolbox has no list
+  of decoders, so `list` reports H.264 and HEVC ones (**`vt_decoder_list`**, named by
+  **`vt_decoder_name`**): a hardware one where `VTIsHardwareDecodeSupported` says this Mac
+  has one, and Apple's software one, which is always there. The same call checks a
+  required hardware decoder when the decoder is made (**`vt_decoder_hardware`**), so a Mac
+  without one refuses it at once with `Unsupported`. Once the session opens, a required
+  decoder that still can't be had for this stream (**`vt_no_decoder`**: no decoder
+  matched) is `Unsupported` too, and any other session failure, such as a bad parameter
+  set, is reported as the call failing. The `VTDecompressionSession` opens on the first
   packet with a complete set of parameter sets, and again whenever a keyframe brings
   different ones; packets before that are dropped. Each packet is decoded synchronously,
   and the output callback, which catches any panic, copies each frame into a **CPU
@@ -128,7 +135,9 @@ It has:
   `Display <id>`, the main one primary) and the on-screen windows of other applications
   at layer 0 as `window:<CGWindowID>` (named by title, else application), each with its
   size in pixels (the content's points times its scale). `start` captures one through an
-  `SCStream` in BGRA, sRGB, with the cursor, at that size; a resized window is scaled to
+  `SCStream` in BGRA, sRGB, with the cursor, at that size (`start_with` and
+  `CursorCapture::Hidden` turn `showsCursor` off; `Metadata` draws the pointer in, as
+  this backend doesn't send it apart yet); a resized window is scaled to
   fit, keeping its aspect ratio. Frames arrive on the stream's serial dispatch queue,
   whose callbacks catch panics. Each complete frame (`SCStreamFrameInfoStatus`; idle,
   blank and suspended frames are skipped) is converted to NV12, BT.709 limited range,
@@ -270,11 +279,13 @@ ADR.
 
 Tests run on every platform where they can: the capture's target IDs, names, sizes, frame
 layouts and statuses, permission steps, process names and parents, the keychain item
-names and the error mapping are platform independent. The macOS ones (the clock, reading the release, encoding with
+names, the error mapping and the decoder list and hardware check are platform
+independent. The macOS ones (the clock, reading the release, encoding with
 VideoToolbox, which falls back to Apple's software encoder on a Mac without a hardware
 one, decoding what the VideoToolbox encoder produced, from the start and from a later
-keyframe, playing a system sound as an audio-only media file and refusing a missing or
-unreadable one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
+keyframe, a required hardware decoder opening exactly where one is listed, playing a
+system sound as an audio-only media file and refusing a missing or unreadable one,
+encoding AAC with AudioToolbox, opening the capture backend, round trips through
 the login keychain with uniquely named items, deleted afterwards, listing audio
 devices and their input formats, refusing an unknown output, reading the Microphone
 status without prompting, listing processes, refusing to tap an unknown output or

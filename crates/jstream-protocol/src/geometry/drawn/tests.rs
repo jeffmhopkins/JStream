@@ -6,7 +6,7 @@ use super::{DrawnPolygon, DrawnVertex, LocalPoint, NEAR_W};
 use crate::command::{Crop, Vec2};
 use crate::finite::Finite32;
 use crate::geometry::{
-    CanvasPoint, FitMode, ItemGeometry, Placed, Size, rotate_x, rotate_y, rotate_z,
+    CanvasPoint, FitMode, GeometryError, ItemGeometry, Placed, Size, rotate_x, rotate_y, rotate_z,
 };
 
 fn finite(value: f32) -> Finite32 {
@@ -394,4 +394,110 @@ fn a_large_item_edge_on_draws_nothing_and_unplaces_nothing() {
             );
         }
     }
+}
+
+/// A tilted box of `width`×2000 under perspective 800 at `center`, reaching behind the
+/// viewer, so its near-plane clip magnifies its far side up to 256 times.
+fn reaching_behind(center: f32, width: f32) -> ItemGeometry {
+    let mut geometry = ItemGeometry::try_new(
+        Vec2::new(center, 540.0).expect("finite"),
+        Size::try_new(width, 2000.0).expect("positive"),
+    )
+    .expect("geometry");
+    geometry.tilt_deg = finite(60.0);
+    geometry.perspective_px = Some(finite(800.0));
+    geometry
+}
+
+/// An edit stores only a geometry the compositor can draw (#629 round 1 B1): ordinary
+/// 3D, and an item behind the viewer that draws nothing, pass; a huge item clipped at
+/// the near plane, or one centred near f32's limit, does not, though its four corners
+/// project to finite points.
+#[test]
+fn only_a_drawable_geometry_passes_check_drawable() {
+    for (tilt, turn, rotation, depth, p) in CASES {
+        geometry(tilt, turn, rotation, depth, p)
+            .check_drawable()
+            .expect("an ordinary 3D item is drawable");
+    }
+    geometry(0.0, 0.0, 0.0, 5000.0, Some(800.0))
+        .check_drawable()
+        .expect("an item behind the viewer draws nothing, and is drawable");
+    reaching_behind(960.0, 4000.0)
+        .check_drawable()
+        .expect("an item reaching behind the viewer is drawable");
+    for (center, width, error) in [
+        // Inputs past MAX_DRAWN_PX are refused before any polygon is built (round 2 B4).
+        (960.0, 1e37, GeometryError::TooFar),
+        (3e38, 1e36, GeometryError::TooFar),
+        (960.0, 1e13, GeometryError::TooFar),
+    ] {
+        let geometry = reaching_behind(center, width);
+        geometry.project().expect("its corners project");
+        assert_eq!(geometry.check_drawable(), Err(error), "{center} {width}");
+    }
+}
+
+/// Round 2 B4's two cases: huge non-neutral 3D whose whole box draws a finite polygon, but
+/// a thin content strip's doesn't. Their inputs are past `MAX_DRAWN_PX`, so they are
+/// refused before any polygon is built.
+#[test]
+fn a_3d_item_with_an_input_past_the_bound_is_refused() {
+    let case = |center: (f32, f32), size: (f32, f32), rotation, tilt, turn, depth, p| {
+        let mut geometry = ItemGeometry::try_new(
+            Vec2::new(center.0, center.1).expect("finite"),
+            Size::try_new(size.0, size.1).expect("positive"),
+        )
+        .expect("geometry");
+        geometry.fit_mode = FitMode::Fit;
+        geometry.rotation_deg = finite(rotation);
+        geometry.tilt_deg = finite(tilt);
+        geometry.turn_deg = finite(turn);
+        geometry.depth_px = finite(depth);
+        geometry.perspective_px = Some(finite(p));
+        geometry
+    };
+    for geometry in [
+        case(
+            (1.227_328e24, 2.381_41e14),
+            (4.154_042e37, 1.857_193_4e37),
+            206.857_88,
+            -127.180_49,
+            -14.493_873,
+            -6.998_378e36,
+            1.887_270_2e14,
+        ),
+        case(
+            (-1.299_659_8e22, -1.482_714_4e37),
+            (6.282_709e37, 2.136_542_7e37),
+            -147.076_95,
+            13.059_319,
+            -15.836_658,
+            1.254_765_5e35,
+            0.285_200_33,
+        ),
+    ] {
+        assert_eq!(
+            geometry.check_drawable(),
+            Err(GeometryError::TooFar),
+            "{geometry:?}"
+        );
+    }
+    // One input past the bound is enough, whatever the others.
+    let bound = super::MAX_DRAWN_PX;
+    let ordinary = reaching_behind(960.0, 4000.0);
+    let mut far = ordinary;
+    far.depth_px = finite(bound * 2.0);
+    assert_eq!(far.check_drawable(), Err(GeometryError::TooFar));
+    let mut far = ordinary;
+    far.perspective_px = Some(finite(bound * 2.0));
+    assert_eq!(far.check_drawable(), Err(GeometryError::TooFar));
+    // Neutral 3D keeps its old rule: finite corners only.
+    let mut flat = ItemGeometry::try_new(
+        Vec2::new(bound * 2.0, 0.0).expect("finite"),
+        Size::try_new(bound * 2.0, 10.0).expect("positive"),
+    )
+    .expect("geometry");
+    flat.fit_mode = FitMode::Fit;
+    flat.check_drawable().expect("neutral 3D isn't bounded");
 }
