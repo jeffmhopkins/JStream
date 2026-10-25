@@ -415,6 +415,18 @@ impl Shot {
         self.chains.get(&ChainOwner::Scene(scene_id.clone()))
     }
 
+    /// The scenes the chain phase composites, with their depths, in order, for tests.
+    #[cfg(test)]
+    pub(crate) fn chain_passes(&self) -> Vec<(String, usize)> {
+        self.chain_steps
+            .iter()
+            .filter_map(|step| match step {
+                ChainStep::Pass(pass) => Some((pass.scene.to_string(), pass.depth)),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// How many tracks the running transition draws, or `None` without one, for tests.
     #[cfg(test)]
     pub(crate) fn transition_tracks(&self) -> Option<usize> {
@@ -772,8 +784,12 @@ impl Planner<'_, '_> {
                 opacity: OPAQUE,
             },
             size: Some([canvas.width, canvas.height]),
+            // One picture that pairs with nothing crossfades (ADR-0065 §6), whatever
+            // the preset's `unmatched` effect.
             settings: ItemTransition {
                 glide: Glide::Never,
+                appear: jstream_protocol::TransitionEffect::Fade,
+                disappear: jstream_protocol::TransitionEffect::Fade,
                 ..ItemTransition::default()
             },
         }]
@@ -1031,6 +1047,12 @@ pub(crate) enum GpuKey {
 /// nested one level down, so what it nests counts toward [`MAX_NESTING`] the same way.
 const REFERENCE_DEPTH: usize = 1;
 
+/// The depth a scene with a video chain (ADR-0065) is composited at for its chain: the
+/// program scene's. Its composite is drawn once per frame, however deep it is placed,
+/// so its own nested scenes count toward [`MAX_NESTING`] from it, as a program scene's
+/// do, and a filtered program scene draws as deep as an unfiltered one.
+const COMPOSITE_DEPTH: usize = 0;
+
 impl GpuKey {
     /// The layer `scene` is drawn into for the video filters that read it.
     pub(crate) fn reference(scene: &SceneId) -> Self {
@@ -1208,7 +1230,7 @@ impl Passes for Vec<Pass> {
 /// The work a frame does once, before any mix draws, in order: each video chain after
 /// what it reads, and each pass after the chains of what it places and the scenes it
 /// nests. A source's chain reads its frame, and a scene's its composite, drawn at
-/// [`REFERENCE_DEPTH`] into [`GpuKey::Composite`]. A scene a chain's filter reads
+/// [`COMPOSITE_DEPTH`] into [`GpuKey::Composite`]. A scene a chain's filter reads
 /// (`scene_mask`) is drawn at [`REFERENCE_DEPTH`] into [`GpuKey::reference`], or read
 /// from its own chain's output when it has one. The graph refuses a cycle through a
 /// filter's scene reference (ADR-0026); were one there, the chain that closes it would
@@ -1255,7 +1277,7 @@ impl ChainOrder {
             if let ChainOwner::Scene(scene) = owner {
                 visit_into(
                     shot,
-                    (scene, REFERENCE_DEPTH, GpuKey::Composite(scene.clone())),
+                    (scene, COMPOSITE_DEPTH, GpuKey::Composite(scene.clone())),
                     &mut BTreeSet::new(),
                     done,
                     self,

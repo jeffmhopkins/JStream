@@ -796,6 +796,11 @@ mod tests {
             .scene_chain(&SceneId::new("main"))
             .expect("the scene's chain");
         assert_eq!(chain.input, GpuKey::Composite(SceneId::new("main")));
+        assert_eq!(
+            filtered.chain_passes(),
+            [("main".to_owned(), 0)],
+            "composited at the program's depth, so it nests as deep as without a filter"
+        );
         assert!(filtered.changes_with_time());
 
         let _gpu = crate::tests::one_gpu_test_at_a_time();
@@ -852,6 +857,11 @@ mod tests {
         let outer = shot_of(&graded, "outer");
         assert!(outer.scene_chain(&SceneId::new("main")).is_some());
         assert!(outer.scene_chain(&SceneId::new("outer")).is_none());
+        assert_eq!(
+            outer.chain_passes(),
+            [("main".to_owned(), 0)],
+            "a filtered nested scene is composited once, at depth 0, wherever it is placed"
+        );
         let key = shot_of(&graded, "key");
         assert!(
             key.scene_chain(&SceneId::new("key")).is_some(),

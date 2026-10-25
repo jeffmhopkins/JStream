@@ -233,7 +233,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   that would close a cycle (`item.add`, and `item.set_source`). The graph accepts any
   acyclic depth, but the program mix (the live output and `video.snapshot` alike) draws
   at most **8 levels** of scene sources below the program scene: a scene source deeper
-  than that draws nothing, and the engine logs it at `debug`.
+  than that draws nothing, and the engine logs it at `debug`. A scene with a scene
+  filter is drawn once per frame as if it were the program scene, so the count restarts
+  below it ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), as it does below a
+  scene a `scene_mask` reads.
 - **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
   - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
     group renders, nests and takes filters like any scene, and clients hide groups from

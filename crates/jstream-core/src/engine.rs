@@ -2307,7 +2307,7 @@ impl State {
     /// comes first, so a retry succeeds even after `rev` moved on. An `ends_gesture` the
     /// client has no open gesture for is refused next, as the mock does, and then a
     /// `filter.add` of a scanned CLAP kind, since nothing runs CLAP filters yet, and any
-    /// filter edit on a scene or an item, since nothing renders those yet (ADR-0065).
+    /// filter edit on an item, since nothing renders item effects yet (ADR-0065).
     fn batch(
         &mut self,
         client_id: &ClientId,

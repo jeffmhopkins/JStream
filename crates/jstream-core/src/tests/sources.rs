@@ -7,7 +7,9 @@ use super::{add, batch, connected, create, edits};
 use crate::Engine;
 use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
-use jstream_protocol::{AssetRoot, Batch, Edit, ItemId, Reference, Settings, SourceId, SourceKind};
+use jstream_protocol::{
+    AssetRoot, Batch, Edit, ItemId, Reference, SceneId, Settings, SourceId, SourceKind,
+};
 use jstream_sources::CaptureSpec;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -812,6 +814,53 @@ fn a_video_filters_asset_is_loaded_for_its_chain() {
     point("again.cube");
     let again = chain_asset(&engine, "pic").expect("the other table is loaded");
     assert_ne!(again, first, "another file is another load");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// ADR-0065: a scene's video filter gets the file it reads too, as a source's does.
+#[test]
+fn a_scene_filters_asset_is_loaded_for_its_chain() {
+    let dir = temp_dir("scene-filter-asset");
+    fs::write(dir.join("invert.cube"), INVERT).expect("the table");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let control = connected(&engine);
+    let lut = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "invert.cube".into(),
+    }
+    .to_value();
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("pic", "color", color("#ffffff")),
+            add("a", "i1", "pic"),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                kind: "apply_lut".into(),
+                settings: settings(&[("lut", lut)]),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the assets were loaded in time");
+    let snapshot = engine.render_hub().load();
+    let chain = snapshot
+        .shot()
+        .scene_chain(&SceneId::new("a"))
+        .expect("the scene's chain");
+    assert!(
+        chain.filters[0].reference.is_some(),
+        "the scene's LUT is loaded"
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
