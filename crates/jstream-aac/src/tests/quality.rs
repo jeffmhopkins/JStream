@@ -351,3 +351,106 @@ fn tns_keeps_the_temporal_envelope_of_clicks_in_long_windows() {
         );
     }
 }
+
+/// Noise from 6.5 to 10 kHz, the same in both channels but `gain` times as loud (and of
+/// its sign) on the right.
+fn panned_high_band(seconds: f32, gain: f32) -> Vec<f32> {
+    let n = (RATE as f32 * seconds) as usize;
+    let mut rng = Rng(17);
+    let partials: Vec<(f32, f32)> = (0..120)
+        .map(|_| {
+            let f = 8250.0 + 1750.0 * rng.unit();
+            (TAU * f / RATE as f32, TAU * rng.unit())
+        })
+        .collect();
+    let mut out = Vec::with_capacity(2 * n);
+    for i in 0..n {
+        let s: f32 = partials
+            .iter()
+            .map(|&(w, p)| 0.02 * (w * i as f32 + p).sin())
+            .sum();
+        out.push(s);
+        out.push(gain * s);
+    }
+    out
+}
+
+/// Intensity stereo on a panned high band: it engages in nine units of ten at least (and
+/// in none with it off), each channel keeps its level within 1 dB of the input's, the
+/// right channel keeps its sign, and the bits the right channel no longer spends lift the
+/// left channel's SNR by at least 3 dB at the same rate.
+#[test]
+fn intensity_stereo_keeps_each_channels_level() {
+    let skip = 2 * 4800;
+    let energy = |x: &[f32], c: usize| -> f64 {
+        x[skip..]
+            .iter()
+            .skip(c)
+            .step_by(2)
+            .map(|&v| f64::from(v).powi(2))
+            .sum()
+    };
+    for gain in [0.35f32, -0.35] {
+        let input = panned_high_band(2.0, gain);
+        for kbps in [64, 96] {
+            let mut snr = [0.0f64; 2];
+            for (on, snr) in [false, true].into_iter().zip(&mut snr) {
+                let config = Config {
+                    intensity: on,
+                    ..Config::new(RATE, 2, kbps * 1000)
+                };
+                let mut enc = crate::Encoder::new(config).expect("valid config");
+                enc.push_interleaved(&input).expect("whole frames");
+                enc.finish();
+                let (mut units, mut au, mut with_is) = (Vec::new(), Vec::new(), 0);
+                while enc.encode_frame(&mut au) {
+                    with_is += usize::from(enc.intensity_bands() > 0);
+                    units.push(std::mem::take(&mut au));
+                }
+                if on {
+                    assert!(
+                        with_is * 10 >= units.len() * 9,
+                        "gain {gain} at {kbps} kbps: intensity in {with_is} of {} units",
+                        units.len()
+                    );
+                } else {
+                    assert_eq!(with_is, 0, "intensity off sends none");
+                }
+                let pcm = decode([0x11, 0x90], &units).expect("decodes");
+                let output = &pcm[2 * DELAY..2 * DELAY + input.len()];
+                for c in 0..2 {
+                    let db = 10.0 * (energy(output, c) / energy(&input, c)).log10();
+                    assert!(
+                        db.abs() < 1.0,
+                        "gain {gain} at {kbps} kbps, intensity {on}: channel {c} off by {db:.2} dB"
+                    );
+                }
+                let cross: f64 = output[skip..]
+                    .chunks_exact(2)
+                    .map(|f| f64::from(f[0]) * f64::from(f[1]))
+                    .sum();
+                let correlation = cross / (energy(output, 0) * energy(output, 1)).sqrt();
+                assert!(
+                    correlation * f64::from(gain.signum()) > 0.9,
+                    "gain {gain} at {kbps} kbps: correlation {correlation:.3}"
+                );
+                let left: Vec<f32> = input.iter().step_by(2).copied().collect();
+                let decoded: Vec<f32> = output.iter().step_by(2).copied().collect();
+                let err: f64 = left[skip / 2..]
+                    .iter()
+                    .zip(&decoded[skip / 2..])
+                    .map(|(&x, &y)| f64::from(x - y).powi(2))
+                    .sum();
+                *snr = 10.0 * (energy(&input, 0) / err).log10();
+            }
+            // Measured: the left channel's SNR 5.9 dB without and 10.9 with intensity
+            // stereo at 64 kbps, 11.1 and 15.3 at 96 kbps; levels within 0.5 dB; intensity
+            // in 93 and 95 of 95 units.
+            let [without, with] = snr;
+            assert!(
+                with > without + 3.0,
+                "gain {gain} at {kbps} kbps: left SNR {with:.1} dB with intensity, {without:.1} without"
+            );
+        }
+    }
+}

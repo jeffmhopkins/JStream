@@ -1825,6 +1825,54 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "vignette",
+    "category": "video_filter",
+    "name": "Vignette",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Strength",
+        "description": "How much of the colour the edges take: 0 is none.",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Radius",
+        "description": "Where the fade starts, from the centre (0) to the corners (1).",
+        "live": true
+      },
+      {
+        "id": "softness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Softness",
+        "description": "How far the fade runs past the radius. 0 is a hard edge.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Color",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "waveform",
     "category": "source",
     "name": "Audio waveform",

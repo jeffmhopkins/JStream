@@ -68,11 +68,11 @@
 #[cfg(doc)]
 use jstream_protocol::MAX_DURATION_MS;
 use jstream_protocol::{
-    Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, EncoderProfile, EncoderProfileId,
-    FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform,
-    ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind, PlacementForm, Rev, SceneId,
-    SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
-    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, EncoderProfile,
+    EncoderProfileId, FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry,
+    ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind,
+    PlacementForm, Rev, SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
+    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
     builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
@@ -544,6 +544,9 @@ pub struct Filter {
     pub(crate) kind: String,
     pub(crate) enabled: bool,
     pub(crate) settings: Settings,
+    /// For a filter loaded while its kind was missing, the kind version the file
+    /// recorded, which a save keeps while the kind is still missing.
+    pub(crate) unknown_kind_version: Option<u32>,
 }
 
 impl Filter {
@@ -963,24 +966,32 @@ impl Encoder {
     }
 }
 
-/// One audio bus: its fader and mute, applied after the sum of its sends.
+/// One audio bus: its fader and mute, applied after the sum of its sends, and its
+/// monitor, if it has one.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bus {
     pub(crate) id: BusId,
     pub(crate) name: String,
     pub(crate) gain_db: Finite32,
     pub(crate) muted: bool,
+    pub(crate) monitor: Option<BusMonitor>,
 }
 
 impl Bus {
-    /// A new bus: at 0 dB, unmuted.
+    /// A new bus: at 0 dB, unmuted, with no monitor.
     pub(crate) fn new(id: BusId, name: String) -> Self {
         Self {
             id,
             name,
             gain_db: Finite32::ZERO,
             muted: false,
+            monitor: None,
         }
+    }
+
+    /// Its monitor: the output device the engine plays it on, and where on the bus.
+    pub fn monitor(&self) -> Option<&BusMonitor> {
+        self.monitor.as_ref()
     }
 
     /// Its ID.

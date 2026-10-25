@@ -20,7 +20,10 @@ use crate::{
     SceneSummary, Size, SourceId, SourceInfo, SourceKind, TransitionsInfo, Vec2, VideoCodec,
     VideoEncoding,
 };
-use crate::{AudioFollow, BusId, BusInfo, MAX_BUSES, SendInfo, SourceAudio};
+use crate::{
+    AudioFollow, BusId, BusInfo, BusMonitor, MAX_BUSES, MAX_MONITOR_DEVICE_LEN, MonitorTap,
+    SendInfo, SourceAudio,
+};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -398,8 +401,35 @@ pub fn collection() -> Batch {
                 bus_id: BusId::new("drums"),
                 gain_db: finite(-12.0),
             },
+            Edit::BusSetMonitor {
+                bus_id: BusId::new("drums"),
+                monitor: Some(BusMonitor::default()),
+            },
             Edit::BusDelete {
                 bus_id: BusId::new("drums"),
+            },
+            // A monitor set, changed and taken away (0.42); the master's is gone again.
+            Edit::BusSetMonitor {
+                bus_id: BusId::master(),
+                monitor: Some(BusMonitor::default()),
+            },
+            Edit::BusSetMonitor {
+                bus_id: BusId::new("vod"),
+                monitor: Some(BusMonitor {
+                    device: "headphones".into(),
+                    tap: MonitorTap::PostFilters,
+                }),
+            },
+            Edit::BusSetMonitor {
+                bus_id: BusId::new("vod"),
+                monitor: Some(BusMonitor {
+                    device: "headphones".into(),
+                    tap: MonitorTap::PreFilters,
+                }),
+            },
+            Edit::BusSetMonitor {
+                bus_id: BusId::master(),
+                monitor: None,
             },
             Edit::BusRename {
                 bus_id: BusId::new("vod"),
@@ -1502,6 +1532,43 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "ghost".into(),
             },
         ),
+        // Monitors (0.42): the bus must exist, and `BusMonitor::problem` decides the rest.
+        (
+            Batch::single(Edit::BusSetMonitor {
+                bus_id: BusId::new("ghost"),
+                monitor: None,
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Bus,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::BusSetMonitor {
+                bus_id: BusId::master(),
+                monitor: Some(BusMonitor {
+                    device: String::new(),
+                    tap: MonitorTap::Unknown,
+                }),
+            }),
+            invalid(
+                "edits.0.monitor.tap",
+                "is not a tap point this engine knows",
+            ),
+        ),
+        (
+            Batch::single(Edit::BusSetMonitor {
+                bus_id: BusId::new("vod"),
+                monitor: Some(BusMonitor {
+                    device: "d".repeat(MAX_MONITOR_DEVICE_LEN + 1),
+                    tap: MonitorTap::PreFilters,
+                }),
+            }),
+            invalid(
+                "edits.0.monitor.device",
+                &format!("must be at most {MAX_MONITOR_DEVICE_LEN} bytes"),
+            ),
+        ),
         // Hotkeys (ADR-0024 §5): one spelling per chord, one binding per chord, and only
         // actions that name objects that exist and keep no secret.
         (
@@ -1676,12 +1743,17 @@ fn buses() -> Vec<BusInfo> {
             name: "Master".into(),
             gain_db: finite(-1.0),
             muted: false,
+            monitor: None,
         },
         BusInfo {
             bus_id: BusId::new("vod"),
             name: "VOD track".into(),
             gain_db: finite(-6.0),
             muted: true,
+            monitor: Some(BusMonitor {
+                device: "headphones".into(),
+                tap: MonitorTap::PreFilters,
+            }),
         },
     ]
 }

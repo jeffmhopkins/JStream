@@ -32,10 +32,13 @@ and stdout. It has no protocol connection and no control token.
   is created and activated once (48 kHz, 1024 frames) to check that it is stereo with
   ports the host takes. Instruments, note effects and effects that won't activate are
   left out.
-- `jstream-plugin-host run <block> <file> <plugin-id>` opens the shared block named
-  `<block>`, which the engine created (`PluginBlock::open`), and runs that plugin over
-  it until the engine stops it. Windows only for now: elsewhere it answers with an
-  `Error` message.
+- `jstream-plugin-host run <file> <plugin-id>` reads the engine's first control
+  message, which must be `Block`: the handle of the shared block the engine created,
+  already duplicated into this process. It maps the block from it
+  (`PluginBlock::from_handle`) and runs that plugin over it until the engine stops it.
+  The block has no name, so no other process can open it (#351). A first message that
+  is malformed or isn't `Block` is reported in an `Error` message. Windows only for
+  now: elsewhere it answers with an `Error` message.
 - Exit status: 0 after a clean run or scan, 1 on a failure (also sent as an `Error`
   message, and marked on the block), and 2 for a usage error.
 
@@ -62,6 +65,7 @@ and stdout. It has no protocol connection and no control token.
      With the real-time loop stopped, another thread beats the heartbeat meanwhile (for
      at most `RESTART_GRACE`, 10 s), so the engine doesn't count a slow re-activation
      as a hang.
+   A `Block` or a second `Start` meanwhile changes nothing.
 5. Ends on `Stop`, the block's `stop` word, or the end of the control stream (the engine
    is gone, and its job object will end this process anyway). It then stops the loop,
    deactivates the plugin and marks the block `STATE_STOPPED`.
@@ -90,15 +94,20 @@ feature) over a block on the heap, with the control channel over in-process pipe
 - every failure marked on the block with its error and reported (an instrument, a mono
   effect, too many ports, an unknown id, no `Start`, an uninitialised block);
 - a bad saved state reported, with the plugin running on its defaults;
+- the block's handle taken from a first `Block` message, leaving the rest of the stream,
+  and an empty stream, a `Start`, an unknown tag, a cut frame or an oversized one
+  refused;
 - the loop's numbering, skipping, resets, failed and wrong-sized blocks, pacing and
   stop word, and `scan` listing only the hostable effects.
 
 **Not yet:**
-- CLAP filters in the graph, so nothing starts this process for a filter yet. The
-  launcher that creates the block and starts it in a kill-on-close job object with a
-  scrubbed environment is `jstream-platform-windows`'s `WindowsPluginHosts`, and the
-  supervisor that watches the heartbeat and restarts it with backoff is `jstream-core`'s
-  `HostSupervisor`.
+- CLAP filters on the master's and outputs' audio chains: the engine starts this
+  process only for each CLAP filter in a source's audio chain, through
+  `jstream-platform-windows`'s `WindowsPluginHosts` (the block, a kill-on-close job
+  object and a scrubbed environment) and `jstream-core`'s `HostSupervisor` (the
+  heartbeat, and restarts with backoff).
+- Writing the plugin's own parameter changes and saved state back to the filter's
+  settings.
 - The plugin's editor window.
 - Waking on a high-resolution timer on the media clock instead of sleeping.
 - Running a real plugin file, which needs a Windows hardware check.

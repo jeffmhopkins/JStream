@@ -50,7 +50,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `output.set_target`, `output.set_encoder`, `output.set_video_mix`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
-  `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`, `hotkey.set`,
+  `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
+  `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
@@ -83,7 +84,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
   `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
   every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
-- **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
+- **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
@@ -94,8 +95,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   implementation), and `VideoMixInfo`.
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   `SourceAudio` and `AudioFollow`, a source's audio settings; `BusInfo` and `SendInfo`,
-  the buses and the send matrix as reads report them; the fader range and its shared
-  check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
+  the buses and the send matrix as reads report them; `BusMonitor` and `MonitorTap`, a
+  bus's monitor, with its shared check (`BusMonitor::problem`, 0.42); the fader range and
+  its shared check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
   the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
   a `meters.tick` carries.
 - **Organisation** (`organise.rs`,
@@ -107,9 +109,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `video.snapshot`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
-  `studio.get`, `privacy.get`, `device.list`, `live.list` and `capture.targets`, with `QueryResult`
-  and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo` and
-  `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and
+  `studio.get`, `privacy.get`, `device.list`, `live.list`, `capture.targets` and
+  `source.sizes`, with `QueryResult`
+  and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
+  `CaptureTargetInfo` and `SourceSize` shapes the reads report. `state.get` carries the `Canvas`, and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
@@ -143,7 +146,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (Transitions above).
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
   (program, preview and the transition a switch started), `privacy.changed`,
-  `events.dropped`,
+  `source.size_changed`, `events.dropped`,
   `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
@@ -183,7 +186,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.43 because of scene filters
   and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
   `FilterOwner`'s `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and
-  `KindDescriptor.max_outset_px`); 0.39 added keyframe scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
+  `KindDescriptor.max_outset_px`); 0.42 added bus monitors (`bus.set_monitor`,
+  `BusInfo`'s `monitor`, `BusMonitor` and `MonitorTap`); 0.41 added the `VideoCodec`
+  values `hevc` and `av1`, which an encoder profile now accepts; 0.40 added runtime
+  source sizes (the `source.sizes` query and the `source.size_changed` event,
+  `SourceSize`); 0.39 added keyframe
+  scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
   `overrides`, the batch result's `dropped_overrides`, and placement edits whose
   `scene_id` names a keyframe scene); 0.38 added YouTube audience stats and the quota
   estimate (the `youtube.stats` event and query, `AudienceStatsInfo`, `QuotaInfo`,
@@ -467,6 +475,21 @@ the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
+**Monitors** (0.42, ADR-0028's D22): any bus, the master's included, may have a monitor,
+an output device the engine plays the bus on while the program mixer runs, so the
+operator hears it. `bus.set_monitor { bus_id, monitor? }` sets one, and with `monitor`
+omitted or null takes it away; `BusInfo` reports it as `monitor`, omitted for none.
+A `BusMonitor` is `{ device, tap }`: `device` names the output device as the platform
+does, empty (the default) for the system's default output, and at most 512 bytes with
+no control characters; `tap` is `pre_filters` (the bus's sum before its filters,
+through its fader and mute: "before FX") or `post_filters` (after them, the default:
+"after FX"). Neither tap goes through the master stage's chain. Whether the device is
+connected is never checked by the edit: a monitor is collection state, valid on any
+machine, and one whose device is missing stays silent. A tap a newer server sent parses
+as `unknown`, which `bus.set_monitor` refuses with `invalid_argument` on
+`monitor.tap`. The engine plays a monitor while the program stage runs; one it can't
+open stays silent and is retried, never failing `output.start`.
+
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
 an audio routing cycle can't be expressed. Filter chains (a source's from 0.22, the
 master stage's and outputs' from 0.29) hold no reference that could feed one bus from
@@ -669,12 +692,14 @@ never quote the key.
 Encoder profiles (0.13) are collection state as well
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 `encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
-`EncoderProfile`: H.264 video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
+`EncoderProfile`: H.264, HEVC or AV1 (the last two since 0.41) video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
 a `vbr` peak at least the average and at most 200000), a keyframe interval of 1..=10 s
 and a hardware preference (`prefer`, `require` or `avoid`, which an omitted field
 means), and AAC audio
 at 32..=320 kbit/s. Anything else, including a value a newer server sent as `unknown`,
-is refused with `invalid_argument` naming the field. `encoder.delete` is refused while
+is refused with `invalid_argument` naming the field. Whether the machine has an encoder
+for the codec is not checked there, since a profile is valid on any machine: an
+`output.start` on a machine with none fails. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with
 no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe every
 2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
@@ -883,6 +908,16 @@ Queries read and never change `rev`. Those that read the collection state carry 
   capture backend or the OS refuses the list. Added in 0.27.
 - `privacy.get`: whether the privacy screen is on (`on`). Runtime state, so no `rev`.
   Added in 0.33.
+- `source.sizes`: every source, ordered by ID, with its current `size` in pixels,
+  omitted while the source has no video frame (it hasn't started, it is audio-only, or
+  it failed). A source of a video kind with nothing to show, such as an `image` or
+  `media` source with no file or a `media` file with no video stream, draws a 1×1
+  transparent frame and reports that size. A source drawn at a density reports its own size, the size its frames are
+  placed at, not their pixels
+  ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). With
+  `source.size_changed` it is what a client needs to draw a legacy placement's box, crop
+  handles and a size in % of the source's own (ADR-0022 §4). Runtime state, so no
+  `rev`. Added in 0.40.
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
@@ -975,8 +1010,9 @@ default master send) for whatever audio differs from the kind's defaults, then a
 `filter.add` with the filter's place, switch and settings) or the previous value,
 undoing `item.set_source` is `item.set_source` back, and undoing
 `source.set_settings` is a patch of the old values. Undoing `bus.delete` is
-`bus.create`, `bus.set_fader` unless the fader was at its default, and a `send.set` for
-each send the bus had; `source.set_audio`, `bus.set_fader` and `send.set` are each
+`bus.create`, `bus.set_fader` unless the fader was at its default, `bus.set_monitor` if
+it had a monitor, and a `send.set` for each send the bus had; `source.set_audio`,
+`bus.set_fader`, `bus.set_monitor` and `send.set` are each
 undone by the same edit with the old values, and a new send by `send.remove`. Deleting a source that items still
 place or a setting refers to, a scene that a `scene` source shows or a setting refers
 to, or a bus a setting refers to, is rejected, so no edit removes more than the object
@@ -1015,7 +1051,8 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   creates or deletes, also reordered the scenes or also set the canvas size, or made its edits
   no longer apply. An item's transform and its geometry are one property, its
   placement, and which source it places (`item.set_source`) is another. Each audio
-  field a `source.set_audio` or `bus.set_fader` sets is its own property, and a send is
+  field a `source.set_audio` or `bus.set_fader` sets is its own property, as is a bus's
+  monitor, and a send is
   an object of its own, which uses its source and its bus. An
   edit touches the objects it creates, deletes or edits and the ones it places or
   names, such as an item's source. What the step touches is taken both from when it was recorded and from
@@ -1114,6 +1151,12 @@ After `welcome`, the server pushes every event to every client.
   naming the client that turned it on and with no `request_id`, so it never shows an
   uncovered picture. Runtime state, so no `rev`
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Added in 0.33.
+- `source.size_changed {source_id, size?}` says a source's size changed: it became
+  known (the first frame), changed, or became unknown (`size` omitted: the source
+  stopped, failed or was deleted; a deletion's comes after its `state.changed`). The
+  size is the one `source.sizes` reports, which a client reads once and then follows
+  with these events. Runtime state, so no `rev`
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -1328,8 +1371,8 @@ after 1.0:
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
   than 0.13, which sends none, never reads it. 0.19 adds `bus` the same way: only an error answering a bus or send edit
-  (`bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`)
-  names it. An older client's undo of its own `source.delete` restores the source's
+  (`bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`,
+  and since 0.42 `bus.set_monitor`) names it. An older client's undo of its own `source.delete` restores the source's
   sends, but if one's bus has since been deleted by another client, the undo fails with
   `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
   answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
@@ -1458,9 +1501,9 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
 - **Flips (0.32).** `flip_h` and `flip_v` are optional fields, an additive minor under
   [R-API-001](../../docs/RULES.md#R-API-001): an older peer ignores them, so it shows a
   flipped item unflipped, and one that writes the geometry back drops the flip.
-- **Not in 0.11 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
-  the engine's runtime source sizes, and live geometry values, which arrived in 0.26
-  with `live.set` ([Live values](#design)). Both are later minors.
+- **Not in 0.11:** `source.sizes` and `source.size_changed` (decision 4), which arrived
+  in 0.40 ([Queries](#design), [Events](#design)), and live geometry values, which
+  arrived in 0.26 with `live.set` ([Live values](#design)).
 
 ### Binary streams
 

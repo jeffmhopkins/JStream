@@ -16,11 +16,11 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, Edit, EncoderProfile, EncoderProfileId,
-    FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
-    ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId, OutputKind, ProtocolError, Rev,
-    SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta,
-    TransitionPresetId, VideoMix, VideoMixId,
+    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
+    EncoderProfileId, FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET,
+    ItemGeometry, ItemId, ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId,
+    OutputKind, ProtocolError, Rev, SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId,
+    SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -407,6 +407,9 @@ struct FileBus {
     name: String,
     gain_db: Finite32,
     muted: bool,
+    /// The bus's monitor; omitted for none (and in files from before monitors).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    monitor: Option<BusMonitor>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -458,7 +461,10 @@ impl Graph {
             .map(|filter| FileFilter {
                 id: filter.id.clone(),
                 kind: filter.kind.clone(),
-                kind_version: self.kinds.get(&filter.kind).map(|k| k.version),
+                kind_version: match self.kinds.get(&filter.kind) {
+                    Some(kind) => Some(kind.version),
+                    None => filter.unknown_kind_version,
+                },
                 enabled: filter.enabled,
                 settings: filter.settings.clone(),
             })
@@ -652,12 +658,25 @@ impl Graph {
             kinds: self.kinds,
         };
         for (object, edit) in rebuild(&graph, &file)? {
-            graph
-                .apply(std::slice::from_ref(&edit), None)
-                .map_err(|error| LoadError::Invalid {
-                    object,
-                    error: Box::new(error),
-                })?;
+            let applied = match &edit {
+                Edit::FilterAdd {
+                    owner,
+                    chain,
+                    filter_id,
+                    kind,
+                    ..
+                } if !graph.kinds.contains_key(kind) => crate::filter::add_unknown_kind(
+                    &mut graph.state,
+                    &graph.kinds,
+                    &edit,
+                    file_filter_version(&file, owner, *chain, filter_id),
+                ),
+                _ => graph.apply(std::slice::from_ref(&edit), None).map(|_| ()),
+            };
+            applied.map_err(|error| LoadError::Invalid {
+                object,
+                error: Box::new(error),
+            })?;
         }
         graph.rev = file.rev;
         Ok(graph)
@@ -674,6 +693,7 @@ fn file_buses(state: &crate::State) -> Vec<FileBus> {
             name: bus.name().to_owned(),
             gain_db: bus.gain_db(),
             muted: bus.muted(),
+            monitor: bus.monitor().cloned(),
         })
         .collect();
     if buses == [default_master()] {
@@ -690,6 +710,7 @@ fn default_master() -> FileBus {
         name: MASTER_NAME.to_owned(),
         gain_db: Finite32::ZERO,
         muted: false,
+        monitor: None,
     }
 }
 
@@ -1223,9 +1244,47 @@ fn rebuild_transitions(
     Ok(())
 }
 
-/// Pushes the edits that give the rebuilt collection `file`'s buses and their faders,
-/// before its sources: a bus depends on nothing, and a source's settings may refer to
-/// one (a `waveform`'s `audio`).
+/// The kind version `file` recorded for `filter_id` on `chain` of `owner`.
+fn file_filter_version(
+    file: &File,
+    owner: &FilterOwner,
+    chain: FilterChain,
+    filter_id: &FilterId,
+) -> Option<u32> {
+    let chains = match owner {
+        FilterOwner::Source { source_id } => {
+            &file.sources.iter().find(|s| &s.id == source_id)?.filters
+        }
+        FilterOwner::Output { output_id } => {
+            &file.outputs.iter().find(|o| &o.id == output_id)?.filters
+        }
+        FilterOwner::Master => &file.master.filters,
+        FilterOwner::Scene { scene_id } => &file.scenes.iter().find(|s| &s.id == scene_id)?.filters,
+        // An item's effects are one video chain (ADR-0065 §1).
+        FilterOwner::Item { item_id } => {
+            let effects = &file
+                .scenes
+                .iter()
+                .flat_map(|s| &s.items)
+                .find(|i| &i.id == item_id)?
+                .effects;
+            return match chain {
+                FilterChain::Video => effects.iter().find(|f| &f.id == filter_id)?.kind_version,
+                FilterChain::Audio => None,
+            };
+        }
+        _ => return None,
+    };
+    let filters = match chain {
+        FilterChain::Video => &chains.video,
+        FilterChain::Audio => &chains.audio,
+    };
+    filters.iter().find(|f| &f.id == filter_id)?.kind_version
+}
+
+/// Pushes the edits that give the rebuilt collection `file`'s buses, their faders and
+/// monitors, before its sources: a bus depends on nothing, and a source's settings may
+/// refer to one (a `waveform`'s `audio`).
 fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
     let default = default_master();
     for bus in &file.buses {
@@ -1256,6 +1315,15 @@ fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
                     bus_id: bus.id.clone(),
                     gain_db: Some(bus.gain_db),
                     muted: Some(bus.muted),
+                },
+            ));
+        }
+        if let Some(monitor) = &bus.monitor {
+            edits.push((
+                format!("bus `{}`", bus.id),
+                Edit::BusSetMonitor {
+                    bus_id: bus.id.clone(),
+                    monitor: Some(monitor.clone()),
                 },
             ));
         }

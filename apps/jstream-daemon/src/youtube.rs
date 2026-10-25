@@ -101,20 +101,20 @@ fn parse(text: &str) -> Result<Client, String> {
 }
 
 /// Gives `engine` YouTube with `client`, calling Google through `transport` and keeping
-/// the account's refresh token in `tokens`.
+/// the account's refresh token in `tokens`. Every token and stream key the account's
+/// client gets is registered with `secrets`, the crash reports' redaction (#353).
 #[cfg(any(windows, test))]
 pub fn set_up(
     engine: Engine,
     client: Client,
     transport: Arc<dyn HttpTransport>,
     tokens: Arc<dyn OAuthTokenStore>,
+    secrets: &jstream_crash::Secrets,
 ) -> Engine {
-    engine.with_youtube(YoutubeSetup::new(
-        client.id,
-        client.secret,
-        transport,
-        tokens,
-    ))
+    engine.with_youtube(
+        YoutubeSetup::new(client.id, client.secret, transport, tokens)
+            .with_secret_hook(secrets.hook()),
+    )
 }
 
 #[cfg(test)]
@@ -237,7 +237,39 @@ mod tests {
             },
             Arc::new(FakeTransport::new()),
             Arc::new(MemoryTokenStore::new()),
+            &jstream_crash::Secrets::new(),
         );
         assert_eq!(auth(&engine).await, YoutubeAuth::SignedOut);
+    }
+
+    /// The engine's YouTube hands its tokens to the crash reports' redaction: the
+    /// store here is not `Redacting`, so only the hook can register its token (#353).
+    #[test]
+    fn set_up_registers_the_accounts_token_with_the_crash_redaction() {
+        use super::{Client, set_up};
+        use jstream_core::{Engine, TOKEN_ACCOUNT};
+        use jstream_platform::fake::MemoryTokenStore;
+        use jstream_platform::{OAuthTokenStore, Secret};
+        use jstream_youtube::fake::FakeTransport;
+        use std::sync::Arc;
+
+        const STORED: &str = "1//0gfixture-daemon-stored-refresh";
+        let tokens = MemoryTokenStore::new();
+        tokens
+            .set(TOKEN_ACCOUNT, &Secret::new(STORED))
+            .expect("stores");
+        let secrets = jstream_crash::Secrets::new();
+        assert!(!secrets.is_registered(STORED));
+        let _engine = set_up(
+            Engine::new(),
+            Client {
+                id: ID.to_owned(),
+                secret: None,
+            },
+            Arc::new(FakeTransport::new()),
+            Arc::new(tokens),
+            &secrets,
+        );
+        assert!(secrets.is_registered(STORED));
     }
 }

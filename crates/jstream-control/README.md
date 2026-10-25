@@ -166,7 +166,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
     deleting the master or a bus a source's settings refer to (a `bus` reference, as
-    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
+    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, a monitor
+    `BusMonitor::problem` refuses (on `monitor.<field>`, after the bus), sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB;
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
     `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`
@@ -285,6 +286,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`;
+- `source.sizes`, answered with every source and no size, since the mock makes no
+  frames, so it never sends `source.size_changed`;
 - the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
   `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
   stream opened while it is on gets first;
