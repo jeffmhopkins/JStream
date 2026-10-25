@@ -12,6 +12,8 @@
 //! ALSA by the card's id in its PCM names. A capture card whose audio is a separate PCI
 //! function, rather than the same device, isn't paired.
 
+// The sysfs walk is used by V4L2 (64-bit Linux) and by the Unix-only sysfs tests.
+#[cfg(any(all(target_os = "linux", target_pointer_width = "64"), all(test, unix)))]
 use std::path::{Path, PathBuf};
 
 use jstream_platform::DeviceId;
@@ -114,6 +116,7 @@ pub(crate) fn alsa_card_inputs<'a>(inputs: impl IntoIterator<Item = &'a str>) ->
 /// The sound cards on the same hardware as video node `node` (`video0`), with the
 /// sysfs tree at `sys` (`/sys`), in index order. Empty when the node or the cards can't
 /// be read.
+#[cfg(any(all(target_os = "linux", target_pointer_width = "64"), all(test, unix)))]
 pub(crate) fn sound_cards_for(sys: &Path, node: &str) -> Vec<SoundCard> {
     let Some(root) = hardware_root(&sys.join("class/video4linux").join(node).join("device")) else {
         return Vec::new();
@@ -144,6 +147,7 @@ pub(crate) fn sound_cards_for(sys: &Path, node: &str) -> Vec<SoundCard> {
 /// The device a video node's `device` link names, or its parent when that is a USB
 /// interface (a directory with `bInterfaceNumber`): the USB device, which holds the
 /// audio interface too.
+#[cfg(any(all(target_os = "linux", target_pointer_width = "64"), all(test, unix)))]
 fn hardware_root(device: &Path) -> Option<PathBuf> {
     let device = std::fs::canonicalize(device).ok()?;
     if device.join("bInterfaceNumber").is_file() {
@@ -223,84 +227,89 @@ mod tests {
         assert_eq!(inputs.input_for(&[card(5, "X")]), None);
     }
 
-    /// A sysfs tree in a temporary directory, laid out as the kernel lays one out.
-    struct Sys(PathBuf);
+    /// The sysfs tests, which lay a tree out with symlinks: Unix only, since the module
+    /// also builds for tests on other targets.
+    #[cfg(unix)]
+    mod sysfs {
+        use super::*;
 
-    impl Sys {
-        fn new(name: &str) -> Self {
-            let root =
-                std::env::temp_dir().join(format!("jstream-pairing-{name}-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&root);
-            std::fs::create_dir_all(&root).expect("temp dir");
-            Self(root)
-        }
+        /// A sysfs tree in a temporary directory, laid out as the kernel lays one out.
+        struct Sys(PathBuf);
 
-        fn dir(&self, rel: &str) -> PathBuf {
-            let p = self.0.join(rel);
-            std::fs::create_dir_all(&p).expect("dir");
-            p
-        }
-
-        /// `devices/<rel>`, a USB interface when `interface`.
-        fn device(&self, rel: &str, interface: bool) -> PathBuf {
-            let p = self.dir(&format!("devices/{rel}"));
-            if interface {
-                std::fs::write(p.join("bInterfaceNumber"), "00\n").expect("write");
+        impl Sys {
+            fn new(name: &str) -> Self {
+                let root = std::env::temp_dir()
+                    .join(format!("jstream-pairing-{name}-{}", std::process::id()));
+                let _ = std::fs::remove_dir_all(&root);
+                std::fs::create_dir_all(&root).expect("temp dir");
+                Self(root)
             }
-            p
+
+            fn dir(&self, rel: &str) -> PathBuf {
+                let p = self.0.join(rel);
+                std::fs::create_dir_all(&p).expect("dir");
+                p
+            }
+
+            /// `devices/<rel>`, a USB interface when `interface`.
+            fn device(&self, rel: &str, interface: bool) -> PathBuf {
+                let p = self.dir(&format!("devices/{rel}"));
+                if interface {
+                    std::fs::write(p.join("bInterfaceNumber"), "00\n").expect("write");
+                }
+                p
+            }
+
+            fn link(&self, class_entry: &str, target: &Path) {
+                let entry = self.dir(class_entry);
+                std::os::unix::fs::symlink(target, entry.join("device")).expect("symlink");
+            }
+
+            fn card(&self, index: u32, id: &str, device: &Path) {
+                let entry = format!("class/sound/card{index}");
+                self.link(&entry, device);
+                std::fs::write(self.0.join(entry).join("id"), format!("{id}\n")).expect("write");
+            }
         }
 
-        fn link(&self, class_entry: &str, target: &Path) {
-            let entry = self.dir(class_entry);
-            std::os::unix::fs::symlink(target, entry.join("device")).expect("symlink");
+        impl Drop for Sys {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
         }
 
-        fn card(&self, index: u32, id: &str, device: &Path) {
-            let entry = format!("class/sound/card{index}");
-            self.link(&entry, device);
-            std::fs::write(self.0.join(entry).join("id"), format!("{id}\n")).expect("write");
+        /// A USB webcam's video and audio interfaces share their USB device, so its card
+        /// pairs and the onboard card doesn't; a node with no card on its device pairs
+        /// nothing, and a missing node reads as no cards.
+        #[test]
+        fn a_webcams_sound_card_is_found_under_its_usb_device() {
+            let sys = Sys::new("usb");
+            let video = sys.device("pci0000:00/0000:00:14.0/usb1/1-2/1-2:1.0", true);
+            let audio = sys.device("pci0000:00/0000:00:14.0/usb1/1-2/1-2:1.2", true);
+            let other_usb = sys.device("pci0000:00/0000:00:14.0/usb1/1-3/1-3:1.0", true);
+            let onboard = sys.device("pci0000:00/0000:00:1f.3", false);
+            sys.link("class/video4linux/video0", &video);
+            sys.link("class/video4linux/video2", &other_usb);
+            sys.card(0, "PCH", &onboard);
+            sys.card(2, "C920", &audio);
+
+            assert_eq!(sound_cards_for(&sys.0, "video0"), vec![card(2, "C920")]);
+            assert_eq!(sound_cards_for(&sys.0, "video2"), Vec::new());
+            assert_eq!(sound_cards_for(&sys.0, "video9"), Vec::new());
         }
-    }
 
-    impl Drop for Sys {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+        /// A PCI capture card whose sound card is on the same PCI function pairs with it;
+        /// one on another function of the same slot doesn't.
+        #[test]
+        fn a_capture_cards_sound_card_on_the_same_device_pairs() {
+            let sys = Sys::new("pci");
+            let card_dev = sys.device("pci0000:00/0000:00:1c.0/0000:03:00.0", false);
+            let sibling = sys.device("pci0000:00/0000:00:1c.0/0000:03:00.1", false);
+            sys.link("class/video4linux/video0", &card_dev);
+            sys.card(1, "HDMI", &card_dev);
+            sys.card(3, "Sibling", &sibling);
+
+            assert_eq!(sound_cards_for(&sys.0, "video0"), vec![card(1, "HDMI")]);
         }
-    }
-
-    /// A USB webcam's video and audio interfaces share their USB device, so its card
-    /// pairs and the onboard card doesn't; a node with no card on its device pairs
-    /// nothing, and a missing node reads as no cards.
-    #[cfg(unix)]
-    #[test]
-    fn a_webcams_sound_card_is_found_under_its_usb_device() {
-        let sys = Sys::new("usb");
-        let video = sys.device("pci0000:00/0000:00:14.0/usb1/1-2/1-2:1.0", true);
-        let audio = sys.device("pci0000:00/0000:00:14.0/usb1/1-2/1-2:1.2", true);
-        let other_usb = sys.device("pci0000:00/0000:00:14.0/usb1/1-3/1-3:1.0", true);
-        let onboard = sys.device("pci0000:00/0000:00:1f.3", false);
-        sys.link("class/video4linux/video0", &video);
-        sys.link("class/video4linux/video2", &other_usb);
-        sys.card(0, "PCH", &onboard);
-        sys.card(2, "C920", &audio);
-
-        assert_eq!(sound_cards_for(&sys.0, "video0"), vec![card(2, "C920")]);
-        assert_eq!(sound_cards_for(&sys.0, "video2"), Vec::new());
-        assert_eq!(sound_cards_for(&sys.0, "video9"), Vec::new());
-    }
-
-    /// A PCI capture card whose sound card is on the same PCI function pairs with it;
-    /// one on another function of the same slot doesn't.
-    #[cfg(unix)]
-    #[test]
-    fn a_capture_cards_sound_card_on_the_same_device_pairs() {
-        let sys = Sys::new("pci");
-        let card_dev = sys.device("pci0000:00/0000:00:1c.0/0000:03:00.0", false);
-        let sibling = sys.device("pci0000:00/0000:00:1c.0/0000:03:00.1", false);
-        sys.link("class/video4linux/video0", &card_dev);
-        sys.card(1, "HDMI", &card_dev);
-        sys.card(3, "Sibling", &sibling);
-
-        assert_eq!(sound_cards_for(&sys.0, "video0"), vec![card(1, "HDMI")]);
     }
 }
