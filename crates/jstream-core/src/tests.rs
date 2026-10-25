@@ -11,6 +11,7 @@ mod history;
 mod keyframes;
 mod live_values;
 mod preview;
+mod source_sizes;
 mod sources;
 mod transitions;
 #[cfg(all(windows, feature = "hw-tests"))]
@@ -22,8 +23,8 @@ use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, GestureId,
     Hello, IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION,
-    ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole,
-    SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
+    PixelSize, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId,
+    SceneRole, SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -2471,7 +2472,17 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     // Inset samples stay off the quad edge, where a linear filter can mix in the clear.
     assert_eq!(at(&rgba, width, 100, 100), [255, 0, 0, 255]);
     assert_eq!(at(&rgba, width, 640, 360), [255, 0, 0, 255]);
-    assert!(drain(&mut events).is_empty());
+    // The stored frame gave the webcam its size; nothing else was sent.
+    assert_eq!(
+        drain(&mut events),
+        vec![Event::SourceSizeChanged {
+            source_id: SourceId::new("webcam"),
+            size: Some(PixelSize {
+                width: 1920,
+                height: 1080,
+            }),
+        }]
+    );
 
     batch(
         &control,

@@ -886,10 +886,10 @@ needs = ["build", "wave", "maintainer"]
 id = "B12"
 milestone = "M2"
 title = "Source sizes as runtime state (source.sizes)"
-status = "planned"
-prs = []
-note = "ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
-needs = ["build"]
+status = "review"
+prs = [806]
+note = "ADR-0022 decision 4: part 1, the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40), is in review into wave/m1-5; capture sources' sizes follow (#805); it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
+needs = ["build", "wave"]
 
 [[item]]
 id = "C2b"

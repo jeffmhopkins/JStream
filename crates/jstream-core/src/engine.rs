@@ -43,7 +43,7 @@ use jstream_protocol::{
     EncoderProfile, EncoderSessionInfo, EntityKind, Event, FilterChain, GestureId, HistoryCall,
     HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
     PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SceneId, SecretString, SourceId, TransitionPresetId, TransitionStarted,
+    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
     YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
@@ -145,7 +145,8 @@ impl Engine {
 
     /// Stores the latest straight-alpha sRGB RGBA8 frame of `source_id`.
     ///
-    /// This is runtime state: it does not change `rev` and emits no event. A snapshot
+    /// This is runtime state: it does not change `rev`, and the only event it can send
+    /// is a `source.size_changed` when the frame changes the source's size. A snapshot
     /// uses it when an item places that source. A frame may arrive before the source
     /// exists; it is kept either way. Replaces any frame already stored for the id.
     /// A `source.delete` drops the deleted source's frame.
@@ -168,6 +169,10 @@ impl Engine {
         let frame = frame.with_version(state.frame_versions);
         state.frames.insert(source_id.clone(), frame);
         state.publish_render();
+        let mut wake = Vec::new();
+        state.sync_sizes(&mut wake);
+        drop(state);
+        wake_all(wake);
         Ok(())
     }
 
@@ -293,6 +298,8 @@ impl Engine {
             state.route_audio();
             // The loaded collection is what the program mix draws now.
             state.publish_render();
+            // No client is connected yet, so nobody is woken.
+            state.sync_sizes(&mut Vec::new());
             *file = Some(opened);
         }
         Ok(self)
@@ -1712,6 +1719,24 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// Forgets every source's size without telling anyone, as if plans had taken new
+    /// frames since the last `sync_sizes`, so a test sees which re-plan catches up.
+    #[cfg(test)]
+    pub(crate) fn forget_sizes(&self) {
+        lock(&self.shared.state).sizes.clear();
+    }
+
+    /// Hands the first video filter asset back to the engine as if its load had just
+    /// finished, through [`LiveHost::install_asset`]. Returns whether there was one.
+    #[cfg(test)]
+    pub(crate) fn reinstall_asset(&self) -> bool {
+        let Some(loaded) = lock(&self.shared.state).live.reload_asset() else {
+            return false;
+        };
+        LiveHost::install_asset(&*self.shared, loaded);
+        true
+    }
+
     /// Runs the live sources on `clock`, for tests that move time by hand.
     #[cfg(test)]
     pub(crate) fn set_source_clock(&self, clock: Arc<dyn jstream_platform::MediaClock>) {
@@ -1730,7 +1755,7 @@ impl Engine {
     /// thread does when a frame is due, for tests that move time by hand.
     #[cfg(test)]
     pub(crate) fn replan(&self) {
-        lock(&self.shared.state).publish_render();
+        self.shared.replan_and_sync();
     }
 }
 
@@ -2123,9 +2148,14 @@ fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake:
 
 /// [`Engine::use_gpu`] and its undo.
 fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
-    let mut state = lock(&shared.state);
-    state.live.use_gpu(context);
-    state.publish_render();
+    let mut wake = Vec::new();
+    {
+        let mut state = lock(&shared.state);
+        state.live.use_gpu(context);
+        state.publish_render();
+        state.sync_sizes(&mut wake);
+    }
+    wake_all(wake);
 }
 
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
@@ -2155,6 +2185,14 @@ fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<A
         }
         waited_ms = 0;
         emit_sampled(&shared, &ledger);
+    }
+}
+
+/// A frame size as the protocol reports it.
+fn pixel_size(size: FrameSize) -> PixelSize {
+    PixelSize {
+        width: size.width(),
+        height: size.height(),
     }
 }
 
@@ -2238,6 +2276,10 @@ struct State {
     /// Forgets the capture backend's grant for each deleted source, once there are
     /// backends ([`ForgetSources`]).
     forget: Option<ForgetSources>,
+    /// Each source's size as `source.sizes` reports it and `source.size_changed` last
+    /// announced it (ADR-0022 §4): runtime state, not part of `rev`. A source with no
+    /// size has no entry.
+    sizes: BTreeMap<SourceId, FrameSize>,
 }
 
 impl State {
@@ -2529,6 +2571,8 @@ impl State {
         if moved {
             self.emit_studio(client_id, request_id, None, wake);
         }
+        // After `state.changed`, so a deleted source's size goes after its deletion.
+        self.sync_sizes(wake);
     }
 
     fn action(
@@ -2645,6 +2689,17 @@ impl State {
                 Query::PrivacyGet => QueryResult::PrivacyGet {
                     on: self.privacy.on(),
                 },
+                Query::SourceSizes => QueryResult::SourceSizes {
+                    sources: self
+                        .graph
+                        .state()
+                        .sources()
+                        .map(|source| SourceSize {
+                            source_id: source.id().clone(),
+                            size: self.sizes.get(source.id()).copied().map(pixel_size),
+                        })
+                        .collect(),
+                },
                 other => return Err(not_implemented(other.name())),
             },
         };
@@ -2721,6 +2776,8 @@ impl State {
             Some(transition::started(preset_id, end_ms)),
             wake,
         );
+        // The scene now on program can show a source no plan reached before.
+        self.sync_sizes(wake);
         Ok(())
     }
 
@@ -2743,6 +2800,53 @@ impl State {
             },
             wake,
         );
+    }
+
+    /// Brings `sizes` in line with each source's size now and sends a
+    /// `source.size_changed` for every change (ADR-0022 §4): a stored frame's size wins
+    /// over the live source's, as its frame does, and a source deleted since loses its
+    /// size. Runs after every plan.
+    fn sync_sizes(&mut self, wake: &mut Vec<Waker>) {
+        let Self {
+            graph,
+            frames,
+            live,
+            sizes,
+            subscribers,
+            ..
+        } = self;
+        let state = graph.state();
+        let mut emit = |source_id: &SourceId, size: Option<FrameSize>| {
+            subscribers.emit(
+                &Event::SourceSizeChanged {
+                    source_id: source_id.clone(),
+                    size: size.map(pixel_size),
+                },
+                wake,
+            );
+        };
+        sizes.retain(|source_id, _| {
+            let kept = state.source(source_id).is_some();
+            if !kept {
+                emit(source_id, None);
+            }
+            kept
+        });
+        for source in state.sources() {
+            let source_id = source.id();
+            let now = match frames.get(source_id) {
+                Some(frame) => frame.extent(),
+                None => live.size(source_id),
+            };
+            if sizes.get(source_id) == now.as_ref() {
+                continue;
+            }
+            match now {
+                Some(size) => sizes.insert(source_id.clone(), size),
+                None => sizes.remove(source_id),
+            };
+            emit(source_id, now);
+        }
     }
 
     /// Re-plans the program mix and the scene each video mix shows at the current time,
@@ -2964,26 +3068,50 @@ impl PreviewSource for Shared {
     }
 }
 
+impl Shared {
+    /// Re-plans now and announces the sizes that changed, waking the subscribers once
+    /// the collection lock is released.
+    fn replan_and_sync(&self) {
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            state.publish_render();
+            state.sync_sizes(&mut wake);
+        }
+        wake_all(wake);
+    }
+}
+
 impl LiveHost for Shared {
     fn install(&self, built: Built) {
-        let mut state = lock(&self.state);
-        let state = &mut *state;
+        let mut guard = lock(&self.state);
+        let state = &mut *guard;
+        let mut wake = Vec::new();
         if state.live.install(built) {
             // A source built with audio of its own is recorded from now on.
             state.audio.sync(state.graph.state(), state.live.audio());
             state.publish_render();
+            state.sync_sizes(&mut wake);
         }
+        drop(guard);
+        wake_all(wake);
     }
 
     fn install_asset(&self, loaded: LoadedAsset) {
-        let mut state = lock(&self.state);
-        if state.live.install_asset(loaded) {
-            state.publish_render();
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            if state.live.install_asset(loaded) {
+                // The plan can take a source's new frame, and so a new size.
+                state.publish_render();
+                state.sync_sizes(&mut wake);
+            }
         }
+        wake_all(wake);
     }
 
     fn replan(&self) {
-        lock(&self.state).publish_render();
+        self.replan_and_sync();
     }
 }
 
