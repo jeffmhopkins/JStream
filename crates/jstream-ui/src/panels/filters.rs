@@ -1697,6 +1697,7 @@ mod tests {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params,
         }
     }
@@ -1920,12 +1921,14 @@ mod tests {
             geometry: None,
             crop: Crop::NONE,
             visible: true,
+            effects: Vec::new(),
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
+            filters: Default::default(),
             variant_of: None,
             scene_id: id.into(),
             name: id.to_uppercase(),

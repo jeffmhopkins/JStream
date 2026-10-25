@@ -73,6 +73,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![
                 param(
                     "color",
@@ -99,6 +100,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         },
     ]

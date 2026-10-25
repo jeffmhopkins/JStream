@@ -98,6 +98,69 @@ pub struct BusInfo {
     pub gain_db: Finite32,
     /// Whether the bus is muted.
     pub muted: bool,
+    /// The bus's monitor, if it has one (since 0.42; omitted when it has none).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitor: Option<BusMonitor>,
+}
+
+/// The most bytes a [`BusMonitor`]'s `device` holds.
+pub const MAX_MONITOR_DEVICE_LEN: usize = 512;
+
+/// A bus's monitor (ADR-0028, D22): an output device the engine plays the bus on while
+/// the program mixer runs, for the operator to hear. Collection state, set by
+/// `bus.set_monitor`. A monitor hears the bus through its fader and mute and never
+/// through the master's filters, so it is not what an output carries.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct BusMonitor {
+    /// The output device, as the platform names it; empty (the default) for the
+    /// system's default output, which the monitor follows when it changes. A device
+    /// that isn't connected leaves the monitor silent; the edit is not refused. At most
+    /// 512 bytes.
+    #[serde(default)]
+    pub device: String,
+    /// Where on the bus the monitor listens. Omitted means `post_filters`.
+    #[serde(default)]
+    pub tap: MonitorTap,
+}
+
+impl BusMonitor {
+    /// Why an engine can't take this monitor, as the field (relative to the monitor,
+    /// `tap`) and the reason, or `None` when it can. Every engine and the mock check a
+    /// monitor with this, so they refuse the same ones. Whether the device is
+    /// connected is not part of it: the monitor is collection state, valid on any
+    /// machine.
+    pub fn problem(&self) -> Option<(&'static str, String)> {
+        if self.device.len() > MAX_MONITOR_DEVICE_LEN {
+            return Some((
+                "device",
+                format!("must be at most {MAX_MONITOR_DEVICE_LEN} bytes"),
+            ));
+        }
+        if self.device.chars().any(char::is_control) {
+            return Some(("device", "must not contain control characters".into()));
+        }
+        if self.tap == MonitorTap::Unknown {
+            return Some(("tap", "is not a tap point this engine knows".into()));
+        }
+        None
+    }
+}
+
+/// Where a bus's monitor listens (ADR-0028, D22). Serialized as a snake_case string.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum MonitorTap {
+    /// The bus's sum before its filters, through its fader and mute: "before FX".
+    PreFilters,
+    /// The bus after its filters, fader and mute: "after FX", what the bus feeds.
+    #[default]
+    PostFilters,
+    /// A tap point this version of the protocol doesn't know, from a newer server. The
+    /// engine refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// One send: a source's audio routed into a bus, post-fader, as `bus.list` and
@@ -162,9 +225,76 @@ pub struct Loudness {
 
 #[cfg(test)]
 mod tests {
-    use super::{AudioFollow, MAX_BUSES, SourceAudio, gain_db_problem};
-    use crate::Finite32;
+    use super::{
+        AudioFollow, BusInfo, BusMonitor, MAX_BUSES, MAX_MONITOR_DEVICE_LEN, MonitorTap,
+        SourceAudio, gain_db_problem,
+    };
+    use crate::{BusId, Finite32};
     use serde_json::{Value, json};
+
+    /// A monitor's fields may be left out (the default output, after the filters), a
+    /// later tap parses as `unknown`, and a bus with no monitor omits the field, so a
+    /// 0.41 payload parses as none.
+    #[test]
+    fn monitor_wire_form() {
+        let monitor: Option<BusMonitor> = serde_json::from_value(json!({})).ok();
+        assert_eq!(monitor, Some(BusMonitor::default()));
+        assert_eq!(BusMonitor::default().tap, MonitorTap::PostFilters);
+        let monitor: Option<BusMonitor> =
+            serde_json::from_value(json!({"device": "hp", "tap": "pre_filters"})).ok();
+        assert_eq!(
+            monitor,
+            Some(BusMonitor {
+                device: "hp".into(),
+                tap: MonitorTap::PreFilters,
+            })
+        );
+        let later: Option<MonitorTap> = serde_json::from_value(json!("pre_master")).ok();
+        assert_eq!(later, Some(MonitorTap::Unknown));
+        let bus = BusInfo {
+            bus_id: BusId::master(),
+            name: "Master".into(),
+            gain_db: Finite32::ZERO,
+            muted: false,
+            monitor: None,
+        };
+        let wire = serde_json::to_value(&bus).ok();
+        assert_eq!(
+            wire,
+            Some(json!({"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}))
+        );
+        let back: Option<BusInfo> = wire.and_then(|wire| serde_json::from_value(wire).ok());
+        assert_eq!(back, Some(bus));
+    }
+
+    /// `problem` refuses an unknown tap and a device name too long or with control
+    /// characters, naming the field; any other device is valid, connected or not.
+    #[test]
+    fn monitor_problems() {
+        let field = |device: &str, tap| {
+            BusMonitor {
+                device: device.into(),
+                tap,
+            }
+            .problem()
+            .map(|(field, _)| field)
+        };
+        assert_eq!(field("", MonitorTap::PreFilters), None);
+        assert_eq!(field("not connected", MonitorTap::PostFilters), None);
+        assert_eq!(
+            field(&"d".repeat(MAX_MONITOR_DEVICE_LEN), MonitorTap::PostFilters),
+            None
+        );
+        assert_eq!(
+            field(
+                &"d".repeat(MAX_MONITOR_DEVICE_LEN + 1),
+                MonitorTap::PostFilters
+            ),
+            Some("device")
+        );
+        assert_eq!(field("a\nb", MonitorTap::PostFilters), Some("device"));
+        assert_eq!(field("", MonitorTap::Unknown), Some("tap"));
+    }
 
     #[test]
     fn source_audio_wire_form() {

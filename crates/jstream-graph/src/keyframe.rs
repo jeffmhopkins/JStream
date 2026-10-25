@@ -76,6 +76,7 @@ fn create(
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),
         overrides: Overrides::new(),
+        filters: Default::default(),
     });
     Ok(vec![Edit::SceneDelete {
         scene_id: scene_id.clone(),

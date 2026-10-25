@@ -11,8 +11,8 @@ use crate::apply::{already_exists, blocked, check_id, check_name, invalid, not_f
 use crate::deps::{self, Node};
 use crate::model::{Bus, MAX_BUSES, State};
 use jstream_protocol::{
-    AudioFollow, BusId, Edit, EntityKind, Finite32, KindDescriptor, ProtocolError, SourceAudio,
-    SourceId, SourceKind, gain_db_problem,
+    AudioFollow, BusId, BusMonitor, Edit, EntityKind, Finite32, KindDescriptor, ProtocolError,
+    SourceAudio, SourceId, SourceKind, gain_db_problem,
 };
 use std::collections::BTreeMap;
 
@@ -167,6 +167,7 @@ pub(crate) fn apply(
             gain_db,
             muted,
         } => set_fader(state, bus_id, *gain_db, *muted, at),
+        Edit::BusSetMonitor { bus_id, monitor } => set_monitor(state, bus_id, monitor, at),
         Edit::BusDelete { bus_id } => delete_bus(state, bus_id, at),
         Edit::SendSet {
             source_id,
@@ -331,6 +332,23 @@ fn set_fader(
     Ok(vec![inverse])
 }
 
+fn set_monitor(
+    state: &mut State,
+    id: &BusId,
+    monitor: &Option<BusMonitor>,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let bus = existing_bus(state, id)?;
+    if let Some((field, reason)) = monitor.as_ref().and_then(BusMonitor::problem) {
+        return Err(invalid(at, &format!("monitor.{field}"), reason));
+    }
+    let old = std::mem::replace(&mut bus.monitor, monitor.clone());
+    Ok(vec![Edit::BusSetMonitor {
+        bus_id: id.clone(),
+        monitor: old,
+    }])
+}
+
 fn delete_bus(state: &mut State, id: &BusId, at: usize) -> Result<Vec<Edit>, ProtocolError> {
     if !state.buses.contains_key(id) {
         return Err(not_found(EntityKind::Bus, id.as_str()));
@@ -358,6 +376,12 @@ fn delete_bus(state: &mut State, id: &BusId, at: usize) -> Result<Vec<Edit>, Pro
             bus_id: bus.id.clone(),
             gain_db: (bus.gain_db != Finite32::ZERO).then_some(bus.gain_db),
             muted: bus.muted.then_some(true),
+        });
+    }
+    if let Some(monitor) = bus.monitor {
+        inverse.push(Edit::BusSetMonitor {
+            bus_id: bus.id.clone(),
+            monitor: Some(monitor),
         });
     }
     let mut restore = Vec::new();

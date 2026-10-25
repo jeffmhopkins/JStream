@@ -1010,6 +1010,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/Finite32",
           "description": "The bus fader, in dB, applied after the sum: from −100 to +24."
         },
+        "monitor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusMonitor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The bus's monitor, if it has one (since 0.42; omitted when it has none)."
+        },
         "muted": {
           "description": "Whether the bus is muted.",
           "type": "boolean"
@@ -1081,6 +1092,22 @@ source: crates/jstream-protocol/src/fixtures.rs
         "peak",
         "rms"
       ],
+      "type": "object"
+    },
+    "BusMonitor": {
+      "description": "A bus's monitor (ADR-0028, D22): an output device the engine plays the bus on while\nthe program mixer runs, for the operator to hear. Collection state, set by\n`bus.set_monitor`. A monitor hears the bus through its fader and mute and never\nthrough the master's filters, so it is not what an output carries.",
+      "properties": {
+        "device": {
+          "default": "",
+          "description": "The output device, as the platform names it; empty (the default) for the\nsystem's default output, which the monitor follows when it changes. A device\nthat isn't connected leaves the monitor silent; the edit is not refused. At most\n512 bytes.",
+          "type": "string"
+        },
+        "tap": {
+          "$ref": "#/$defs/MonitorTap",
+          "default": "post_filters",
+          "description": "Where on the bus the monitor listens. Omitted means `post_filters`."
+        }
+      },
       "type": "object"
     },
     "Call": {
@@ -3548,7 +3575,36 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+          "description": "Gives a bus a monitor, the master's included, or (with `monitor` omitted or null)\ntakes its monitor away (since 0.42). A monitor `BusMonitor::problem` refuses is\n`invalid_argument` on `monitor.<field>`; a device that isn't connected is not\nrefused. Inverse: `bus.set_monitor` with the previous monitor, or none.",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus to change."
+            },
+            "monitor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusMonitor"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The monitor, or none."
+            },
+            "type": {
+              "const": "bus.set_monitor",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bus_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -3884,6 +3940,35 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "output_id",
             "state"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A source's size changed (ADR-0022 §4, 0.40), including when it became known (its\nfirst frame) or unknown (it stopped, failed, or was deleted). Runtime state, so it\ncarries no `rev`. The size is the one `source.sizes` reports.",
+          "properties": {
+            "size": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PixelSize"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Its new size. Omitted when it has no video frame now."
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source.size_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
           ],
           "type": "object"
         },
@@ -4363,7 +4448,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "FilterOwner": {
-      "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
+      "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
       "oneOf": [
         {
           "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -4411,6 +4496,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "output_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine runs this chain on the scene's composite.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An item's effects, which run on that one placement's cropped, fitted box, before\nits opacity and blend (ADR-0065 §5, since 0.43). A video chain only. Item IDs are\nunique across scenes, so no scene is named. The engine refuses this owner with\n`invalid_argument` on `owner` until item effects are built.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item."
+            },
+            "type": {
+              "const": "item",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
           ],
           "type": "object"
         }
@@ -4821,6 +4942,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/Crop",
           "description": "How much of the source it cuts off."
         },
+        "effects": {
+          "description": "Its effects (ADR-0065, since 0.43): a video chain, first filter first, which\n`filter.*` edits with the owner `{\"type\":\"item\",\"item_id\":…}`. They run on this\nplacement's cropped, fitted box, before its opacity and blend. Omitted while\nempty, so missing (also from an older server) parses as none.",
+          "items": {
+            "$ref": "#/$defs/FilterInfo"
+          },
+          "type": "array"
+        },
         "geometry": {
           "anyOf": [
             {
@@ -5031,6 +5159,15 @@ source: crates/jstream-protocol/src/fixtures.rs
         "kind_id": {
           "description": "The kind's ID, as in [`KindSummary::kind_id`].",
           "type": "string"
+        },
+        "max_outset_px": {
+          "description": "For a `video_filter` kind that draws outside its input (a drop shadow, a glow, an\noutline): the most it can draw beyond each edge, in pixels, at any settings\n(ADR-0065 §5, since 0.43). An item's effects layer is padded by the sum over its\nenabled effects, so a live edit never resizes it. On a source's or a scene's chain\nit is ignored, since the output there is the input's size. Omitted for none,\nand for every other category.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "name": {
           "description": "Display name.",
@@ -5283,6 +5420,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         "height"
       ],
       "type": "object"
+    },
+    "MonitorTap": {
+      "description": "Where a bus's monitor listens (ADR-0028, D22). Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "pre_filters",
+          "description": "The bus's sum before its filters, through its fader and mute: \"before FX\".",
+          "type": "string"
+        },
+        {
+          "const": "post_filters",
+          "description": "The bus after its filters, fader and mute: \"after FX\", what the bus feeds.",
+          "type": "string"
+        }
+      ]
     },
     "OutputId": {
       "description": "An output (RTMP(S), recording, virtual camera).",
@@ -5955,6 +6107,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "type": {
               "const": "source.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Every source's current size (ADR-0022 §4, 0.40): runtime state, so the result\ncarries no `rev`. A source drawn at a density reports its own size, the size its\nframes are placed at, not its pixels (ADR-0073). `source.size_changed` reports each\nchange after this.",
+          "properties": {
+            "type": {
+              "const": "source.sizes",
               "type": "string"
             }
           },
@@ -6919,6 +7084,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `source.sizes`. Runtime state, so it carries no `rev`.",
+          "properties": {
+            "sources": {
+              "description": "Every source in the collection, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/SourceSize"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "source.sizes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "sources"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `capture.targets`.",
           "properties": {
             "targets": {
@@ -7159,6 +7345,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "favourite": {
           "description": "Whether it is a favourite. JStream is single-user, so this is not per person.\nOmitted for `false`.",
           "type": "boolean"
+        },
+        "filters": {
+          "$ref": "#/$defs/FilterChains",
+          "description": "Its filter chains (ADR-0065, since 0.43), which `filter.*` edits with the owner\n`{\"type\":\"scene\",\"scene_id\":…}`. They run on the scene's composite. Only the video\nchain holds filters, and a keyframe scene has none of its own, since it shows its\nparent's. Omitted while both are empty, so missing (also from an older server)\nparses as none."
         },
         "folder": {
           "anyOf": [
@@ -7607,6 +7797,30 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "SourceSize": {
+      "description": "One source's current size, in a `source.sizes` result.",
+      "properties": {
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PixelSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its current frame's size. Omitted while the source has no video frame: it hasn't\nstarted, it has no video (an audio-only kind), or it failed."
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId",
+          "description": "The source."
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "type": "object"
+    },
     "StatsPolling": {
       "description": "How the engine polls audience stats, by how much of the day's estimated YouTube\nquota is left (ADR-0041 §5). Serialized as a snake_case string.",
       "oneOf": [
@@ -7858,11 +8072,21 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "VideoCodec": {
-      "description": "A video codec. Serialized as a snake_case string.",
+      "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP; a recording takes H.264 only so far, and its start fails with another.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
       "oneOf": [
         {
           "const": "h264",
           "description": "H.264 (AVC).",
+          "type": "string"
+        },
+        {
+          "const": "hevc",
+          "description": "HEVC (H.265). Since 0.41.",
+          "type": "string"
+        },
+        {
+          "const": "av1",
+          "description": "AV1. Since 0.41.",
           "type": "string"
         }
       ]
@@ -8334,5 +8558,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.39"
+  "title": "JStream protocol 0.43"
 }

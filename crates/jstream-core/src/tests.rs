@@ -11,6 +11,7 @@ mod history;
 mod keyframes;
 mod live_values;
 mod preview;
+mod source_sizes;
 mod sources;
 mod transitions;
 #[cfg(all(windows, feature = "hw-tests"))]
@@ -22,8 +23,8 @@ use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, GestureId,
     Hello, IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION,
-    ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole,
-    SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
+    PixelSize, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId,
+    SceneRole, SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -436,7 +437,7 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
         }],
     );
     let engine = Engine::new();
-    let scan = engine.scan_clap_plugins(&OneDir(dir.clone(), fake));
+    let scan = engine.scan_clap_plugins(std::sync::Arc::new(OneDir(dir.clone(), fake)));
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(scan.kinds.len(), 1);
     assert_eq!(scan.kinds[0].file, file);
@@ -478,9 +479,9 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
         matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.kind.kind"),
         "{error:?}"
     );
-    // Nothing runs a CLAP filter yet, and a collection holding one wouldn't load before
-    // the next scan, so `filter.add` refuses the kind.
-    let error = batch(
+    // A CLAP filter is added like any filter, its settings completed from the plugin's
+    // parameters.
+    let added = batch(
         &control,
         Batch {
             edits: vec![
@@ -488,7 +489,7 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
                     source_id: SourceId::new("mic"),
                     name: "mic".into(),
                     kind: SourceKind::Builtin {
-                        kind: "tone".into(),
+                        kind: "desktop_audio".into(),
                     },
                     settings: Default::default(),
                     duplicated_from: None,
@@ -510,9 +511,99 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
             ends_gesture: None,
         },
     )
-    .expect_err("a CLAP filter can't be added yet");
+    .expect("a CLAP filter is added");
+    assert_eq!(added, Rev(1));
+    let Ok(QueryResult::SourceList { sources, .. }) = query(&control, Query::SourceList) else {
+        panic!("source.list");
+    };
+    let filter = &sources[0].filters.audio[0];
+    assert_eq!(filter.kind, "clap/org.example.gain");
+    assert_eq!(filter.settings.get("1"), Some(&serde_json::json!(1.0)));
+}
+
+/// The engine takes scene filters (ADR-0065), which run on the scene's composite. The
+/// graph holds item effects too, but nothing renders them yet, so the engine refuses a
+/// filter edit on an item, on `owner`, once the graph's own checks pass; a batch the
+/// graph would refuse gets the graph's answer.
+#[test]
+fn scene_filters_are_taken_and_item_effects_refused_until_rendered() {
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner, ItemId, SceneId};
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let setup = vec![
+        Edit::SceneCreate {
+            scene_id: SceneId::new("s"),
+            name: "S".into(),
+            role: None,
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("bg"),
+            name: "bg".into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        },
+        Edit::ItemAdd {
+            scene_id: SceneId::new("s"),
+            item_id: ItemId::new("i"),
+            source_id: SourceId::new("bg"),
+            transform: None,
+            geometry: None,
+            opacity: None,
+            blend: None,
+        },
+    ];
+    let rev = batch(
+        &control,
+        Batch {
+            edits: setup,
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("set up");
+    let sharpen = |owner: FilterOwner| Edit::FilterAdd {
+        owner,
+        chain: FilterChain::Video,
+        filter_id: FilterId::new("f"),
+        kind: "sharpen".into(),
+        settings: Default::default(),
+        enabled: None,
+        index: None,
+    };
+    let item = FilterOwner::Item {
+        item_id: ItemId::new("i"),
+    };
+    let error = batch(&control, Batch::single(sharpen(item))).expect_err("refused");
     assert!(
-        matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.1.kind"),
+        matches!(
+            error.protocol(),
+            Some(ProtocolError::InvalidArgument { field, reason, .. })
+                if field == "edits.0.owner" && reason.contains("not rendered yet")
+        ),
+        "{error:?}"
+    );
+    assert_eq!(engine.rev(), rev, "nothing applied");
+    let scene = FilterOwner::Scene {
+        scene_id: SceneId::new("s"),
+    };
+    let taken = batch(&control, Batch::single(sharpen(scene))).expect("a scene filter");
+    assert!(taken > rev);
+    let ghost = FilterOwner::Item {
+        item_id: ItemId::new("ghost"),
+    };
+    let error = batch(&control, Batch::single(sharpen(ghost))).expect_err("not found");
+    assert!(
+        matches!(
+            error.protocol(),
+            Some(ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                ..
+            })
+        ),
         "{error:?}"
     );
 }
@@ -2352,14 +2443,17 @@ pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The output states among the buffered events. `stats.tick` and `meters.tick` are
-/// skipped: the pipeline emits them while it runs, and a final `stats.tick` when it stops.
+/// The output states among the buffered events. `stats.tick`, `meters.tick` and
+/// `source.size_changed` are skipped: the pipeline emits the ticks while it runs, and a
+/// final `stats.tick` when it stops, and a capture source's size as its capture's
+/// frames come and go, at any point of a start or stop.
 fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
     drain(events)
         .into_iter()
         .filter_map(|event| match event {
             Event::OutputStateChanged { state, .. } => Some(state),
             Event::StatsTick { .. } | Event::MetersTick { .. } => None,
+            Event::SourceSizeChanged { .. } => None,
             other => panic!("unexpected event {other:?}"),
         })
         .collect()
@@ -2471,7 +2565,17 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     // Inset samples stay off the quad edge, where a linear filter can mix in the clear.
     assert_eq!(at(&rgba, width, 100, 100), [255, 0, 0, 255]);
     assert_eq!(at(&rgba, width, 640, 360), [255, 0, 0, 255]);
-    assert!(drain(&mut events).is_empty());
+    // The stored frame gave the webcam its size; nothing else was sent.
+    assert_eq!(
+        drain(&mut events),
+        vec![Event::SourceSizeChanged {
+            source_id: SourceId::new("webcam"),
+            size: Some(PixelSize {
+                width: 1920,
+                height: 1080,
+            }),
+        }]
+    );
 
     batch(
         &control,

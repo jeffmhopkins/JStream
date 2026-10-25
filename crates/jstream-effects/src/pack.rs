@@ -72,6 +72,7 @@ impl Pack {
                 version: effect.version,
                 video: true,
                 audio: false,
+                max_outset_px: None,
                 params,
             };
             loaded.push(Effect {

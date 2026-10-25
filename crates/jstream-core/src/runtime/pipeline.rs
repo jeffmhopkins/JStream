@@ -48,8 +48,8 @@ use std::time::{Duration, Instant};
 
 use jstream_audio::{BusControl, Mixer, MixerConfig, OutputTapId};
 use jstream_encode::{
-    AudioInput, AudioSession, PushError, SessionOptions, SessionRegistry, SessionStats, StreamEnd,
-    SubscriberStats, Subscription, VideoInput, VideoPath, VideoSession,
+    AudioInput, AudioSession, EncodeError, PushError, SessionOptions, SessionRegistry,
+    SessionStats, StreamEnd, SubscriberStats, Subscription, VideoInput, VideoPath, VideoSession,
 };
 use jstream_media::{
     AudioBuffer, AudioFormat, ChannelLayout, Codec, ColorInfo, ColorRange, ColorSpace, FrameSize,
@@ -57,9 +57,9 @@ use jstream_media::{
 };
 use jstream_platform::wgpu;
 use jstream_platform::{
-    AudioEncoderConfig, AudioIo, Backends, Capture, Codecs, GpuContext, GpuFrame, GpuInterop,
-    HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices, VideoEncoderConfig,
-    VideoSurface,
+    AudioEncoderConfig, AudioIo, Backends, Capture, CodecRole, Codecs, GpuContext, GpuFrame,
+    GpuInterop, HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices,
+    VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
@@ -71,7 +71,7 @@ use jstream_render::{
 };
 use jstream_sources::AudioScopes;
 
-use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
+use crate::audio::{MasterMetering, MixerHandles, MonitorRoute, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
 use crate::chain::Chains;
 use crate::drops::{
@@ -80,6 +80,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
+use crate::privacy::Privacy;
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -543,6 +544,9 @@ pub(crate) struct Program {
     collector: Option<JoinHandle<()>>,
     mixer: Option<JoinHandle<()>>,
     forward: Option<JoinHandle<()>>,
+    /// Hands the captures' sizes to the engine. It ends once the render thread has let
+    /// go of its captures.
+    sizes: Option<JoinHandle<()>>,
     clock: Arc<dyn MediaClock>,
     codecs: Arc<dyn Codecs>,
     size: FrameSize,
@@ -729,6 +733,7 @@ impl Drop for Program {
         // These end once the render and mixer threads have dropped their senders.
         join("collector", self.collector.take());
         join("program watch", self.forward.take());
+        join("capture sizes", self.sizes.take());
         join("stats", self.ticker.take());
         // After the threads stop, so the latch sees their final counters.
         self.drop_guard.take();
@@ -1182,6 +1187,10 @@ pub(crate) struct Parts {
     /// Whether the privacy screen is on: the engine sets it, the render thread reads it
     /// every tick, with no lock (ADR-0027 §4).
     privacy: Arc<AtomicBool>,
+    /// How many times the privacy screen has changed, odd while it is on: the engine
+    /// increments it, the mixer reads it before every block and the microphones' audio
+    /// threads on every packet, with no lock.
+    privacy_changes: Arc<AtomicU64>,
 }
 
 pub(crate) fn parts_from(
@@ -1191,7 +1200,7 @@ pub(crate) fn parts_from(
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
     canvas: (u32, u32),
-    privacy: Arc<AtomicBool>,
+    privacy: &Privacy,
 ) -> Parts {
     Parts {
         canvas,
@@ -1205,7 +1214,8 @@ pub(crate) fn parts_from(
         open_timeout,
         render,
         audio_sources,
-        privacy,
+        privacy: privacy.flag(),
+        privacy_changes: privacy.changes(),
     }
 }
 
@@ -1448,9 +1458,20 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let gpu_sources = context
         .as_deref()
         .map(|context| GpuSourcesGuard(GpuSources::new(engine.use_gpu(context))));
-    let captures = captures::spawn(backends, parts.clock.timebase())?;
+    // Ends once the captures' sender goes, so on an early return it ends by itself.
+    let (size_tx, size_rx) = mpsc::channel();
+    let sizes = spawn("jstream-capture-sizes", engine.capture_sizes_watch(size_rx))?;
+    let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
-    let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
+    // The mixer and its inputs' audio threads follow the engine's count of privacy
+    // changes, so a microphone's packets are zeroed from the moment privacy goes on, and
+    // a change between two polls is not missed (ADR-0027 §4).
+    let mixer =
+        Mixer::with_privacy_signal(MixerConfig::default(), Arc::clone(&parts.privacy_changes))
+            .map_err(|err| format!("mixer: {err}"))?;
+    // The monitors the audio sources' thread opens hand their feeds to the mixer
+    // thread here, at most one per bus at a time.
+    let (monitor_routes, monitor_feeds) = mpsc::sync_channel(jstream_audio::MAX_BUSES);
     // On an early return this closes the inputs, each stream before its ring's last
     // handle, so no ring is freed on a real-time thread (docs/RULES.md#R-RT-003).
     let audio = AudioInputs::start(
@@ -1460,6 +1481,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         Arc::clone(&parts.clock),
         Arc::clone(&parts.audio_sources),
         engine.drop_ledger(),
+        monitor_routes,
     )?;
     let bus = mixer.bus();
     let period = frame_period(parts.clock.timebase())?;
@@ -1548,6 +1570,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             format,
             scopes: engine.audio_scopes(),
             taps: Arc::clone(&scope_taps),
+            monitors: monitor_feeds,
         };
         let mixing = Mixing { mixer, metering };
         move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
@@ -1565,6 +1588,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         collector: Some(collector_thread),
         mixer: Some(mixer_thread),
         forward: Some(forward),
+        sizes: Some(sizes),
         clock: Arc::clone(&parts.clock),
         codecs: Arc::clone(&parts.codecs),
         size,
@@ -1599,6 +1623,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
                 meters: master_meters,
                 scopes: engine.audio_scopes(),
                 taps: scope_taps,
+                wanted: Arc::clone(&parts.audio_sources),
             });
             *lock(&program.detach_audio) = Some(detach);
             Ok(Arc::new(program))
@@ -1896,12 +1921,84 @@ fn gpu_capture(capture: &dyn Capture, context: &GpuContext) -> Option<Arc<dyn Ca
     }
 }
 
-/// The codec `profile` encodes video in. HEVC and AV1 map here once the protocol's
-/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them.
+/// The codec `profile` encodes video in. A machine without that encoder fails at the
+/// open, and [`check_video_encoder`] names the ones a platform lacks.
 fn video_codec(profile: &EncoderProfile) -> Result<Codec, String> {
     match profile.video.codec {
         VideoCodec::H264 => Ok(Codec::H264),
+        VideoCodec::Hevc => Ok(Codec::Hevc),
+        VideoCodec::Av1 => Ok(Codec::Av1),
         _ => Err("the encoder profile's video codec is not one this engine knows".into()),
+    }
+}
+
+/// A codec's name in a message.
+fn codec_name(codec: Codec) -> &'static str {
+    match codec {
+        Codec::H264 => "H.264",
+        Codec::Hevc => "HEVC",
+        Codec::Av1 => "AV1",
+        Codec::Aac => "AAC",
+        _ => "this codec",
+    }
+}
+
+/// Why opening a video encoder for `config` failed with `err`, as `output.start`
+/// reports it. A missing component keeps the platform's own error, whose remedy (a
+/// driver package, the OpenH264 download) says more than any list could (ADR-0060 §6).
+/// Otherwise, when the platform's encoder list explains the failure, that names what the
+/// machine lacks ([`check_video_encoder`]), with the open's own error logged, and else
+/// the open's error stands.
+fn video_open_failure(
+    codecs: &dyn Codecs,
+    config: &VideoEncoderConfig,
+    err: &EncodeError,
+) -> String {
+    let opening = format!("opening the video encoder: {err}");
+    if matches!(
+        err,
+        EncodeError::Open(jstream_platform::PlatformError::MissingComponent { .. })
+    ) {
+        return opening;
+    }
+    match check_video_encoder(codecs, config) {
+        Err(lacks) => {
+            // The list's message replaces the open's error for the user; log the open's
+            // own so a list that disagrees with the open (#812) still shows the cause.
+            tracing::warn!(error = %err, "{lacks}");
+            lacks
+        }
+        Ok(()) => opening,
+    }
+}
+
+/// Why `codecs` can't encode `config`'s codec with its hardware preference, from the
+/// encoders the platform lists, so that a failed `output.start` names what the machine
+/// lacks ("this machine has no hardware AV1 encoder") rather than how an open failed.
+/// The codec in a profile is collection state, valid on any machine, so this is only
+/// consulted when an output's encoder fails to open, never when the profile is edited,
+/// and never before the open, which stays the authority. A platform that can't list its
+/// codecs passes.
+fn check_video_encoder(codecs: &dyn Codecs, config: &VideoEncoderConfig) -> Result<(), String> {
+    let Ok(list) = codecs.list() else {
+        return Ok(());
+    };
+    let found: Vec<bool> = list
+        .iter()
+        .filter(|info| info.role == CodecRole::VideoEncoder && info.codec == config.codec)
+        .map(|info| info.hardware)
+        .collect();
+    let name = codec_name(config.codec);
+    let (hardware, software) = (found.contains(&true), found.contains(&false));
+    match config.hardware {
+        _ if found.is_empty() => Err(format!("this machine has no {name} encoder")),
+        HardwarePreference::Require if !hardware => Err(format!(
+            "this machine has no hardware {name} encoder, and the encoder profile requires one"
+        )),
+        HardwarePreference::Avoid if !software => Err(format!(
+            "this machine has no software {name} encoder, and the encoder profile avoids hardware"
+        )),
+        _ => Ok(()),
     }
 }
 
@@ -1946,13 +2043,9 @@ fn open_video(
     feed: &Feed,
     profile: &EncoderProfile,
 ) -> Result<VideoSession, String> {
-    let session = VideoSession::open_on(
-        codecs,
-        context,
-        video_config(feed, profile)?,
-        SessionOptions::default(),
-    )
-    .map_err(|err| format!("opening the video encoder: {err}"))?;
+    let config = video_config(feed, profile)?;
+    let session = VideoSession::open_on(codecs, context, config, SessionOptions::default())
+        .map_err(|err| video_open_failure(codecs, &config, &err))?;
     match session.path() {
         VideoPath::Gpu => tracing::info!("the video encoder takes GPU frames"),
         VideoPath::Cpu {
@@ -2758,11 +2851,11 @@ fn render_loop(job: RenderJob) {
 /// thread, once per program stage.
 ///
 /// Once it is done, the render thread moves the captures to the CPU path
-/// ([`RenderCaptures::leave_gpu`], which lets go of the held frames first) and puts the
-/// new compositor in place of the old one, which goes on the render thread: it is owned
-/// there and never shared, so it is not the collector's to free (R-RT-003). The context
-/// itself stays until the render loop ends, after the captures have stopped, as its
-/// platform state requires (README › GPU frames).
+/// ([`RenderCaptures::leave_gpu`], which first lets go of the frames on the context's
+/// device) and puts the new compositor in place of the old one, which goes on the render
+/// thread: it is owned there and never shared, so it is not the collector's to free
+/// (R-RT-003). The context itself stays until the render loop ends, after the captures
+/// have stopped, as its platform state requires (README › GPU frames).
 ///
 /// A lost device (#349) starts one too, at once: on the context it leaves the GPU path as
 /// above, and on the render thread's own device it opens the compositor on a new one
@@ -3023,6 +3116,8 @@ struct MixOut {
     scopes: Arc<AudioScopes>,
     /// The bus and source scopes, each fed its bus's or input's block.
     taps: Arc<ScopeTaps>,
+    /// The bus monitors' feeds, as the audio sources' thread opens them.
+    monitors: Receiver<MonitorRoute>,
 }
 
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
@@ -3046,8 +3141,9 @@ fn mixer_thread(
     }
 }
 
-/// What the mixer thread owns: the mixer, and the master's true-peak and loudness
-/// meters, which it runs on every block.
+/// What the mixer thread owns: the mixer, which follows the privacy screen itself
+/// (`Mixer::with_privacy_signal`), and the master's true-peak and loudness meters, which
+/// it runs on every block.
 struct Mixing {
     mixer: Mixer,
     metering: MasterMetering,
@@ -3076,6 +3172,7 @@ fn mixer_loop(
         format,
         scopes,
         taps,
+        monitors: monitor_feeds,
     } = out;
     let format = *format;
     let scope = scopes.program();
@@ -3085,6 +3182,9 @@ fn mixer_loop(
     // What a silent drawn source's scope gets.
     let silence = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioTap> = Vec::new();
+    // Room for every bus's monitor and as many being replaced, so taking one never
+    // allocates here.
+    let mut monitors: Vec<MonitorRoute> = Vec::with_capacity(2 * jstream_audio::MAX_BUSES);
     'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
@@ -3104,6 +3204,7 @@ fn mixer_loop(
                 if let Some(replaced) = replaced {
                     collector.free(Garbage::Scopes(replaced));
                 }
+                feed_monitors(&mixer, &block, &mut monitors, monitor_feeds, collector);
                 targets.extend(inputs.try_iter());
                 let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned
@@ -3153,6 +3254,40 @@ fn mixer_loop(
         }
     }
     collector.free(Garbage::Scopes(scope_taps.into_held()));
+    for route in monitors {
+        collector.free(Garbage::Monitor(route));
+    }
+}
+
+/// Lets go of the monitors whose device closed (to the collector), takes the newly
+/// opened ones while there is room, and pushes each the block it hears. Never locks,
+/// waits or allocates: `monitors` has its room already.
+fn feed_monitors(
+    mixer: &Mixer,
+    block: &jstream_audio::Block,
+    monitors: &mut Vec<MonitorRoute>,
+    feeds: &Receiver<MonitorRoute>,
+    collector: &Collector,
+) {
+    let mut at = 0;
+    while at < monitors.len() {
+        if monitors[at].closed.load(Ordering::Acquire) {
+            collector.free(Garbage::Monitor(monitors.swap_remove(at)));
+        } else {
+            at += 1;
+        }
+    }
+    while monitors.len() < monitors.capacity() {
+        match feeds.try_recv() {
+            Ok(route) => monitors.push(route),
+            Err(_) => break,
+        }
+    }
+    for route in monitors.iter_mut() {
+        if let Some(heard) = mixer.monitor_block(route.bus, route.tap) {
+            route.feed.push(block.frame, heard);
+        }
+    }
 }
 
 /// An output thread's encoder subscriptions, shared with the stop so that, when it
@@ -3384,8 +3519,8 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 mod tests {
     use super::{
         DrawFn, EncodeRing, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw, Switch,
-        SwitchWhy, VideoTap, catch_up, encode_ring_len, lock, open_video, output_size, push_each,
-        stream_info, video_config,
+        SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock, open_video,
+        output_size, push_each, stream_info, video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
     use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
@@ -3604,13 +3739,207 @@ mod tests {
         assert!(video_config(size, &profile).is_err());
 
         let mut profile = EncoderProfile::DEFAULT;
-        assert_eq!(
-            video_config(size, &profile).expect("h264").codec,
-            Codec::H264
-        );
+        for (codec, want) in [
+            (VideoCodec::H264, Codec::H264),
+            (VideoCodec::Hevc, Codec::Hevc),
+            (VideoCodec::Av1, Codec::Av1),
+        ] {
+            profile.video.codec = codec;
+            assert_eq!(video_config(size, &profile).expect("known").codec, want);
+            assert_eq!(
+                stream_info(size, MediaTime::zero(Timebase::MICROS), &profile)
+                    .expect("known")
+                    .codec,
+                want
+            );
+        }
         profile.video.codec = VideoCodec::Unknown;
         assert!(video_config(size, &profile).is_err());
         assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());
+    }
+
+    /// The platform's encoder list decides which codec and hardware preference an
+    /// output can start with, and the refusal names what the machine lacks (F6b).
+    #[test]
+    fn a_missing_encoder_is_named() {
+        use jstream_platform::{
+            AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, PlatformError,
+            VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, fake::FakeCodecs,
+        };
+        /// Lists `encoders` (codec, hardware) and opens nothing: its open fails as
+        /// unsupported, or, with `missing`, as a missing component with a remedy.
+        struct Listed(Result<Vec<(Codec, bool)>, ()>, bool);
+        impl Codecs for Listed {
+            fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+                let listed = self.0.clone().map_err(|()| PlatformError::Os {
+                    call: "listing",
+                    code: None,
+                    message: "refused".into(),
+                })?;
+                Ok(listed
+                    .into_iter()
+                    .map(|(codec, hardware)| CodecInfo {
+                        name: "listed".into(),
+                        codec,
+                        role: CodecRole::VideoEncoder,
+                        hardware,
+                    })
+                    .chain([CodecInfo {
+                        name: "a decoder".into(),
+                        codec: Codec::Av1,
+                        role: CodecRole::VideoDecoder,
+                        hardware: true,
+                    }])
+                    .collect())
+            }
+            fn video_encoder(
+                &self,
+                _: &VideoEncoderConfig,
+            ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+                Err(if self.1 {
+                    PlatformError::MissingComponent {
+                        component: "Cisco's OpenH264 (software H.264)",
+                        remedy: "download it from Cisco through JStream".into(),
+                    }
+                } else {
+                    PlatformError::Unsupported { what: "x".into() }
+                })
+            }
+            fn audio_encoder(
+                &self,
+                _: &AudioEncoderConfig,
+            ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+                Err(PlatformError::Unsupported { what: "x".into() })
+            }
+            fn video_decoder(
+                &self,
+                _: &VideoDecoderConfig,
+            ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+                Err(PlatformError::Unsupported { what: "x".into() })
+            }
+        }
+        let feed = Feed {
+            mix: None,
+            size: FrameSize::new(64, 36).expect("size"),
+            divisor: 1,
+            owner: None,
+        };
+        let config = |codec, hardware| VideoEncoderConfig {
+            codec,
+            hardware,
+            ..video_config(&feed, &EncoderProfile::DEFAULT).expect("default")
+        };
+        use HardwarePreference::{Avoid, Prefer, Require};
+        let mf = Listed(
+            Ok(vec![
+                (Codec::H264, true),
+                (Codec::H264, false),
+                (Codec::Hevc, true),
+            ]),
+            false,
+        );
+        for hardware in [Prefer, Require, Avoid] {
+            assert_eq!(
+                check_video_encoder(&mf, &config(Codec::H264, hardware)),
+                Ok(())
+            );
+        }
+        assert_eq!(
+            check_video_encoder(&mf, &config(Codec::Hevc, Prefer)),
+            Ok(())
+        );
+        assert_eq!(
+            check_video_encoder(&mf, &config(Codec::Hevc, Require)),
+            Ok(())
+        );
+        assert_eq!(
+            check_video_encoder(&mf, &config(Codec::Hevc, Avoid)),
+            Err(
+                "this machine has no software HEVC encoder, and the encoder profile avoids \
+                 hardware"
+                    .into()
+            )
+        );
+        // An AV1 decoder is no AV1 encoder.
+        assert_eq!(
+            check_video_encoder(&mf, &config(Codec::Av1, Prefer)),
+            Err("this machine has no AV1 encoder".into())
+        );
+        let software = Listed(Ok(vec![(Codec::H264, false)]), false);
+        assert_eq!(
+            check_video_encoder(&software, &config(Codec::H264, Require)),
+            Err(
+                "this machine has no hardware H.264 encoder, and the encoder profile \
+                 requires one"
+                    .into()
+            )
+        );
+        // A platform that can't list its codecs leaves it to the open.
+        let unlisted = Listed(Err(()), false);
+        assert_eq!(
+            check_video_encoder(&unlisted, &config(Codec::Av1, Require)),
+            Ok(())
+        );
+        // The fake platform lists the encoder it opens, so every engine test still starts.
+        assert_eq!(
+            check_video_encoder(&FakeCodecs, &config(Codec::H264, Prefer)),
+            Ok(())
+        );
+        // `open_video` names what the machine lacks when the open fails...
+        let require = {
+            let mut profile = EncoderProfile::DEFAULT;
+            profile.video.hardware = ProfileHardware::Require;
+            profile
+        };
+        let err = open_video(&software, None, &feed, &require).err();
+        assert_eq!(
+            err.as_deref(),
+            Some(
+                "this machine has no hardware H.264 encoder, and the encoder profile requires one"
+            )
+        );
+        // ...but a missing component keeps the platform's remedy (ADR-0060 §6), even
+        // when the list has no encoder at all: Linux without a VA-API H.264 driver and
+        // without OpenH264 (#807 B1).
+        let bare = Listed(Ok(vec![]), true);
+        let Err(err) = open_video(&bare, None, &feed, &EncoderProfile::DEFAULT) else {
+            panic!("refused");
+        };
+        assert!(
+            err.contains("download it from Cisco through JStream"),
+            "{err}"
+        );
+        // The open fails for a reason the list doesn't explain: its own error stands.
+        let Err(err) = open_video(&mf, None, &feed, &EncoderProfile::DEFAULT) else {
+            panic!("refused");
+        };
+        assert!(err.starts_with("opening the video encoder:"), "{err}");
+        // And the list never blocks an encoder that opens: here one it doesn't name.
+        struct Unlisting;
+        impl Codecs for Unlisting {
+            fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+                Ok(Vec::new())
+            }
+            fn video_encoder(
+                &self,
+                config: &VideoEncoderConfig,
+            ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+                FakeCodecs.video_encoder(config)
+            }
+            fn audio_encoder(
+                &self,
+                config: &AudioEncoderConfig,
+            ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+                FakeCodecs.audio_encoder(config)
+            }
+            fn video_decoder(
+                &self,
+                config: &VideoDecoderConfig,
+            ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+                FakeCodecs.video_decoder(config)
+            }
+        }
+        assert!(open_video(&Unlisting, None, &feed, &EncoderProfile::DEFAULT).is_ok());
     }
 
     /// #433: the program renders and encodes at the canvas, rounded down to even sizes

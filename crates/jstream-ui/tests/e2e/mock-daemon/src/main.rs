@@ -159,6 +159,7 @@ fn audio_input_kind() -> KindDescriptor {
         video: false,
         audio: true,
         params: Vec::new(),
+        max_outset_px: None,
     }
 }
 

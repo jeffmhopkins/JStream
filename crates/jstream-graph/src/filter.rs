@@ -8,16 +8,21 @@
 //! ([`crate::deps`]), so the edits that set them run the cycle check. The master's and
 //! outputs' filters take no references yet: nothing would keep what they name from
 //! being deleted.
+//!
+//! A scene and an item own a video chain each (ADR-0065): a scene's filters and an
+//! item's effects. A keyframe scene owns none, since it shows its parent's. References in
+//! them are edges of the scene, or of the item's scene, so they run the cycle check and
+//! block deletes as a source's do.
 
 use crate::apply::{
     Kinds, already_exists, check_id, check_index, check_value, complete_settings, invalid,
     not_found, wire_index,
 };
 use crate::deps::{self, Node};
-use crate::model::{Chains, Filter, MAX_CHAIN_FILTERS, Output, Source, State};
+use crate::model::{Chains, Filter, Item, MAX_CHAIN_FILTERS, Output, Scene, Source, State};
 use jstream_protocol::{
     Edit, EntityKind, FilterChain, FilterId, FilterOwner, KindCategory, KindDescriptor,
-    ProtocolError, Reference, Settings, SourceKind,
+    ProtocolError, Reference, SceneId, Settings, SourceKind,
 };
 use serde_json::Value;
 
@@ -29,6 +34,11 @@ pub(crate) fn apply(
     edit: &Edit,
     at: usize,
 ) -> Option<Result<Vec<Edit>, ProtocolError>> {
+    if let Some(owner) = edit_owner(edit)
+        && let Err(error) = check_not_variant(state, owner, at)
+    {
+        return Some(Err(error));
+    }
     Some(match edit {
         Edit::FilterAdd { .. } => add(state, kinds, edit, at),
         Edit::FilterRemove { owner, filter_id } => remove(state, owner, filter_id),
@@ -48,6 +58,84 @@ pub(crate) fn apply(
             index,
         } => reorder(state, owner, filter_id, *index, at),
         _ => return None,
+    })
+}
+
+/// The owner a `filter.*` edit addresses, or `None` for any other edit.
+fn edit_owner(edit: &Edit) -> Option<&FilterOwner> {
+    match edit {
+        Edit::FilterAdd { owner, .. }
+        | Edit::FilterRemove { owner, .. }
+        | Edit::FilterSetEnabled { owner, .. }
+        | Edit::FilterSetSettings { owner, .. }
+        | Edit::FilterReorder { owner, .. } => Some(owner),
+        _ => None,
+    }
+}
+
+/// Refuses a keyframe scene as the owner, for every filter edit, with `invalid_argument`
+/// on `owner`: it shows its parent's filters and has none of its own (ADR-0065 §3).
+fn check_not_variant(state: &State, owner: &FilterOwner, at: usize) -> Result<(), ProtocolError> {
+    if let FilterOwner::Scene { scene_id } = owner
+        && let Some(parent) = state.scene(scene_id).and_then(|s| s.variant_of.as_ref())
+    {
+        return Err(invalid(
+            at,
+            "owner",
+            format!(
+                "scene `{scene_id}` is a keyframe scene of `{parent}`: it shows its \
+                 parent's filters and has none of its own"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The edits that re-create `scene`'s filters after `scene.create`: what
+/// `scene.delete`'s inverse appends.
+pub(crate) fn restore_scene(scene: &Scene) -> Vec<Edit> {
+    let owner = FilterOwner::Scene {
+        scene_id: scene.id.clone(),
+    };
+    restore_chains(&owner, &scene.filters)
+}
+
+/// The edits that re-create `item`'s effects after `item.add`: what `item.remove`'s
+/// inverse appends.
+pub(crate) fn restore_effects(item: &Item) -> Vec<Edit> {
+    let owner = FilterOwner::Item {
+        item_id: item.id.clone(),
+    };
+    restore_chains(&owner, &item.effects)
+}
+
+/// The scene whose edges a filter on `owner` adds to: a scene's own, an item's scene;
+/// `None` for any other owner.
+fn owner_scene<'a>(state: &'a State, owner: &'a FilterOwner) -> Option<&'a SceneId> {
+    match owner {
+        FilterOwner::Scene { scene_id } => Some(scene_id),
+        FilterOwner::Item { item_id } => state
+            .item_index(item_id)
+            .map(|(si, _)| &state.scenes[si].id),
+        _ => None,
+    }
+}
+
+/// The first reference in `item`'s effects that would close a cycle if the item sat in
+/// scene `scene_id`, as the parameter (`effects.<filter_id>.<param>`) and the cycle: what
+/// `item.move` checks, since its effects' references become edges of the new scene.
+pub(crate) fn effects_cycle(
+    state: &State,
+    item: &Item,
+    scene_id: &SceneId,
+) -> Option<(String, String)> {
+    let from = Node::Scene(scene_id.clone());
+    item.effects.all().find_map(|(_, filter)| {
+        filter.settings.references().find_map(|(param, reference)| {
+            let to = deps::reference_node(&reference)?;
+            let cycle = deps::cycle(state, &from, &to)?;
+            Some((format!("effects.{}.{param}", filter.id), cycle))
+        })
     })
 }
 
@@ -91,7 +179,8 @@ fn restore(owner: &FilterOwner, chain: FilterChain, filter: &Filter, index: Opti
     }
 }
 
-/// `owner`'s chains, or `not_found` for a source or output that doesn't exist.
+/// `owner`'s chains, or `not_found` for a source, output, scene or item that doesn't
+/// exist.
 fn chains<'a>(state: &'a State, owner: &FilterOwner) -> Result<&'a Chains, ProtocolError> {
     match owner {
         FilterOwner::Source { source_id } => state
@@ -103,6 +192,14 @@ fn chains<'a>(state: &'a State, owner: &FilterOwner) -> Result<&'a Chains, Proto
             .map(|output| &output.filters)
             .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str())),
         FilterOwner::Master => Ok(&state.master),
+        FilterOwner::Scene { scene_id } => state
+            .scene(scene_id)
+            .map(|scene| &scene.filters)
+            .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str())),
+        FilterOwner::Item { item_id } => state
+            .item_index(item_id)
+            .map(|(si, ii)| &state.scenes[si].items[ii].effects)
+            .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str())),
         _ => Err(unknown_owner()),
     }
 }
@@ -123,6 +220,14 @@ fn chains_mut<'a>(
             .map(|output| &mut output.filters)
             .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str())),
         FilterOwner::Master => Ok(&mut state.master),
+        FilterOwner::Scene { scene_id } => match state.scene_index(scene_id) {
+            Some(si) => Ok(&mut state.scenes[si].filters),
+            None => Err(not_found(EntityKind::Scene, scene_id.as_str())),
+        },
+        FilterOwner::Item { item_id } => match state.item_index(item_id) {
+            Some((si, ii)) => Ok(&mut state.scenes[si].items[ii].effects),
+            None => Err(not_found(EntityKind::Item, item_id.as_str())),
+        },
         _ => Err(unknown_owner()),
     }
 }
@@ -138,7 +243,8 @@ fn unknown_owner() -> ProtocolError {
 /// video chain if its kind produces video, and an audio chain if it produces audio and
 /// is not a `scene` source (ADR-0026 §1); a kind the graph doesn't describe has neither.
 /// The master stage and an output that carries audio have an audio chain; their video
-/// chains wait for video mixes (ADR-0027).
+/// chains wait for video mixes (ADR-0027). A scene and an item have a video chain only
+/// (ADR-0065 §1).
 fn check_chain(
     state: &State,
     kinds: &Kinds,
@@ -184,21 +290,31 @@ fn check_chain(
             )),
         },
         (FilterOwner::Master, FilterChain::Audio) => Ok(()),
+        (FilterOwner::Scene { .. } | FilterOwner::Item { .. }, FilterChain::Video) => Ok(()),
+        (FilterOwner::Scene { scene_id }, FilterChain::Audio) => missing(format!(
+            "scene `{scene_id}` has no audio chain: a scene's audio is its bus's"
+        )),
+        (FilterOwner::Item { item_id }, FilterChain::Audio) => missing(format!(
+            "item `{item_id}` has no audio chain: its effects are video only"
+        )),
         _ => Err(unknown_owner()),
     }
 }
 
 /// Refuses any reference (a scene, source, bus or asset) in the settings of a master
-/// or output filter, naming the parameter as `field_prefix.<id>`. Only a source's filters may refer to
-/// something: the delete checks follow a source's edges, not the master's or an
-/// output's.
+/// or output filter, naming the parameter as `field_prefix.<id>`. Only a source's,
+/// scene's or item's filters may refer to something: the delete checks follow their
+/// edges, not the master's or an output's.
 fn check_no_references(
     owner: &FilterOwner,
     settings: &Settings,
     at: usize,
     field_prefix: &str,
 ) -> Result<(), ProtocolError> {
-    if owner.source_id().is_some() {
+    if matches!(
+        owner,
+        FilterOwner::Source { .. } | FilterOwner::Scene { .. } | FilterOwner::Item { .. }
+    ) {
         return Ok(());
     }
     match settings
@@ -241,6 +357,77 @@ fn filter_kind<'a>(
             format!("there is no kind `{kind}`; `kind.list` names them"),
         )),
     }
+}
+
+/// Puts a filter whose kind this graph doesn't describe on its chain, as a collection
+/// file saved it: a pack kind that isn't installed, or a CLAP kind before the scan that
+/// describes it (ADR-0035). Its settings are kept verbatim and unchecked, and
+/// `kind_version` is kept for the next save, so loading in a build without the kind
+/// destroys nothing (ADR-0025 › Versioning a kind). The engine reports such a filter as
+/// an error and bypasses it until its kind appears. Only a load does this: `filter.add`
+/// refuses a kind it can't check.
+pub(crate) fn add_unknown_kind(
+    state: &mut State,
+    kinds: &Kinds,
+    edit: &Edit,
+    kind_version: Option<u32>,
+) -> Result<(), ProtocolError> {
+    let Edit::FilterAdd {
+        owner,
+        chain,
+        filter_id,
+        kind,
+        settings,
+        enabled,
+        index: None,
+    } = edit
+    else {
+        return Err(ProtocolError::Internal {
+            reason: "invariant: a load adds filters with `filter.add`, last".into(),
+        });
+    };
+    // As `filter.*` does: a keyframe scene shows its parent's filters (ADR-0065 §1).
+    check_not_variant(state, owner, 0)?;
+    let filters = chains(state, owner)?;
+    check_id(filter_id.as_str(), 0, "filter_id")?;
+    if filters.find(filter_id).is_some() {
+        return Err(already_exists(EntityKind::Filter, filter_id.as_str()));
+    }
+    check_chain(state, kinds, owner, *chain, 0)?;
+    if filters.chain(*chain).len() >= MAX_CHAIN_FILTERS {
+        return Err(invalid(
+            0,
+            "chain",
+            format!("a chain holds at most {MAX_CHAIN_FILTERS} filters"),
+        ));
+    }
+    check_no_references(owner, settings, 0, "settings")?;
+    // Unchecked settings may still name objects: each must exist, as a checked
+    // reference's must, so deletes and the cycle check see a whole graph.
+    for (param, reference) in settings.references() {
+        if let Some(node) = deps::reference_node(&reference) {
+            let exists = match &node {
+                Node::Scene(id) => state.scene(id).is_some(),
+                Node::Source(id) => state.source(id).is_some(),
+                Node::Bus(id) => state.bus(id).is_some(),
+            };
+            if !exists {
+                return Err(invalid(
+                    0,
+                    &format!("settings.{param}"),
+                    format!("{node} doesn't exist"),
+                ));
+            }
+        }
+    }
+    chains_mut(state, owner)?.chain_mut(*chain).push(Filter {
+        id: filter_id.clone(),
+        kind: kind.clone(),
+        enabled: enabled.unwrap_or(true),
+        settings: settings.clone(),
+        unknown_kind_version: kind_version,
+    });
+    check_cycles(state, owner, filter_id, 0, "settings")
 }
 
 /// Applies `filter.add` (`edit`) and returns its inverse, `filter.remove`.
@@ -293,6 +480,7 @@ fn add(
             kind: kind.clone(),
             enabled,
             settings,
+            unknown_kind_version: None,
         },
     );
     check_cycles(state, owner, filter_id, at, "settings")?;
@@ -420,8 +608,9 @@ fn reorder(
 }
 
 /// Rejects a scene or source reference in filter `filter_id`'s settings that closes a
-/// cycle through its source, naming the parameter as `field_prefix.<id>`. Only a
-/// source's filters may refer to anything ([`check_no_references`]).
+/// cycle through its owner's node, naming the parameter as `field_prefix.<id>`: the
+/// source, or for a scene filter or an item effect the scene. Only those owners'
+/// filters may refer to anything ([`check_no_references`]).
 fn check_cycles(
     state: &State,
     owner: &FilterOwner,
@@ -429,16 +618,17 @@ fn check_cycles(
     at: usize,
     field_prefix: &str,
 ) -> Result<(), ProtocolError> {
-    let Some(source_id) = owner.source_id() else {
-        return Ok(());
+    let from = match (owner.source_id(), owner_scene(state, owner)) {
+        (Some(source_id), _) => Node::Source(source_id.clone()),
+        (None, Some(scene_id)) => Node::Scene(scene_id.clone()),
+        (None, None) => return Ok(()),
     };
-    let Some((_, _, filter)) = state
-        .source(source_id)
-        .and_then(|s| s.filters.find(filter_id))
+    let Some((_, _, filter)) = chains(state, owner)
+        .ok()
+        .and_then(|chains| chains.find(filter_id))
     else {
         return Ok(());
     };
-    let from = Node::Source(source_id.clone());
     for (param, reference) in filter.settings.references() {
         if let Some(to) = deps::reference_node(&reference)
             && let Some(cycle) = deps::cycle(state, &from, &to)

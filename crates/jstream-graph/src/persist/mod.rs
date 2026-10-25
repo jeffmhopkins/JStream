@@ -16,11 +16,11 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, Edit, EncoderProfile, EncoderProfileId,
-    FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
-    ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId, OutputKind, ProtocolError, Rev,
-    SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta,
-    TransitionPresetId, VideoMix, VideoMixId,
+    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
+    EncoderProfileId, FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET,
+    ItemGeometry, ItemId, ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId,
+    OutputKind, ProtocolError, Rev, SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId,
+    SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,7 +32,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// The built-in `webcam` kind, which gained audio (its device's paired input) after
 /// collection files existed; see `rebuild_audio`.
@@ -47,8 +47,32 @@ fn is_webcam(kind: &SourceKind) -> bool {
 type Migration = fn(&mut Value) -> Result<(), String>;
 
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
-/// `MIGRATIONS[v - 1..]`. Version 1 is the first, so there are none yet.
-const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [];
+/// `MIGRATIONS[v - 1..]`.
+const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [v1_to_v2];
+
+/// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
+/// `items[].effects`, ADR-0065). A version 1 file has no scene filters, and its items'
+/// `effects` could only be empty, so it upgrades unchanged; a non-empty list there is
+/// refused, as version 1 refused it.
+fn v1_to_v2(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        if scene.get("filters").is_some() {
+            return Err("a version 1 scene has no `filters`".into());
+        }
+        let items = scene.get("items").and_then(Value::as_array);
+        for item in items.into_iter().flatten() {
+            if item
+                .get("effects")
+                .and_then(Value::as_array)
+                .is_some_and(|e| !e.is_empty())
+            {
+                return Err("a version 1 item's `effects` must be empty".into());
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Why a collection file could not be loaded. The message never quotes the file's
 /// values beyond IDs, so it is safe to log.
@@ -223,6 +247,10 @@ struct FileScene {
     /// A keyframe scene's overrides, in item ID order; omitted when there are none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     overrides: Vec<ItemOverride>,
+    /// Its filters (ADR-0065, schema_version 2), a video chain; omitted when there are
+    /// none.
+    #[serde(default, skip_serializing_if = "FileChains::is_empty")]
+    filters: FileChains,
     /// Bottom first.
     items: Vec<FileItem>,
 }
@@ -278,10 +306,10 @@ struct FileItem {
     /// The blend mode; omitted at `normal`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     blend: Option<BlendMode>,
-    /// Per-placement effects, reserved (ADR-0023 §1): accepted so that item effects can
-    /// come later without a migration, never written, and refused unless empty.
+    /// Its effects (ADR-0065, schema_version 2), first first; omitted when there are none.
+    /// A version 1 file could hold only an empty list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    effects: Vec<Value>,
+    effects: Vec<FileFilter>,
     /// Its transition settings (ADR-0029 §6); omitted while they are the defaults.
     #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
     transition: ItemTransition,
@@ -379,6 +407,9 @@ struct FileBus {
     name: String,
     gain_db: Finite32,
     muted: bool,
+    /// The bus's monitor; omitted for none (and in files from before monitors).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    monitor: Option<BusMonitor>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -430,7 +461,10 @@ impl Graph {
             .map(|filter| FileFilter {
                 id: filter.id.clone(),
                 kind: filter.kind.clone(),
-                kind_version: self.kinds.get(&filter.kind).map(|k| k.version),
+                kind_version: match self.kinds.get(&filter.kind) {
+                    Some(kind) => Some(kind.version),
+                    None => filter.unknown_kind_version,
+                },
                 enabled: filter.enabled,
                 settings: filter.settings.clone(),
             })
@@ -467,6 +501,7 @@ impl Graph {
                         .iter()
                         .map(|(item_id, o)| crate::keyframe::to_info(item_id, o))
                         .collect(),
+                    filters: self.file_chains(&scene.filters),
                     items: scene
                         .items
                         .iter()
@@ -484,7 +519,7 @@ impl Graph {
                                 visible: item.visible,
                                 opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
                                 blend: (!item.blend.is_normal()).then_some(item.blend),
-                                effects: Vec::new(),
+                                effects: self.file_filters(&item.effects.video),
                                 transition: item.transition,
                             }
                         })
@@ -623,12 +658,25 @@ impl Graph {
             kinds: self.kinds,
         };
         for (object, edit) in rebuild(&graph, &file)? {
-            graph
-                .apply(std::slice::from_ref(&edit), None)
-                .map_err(|error| LoadError::Invalid {
-                    object,
-                    error: Box::new(error),
-                })?;
+            let applied = match &edit {
+                Edit::FilterAdd {
+                    owner,
+                    chain,
+                    filter_id,
+                    kind,
+                    ..
+                } if !graph.kinds.contains_key(kind) => crate::filter::add_unknown_kind(
+                    &mut graph.state,
+                    &graph.kinds,
+                    &edit,
+                    file_filter_version(&file, owner, *chain, filter_id),
+                ),
+                _ => graph.apply(std::slice::from_ref(&edit), None).map(|_| ()),
+            };
+            applied.map_err(|error| LoadError::Invalid {
+                object,
+                error: Box::new(error),
+            })?;
         }
         graph.rev = file.rev;
         Ok(graph)
@@ -645,6 +693,7 @@ fn file_buses(state: &crate::State) -> Vec<FileBus> {
             name: bus.name().to_owned(),
             gain_db: bus.gain_db(),
             muted: bus.muted(),
+            monitor: bus.monitor().cloned(),
         })
         .collect();
     if buses == [default_master()] {
@@ -661,6 +710,7 @@ fn default_master() -> FileBus {
         name: MASTER_NAME.to_owned(),
         gain_db: Finite32::ZERO,
         muted: false,
+        monitor: None,
     }
 }
 
@@ -878,11 +928,6 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                     "{object}: exactly one of `transform` and `geometry` must be set"
                 )));
             }
-            if !item.effects.is_empty() {
-                return Err(LoadError::Parse(format!(
-                    "{object}: `effects` is reserved and must be empty"
-                )));
-            }
             edits.push((
                 object.clone(),
                 Edit::ItemAdd {
@@ -924,6 +969,28 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                     },
                 ));
             }
+        }
+    }
+    // After every scene, item and source, so their references find what they name.
+    for scene in &file.scenes {
+        let owner = FilterOwner::Scene {
+            scene_id: scene.id.clone(),
+        };
+        let of = format!("scene `{}`", scene.id);
+        add_filters(graph, &owner, &of, &scene.filters, &mut edits)?;
+        for item in &scene.items {
+            let owner = FilterOwner::Item {
+                item_id: item.id.clone(),
+            };
+            let of = format!("item `{}`", item.id);
+            add_chain(
+                graph,
+                &owner,
+                &of,
+                FilterChain::Video,
+                &item.effects,
+                &mut edits,
+            )?;
         }
     }
     // After every item, since an override names one of its parent's.
@@ -1074,27 +1141,34 @@ fn add_filters(
     chains: &FileChains,
     edits: &mut Vec<(String, Edit)>,
 ) -> Result<(), LoadError> {
-    let chains = [
-        (FilterChain::Video, &chains.video),
-        (FilterChain::Audio, &chains.audio),
-    ];
-    for (chain, filters) in chains {
-        for filter in filters {
-            let object = format!("filter `{}` of {of}", filter.id);
-            check_kind_version(graph, &object, &filter.kind, filter.kind_version)?;
-            edits.push((
-                object,
-                Edit::FilterAdd {
-                    owner: owner.clone(),
-                    chain,
-                    filter_id: filter.id.clone(),
-                    kind: filter.kind.clone(),
-                    settings: filter.settings.clone(),
-                    enabled: (!filter.enabled).then_some(false),
-                    index: None,
-                },
-            ));
-        }
+    add_chain(graph, owner, of, FilterChain::Video, &chains.video, edits)?;
+    add_chain(graph, owner, of, FilterChain::Audio, &chains.audio, edits)
+}
+
+/// Pushes the `filter.add`s that rebuild one chain, `chain`, of `owner`, first first.
+fn add_chain(
+    graph: &Graph,
+    owner: &FilterOwner,
+    of: &str,
+    chain: FilterChain,
+    filters: &[FileFilter],
+    edits: &mut Vec<(String, Edit)>,
+) -> Result<(), LoadError> {
+    for filter in filters {
+        let object = format!("filter `{}` of {of}", filter.id);
+        check_kind_version(graph, &object, &filter.kind, filter.kind_version)?;
+        edits.push((
+            object,
+            Edit::FilterAdd {
+                owner: owner.clone(),
+                chain,
+                filter_id: filter.id.clone(),
+                kind: filter.kind.clone(),
+                settings: filter.settings.clone(),
+                enabled: (!filter.enabled).then_some(false),
+                index: None,
+            },
+        ));
     }
     Ok(())
 }
@@ -1170,9 +1244,47 @@ fn rebuild_transitions(
     Ok(())
 }
 
-/// Pushes the edits that give the rebuilt collection `file`'s buses and their faders,
-/// before its sources: a bus depends on nothing, and a source's settings may refer to
-/// one (a `waveform`'s `audio`).
+/// The kind version `file` recorded for `filter_id` on `chain` of `owner`.
+fn file_filter_version(
+    file: &File,
+    owner: &FilterOwner,
+    chain: FilterChain,
+    filter_id: &FilterId,
+) -> Option<u32> {
+    let chains = match owner {
+        FilterOwner::Source { source_id } => {
+            &file.sources.iter().find(|s| &s.id == source_id)?.filters
+        }
+        FilterOwner::Output { output_id } => {
+            &file.outputs.iter().find(|o| &o.id == output_id)?.filters
+        }
+        FilterOwner::Master => &file.master.filters,
+        FilterOwner::Scene { scene_id } => &file.scenes.iter().find(|s| &s.id == scene_id)?.filters,
+        // An item's effects are one video chain (ADR-0065 §1).
+        FilterOwner::Item { item_id } => {
+            let effects = &file
+                .scenes
+                .iter()
+                .flat_map(|s| &s.items)
+                .find(|i| &i.id == item_id)?
+                .effects;
+            return match chain {
+                FilterChain::Video => effects.iter().find(|f| &f.id == filter_id)?.kind_version,
+                FilterChain::Audio => None,
+            };
+        }
+        _ => return None,
+    };
+    let filters = match chain {
+        FilterChain::Video => &chains.video,
+        FilterChain::Audio => &chains.audio,
+    };
+    filters.iter().find(|f| &f.id == filter_id)?.kind_version
+}
+
+/// Pushes the edits that give the rebuilt collection `file`'s buses, their faders and
+/// monitors, before its sources: a bus depends on nothing, and a source's settings may
+/// refer to one (a `waveform`'s `audio`).
 fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
     let default = default_master();
     for bus in &file.buses {
@@ -1203,6 +1315,15 @@ fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
                     bus_id: bus.id.clone(),
                     gain_db: Some(bus.gain_db),
                     muted: Some(bus.muted),
+                },
+            ));
+        }
+        if let Some(monitor) = &bus.monitor {
+            edits.push((
+                format!("bus `{}`", bus.id),
+                Edit::BusSetMonitor {
+                    bus_id: bus.id.clone(),
+                    monitor: Some(monitor.clone()),
                 },
             ));
         }

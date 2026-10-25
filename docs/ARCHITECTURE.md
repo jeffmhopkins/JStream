@@ -145,7 +145,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), AVFoundation webcams, VideoToolbox/AudioToolbox, AVFoundation media files, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens (M3; [ADR-0063](adr/0063-macos-platform-support.md); Apple frameworks through the objc2 crates) | **yes** |
-| 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac` (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md); a crate loading its system libraries at run time) | **yes** |
+| 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
@@ -179,9 +179,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          items[] }   flat display order
+│                          filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
-│                              effects[] (reserved, empty until built), transition }
+│                              effects[] (video filters), transition }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
@@ -233,7 +233,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   that would close a cycle (`item.add`, and `item.set_source`). The graph accepts any
   acyclic depth, but the program mix (the live output and `video.snapshot` alike) draws
   at most **8 levels** of scene sources below the program scene: a scene source deeper
-  than that draws nothing, and the engine logs it at `debug`.
+  than that draws nothing, and the engine logs it at `debug`. A scene with a scene
+  filter is drawn once per frame as if it were the program scene, so the count restarts
+  below it ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), as it does below a
+  scene a `scene_mask` reads.
 - **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
   - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
     group renders, nests and takes filters like any scene, and clients hide groups from
@@ -292,10 +295,13 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   hold filters until video mixes run the video ones, and their filters can't hold a
   reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
-  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects, which
-  are in v1 ([ADR-0068](adr/0068-item-effects-in-v1.md), designed in
-  [ADR-0065](adr/0065-scene-chains-and-item-effects.md)), and stays empty until they are
-  built; the slot means the collection already has a place for them.
+  compositor draws it). A scene's `filters` and a placement's `effects[]` are video filter
+  chains, the owners `scene` and `item` of `filter.*`
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
+  [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
+  scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
+  none of its own. The engine runs a scene's filters on its composite; it refuses the
+  `item` owner until it renders item effects.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
@@ -347,8 +353,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   slate) and which sources it mutes, by default every audio input-device source,
   independently of each source's own mute. While on, it covers every output and every
   preview stream of a post-master stage. Built so far: on and off, covering every
-  output's video with the default blur. The look setting, the slate and the muted
-  sources are not built yet.
+  output's video with the default blur and muting the default set, every audio input
+  device. The look setting, the slate and choosing the muted sources are not built
+  yet.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -376,8 +383,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scene, with `settings` checked against the kind's descriptor and stored complete, and
   its video and audio filter chains, each filter's settings checked the same way),
   scenes in display order, and items in stacking order with `source_id`, a placement,
-  `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and the reserved
-  `effects[]`, which a collection file must leave empty. The placement is a `geometry` or, until 1.0, a
+  `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and its
+  `effects[]`, a scene's `filters` beside them. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
   its `canvas` (protocol 0.11); any 3D geometry the compositor can draw is accepted from
   protocol 0.34. Scenes have
@@ -420,7 +427,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
-  H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
+  H.264, HEVC or AV1 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. Video mixes
   (protocol 0.28), ordered by ID, each with a name besides the fields above: the
@@ -434,16 +441,18 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cuts until a client adds another.
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
-  others with their faders, and the post-fader sends, a new channel source sending to
-  the master at 0 dB. A send always runs from a source to a bus, and filters have no
-  sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
-  the program stage's mixer while it runs.
+  others with their faders and (protocol 0.42) each bus's optional monitor, an output
+  device and a tap point before or after its filters (`bus.set_monitor`), and the
+  post-fader sends, a new channel source sending to the master at 0 dB. A send always
+  runs from a source to a bus, and filters have no sidechain keys yet, so no edit can
+  close an audio cycle. The engine routes these into the program stage's mixer while it
+  runs, and plays each bus's monitor on its device (one it can't open stays silent and
+  is retried).
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), blend modes
-  other than `normal`,
-  bus monitors, per-placement effects, a keyframe scene's overrides of a group's
+  other than `normal`, a keyframe scene's overrides of a group's
   children (so `scene.set_role` and removing or retargeting a group's item drop none
   yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
@@ -491,8 +500,9 @@ model; a change that would contradict it edits it in the same PR.
 (`jstream-plugin-proto`), the mixer's side of it (`jstream-audio`) and the host
 process (`jstream-plugin-host`) are built, and so are starting hosts
 (`jstream-platform-windows`) and watching and restarting them on a control thread
-(`jstream-core`'s `HostSupervisor`); running a CLAP filter from the graph, which would
-start that supervisor, and the `stats.tick` count are not yet. Each CLAP filter
+(`jstream-core`'s `HostSupervisor`), and a source's audio chain runs CLAP filters, each
+with its own supervisor; CLAP filters on the master's and outputs' chains, and the
+`stats.tick` count, are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
 processes read from the same OS counter (not built yet: for now the host sleeps a
@@ -500,8 +510,8 @@ quarter block between passes). Audio crosses through shared-memory rings, and
 the mixer never waits on the host: it writes block *n* and reads the processed block
 *n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
 ([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade, by
-the dry signal delayed the same amount, and counted in the shared block for
-`stats.tick`. The filter's latency is *d* plus the plugin's own, and latency
+the dry signal delayed the same amount, and counted for `stats.tick` in the engine's
+own memory beside the block (`EngineBlock`), where the host can't reset it. The filter's latency is *d* plus the plugin's own, and latency
 compensation keeps audio and video in sync. A host that dies is restarted by the control
 thread with backoff while the mixer bypasses it.
 
@@ -601,8 +611,18 @@ the next tick: the engine stores it with release ordering under its lock, and th
 loads it with acquire ordering at the start of each tick. The blur pass's layers are
 kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
 thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
-never the last frame. The mixer thread will read it the same way once privacy mutes
-sources; not built yet.
+never the last frame. The mixer reads a count of the screen's changes instead (odd
+while it is on, stored after the flag), with acquire ordering at each poll, so a screen
+turned on and off again between two polls still reaches it. It silences the inputs it
+mutes from the next block, before their filter chains (so no delay line holds what
+they captured meanwhile) and through their activity gain, so that takes a field store
+and allocates nothing either. Those inputs' audio threads load the count with acquire
+ordering too, and zero each packet as it arrives, before the input's ring, while it is
+odd or the mixer has not yet acted on it. Turning it off follows the capture
+time: blocks mixed late by the mixer's latency that start before the clock's frame at
+the first poll after it went off, plus 40 ms for an input's timing error, stay covered,
+and the audio threads zero a packet that its stamp, the input's timing of it or its
+placement starts before that frame, an atomic the mixer stores.
 
 <a id="protocol"></a>
 ## Control protocol
@@ -646,10 +666,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   master stage or an output, addressed by an `owner` and a filter ID;
   `SourceInfo.filters`, `OutputInfo.filters` and `state.get`'s `master` report them
   ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22;
-  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29).
+  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29). Since 0.43
+  the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
+  descriptor's `max_outset_px` are in the protocol
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs scene
+  filters, and refuses the `item` owner on `owner` until it renders item effects.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
-  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19).
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
+  bus's monitor, an output device and a tap point (protocol 0.42).
   `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
   ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.25). Deleting the scene,
   output or transition preset an action names removes its bindings in the same edit, the batch result lists
@@ -747,8 +772,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
-  source's `target` can name; audio levels are the `meters.tick` event, not a query).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
+  source's `target` can name; `source.sizes` (protocol 0.40) → each source's current
+  size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4); audio
+  levels are the `meters.tick` event, not a query).
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`,
+  `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) every source's and bus's levels and the master's loudness,
@@ -860,7 +888,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 706 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 728 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -963,8 +991,9 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Staging attaches to the queue's next submit, so render holds the context's
-`SubmitLock` from staging through its submit, and other threads that submit on that
-queue (the browser source's copies) take it too.
+`SubmitLock` from staging through its submit (the composite's and the NV12
+conversion's), and other threads that submit on that queue (the browser source's
+copies, Linux's PipeWire capture copies) take it too.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
 browser source's page paints on the same context and is imported the same way, read
@@ -986,7 +1015,9 @@ descriptors whose passes `apply_filter` draws from any image (an upload, a layer
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));
 `apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
-chain runtime runs a source's video chain before placement without allocating per
+chain runtime runs a source's video chain before placement, and a scene's over its
+composite once per frame wherever the scene shows
+([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
 frame. Still outside this crate: the render
 thread (in `jstream-core`), P010, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
@@ -1152,9 +1183,14 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   version, migrated on load like the collection
   ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
   migrations, a source, filter or preset saved at another version is refused on load.
+  A filter whose kind the engine doesn't describe (a pack that isn't installed, or a
+  CLAP plugin before the scan that runs after the load) loads with its settings and
+  version verbatim and is saved back as it was; the engine bypasses it until its kind
+  appears.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
-  `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
-  must be empty.
+  `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
+  `filters` and an item's `effects`, each omitted while empty; the migration from 1
+  changes nothing, and refuses a version 1 file that holds either.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

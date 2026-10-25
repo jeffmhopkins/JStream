@@ -7,29 +7,25 @@ use jstream_platform::PluginHosts;
 use jstream_plugin_proto::control::{
     PARAM_BYPASS, PARAM_HIDDEN, PARAM_READ_ONLY, PARAM_STEPPED, ParamDesc, PluginDesc,
 };
-use jstream_protocol::{
-    Edit, KindCategory, KindDescriptor, ParamDescriptor, ParamType, ProtocolError,
-};
+use jstream_protocol::{KindCategory, KindDescriptor, ParamDescriptor, ParamType};
 use serde_json::json;
 
 /// The prefix of every CLAP kind's ID.
 pub const CLAP_KIND_PREFIX: &str = "clap/";
 
-/// Refuses a `filter.add` of a CLAP kind, as `invalid_argument` on its `kind`. Nothing
-/// runs a CLAP filter yet, and a collection holding one wouldn't load at the next start:
-/// the file is read before the scan that describes the kind has run.
-pub(crate) fn refuse_filters(edits: &[Edit]) -> Result<(), ProtocolError> {
-    for (at, edit) in edits.iter().enumerate() {
-        if let Edit::FilterAdd { kind, .. } = edit
-            && kind.starts_with(CLAP_KIND_PREFIX)
-        {
-            return Err(ProtocolError::invalid_argument(
-                format!("edits.{at}.kind"),
-                format!("kind `{kind}` is a CLAP plugin, and CLAP filters can't be added yet"),
-            ));
-        }
-    }
-    Ok(())
+/// The most characters of a plugin's text that reach clients.
+const MAX_PLUGIN_TEXT: usize = 128;
+
+/// Text a plugin chose (a name, a parameter's name or module), as clients and agents
+/// may read it (#351): control characters become spaces, it is trimmed, and cut to
+/// [`MAX_PLUGIN_TEXT`] characters. Clients render it as text only.
+pub(crate) fn plugin_text(text: &str) -> String {
+    let text: String = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(MAX_PLUGIN_TEXT)
+        .collect();
+    text.trim().to_owned()
 }
 
 /// How deep a scan looks below each search directory, as CLAP's search is recursive.
@@ -122,14 +118,14 @@ pub fn descriptor(plugin: &PluginDesc) -> KindDescriptor {
     KindDescriptor {
         kind_id: format!("{CLAP_KIND_PREFIX}{}", plugin.id),
         category: KindCategory::AudioFilter,
-        name: if plugin.name.is_empty() {
-            plugin.id.clone()
-        } else {
-            plugin.name.clone()
+        name: match plugin_text(&plugin.name) {
+            name if name.is_empty() => plugin_text(&plugin.id),
+            name => name,
         },
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params: plugin.params.iter().filter_map(param).collect(),
     }
 }
@@ -179,13 +175,12 @@ fn param(p: &ParamDesc) -> Option<ParamDescriptor> {
         id: p.id.to_string(),
         ty,
         default,
-        label: if p.name.is_empty() {
-            format!("Parameter {}", p.id)
-        } else {
-            p.name.clone()
+        label: match plugin_text(&p.name) {
+            label if label.is_empty() => format!("Parameter {}", p.id),
+            label => label,
         },
         description: None,
-        group: (!p.module.is_empty()).then(|| p.module.clone()),
+        group: Some(plugin_text(&p.module)).filter(|group| !group.is_empty()),
         advanced: false,
         visible_if: None,
         live: true,
@@ -267,6 +262,21 @@ mod tests {
             assert!(p.live);
             assert_eq!(p.check(&p.default), Ok(()), "{}", p.id);
         }
+    }
+
+    /// A plugin's text reaches clients without control characters and bounded.
+    #[test]
+    fn plugin_text_is_bounded_and_plain() {
+        let mut gain = plugin("org.example.gain", vec![p(1, 0, 0.0, 1.0, 0.0)]);
+        gain.name = format!("Gain\n\u{1b}[2J{}", "x".repeat(500));
+        gain.params[0].name = "\t\r\n".into();
+        gain.params[0].module = " \u{7}Out ".into();
+        let kind = descriptor(&gain);
+        assert_eq!(kind.name.chars().count(), MAX_PLUGIN_TEXT);
+        assert!(kind.name.starts_with("Gain  [2J"), "{}", kind.name);
+        assert!(!kind.name.chars().any(char::is_control));
+        assert_eq!(kind.params[0].label, "Parameter 1");
+        assert_eq!(kind.params[0].group.as_deref(), Some("Out"));
     }
 
     #[test]

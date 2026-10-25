@@ -1,10 +1,14 @@
 //! The app's log file: `logs/jstream-desktop.log` in the data folder, replaced at each
 //! start and capped at [`MAX_BYTES`], so it can't fill the disk. A windowed app has no
-//! console to log to.
+//! console to log to. As the daemon's logs, it is user-only (#780): the old file is
+//! deleted and a new one created, mode `0600` in a `0700` folder on Unix, and with a
+//! protected DACL for SYSTEM and the user on Windows
+//! (`jstream_platform_windows::create_private_file`), so it never inherits a shared
+//! folder's access.
 //!
 //! Docs: apps/jstream-desktop/README.md#usage
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -23,16 +27,22 @@ pub struct LogFile {
 }
 
 impl LogFile {
-    /// Creates `dir` (with its parents) and replaces the log file in it.
+    /// Creates `dir` (with its parents; user-only on Unix) and replaces the log file in
+    /// it with a new, user-only one.
     pub fn create(dir: &Path) -> io::Result<LogFile> {
         Self::with_limit(dir, MAX_BYTES)
     }
 
     /// As [`LogFile::create`], capped at `max` bytes.
     pub fn with_limit(dir: &Path, max: u64) -> io::Result<LogFile> {
-        std::fs::create_dir_all(dir)?;
+        create_dir(dir)?;
         let path = dir.join(FILE_NAME);
-        let file = File::create(&path)?;
+        // A new file, never the old one reopened: truncating would keep its access.
+        match fs::remove_file(&path) {
+            Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
+            _ => {}
+        }
+        let file = create_new(&path)?;
         Ok(LogFile {
             path,
             state: Mutex::new((file, 0)),
@@ -44,6 +54,26 @@ impl LogFile {
     pub fn path(&self) -> &Path {
         &self.path
     }
+}
+
+/// Creates `dir` and its parents, a new one user-only (mode 0700) on Unix. An existing
+/// folder is left as it is.
+fn create_dir(dir: &Path) -> io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(dir)
+}
+
+/// Opens a new file at `path` for writing, failing if anything is there: with a
+/// protected DACL for SYSTEM and the user on Windows, mode 0600 elsewhere (the crash
+/// reports' own helper).
+fn create_new(path: &Path) -> io::Result<File> {
+    #[cfg(windows)]
+    return jstream_platform_windows::create_private_file(path);
+    #[cfg(not(windows))]
+    jstream_crash::create_new(path)
 }
 
 impl Write for &LogFile {
@@ -100,6 +130,38 @@ mod tests {
 
         let log = LogFile::with_limit(&dir, 10).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(read(), "", "replaced at the next start");
+        drop(log);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The log file is user-only, a replaced one too, and so is a log folder the app
+    /// creates (#780).
+    #[cfg(unix)]
+    #[test]
+    fn the_file_and_a_new_folder_are_user_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |path: &std::path::Path| {
+            std::fs::metadata(path)
+                .map(|meta| meta.permissions().mode() & 0o777)
+                .unwrap_or_else(|e| panic!("{e}"))
+        };
+        let root =
+            std::env::temp_dir().join(format!("jstream-desktop-private-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("logs");
+
+        let log = LogFile::with_limit(&dir, 10).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(log.path()), 0o600);
+        drop(log);
+
+        // A file left readable by others, as an older build's was, is replaced by a new
+        // user-only one rather than reopened.
+        let path = dir.join(FILE_NAME);
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let log = LogFile::with_limit(&dir, 10).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(mode(&path), 0o600);
         drop(log);
         let _ = std::fs::remove_dir_all(&root);
     }
