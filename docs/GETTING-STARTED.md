@@ -62,8 +62,9 @@ on **program**, drawn on the canvas in the middle.
    browser page, text, a colour, or an audio visualiser. Name it and press **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
    display, the device or the file.
-3. Drag the source on the canvas to move it, and its handles to resize it. The
-   **Inspector** and **Transform** panels hold the exact numbers.
+3. Drag the source on the canvas to move it, and its handles to resize it. To crop it,
+   hold Alt on a handle, or press C for crop mode (V leaves it). The **Inspector** and
+   **Transform** panels hold the exact numbers.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.
 5. To show a scene, hover its row in **Scenes** and press the button that puts it on
