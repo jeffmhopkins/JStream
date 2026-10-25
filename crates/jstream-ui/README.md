@@ -427,7 +427,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   beside it, a strip per source with its short name, a meter filling upwards, the dB
   field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with, under More, its
   monitor (off, after FX or before FX, and the output device it plays on, empty for the
-  default output, trimmed and checked as the engine checks it), renaming and (except
+  default output, trimmed and checked as the engine checks it; the menu shows the
+  bus's monitor, so a refused pick goes back, and a tap from a newer engine shows as
+  "Another tap"), renaming and (except
   the master) deleting. A delete reads `delete.plan`
   first, as a scene's or source's does: the strip asks, saying how many `waveform` or
   `spectrum` settings drawing the bus the plan clears, and sends the plan's edits

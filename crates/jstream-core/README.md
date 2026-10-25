@@ -135,10 +135,6 @@ state machine. Contents:
     settings); a new mixer filter when a restarted plugin reports a new latency; the
     plugin's editor; rescanning; and stopping a removed filter's host off the
     `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
-- **Not yet: item effects** (ADR-0065, ADR-0068). The graph holds them, but nothing
-  renders them, so the engine refuses a `filter.*` edit whose owner is an item
-  (`invalid_argument` on `edits.N.owner`). It validates the batch first, so a batch
-  the graph refuses gets the graph's answer. Scene filters run (Video chains, below).
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -927,10 +923,35 @@ leaves the scene composited as before. In a transition the scene is one picture
 it, Move falls back to that, and a filtered nested scene is never flattened into its
 items.
 
+An item's effects (ADR-0065 §5, in v1 under
+[ADR-0068](../../docs/adr/0068-item-effects-in-v1.md)) run over its box, once per frame,
+as the scene that draws the item draws it: a keyframe scene's items have chains of
+their own, at their effective values. The chain phase draws the item into
+`GpuKey::ItemBox`, a layer the size of its planned box plus the effects' outset on
+every side, in canvas pixels. The outset is the sum of their kinds' `max_outset_px`; no
+built-in kind declares one yet. A layer longer than 8192 pixels on a side is scaled
+down uniformly. The item is drawn cropped and fitted, centred, flat and unrotated,
+with its fit and flips, and its live values applied. Then the chain runs into
+`GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
+item's box grown by the outset in proportion, and turned and projected as the box is,
+before its opacity and blend. So a live resize draws the same layer, scaled, until
+the plan is made again. A layer that can't be made or drawn (too large for the
+adapter) blanks only its item that frame, logged once until a frame draws it, as a
+failed chain blanks only its owner. What the item shows is read as the chain phase draws it: a
+source's frame or chain output, a capture, or a nested scene through its own chain or
+drawn as a `scene_mask`'s scene is, at depth 1, so the nesting count restarts below
+it. A legacy transform has the box its quad covers, so
+over a capture, whose size isn't known when planning, its effects are bypassed. A
+source's own chain still runs once, wherever it is placed. In a transition an item
+with effects is its effects' layer over its grown box, uncropped, and two items pair
+only when their effects are the same kinds with the same settings in order. Not yet:
+`stats.tick`'s counts of these layers and passes (ADR-0065 §7), which need protocol
+fields.
+
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, a source's or a scene's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's, a scene's or an item's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
@@ -1028,7 +1049,8 @@ A source the program mix shows enlarged is drawn at a density, when its kind can
 `Shot::scales` measures how much each frame its passes draw is enlarged: canvas pixels
 per pixel of the frame's extent, from the placements the collection holds (not a
 gesture's live values, so a drag is measured once it commits), the most of any item, in
-the program's passes and the video mixes'. A source a video chain runs over counts as 1,
+the program's passes and the video mixes', and the items whose effects draw it into
+their layer. A source a video chain runs over counts as 1,
 since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
 into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 8) and,
 when that differs from the source's density, queues a build at it: the thread creates the

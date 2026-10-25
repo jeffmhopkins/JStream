@@ -118,13 +118,13 @@ test('the Hear button sets the master monitor, which each bus strip can name a d
   const card = mixer(page).getByRole('group', { name: 'Master' });
   const hear = card.locator('button.hear');
   await expect(hear).toHaveText('Hear: off');
-  await expect(hear).toHaveAttribute('aria-pressed', 'false');
+  await expect(hear).not.toHaveClass(/\bon\b/);
 
   // Off, then after FX on the default output, then before FX: one edit each.
   const start = await rev(page);
   await hear.click();
   await expect(hear).toHaveText('Hear: after FX');
-  await expect(hear).toHaveAttribute('aria-pressed', 'true');
+  await expect(hear).toHaveClass(/\bon\b/);
   await expect(hear).toHaveAttribute('title', /on the default output\. Click to hear it before FX$/);
   await expect.poll(() => rev(page)).toBe(start + 1);
   await hear.click();

@@ -154,7 +154,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   after its row was closed, and one after the Filter settings dialog was cancelled,
   each in the problem bar.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
-  seed's two channels, its Hear button on and its FX button disabled, and its button (with its
+  seed's two channels, its Hear button enabled and its FX button disabled, and its button (with its
   tooltip) unfolding the channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true

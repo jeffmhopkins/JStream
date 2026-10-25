@@ -547,13 +547,13 @@ pub fn toggled_monitor(monitor: Option<&BusMonitor>) -> BusMonitor {
 }
 
 /// A bus strip's monitor choice, as its menu's value: `off`, `post_filters` or
-/// `pre_filters`. A tap from a newer server shows as neither tap.
+/// `pre_filters`, or `other` for a tap from a newer server.
 pub fn monitor_choice(monitor: Option<&BusMonitor>) -> &'static str {
     match monitor.map(|m| m.tap) {
         None => "off",
         Some(MonitorTap::PostFilters) => "post_filters",
         Some(MonitorTap::PreFilters) => "pre_filters",
-        Some(_) => "",
+        Some(_) => "other",
     }
 }
 
@@ -795,7 +795,6 @@ impl Panel {
                 class="ghost-button hear"
                 class:on=move || monitor().is_some()
                 disabled=move || !loaded()
-                aria-pressed=move || monitor().is_some().to_string()
                 title=move || monitor_title(monitor().as_ref())
                 on:click=move |_| {
                     let next = toggled_monitor(self.master_monitor().as_ref());
@@ -1092,7 +1091,7 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
 
 /// The master strip of the vertical mixer (spec-panels.md M5): the fold button with the
 /// channel count, the short-term loudness filling up to the target line, the loudness
-/// and true peak, the FX button the engine can't serve yet, and the Hear button.
+/// and true peak, the FX button that isn't built yet, and the Hear button.
 #[component]
 fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
     let count = move || {
@@ -1636,8 +1635,14 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
     };
     let monitor = move || bus.with(|b| b.as_ref().and_then(|b| b.monitor.clone()));
     let choice = move || bus.with(|b| monitor_choice(b.as_ref().and_then(|b| b.monitor.as_ref())));
+    let menu = NodeRef::<leptos::html::Select>::new();
     let choose_monitor = move |event: leptos::ev::Event| {
         let chosen = chosen_monitor(&event_target_value(&event), monitor().as_ref());
+        // The menu shows the bus's monitor, not the pick: the accepted edit moves it
+        // there, and a refused one leaves it where the bus is.
+        if let Some(menu) = menu.get_untracked() {
+            menu.set_value(choice());
+        }
         panel.set_monitor(id.get_value(), chosen);
     };
     let set_device = move |event: leptos::ev::Event| {
@@ -1733,6 +1738,7 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
                 <label>
                     "Monitor"
                     <select
+                        node_ref=menu
                         aria-label=move || format!("{} monitor", name())
                         on:change=choose_monitor
                     >
@@ -1742,6 +1748,14 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
                         </option>
                         <option value="pre_filters" prop:selected=move || choice() == "pre_filters">
                             "Hear before FX"
+                        </option>
+                        <option
+                            value="other"
+                            disabled
+                            hidden=move || choice() != "other"
+                            prop:selected=move || choice() == "other"
+                        >
+                            "Another tap (from a newer engine)"
                         </option>
                     </select>
                 </label>
@@ -1832,8 +1846,9 @@ mod tests {
     };
     use jstream_control::protocol::{
         AudioFollow, Batch, BusId, BusMeter, BusMonitor, Call, CallResult, DeleteTarget, Edit,
-        Finite32, Hello, KindCategory, KindDescriptor, Loudness, PROTOCOL_VERSION, Query,
-        QueryResult, Response, SceneId, Settings, SourceId, SourceKind, SourceMeter, Welcome,
+        Finite32, Hello, KindCategory, KindDescriptor, Loudness, MonitorTap, PROTOCOL_VERSION,
+        Query, QueryResult, Response, SceneId, Settings, SourceId, SourceKind, SourceMeter,
+        Welcome,
     };
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use std::pin::pin;
@@ -2261,6 +2276,15 @@ mod tests {
         assert_eq!(device_name(""), "the default output");
         assert!(with_device(&pre, "a\tb").is_err());
         assert!(with_device(&pre, &"d".repeat(513)).is_err());
+
+        // A tap from a newer server is shown as on, and switches to after FX.
+        let later = BusMonitor {
+            device: String::new(),
+            tap: MonitorTap::Unknown,
+        };
+        assert_eq!(monitor_label(Some(&later), false), "Hear: on");
+        assert_eq!(monitor_choice(Some(&later)), "other");
+        assert_eq!(toggled_monitor(Some(&later)).tap, MonitorTap::PostFilters);
     }
 
     #[test]
