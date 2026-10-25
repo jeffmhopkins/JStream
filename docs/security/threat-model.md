@@ -291,9 +291,12 @@ non-finite samples turned to silence.
   the limits. The host builds its CPU and memory limits (the 100 ms and 1 s deadlines, 64 MiB and 10,000
   table elements), the cap of 50 commands a second (answered with the ABI's
   `STATUS_LIMITED`) and the 1,000-event queue with its `events.dropped` notice (nothing
-  feeds it yet), and adds a fuel budget of its own. Not built yet: the capability
-  classes checked against the protocol's table and grants made only by people, the
-  `forbidden` error,
+  feeds it yet), and adds a fuel budget of its own. The protocol half is in
+  `jstream-protocol` (#642, protocol 0.35): `PLUGIN_SCOPES` places every command in a
+  class or under "never", and `PluginGrant::check` returns the `forbidden` error for a
+  call no grant covers. The `plugin.install`, `plugin.grant` and `plugin.enable` actions
+  get no MCP tool, and the engine answers them `unsupported`. Not built yet: the host
+  or engine calling that check on a plugin's calls, installing and granting plugins,
   disabling a plugin that fails, and the untrusted-output handling (U1: plugin text about the
   plugin in `remote_*` fields, and MCP instructions saying state text can come from a
   plugin). Until grants exist a plugin is
@@ -454,7 +457,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #780 | Server | The desktop app's log file only inherits its folder's ACL on Windows and gets the umask's mode on Unix | Low |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
-| #348 | WASM | ADR-0069's capability classes, grants, `forbidden` error and untrusted-output handling are decided but not built (the CPU and memory limits, the command cap and the event queue are) | Medium |
+| #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | Crash reports miss a YouTube-bound key and the access token | Low |
