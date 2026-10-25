@@ -430,7 +430,10 @@ impl Graph {
             .map(|filter| FileFilter {
                 id: filter.id.clone(),
                 kind: filter.kind.clone(),
-                kind_version: self.kinds.get(&filter.kind).map(|k| k.version),
+                kind_version: match self.kinds.get(&filter.kind) {
+                    Some(kind) => Some(kind.version),
+                    None => filter.unknown_kind_version,
+                },
                 enabled: filter.enabled,
                 settings: filter.settings.clone(),
             })
@@ -623,12 +626,25 @@ impl Graph {
             kinds: self.kinds,
         };
         for (object, edit) in rebuild(&graph, &file)? {
-            graph
-                .apply(std::slice::from_ref(&edit), None)
-                .map_err(|error| LoadError::Invalid {
-                    object,
-                    error: Box::new(error),
-                })?;
+            let applied = match &edit {
+                Edit::FilterAdd {
+                    owner,
+                    chain,
+                    filter_id,
+                    kind,
+                    ..
+                } if !graph.kinds.contains_key(kind) => crate::filter::add_unknown_kind(
+                    &mut graph.state,
+                    &graph.kinds,
+                    &edit,
+                    file_filter_version(&file, owner, *chain, filter_id),
+                ),
+                _ => graph.apply(std::slice::from_ref(&edit), None).map(|_| ()),
+            };
+            applied.map_err(|error| LoadError::Invalid {
+                object,
+                error: Box::new(error),
+            })?;
         }
         graph.rev = file.rev;
         Ok(graph)
@@ -1168,6 +1184,30 @@ fn rebuild_transitions(
         ));
     }
     Ok(())
+}
+
+/// The kind version `file` recorded for `filter_id` on `chain` of `owner`.
+fn file_filter_version(
+    file: &File,
+    owner: &FilterOwner,
+    chain: FilterChain,
+    filter_id: &FilterId,
+) -> Option<u32> {
+    let chains = match owner {
+        FilterOwner::Source { source_id } => {
+            &file.sources.iter().find(|s| &s.id == source_id)?.filters
+        }
+        FilterOwner::Output { output_id } => {
+            &file.outputs.iter().find(|o| &o.id == output_id)?.filters
+        }
+        FilterOwner::Master => &file.master.filters,
+        _ => return None,
+    };
+    let filters = match chain {
+        FilterChain::Video => &chains.video,
+        FilterChain::Audio => &chains.audio,
+    };
+    filters.iter().find(|f| &f.id == filter_id)?.kind_version
 }
 
 /// Pushes the edits that give the rebuilt collection `file`'s buses and their faders,
